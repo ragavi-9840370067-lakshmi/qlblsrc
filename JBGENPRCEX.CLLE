@@ -1,0 +1,155 @@
+000001170313     /* %ATTR OPTION(*XREF) DBGVIEW(*ALL) */
+000101080423/* *******************************************************************/
+000201080423/* TITLE        : Fund Price Extract                                 */
+000301080423/* SYSTEM       : MF                                                 */
+000401080423/* PROGRAM TYPE : CL                                                 */
+000501080423/* PROGRAMMER   : Abdirisak Hassan                                   */
+000601080423/* PROGRAM      : JBGENPRCEX                                         */
+000701080423/* DESCRIPTION  : This program calls GENPRCEX programs to create     */
+000801080423/*                Fund Price extract file.                           */
+000901080423/*                JBGENPRCEX is called from Job Menu                 */
+001001080423/*                by GENIFSX screen                                  */
+001101080423/* DATE CREATED : 2008/04/23                                         */
+001201080423/*------------------ MODIFICATION HISTORY ---------------------------*/
+001301080423/* *******************************************************************/
+001401080423/* Programmer¦**Date******¦*Comments *********************************/
+001501080423/* *******************************************************************/
+001601080423/*A.Hassan   | 2008/04/23 | Create JBGENPRCEX program                */
+001701080730/*A.Chan     | 2008/07/22 | RFS 55040 - Add Feedhub                  */
+001801080730/*A.Chan     | 2008/07/30 | RFS 55332 - Fix length on parameter      */
+001901080808/*A.Chan     | 2008/08/08 | RFS 55695 - Crtpf before copy            */
+002001140529/*Kamal T    | 2014/05/28 | RFS 137052 - Adding SIZE parameter       */
+002101140529/*           |            | as *NOMAX in CRTPF COMMAND               */
+002201080423/*           |            |                                          */
+002301080423/*-------------------------------------------------------------------*/
+002401080423             PGM
+002501080423
+002601080425             DCL VAR(&Asatdte)  TYPE(*CHAR) LEN(08)
+002701080425             DCL VAR(&Fname1)   TYPE(*CHAR) LEN(04) VALUE('WBXP')
+002801080428             DCL VAR(&Filext)   TYPE(*CHAR) LEN(04) VALUE('.CSV')
+002901080425             DCL VAR(&Fname2)   TYPE(*CHAR) LEN(06) VALUE(' ')
+003001080425             DCL VAR(&Fname)    TYPE(*CHAR) LEN(10) VALUE(' ')
+003101080425             DCL VAR(&EftLib)   TYPE(*CHAR) LEN(10) VALUE(' ')
+003201080425             DCL VAR(&SrcMsg)   TYPE(*CHAR) LEN(06) VALUE(' ')
+003301080425             DCL VAR(&Fail)     TYPE(*CHAR) LEN(06) VALUE('FAILED')
+003401080428             DCL VAR(&Dir)      TYPE(*CHAR) LEN(17) +
+003501080428                                VALUE('/ATL/FD_OUTBOUND/')
+003601080428             DCL VAR(&Destin)   TYPE(*CHAR) LEN(35) +
+003701080425
+003801080425             /** GENPRCEX parameters **/
+003901080425             DCL VAR(&Rtncde)    TYPE(*CHAR) LEN(2) VALUE('00')
+004001080425             DCL VAR(&Tdate)    TYPE(*CHAR) LEN(8)
+004101080425             DCL VAR(&Action)   TYPE(*CHAR) LEN(1) VALUE('C')
+004201080425
+004301080425             /** Function parameters **/
+004401080425             DCL VAR(&fxparm)   TYPE(*CHAR) LEN(25)
+004501080425             DCL VAR(&Funct)    TYPE(*CHAR) LEN(1) VALUE('S')
+004601080425             DCL VAR(&Period)   TYPE(*CHAR) LEN(1) VALUE('D')
+004701080425             DCL VAR(&NumDays)  TYPE(*DEC)  LEN(5) VALUE(1)
+004801080425             DCL VAR(&Duration) TYPE(*CHAR) LEN(5)
+004901080425             DCL VAR(&PrevDate) TYPE(*CHAR) LEN(8)
+005001080722/*55040*/    DCL        VAR(&JOBNAME) TYPE(*CHAR) LEN(15) +
+005101080722                          VALUE('JBGENPRCEX001')
+005201080722/*55040*/    DCL        VAR(&EXTENSION) TYPE(*CHAR) LEN(4) VALUE('CSV')
+005301080730/*55332*/    DCL        VAR(&FNAME100)  TYPE(*CHAR) LEN(100)
+005401080425
+005501080425             RTVDTAARA DTAARA(*LDA (1 8)) RTNVAR(&Tdate)
+005601080425             RTVDTAARA DTAARA(*LDA (70 6)) RTNVAR(&SrcMsg)
+005701080425             RTVDTAARA DTAARA(MFAPRCDTP (1 8)) RTNVAR(&Asatdte)
+005801080425             RTVDTAARA  DTAARA(MFAEFTLIB (1 10)) RTNVAR(&EftLib)
+005901080425
+006001080507/** Defect 3 Delete all prev files */
+006101080507      /**    CHGVAR VAR(&Duration) VALUE(&NumDays)            **/
+006201080507      /**    CHGVAR VAR(&fxparm) VALUE(+                      **/
+006301080507      /**               &Asatdte  *CAT +                      **/
+006401080507      /**               &Funct    *CAT +                      **/
+006501080507      /**               &Period   *CAT +                      **/
+006601080507      /**               &Duration *CAT +                      **/
+006701080507      /**               &Asatdte  *CAT +                      **/
+006801080507      /**               &Rtncde)                              **/
+006901080507      /**    CALL PGM(FXCALCDATE) PARM(&fxparm)               **/
+007001080507      /**    CHGVAR VAR(&PrevDate) VALUE(%SST(&fxparm 16 8))  **/
+007101080507      /**                                                     **/
+007201080507      /**    CHGVAR VAR(&Fname2) VALUE(%SST(&PrevDate 3 6))   **/
+007301080507      /**    CHGVAR VAR(&Fname) VALUE(&Fname1 *TCAT &Fname2)  **/
+007401080507             CHGVAR VAR(&Fname) VALUE(&Fname1 *TCAT '*')
+007501080425
+007601080425/**Delete previous file **/
+007701080425             DLTF FILE(&EftLib/&Fname)
+007801080425             MONMSG MSGID(CPF0000)
+007901080425
+008001080425             IF COND(&SrcMsg *EQ &Fail) THEN(DO)
+008101080425                CHGDTAARA  DTAARA(*LDA (10 20)) +
+008201080425                VALUE('Fund Price Extract Failed')
+008301080425                GOTO CMDLBL(Show)
+008401080425             ENDDO
+008501080425
+008601080425             CHGVAR VAR(&Rtncde) VALUE('00')
+008701080425             CALL PGM(GENPRCEX) PARM(&Action &Tdate &Rtncde)
+008801080425
+008901080425             CHGVAR VAR(&Fname2) VALUE(%SST(&AsAtDte 3 6))
+009001080425             CHGVAR VAR(&Fname) VALUE(&Fname1 *TCAT &Fname2)
+009101080425/**Delete file is exist **/
+009201080425             DLTF FILE(&EftLib/&Fname)
+009301080425             MONMSG MSGID(CPF0000)
+009401080808
+009501140529 /* RFS137052 Begin */
+009601140529/*55695*/ /* CRTPF      FILE(&EftLib/&Fname) RCDLEN(100)  */
+009701140529             CRTPF      FILE(&EFTLIB/&FNAME) RCDLEN(100) SIZE(*NOMAX)
+009801140529 /* RFS137052 End   */
+009901080808
+010001080425             CPYF FROMFILE(QTEMP/WRKFundP) +
+010101080425                  TOFILE(&EftLib/&Fname) +
+010201080808                  MBROPT(*REPLACE) FMTOPT(*NOCHK)   /* 55695 */
+010301080808/* 55695          MBROPT(*REPLACE) CRTFILE(*YES)   */
+010401080428
+010501080808/*55040      RNMM       FILE(&EFTLIB/&FNAME) MBR(WRKFUNDP) +
+010601080808  55695                   NEWMBR(&FNAME)      */
+010701080723
+010801080723/* 55040     CHGVAR VAR(&Destin) VALUE(&Dir *TCAT &Fname +
+010901080723                          *TCAT &Filext)      */
+011001080428
+011101080723/* 55040     CPYTOIMPF FROMFILE(&EftLib/&Fname) +
+011201080723should be done         TOSTMF(&Destin) MBROPT(*REPLACE) +
+011301080723by feedhub             STMFCODPAG(*PCASCII) RCDDLM(*CRLF) +
+011401080723                       STRDLM(*NONE)                            */
+011501080425
+011601080425             IF COND(&Rtncde *NE '00') THEN(DO)
+011701080425                CHGDTAARA  DTAARA(*LDA (10 20))    +
+011801080425                VALUE('Fund Price Extract Failed')
+011901080425                CHGDTAARA  DTAARA(*LDA (70 06))    +
+012001080425                VALUE('FAILED')
+012101080425             ENDDO
+012201080425             IF COND(&Rtncde *EQ '00') THEN(DO)
+012301080425                CHGDTAARA  DTAARA(*LDA (10 30))    +
+012401080425                VALUE('Fund Price Extract successfull')
+012501080425             ENDDO
+012601080425
+012701080730/*55332*/    CHGVAR     VAR(&FNAME100) VALUE(&FNAME)
+012801080730
+012901080811/* 55695 */  RMVLIBLE   LIB(QTEMP)
+013001080811/* 55695 */  MONMSG     MSGID(CPF0000)
+013101080811
+013201080811 /* 55695 */ ADDLIBLE   LIB(QTEMP) POSITION(*FIRST)
+013301080811
+013401080811 /* 55695 */ DLTF       FILE(QTEMP/MFAFEEDHUP)
+013501080811 /* 55695 */ MONMSG     MSGID(CPF0000)
+013601080811
+013701080811 /* 55695 */ CPYF       FROMFILE(MFAFEEDHUP) +
+013801080811                          TOFILE(QTEMP/MFAFEEDHUP) MBROPT(*REPLACE) +
+013901080811                          CRTFILE(*YES)
+014001080811
+014101080811 /* 55695 */ CLRPFM     FILE(QTEMP/MFAFEEDHUP)
+014201080811
+014301080722/*55040 begin */
+014401080722             CALL       PGM(CRTDOCFH) PARM(&JOBNAME +
+014501080730                          &FName100  &EXTENSION)
+014601080722/*55040 End */
+014701080811
+014801080811             CALL       PGM(JOBFEEDHUB)    /* 55695 */
+014901080722
+015001080425Show:
+015101080425             DSPDTAARA  DTAARA(*LDA)
+015201080423
+015301080425Exit:
+015401080425             ENDPGM

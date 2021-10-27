@@ -1,0 +1,195 @@
+000100171026/**********************************************************************/
+000200171026/* TITLE        : DSC Reports.                                        */
+000300171026/* SYSTEM       : L&T Financial Services Technology Inc.              */
+000400171026/* PROGRAM TYPE : CL                                                  */
+000500171026/* PROGRAMMER   : Aarthi M                                            */
+000600171026/* PROGRAM      : JBDEL10UNT                                          */
+000700171026/* DESCRIPTION  : This Job will generate the free units detail        */
+000800171026/*                existing report and place in spool and generate the */
+000900171026/*                free units detail new excel file and FTP to print   */
+001000171026/*                director.                                           */
+001100171026/* DATE CREATED : 2017/08/22                                          */
+001200171026/* RFS NUMBER   : RFS172336                                           */
+001300171026/* CALLED BY    :                                                     */
+001400171026/* PARAMETERS   : NONE                                                */
+001500171026/* CALLS PROGRAM:                                                     */
+001600171026/*                FXRPTCHK                                            */
+001700171026/*                RPTCHK                                              */
+001800171026/*                FXFTPIFS                                            */
+001900171026/**********************************************************************/
+002000180209/*  PROGRAMMER * DATE OF CHANGE * DESCRIPTION OF CHANGE               */
+002100180209/**********************************************************************/
+002200180209/* Suresh G.  *   2018/02/09    * RFS176815 - To fix the overridden   */
+002300180209/*            *                 * issue of the DEL10UNT Excel Reports */
+002400180209/*            *                 * generated on the same Process Date  */
+002500180301/* Suresh G.  *   2018/03/01    * RFS177998 - To fix the Naming       */
+002600180301/*            *                 * Convention for DEL10UNT Excel report*/
+002700180209/* ********************************************************************/
+002800171026             PGM
+002900171103             DCL        VAR(&JOBNAME)    TYPE(*CHAR) LEN(10) +
+003000171103                          VALUE('JBDEL10UNT')
+003100171026             DCL        VAR(&ASATDATE)   TYPE(*CHAR) LEN(08)
+003200171027             DCL        VAR(&ENV) TYPE(*CHAR) LEN(03)
+003300171027             DCL        VAR(&RTNCODE)    TYPE(*CHAR) LEN(2)
+003400171027             DCL        VAR(&RHCODE)     TYPE(*CHAR) LEN(10)
+003500171026             DCL        VAR(&EFTLIBRARY) TYPE(*CHAR) LEN(10)
+003600171026             DCL        VAR(&EFTFILE)    TYPE(*CHAR) LEN(10) +
+003700171026                          VALUE('DEL10UNT')
+003800180209/*176815     DCL        VAR(&FILENAME)   TYPE(*CHAR) LEN(25)  */
+003900180212/*176815*/   DCL        VAR(&FILENAME)   TYPE(*CHAR) LEN(43)
+004000171026             DCL        VAR(&HOSTFILE)   TYPE(*CHAR) LEN(12) VALUE(' ')
+004100171026             DCL        VAR(&MEMBRNM)    TYPE(*CHAR) LEN(10) +
+004200171026                          VALUE('DEL10UNT')
+004300171026             DCL        VAR(&FORMCODE)   TYPE(*CHAR) LEN(10) +
+004400171026                          VALUE('DEL10UNT')
+004500171026             DCL        VAR(&UCODE)      TYPE(*CHAR) LEN(01) VALUE('_')
+004600171026             DCL        VAR(&CMPCD)      TYPE(*CHAR) LEN(03)
+004700171026             DCL        VAR(&DEL10UNT)   TYPE(*CHAR) LEN(08) +
+004800171026                          VALUE('DEL10UNT')
+004900171026             DCL        VAR(&IFSTYPE)    TYPE(*CHAR) LEN(02)
+005000171026             DCL        VAR(&IFSOWNER)   TYPE(*CHAR) LEN(04)
+005100171026             DCL        VAR(&IFSMETHOD)  TYPE(*CHAR) LEN(03)
+005200171026             DCL        VAR(&IFSDIR)     TYPE(*CHAR) LEN(300)
+005300171026             DCL        VAR(&IFSPATH)    TYPE(*CHAR) LEN(317)
+005400171026             DCL        VAR(&XLSEXT)     TYPE(*CHAR) LEN(04) VALUE('.xls')
+005500180209/* RFS176815 - Starts */
+005600180209             DCL        VAR(&CURUSER)    TYPE(*CHAR) LEN(10)
+005700180209             DCL        VAR(&VER)        TYPE(*CHAR) LEN(03)
+005800180209             DCL        VAR(&VERCOUNT)   TYPE(*DEC)  LEN(03) VALUE(0)
+005900180212             DCL        VAR(&CMD3)       TYPE(*CHAR) LEN(80) VALUE(' ')
+006000180209/* RFS176815 - Ends   */
+006100180301/*177998*/   DCL        VAR(&USER)       TYPE(*CHAR) LEN(10) VALUE(' ')
+006200171027/* Retrieve Environment detail*/
+006300171026             RTVDTAARA  DTAARA(MFADBASE (4 3))   RTNVAR(&ENV)
+006400171026/* Retrieve Process Date details from MFAPRCDTP Data Areas */
+006500171026             RTVDTAARA  DTAARA(MFAPRCDTP (1 8))  RTNVAR(&ASATDATE)
+006600171026/* Retrieve EFT library from MFAEFTLIB */
+006700171026             RTVDTAARA  DTAARA(MFAEFTLIB (1 10)) RTNVAR(&EFTLIBRARY)
+006800171026/* Retrieve Company Code from MFACMPCDP */
+006900171026             RTVDTAARA  DTAARA(MFACMPCDP (1 3))  RTNVAR(&CMPCD)
+007000171101
+007100171101             DSPDTAARA  DTAARA(*LDA)
+007200171026             QTP        AUTO(PTDEL10UNT)
+007300171026             QUIZ       AUTO(PZDEL10UNT)
+007400171026
+007500171026/* Set Print Director path */
+007600171026             DLTDTAARA  DTAARA(QTEMP/RHCODE)
+007700171026             MONMSG     MSGID(CPF2105)
+007800171026
+007900171026             CRTDTAARA  DTAARA(QTEMP/RHCODE) TYPE(*CHAR) LEN(10)
+008000171026
+008100171026             RUNCMD     CMD('CHGDTAARA  DTAARA(QTEMP/RHCODE)  +
+008200171026                          VALUE(''&&RHCODE'')') SQL('SELECT +
+008300171026                          REMOTE_HOST_CODE  LEN(10) NAME(RHCODE) FROM +
+008400171026                          MFAFTPFDP WHERE FORM_CODE = "' || &FORMCODE || +
+008500171026                          '"')
+008600171026             RTVDTAARA  DTAARA(QTEMP/RHCODE)  RTNVAR(&RHCODE)
+008700171026
+008800171026             CALL       PGM(FXSETPDP) PARM(&RHCODE &FORMCODE &RTNCODE)
+008900171026             IF         COND(&RTNCODE = '99') THEN(GOTO CMDLBL(PGM_EXIT))
+009000171026
+009100180209/* RFS176815 - Starts */
+009200171026/* Construct naming convention for new DEL10UNT Report  */
+009300180209/*           CHGVAR     VAR(&FILENAME) VALUE(&CMPCD     *TCAT &UCODE     +
+009400171026                          *TCAT &ENV       *TCAT &UCODE     *TCAT +
+009500180209                          &DEL10UNT  *TCAT &UCODE     *TCAT &ASATDATE)  */
+009600180209/* RFS176815 - Ends   */
+009700171026
+009800171026/* Get IFS Directory information from MFAIFSDIRP by Calling    */
+009900171026/* Function FXGETIFSD.                                         */
+010000171026             CHGVAR     VAR(&IFSTYPE)   VALUE('UX')
+010100171026             CHGVAR     VAR(&IFSOWNER)  VALUE('OUT')
+010200171026             CHGVAR     VAR(&IFSMETHOD) VALUE('EXT')
+010300171026
+010400171026             CALL       PGM(FXGETIFSD) PARM(&IFSTYPE &IFSOWNER &IFSMETHOD +
+010500171026                          &IFSDIR)
+010600171026
+010700171026             IF         COND(&IFSDIR *EQ ' ') THEN(DO)
+010800171026                SNDPGMMSG  MSG('DEL10UNT Excel not created because IFS +
+010900171026                             Folder not setup Correctly') TOMSGQ(QSYSOPR)
+011000171026                GOTO       CMDLBL(PGM_EXIT)
+011100171026             ENDDO
+011200180209
+011300180209/* RFS176815 - Starts */
+011400180209/* Get the version count & form the file name with new naming convention */
+011500180301/* RFS177998 - Starts */
+011600180301/* Retrieve USER ID instead of Current USER and reuse the same variables */
+011700180301/*           RTVJOBA    CURUSER(&CURUSER)      */
+011800180301             RTVJOBA    USER(&USER)
+011900180301             CHGVAR     VAR(&CURUSER) VALUE(&USER)
+012000180301/* RFS177998 - Ends   */
+012100180209             CHGVAR     VAR(&VERCOUNT) VALUE(0)
+012200180209             CHGVAR     VAR(&VER)      VALUE(' ')
+012300180209
+012400180209FNDVER:
+012500180209             IF  COND(&VER = '999') THEN(DO)
+012600180209                 CHGVAR VAR(&VER) VALUE('0001')
+012700180209                 CHGVAR VAR(&FILENAME) VALUE(&CMPCD *TCAT &UCODE  +
+012800180209                          *TCAT &ENV *TCAT &UCODE *TCAT &DEL10UNT +
+012900180212                          *TCAT &UCODE *TCAT &CURUSER *TCAT &VER  +
+013000180212                          *TCAT &UCODE *TCAT &ASATDATE *TCAT &XLSEXT)
+013100180212                 CHGVAR VAR(&IFSPATH) VALUE(&IFSDIR *TCAT &FILENAME)
+013200180209                 GOTO   CMDLBL(CRTXLFL)
+013300180209             ENDDO
+013400180209
+013500180209             CHGVAR     VAR(&VERCOUNT) VALUE(&VERCOUNT + 1)
+013600180209             CHGVAR     VAR(&VER) VALUE(&VERCOUNT)
+013700180209/* Construct naming convention for new DEL10UNT Report  */
+013800180209             CHGVAR     VAR(&FILENAME) VALUE(&CMPCD *TCAT &UCODE  +
+013900180209                          *TCAT &ENV *TCAT &UCODE *TCAT &DEL10UNT +
+014000180212                          *TCAT &UCODE *TCAT &CURUSER *TCAT &VER  +
+014100180212                          *TCAT &UCODE *TCAT &ASATDATE *TCAT &XLSEXT)
+014200180209/* RFS176815 - Ends   */
+014300180209
+014400171026/* Construct the Full File Path by adding File Name to the     */
+014500171026/* IFS Director and Print Director (.xls file)                 */
+014600180212/* RFS176815 - Starts */
+014700180212/*           CHGVAR     VAR(&IFSPATH) VALUE(&IFSDIR *TCAT &FILENAME  *TCAT +
+014800180212                          &XLSEXT)   */
+014900180212             CHGVAR     VAR(&IFSPATH) VALUE(&IFSDIR *TCAT &FILENAME)
+015000180212
+015100180209             CHKOUT     OBJ(&IFSPATH)
+015200180209             MONMSG     MSGID(CPFA0A9) EXEC(GOTO CMDLBL(CRTXLFL))
+015300180209             CHKIN      OBJ(&IFSPATH)
+015400180209             GOTO       CMDLBL(FNDVER)
+015500180209
+015600180209CRTXLFL:
+015700180209/* RFS176815 - Ends   */
+015800171026
+015900171026             RMVLNK     OBJLNK(&IFSPATH)
+016000171026             MONMSG     MSGID(CPF0000)
+016100171026
+016200171026             DLTF       FILE(QTEMP/DEL10UNTV)
+016300171026             MONMSG     MSGID(CPF2105)
+016400171026
+016500171106             EXECUTE    VIEW(DEL10UNTV) PCFMT(*XLS) TOSTMF(&IFSPATH)
+016600171026
+016700171026             CHGAUT     OBJ(&IFSPATH) USER(*PUBLIC) DTAAUT(*RWX) +
+016800171026                          OBJAUT(*ALL)
+016900171026             MONMSG     MSGID(CPF0000 CPFA0A9 CPFA0B1)
+017000171026
+017100171026/* Setup LDA parameterd for FTP file */
+017200180212/* RFS176815 - Starts */
+017300180212/*           CHGDTAARA  DTAARA(*LDA (800 100)) VALUE(&IFSPATH)  */
+017400180212             CHGVAR     VAR(&CMD3) VALUE('"LCD ' *CAT &IFSDIR *TCAT '"')
+017500180212             UPDATE     SET((COMMAND_3 &CMD3)) SQL('FROM MFAFTPFDP +
+017600180212                          WHERE REMOTE_HOST_CODE = "DEL10UNT" AND +
+017700180212                          FORM_CODE = "DEL10UNT"')
+017800180212
+017900180212             CHGDTAARA  DTAARA(*LDA (800 100)) VALUE(&FILENAME)
+018000180212/* RFS176815 - Ends   */
+018100171026             CHGDTAARA  DTAARA(*LDA (900 110)) VALUE(' ')
+018200171026             CHGDTAARA  DTAARA(*LDA (900 10))  VALUE(&JOBNAME)
+018300171026             CHGDTAARA  DTAARA(*LDA (910 10))  VALUE(&FORMCODE)
+018400171026             CHGDTAARA  DTAARA(*LDA (920 10))  VALUE(&EFTLIBRARY)
+018500171026             CHGDTAARA  DTAARA(*LDA (930 10))  VALUE(&EFTFILE)
+018600171026             CHGDTAARA  DTAARA(*LDA (940 10))  VALUE(&MEMBRNM)
+018700171026             CHGDTAARA  DTAARA(*LDA (950 10))  VALUE(&RHCODE)
+018800171026             CHGDTAARA  DTAARA(*LDA (960 30))  VALUE(&HOSTFILE)
+018900171026             CHGDTAARA  DTAARA(*LDA (990 8))   VALUE(' ')
+019000171026             CHGDTAARA  DTAARA(*LDA (998 2))   VALUE('UT')
+019100171026             DSPDTAARA  DTAARA(*LDA)
+019200171026/* Update the FTP-REQUEST file by calling FXFTPIFS */
+019300171026             CALL       PGM(FXFTPIFS)
+019400171026
+019500171026 PGM_EXIT:   ENDPGM

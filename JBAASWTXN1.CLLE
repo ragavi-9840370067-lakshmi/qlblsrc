@@ -1,0 +1,239 @@
+000100130224   /*****************************************************************/
+000200190927   /* TITLE        : Prepare a pre multi-thread workfile before     */
+000300130224   /*                executing the AASWTTXN1                        */
+000400130224   /*                                                               */
+000500130224   /* SYSTEM       : JSI                                            */
+000600190930   /*                                                               */
+000700130224   /* PROGRAM TYPE : CL                                             */
+000800130224   /*                                                               */
+000900130224   /* PROGRAMMER   : UNITRAX                                        */
+001000190905   /*                                                               */
+001100130224   /* PROGRAM      : JBAASWTXN1  - Call by JOBDAILY                 */
+001200130224   /*                                                               */
+001300130224   /* DESCRIPTION  : This program is used to prepare a pre multi-   */
+001400130224   /*                thread workfile before executing the AASWTTXN1 */
+001500130224   /*                program if and only if multi-thread version    */
+001600130224   /*                has turned on in the environment.              */
+001700130224   /*****************************************************************/
+001800130224   /*****************************************************************/
+001900130224   /*    C H A N G E   H I S T O R Y                                */
+002000130224   /*****************************************************************/
+002100130224   /* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE             */
+002200130224   /*****************************************************************/
+002300130224   /* Antony S   * 2013/02/25   * RFS113553 Initial Coding          */
+002301190903   /* Lavanya V  * 2019/09/03   * RFS184524 - AOT for Phantom Funds */
+002400130224   /*****************************************************************/
+002500130224             PGM        PARM(&PAASWTTXN)
+002600130224             DCL        VAR(&PAASWTTXN) TYPE(*CHAR) LEN(10)
+002700130313             DCL        VAR(&PAASWTTXN1) TYPE(*CHAR) LEN(12)
+002800130224             DCL        VAR(&INSTANCEA) TYPE(*CHAR) LEN(2)
+002900130224             DCL        VAR(&INSTANCES) TYPE(*DEC) LEN(2) VALUE(0)
+003000130224             DCL        VAR(&OJLIB) TYPE(*CHAR) LEN(10)
+003100130224             DCL        VAR(&INSTQ) TYPE(*CHAR) LEN(10)
+003200130306             DCL        VAR(&CMPCDE) TYPE(*CHAR) LEN(3)
+003300130306             DCL        VAR(&PRCDTE) TYPE(*CHAR) LEN(8)
+003400130307             DCL        VAR(&CURNBRREC) TYPE(*CHAR) LEN(10)
+003500130307             DCL        VAR(&NBROFREC) TYPE(*DEC) LEN(10) VALUE(0)
+003600130225             DCL        VAR(&DQNAME) TYPE(*CHAR) LEN(10) VALUE('DQAASWT')
+003700130225             DCL        VAR(&SUBMITTED) TYPE(*DEC) LEN(2) VALUE(0)
+003800130225             DCL        VAR(&SBMNBR) TYPE(*CHAR) LEN(2)
+003900130225             DCL        VAR(&JOBNAME) TYPE(*CHAR) LEN(10)
+004000130225             DCL        VAR(&RETURNED) TYPE(*DEC) LEN(2) VALUE(0)
+004100130225             DCL        VAR(&DTA) TYPE(*CHAR) LEN(02)
+004200130225             DCL        VAR(&FIELDLEN) TYPE(*DEC) LEN(5) VALUE(2)
+004300130314             DCL        VAR(&WAIT) TYPE(*DEC) LEN(5) VALUE(-1)
+004400130225             DCL        VAR(&REPLY) TYPE(*CHAR) LEN(1)
+004401130401             DCL        VAR(&BOX)   TYPE(*CHAR) LEN(10)
+004402190903             DCL        VAR(&MINTHREADS) TYPE(*DEC) LEN(10) VALUE(0)
+004403190903             /*184524*/
+004404190903             DCL        VAR(&LT_SPACE)   TYPE(*CHAR) LEN(1) VALUE(' ') +
+004405190903                          /*184524*/
+004500130225
+004601130401             CHGVAR     VAR(&PAASWTTXN1) VALUE(&PAASWTTXN || '00')
+004602130401
+004603130401             RTVNETA    SYSNAME(&BOX)
+004700130224
+004800130224    /* Check Multi-Thread Seqment AASWTTXN1 */
+004900130224
+005000130224             CHGDTAARA  DTAARA(*LDA (100 3)) VALUE(' ')
+005100130224             RUNCMD     CMD('CHGDTAARA  DTAARA(*LDA (100 3)) +
+005200130224                          VALUE(''&&INSTANCES'')') SQL('select +
+005300130306                          digits(instanceno) len(3) name(instances) +
+005400130224                          from mfamtjobp where jobname = "JOBDAILY" +
+005500130224                          and jobsegment = "AASWTTXN1"')
+005600130224
+005700130224             RTVDTAARA  DTAARA(*LDA (101 2)) RTNVAR(&INSTANCEA)
+005800130224
+005900130224             IF         COND(&INSTANCEA *EQ '  ' *OR &INSTANCEA *EQ +
+006000130224                          '00' *OR &INSTANCEA *EQ ' 0') THEN(CHGVAR +
+006100130224                          VAR(&INSTANCEA) VALUE('01'))
+006200130224
+006300130224             CHGVAR     VAR(&INSTANCES) VALUE(&INSTANCEA)
+006400190905
+006500130224 /* Get Multi-Thread Queue Name */
+006600130224
+006700130224             CHGDTAARA  DTAARA(*LDA (110 10)) VALUE(' ')
+006800130224             RUNCMD     CMD('CHGDTAARA  DTAARA(*LDA (110 10)) +
+006900130224                          VALUE(''&&JOBQ'')') SQL('select TXNJOBQ +
+007000130224                          len(10) name(jobq) from mfamtjobp where +
+007100130224                          jobname = "JOBDAILY" and jobsegment = +
+007200130224                          "AASWTTXN1"')
+007300130224
+007400130224             RTVDTAARA  DTAARA(*LDA (110 10)) RTNVAR(&INSTQ)
+007500130224
+007600130225/* If only one instance is there no need of multi-threading */
+007700130225
+007800130304             IF         COND(&INSTANCES *EQ 1) THEN(DO)
+007801190903/*RFS 184524 Starts */
+007900190903/*              CALL       PGM(AASWTTXN1) PARM(&PAASWTTXN1) */
+007903190903                CALL       PGM(AASWTTXN1) PARM(&PAASWTTXN1 &LT_SPACE)
+007904190903/*184524     Ends */
+008000130225             GOTO       CMDLBL(EXIT)
+008100130225             ENDDO
+008200130225
+008300130225/* Retrive object library,compnay code,process date  */
+008400130225
+008500130225             RTVDTAARA  DTAARA(MFAOBJECTS) RTNVAR(&OJLIB)
+008600130306             RTVDTAARA  DTAARA(MFACMPCDP (1 3)) RTNVAR(&CMPCDE)
+008700130306             RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&PRCDTE)
+008800130225
+008900130225/*  Capture and Count how many AAP Transfer/Switch  */
+009000130225/*  transactions are for this execution             */
+009100130321
+009200130225             DLTF       FILE(QTEMP/SQAAPTRNS)
+009300130225             MONMSG     MSGID(CPF0000)
+009400130307
+010100130403             EXECUTE    SQL('SELECT t1.PLACEMENT_DATE, t1.TRANS_NO, +
+010200130403                          t1.account_no, t1.INVESTMENT_CODE, +
+010300130403                          i1.PRODUCT_TYPE_CODE  FROM mfatrntgp a, +
+010400130403                          mfatrnp t1, mfainvp i1, mfatrnp t2, +
+010500130403                          mfainvp i2 WHERE a.placement_date = +
+010600130403                          t1.placement_date AND a.trans_no = +
+010700130403                          t1.trans_no AND  a.placement_date_2 = +
+010800130403                          t2.placement_date AND a.trans_no_2 = +
+010900130403                          t2.trans_no AND t1.investment_code = +
+011000130403                          i1.investment_code AND t2.investment_code +
+011100130403                          = i2.investment_code AND +
+011200130403                          t1.Trans_Type_Code IN ("SWI" ,"SWO",  +
+011300130403                          "TRI" ,"TRO" ) AND t1.Trans_Status_Code +
+011400130403                          in ("PND" , "VER" , "UNC" )  AND +
+011500130403                          t1.Trade_Date <= ' || &PRCDTE || ' AND +
+011600130403                          (i1.Product_Type_Code = "AAP"  OR  +
+011700130403                          i2.Product_Type_Code = "AAP") ') +
+011800130403                          OUTFILE(QTEMP/SQAAPTRNS)
+012100130321
+012101130403             EXECUTE    SQL('SELECT t2.PLACEMENT_DATE, t2.TRANS_NO, +
+012102130403                          t2.account_no, t2.INVESTMENT_CODE, +
+012103130403                          i2.PRODUCT_TYPE_CODE  FROM mfatrntgp a, +
+012104130403                          mfatrnp t1, mfainvp i1, mfatrnp t2, +
+012105130403                          mfainvp i2 WHERE a.placement_date = +
+012106130403                          t1.placement_date AND a.trans_no = +
+012107130403                          t1.trans_no AND  a.placement_date_2 = +
+012108130403                          t2.placement_date AND a.trans_no_2 = +
+012109130403                          t2.trans_no AND t1.investment_code = +
+012110130403                          i1.investment_code AND t2.investment_code +
+012111130403                          = i2.investment_code AND +
+012112130403                          t1.Trans_Type_Code IN ("SWI" ,"SWO",  +
+012113130403                          "TRI" ,"TRO" ) AND t1.Trans_Status_Code +
+012114130403                          in ("PND" , "VER" , "UNC" )  AND +
+012115130403                          t1.Trade_Date <= ' || &PRCDTE || ' AND +
+012116130403                          (i1.Product_Type_Code = "AAP"  OR  +
+012117130403                          i2.Product_Type_Code = "AAP") ') +
+012118130403                          OUTFILE(QTEMP/SQAAPTRNS) MBROPT(*ADD)
+012119130403
+014300130225 /*  Get current number of records of workfile QTEMP/SQAAPTRNS   */
+014400130225
+014500130307             CHGDTAARA  DTAARA(*LDA (121 10)) VALUE(' ')
+014600130307             RUNCMD     CMD('CHGDTAARA  DTAARA(*LDA (121 10)) +
+014700130307                        VALUE(''&&CURNBRREC'')') SQL('select count(*) +
+014800130307                        len(10) name(CURNBRREC) from   +
+014900130307                        QTEMP/SQAAPTRNS ')
+015000130307
+015100130307             RTVDTAARA  DTAARA(*LDA (121 10)) RTNVAR(&CURNBRREC)
+015200130307
+015202130401
+015300130307             CHGVAR     VAR(&NBROFREC) VALUE(&CURNBRREC)
+015401130401             CHGVAR     VAR(&MINTHREADS) VALUE(&INSTANCES * 500)
+015402130401
+015403130401             IF         COND(&BOX *EQ 'TESTING') THEN(DO)
+015500130401             IF         COND(&NBROFREC *LT &MINTHREADS) THEN(DO)
+015501190903/* RFS184524 Starts */
+015600190903/*           CALL       PGM(AASWTTXN1) PARM(&PAASWTTXN1) */
+015602190903             CALL       PGM(AASWTTXN1) PARM(&PAASWTTXN1 &LT_SPACE)
+015603190903/* RFS184524 Ends */
+015604190903
+015700130325             GOTO       CMDLBL(EXIT)
+015800130225             ENDDO
+015801130401
+015802130401             ENDDO
+015900130225
+016000130225 /*  Call FXAASWMULT to prepare thread account grouping  */
+016100130225
+016200130225             CALL       PGM(FXAASWMULT) PARM(&INSTANCES)
+016300130225
+016400130225 /* Multi-Thread Set up */
+016500130225
+016600130225              IF         COND(&INSTANCES *GT 1) THEN(DO)
+016700130225
+016800130225              /* remove last run objects, if any */
+016900130225
+017000130225              DLTDTAQ    DTAQ(&OJLIB/&DQNAME)
+017100130225              MONMSG     MSGID(CPF0000)
+017200130225
+017300130225              /* Create this run objects */
+017400130225
+017500130225             CRTDTAQ    DTAQ(&OJLIB/&DQNAME) MAXLEN(2)
+017600130225
+017700130225             ENDDO
+017800130225
+017900130225  /* Submit Threads to copy files */
+018000130225
+018100130225             CHGVAR     VAR(&SUBMITTED) VALUE(0)
+018200130225
+018300130225 MULTI:      CHGVAR     VAR(&SUBMITTED) VALUE(&SUBMITTED + 1)
+018400130312
+018500130312             CHGVAR     VAR(&SBMNBR) VALUE(&SUBMITTED)
+018600130225
+018700130225             CHGVAR     VAR(&JOBNAME) VALUE(&CMPCDE |< 'AASWT' |< +
+018800130225                          &SBMNBR)
+018900130313
+019000130313             CHGVAR     VAR(&PAASWTTXN1) VALUE(&PAASWTTXN *TCAT +
+019100130313                          &SBMNBR)
+019200130225
+019201190903/* RFS184524 Starts */
+019300190903/*             SBMJOB     CMD(CALL PGM(AASWTTXN1) PARM(&PAASWTTXN1)) +*/
+019301190903/*             JOB(&JOBNAME) JOBQ(&INSTQ) */
+019302190903             SBMJOB     CMD(CALL PGM(AASWTTXN1) PARM(&PAASWTTXN1 +
+019303190903                          &LT_Space)) JOB(&JOBNAME) JOBQ(&INSTQ)
+019304190903/* RFS184524 Ends */
+019500130225
+019600130225             IF         COND(&SUBMITTED *LT &INSTANCES) THEN(GOTO +
+019700130225                          CMDLBL(MULTI))
+019800130318
+019900130318             CHGVAR     VAR(&RETURNED) VALUE(0)
+020000130225
+020100130225 /* Wait until all threads are finished */
+020200130225
+020300130225 DELAY:      CALL       PGM(QRCVDTAQ) PARM(&DQNAME &OJLIB &FIELDLEN +
+020400130225                          &DTA &WAIT)
+020500130225
+020600130225             CHGVAR     VAR(&RETURNED) VALUE(&RETURNED + 1)
+020700130225
+020800130225 /* If thread returns fail, send a pgm message */
+020900130225
+021000130225              IF         COND(&DTA *EQ 'F') THEN(GOTO CMDLBL(FAIL))
+021100130225
+021200130225              IF         COND(&RETURNED *LT &SUBMITTED) THEN(GOTO +
+021300130225                           CMDLBL(DELAY))
+021400130225
+021500130225              GOTO       CMDLBL(EXIT)
+021600130225
+021700130225 FAIL:       SNDUSRMSG  MSG('A failure has occurred.please +
+021800130225                          investigate  the failed instance job. +
+021900130225                          Reply I to continue') VALUES('I' ' ') +
+022000130225                          MSGRPY(&REPLY)
+022100130225
+022200130225             GOTO       CMDLBL(DELAY)
+022300130225
+022400130225 EXIT:       RETURN
+022500130225             ENDPGM

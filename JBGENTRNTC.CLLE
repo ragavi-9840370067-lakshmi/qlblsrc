@@ -1,0 +1,71 @@
+000100180219/********************************************************************/
+000200180219/* TITLE        : Download Adj Trans Tracker Excel Report.          */
+000300180219/* SYSTEM       : L&T Financial Services Technology Inc.            */
+000400180219/* PROGRAM      : JBGENTRNTC                                        */
+000500180219/* DESCRIPTION  : Existing functionality about the Transaction      */
+000600180219/*                Tracker Ad hoc Job (GENTRNTC) logic is moved to   */
+000700180219/*                JBGENTRNTR job to produces the Transaction Tracker*/
+000800180219/*                Excel Report.                                     */
+000900180219/* DATE CREATED : 2018/02/15                                        */
+001000180219/* RFS NUMBER   : RFS177142                                         */
+001100180219/* CALLS PROGRAM: JBGENTRNTR                                        */
+001200180219/********************************************************************/
+001300171102/* ******************************************************************/
+001400171102/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+001500171102/* ******************************************************************/
+001600180222/* Suresh G.    * 2018/02/19 * RFS177142 - Existing logic was moved */
+001700180222/*              *            * to JBGENTRNTR program.               */
+001800180329/* Suresh G.    * 2018/03/02 * RFS178145 - To retrieve USER ID info */
+001801180329/* Janapriya J  * 2018/03/29 * RFS178397 - Recompile                */
+001900171102/* ******************************************************************/
+002000171109             PGM
+002100180220
+002200180220             DCL        VAR(&JOBNAME)    TYPE(*CHAR) LEN(10)
+002300180220             DCL        VAR(&INSTANCES)  TYPE(*DEC)  LEN(2)  VALUE(0)
+002400180220             DCL        VAR(&INSTANCEA)  TYPE(*CHAR) LEN(2)
+002500180220             DCL        VAR(&INSTQ)      TYPE(*CHAR) LEN(10)
+002600180305/* RFS178145 - Starts */
+002700180305             DCL        VAR(&USER)       TYPE(*CHAR) LEN(10)
+002800180305             DCL        VAR(&JOBNBR)     TYPE(*CHAR) LEN(06)
+002900180305/* RFS178145 - Ends  */
+003000180220
+003100180220             CHGVAR     VAR(&JOBNAME) VALUE('JBGENTRNTR')
+003200180220
+003300180220             CHGDTAARA  DTAARA(*LDA (100 3)) VALUE(' ')
+003400180220             RUNCMD     CMD('CHGDTAARA  DTAARA(*LDA (100 3)) +
+003500180220                          VALUE(''&&INSTANCE'')') SQL('select +
+003600180220                          digits(instanceno) len(3) name(instance) +
+003700180220                          from mfamtjobp where jobname = "JBGENTRNTC" +
+003800180220                          and jobsegment = "GENTRNTC"')
+003900180220
+004000180220             RTVDTAARA  DTAARA(*LDA (101 2)) RTNVAR(&INSTANCEA)
+004100180220
+004200180220             IF         COND(&INSTANCEA *EQ '  ' *OR &INSTANCEA *EQ +
+004300180220                          '00' *OR &INSTANCEA *EQ ' 0') THEN(CHGVAR +
+004400180220                          VAR(&INSTANCEA) VALUE('01'))
+004500180220
+004600180220             CHGVAR     VAR(&INSTANCES) VALUE(&INSTANCEA)
+004700180220
+004800180220/* Get Multi-Thread Queue Name */
+004900180220             CHGDTAARA  DTAARA(*LDA (110 10)) VALUE(' ')
+005000180220             RUNCMD     CMD('CHGDTAARA  DTAARA(*LDA (110 10)) +
+005100180220                          VALUE(''&&JOBQ'')') SQL('select TXNJOBQ +
+005200180220                          len(10) name(jobq) from mfamtjobp where +
+005300180220                          jobname = "JBGENTRNTC" and jobsegment = +
+005400180220                          "GENTRNTC"')
+005500180220
+005600180220             RTVDTAARA  DTAARA(*LDA (110 10)) RTNVAR(&INSTQ)
+005700180220
+005800180220             IF         COND(&INSTQ *EQ '  ') THEN(CHGVAR +
+005900180220                          VAR(&INSTQ) VALUE('MULTIQ'))
+006000180305/* RFS178145 - Start */
+006100180305             CHGDTAARA  DTAARA(*LDA (150 16)) VALUE(' ')
+006200180305             RTVJOBA    USER(&USER) NBR(&JOBNBR)
+006300180305             CHGDTAARA  DTAARA(*LDA (150 10)) VALUE(&USER)
+006400180305             CHGDTAARA  DTAARA(*LDA (160 06)) VALUE(&JOBNBR)
+006500180305/* RFS178145 - Ends  */
+006600180220/* Single-Thread, Run then Exit */
+006700180220             SBMJOB     CMD(CALL PGM(JBGENTRNTR)) JOB(&JOBNAME) +
+006800180220                          JOBQ(&INSTQ)
+006900180220
+007000171110EXIT:        ENDPGM

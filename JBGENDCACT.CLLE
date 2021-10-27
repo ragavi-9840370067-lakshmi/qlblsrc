@@ -1,0 +1,86 @@
+000100130709/*****************************************************************/
+000200130709/* TITLE        : FOR GENERATING 'DEATH CLAIMS ACTIVITY' REPORT  */
+000300130709/*                                                               */
+000400130709/* SYSTEM       : L&T FINANCIAL SERVICES TECHNOLOGY INC.         */
+000500130709/*                                                               */
+000600130709/* PROGRAM TYPE : CL                                             */
+000700130709/*                                                               */
+000800130709/* PROGRAMMER   : CHENCHU SAIRAM DARSI                           */
+000900130709/*                                                               */
+001000130709/* DATE         : 09-JULY-2013                                   */
+001100130709/*                                                               */
+001200130709/* PROGRAM      : JBGENDCACT                                     */
+001300130709/*                                                               */
+001400130709/* CALLED BY    : NONE                                           */
+001500130709/*                                                               */
+001600130709/* PARAMETERS   : NONE                                           */
+001700130709/*                                                               */
+001800130709/* CALLS PROGRAM: NONE                                           */
+001900130709/*                                                               */
+002000130718/* DESCRIPTION:  REPORT WILL BE GENERATED ON DEMAND              */
+002100130718/*               AS PER USER ENTRY.                              */
+002200130709/*****************************************************************/
+002300130722/*****************************************************************/
+002400130722/*    C H A N G E   H I S T O R Y                                */
+002500130722/*****************************************************************/
+002600130722/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE             */
+002700130722/*****************************************************************/
+002800130722/* SAIRAM DC  * 22-07-2013   * Initial Coding                    */
+002801140505/* Shu Yin    * 2014/05/05   * RFS 135590 - Fix rounding issue   */
+002900130722/*****************************************************************/
+003000130716             PGM
+003100130709
+003200130716             DCL        VAR(&FRMDTE) TYPE(*CHAR) LEN(08)
+003300130716             DCL        VAR(&TODTE)  TYPE(*CHAR) LEN(08)
+003400130812             DCL        VAR(&MODE)   TYPE(*CHAR) LEN(01)
+003500130821             DCL        VAR(&CMPCDP) TYPE(*CHAR) LEN(40)
+003600130813             DCL        VAR(&ASATDTE)   TYPE(*CHAR) LEN(8)
+003700130718
+003800130718             DLTF       FILE(QTEMP/GENDCACTPF)
+003900130718             MONMSG     MSGID(CPF2105)
+003901140505/*135590 start */
+003906140505             DLTF       FILE(QTEMP/GENRUN)
+003907140505             MONMSG     MSGID(CPF2105)
+003908140505             DLTF       FILE(QTEMP/GENDTHVAL)
+003909140505             MONMSG     MSGID(CPF2105)
+003910140505             DLTF       FILE(QTEMP/GENCALC)
+003911140505             MONMSG     MSGID(CPF2105)
+003912140505             DLTF       FILE(QTEMP/GENTRNINTF)
+003913140505             MONMSG     MSGID(CPF2105)
+003914140505             DLTF       FILE(QTEMP/GENCALCDTH)
+003915140505             MONMSG     MSGID(CPF2105)
+003916140505/*135590 end   */
+004000130718
+004100130716             RTVDTAARA  DTAARA(*LDA (1 8))  RTNVAR(&FRMDTE)
+004200130716             RTVDTAARA  DTAARA(*LDA (9 8))  RTNVAR(&TODTE)
+004300130821             RTVDTAARA  DTAARA(MFACMPCDP (4 40)) RTNVAR(&CMPCDP)
+004400130813             RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&ASATDTE)
+004500130813
+004600130812    /* MODE VALUE WILL BE 'A' HERE */
+004700130813
+004800130812             CHGVAR     VAR(&MODE) VALUE('A')
+004900130812             CALL       PGM(ACCRUALCLC) PARM(&MODE)
+005000130813
+005100130821             CHGDTAARA  DTAARA(*LDA (100 40)) VALUE(&CMPCDP)
+005200130821             CHGDTAARA  DTAARA(*LDA (141 08)) VALUE(&ASATDTE)
+005300130813
+005400130813             EXECUTE    VIEW(GENDCACTVR) OUTFILE(QTEMP/GENRUN)
+005500130813
+005600130813             EXECUTE    VIEW(GENDTHVAL)  OUTFILE(QTEMP/GENDTHVAL)
+005700130813
+005800130904             EXECUTE    VIEW(GENCALC)    OUTFILE(QTEMP/GENCALC)
+005900130904
+005901140505/*135590 start */
+005906140505             EXECUTE    VIEW(GENTRNINT)  OUTFILE(QTEMP/GENTRNINTF)
+005907140505/*135590 end   */
+006000131230             EXECUTE    VIEW(GENCALCDTH) OUTFILE(QTEMP/GENCALCDTH)
+006100131230
+006200130710             OVRPRTF    FILE(SQLPRT1) MAXRCDS(*NOMAX) SAVE(*YES) +
+006300130711                        USRDTA(GENDCACT) SHARE(*YES)
+006400130718
+006500130813             REPORT     REPORT(GENDCACT) VIEW(GENDCACTV) SAVE(*YES) +
+006600130813                                         SETVAR((&FROM &FRMDTE)   +
+006700130813                                         (&TO &TODTE))
+006800130710
+006900130716 PGM_EXIT:   ENDPGM
+007000130710

@@ -1,0 +1,257 @@
+000100130226/*******************************************************************/
+000200130315/* TITLE        : To create the extract file B2BLOANEXT in          */
+000300130315/*              : EFT library                                       */
+000400130226/* SYSTEM       : AS/400                                            */
+000500130226/* PROGRAM TYPE : CL                                                */
+000600130226/* PROGRAMMER   : Callista Niddi                                    */
+000700130226/* PROGRAM      : JB2BLONRPT                                        */
+000800130226/* DESCRIPTION  : This is a new job that will be run in daily       */
+000900130226/*              : batch and it creates the extract file             */
+001000130226/*              : B2BLOANRPT in EFT library.                        */
+001100130226/* DATE CREATED : 2013/02/20                                        */
+001200130226/* RFS NUMBER   : RFS114554                                         */
+001300130226/********************************************************************/
+001400130226/*PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                 */
+001500130226/********************************************************************/
+001600130226/********************************************************************/
+001700130220/* Callista N * 2013/02/20   * New program                          */
+001800130531/* L Martin   * 2013/05/22   * Rfs123655 Format date from YMD to MDY*/
+001900130619/* TamilSelvi * 2013/06/18   * Rfs124404 Recomplied                 */
+002000131015/* Uma C      * 2013/10/15   * RFS 126982 - Added new fields        */
+002100131015/*            *              * TradeDate, GrossAmt and NetAmt.      */
+002200140414/* Suresh G.  * 2013/04/12   * RFS130433-Add new field in WRKB2BEXT1*/
+002400140414/*            *              * and call new job JOBB2BMEU to create */
+002500140414/*            *              * Month End Unit Balances Extract      */
+002501150108/* Jack   A   * 2015/01/08   * RFS143030-Revised to removed the     */
+002502150108/*            *              * quotes from '&EFTMBR'                */
+002600130226/********************************************************************/
+002700130220
+002800130220             PGM
+002900130220
+003000130226             DCL        VAR(&PROCDATE)  TYPE(*CHAR) LEN(8)
+003100130522             DCL        VAR(&PDTEMDYY)  TYPE(*CHAR) LEN(8)
+003200130226             DCL        VAR(&COMPNM)    TYPE(*CHAR) LEN(40)
+003300130226             DCL        VAR(&EFTLIB)    TYPE(*CHAR) LEN(10)
+003400130226             DCL        VAR(&CMPID)     TYPE(*CHAR) LEN(2)
+003500130226             DCL        VAR(&ES)        TYPE(*CHAR) LEN(2)          +
+003600130226                                        VALUE('ES')
+003700130226             DCL        VAR(&JOBNAME)   TYPE(*CHAR) LEN(10)         +
+003800130226                                        VALUE('JB2BLONRPT')
+003900130226             DCL        VAR(&RPTNAME)   TYPE(*CHAR) LEN(10)         +
+004000130315                                        VALUE('B2BLOANEXT')
+004100130311             DCL        VAR(&PROCESS)   TYPE(*CHAR) LEN(1)    +
+004200130311                                        VALUE('N')
+004300130312             DCL        VAR(&TODAYMMDD) TYPE(*CHAR) LEN(04)
+004400130313             DCL        VAR(&EFTMBR)    TYPE(*CHAR) LEN(10)
+004500130226             DCL        VAR(&EFTFILE)   TYPE(*CHAR) LEN(10)         +
+004600130308                                        VALUE('B2BLOANEXT')
+004700130312             DCL        VAR(&RCDCNT)    TYPE(*DEC) LEN(10) VALUE(0)
+004800130312             DCL        VAR(&RCDCNTX)   TYPE(*CHAR) LEN(13)
+004900130312             DCL        VAR(&Qte)       TYPE(*CHAR) LEN(01) VALUE('"')
+005000130312             DCL        VAR(&Trlv)      TYPE(*CHAR) LEN(80) VALUE(' ')
+005100130312             DCL        VAR(&TRAILER)   TYPE(*CHAR) LEN(7) VALUE('TRAILER')
+005200130312             DCL        VAR(&Trl)       TYPE(*CHAR) LEN(30)
+005300130313             DCL        VAR(&FileName)  TYPE(*CHAR) LEN(15)
+005400130308
+005500130220             RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&PROCDATE)
+005600130220
+005700130220             RTVDTAARA  DTAARA(MFACMPNMA (1 40)) RTNVAR(&COMPNM)
+005800130220
+005900130220             RTVDTAARA  DTAARA(MFAEFTLIB (1 10)) RTNVAR(&EFTLIB)
+006000130220
+006100130220             RTVDTAARA  DTAARA(MFADBASE (7 2)) RTNVAR(&CMPID)
+006200130226
+006300130226             CHGVAR     VAR(&TodayMMDD)  VALUE(%SST(&PROCDATE 5 4))
+006400130313
+006500130226
+006600130226  /* GET COMPANY NAME*/
+006700130226
+006800130220             IF         COND(&CMPID *EQ 'EC') THEN(DO)
+006900130220             CHGVAR     VAR(&CMPID) VALUE(&ES)
+007000130226             CHGVAR     VAR(&COMPNM) VALUE('The Empire Life +
+007100130226                                            Insurance Company')
+007200130220             ENDDO
+007300130220
+007400130315  /* GENERATE THE B2BLOANEXT REPORT  */
+007500130226
+007600130220             CALL       PGM(RPTCHK) PARM(&JOBNAME &RPTNAME &PROCESS)
+007700130220
+007800130226             IF         COND(&PROCESS *EQ 'N') THEN(DO)
+007900140412/* RFS130433-Start */
+008000140412/*                      GOTO CMDLBL(EXIT)                       */
+008100140412                        GOTO CMDLBL(B2BMEU)
+008200140412/* RFS130433-End   */
+008300130226             ENDDO
+008400130311
+008500130311  /* CREATE TABLE WRKB2BEXT1  */
+008600130311
+008700130311             DLTF       FILE(QTEMP/WRKB2BEXT1)
+008800130225             MONMSG     MSGID(CPF0000)
+008900130226
+009000130308             DYNSQL     SQL('CREATE TABLE QTEMP/WRKB2BEXT1 (          +
+009100130226                       Account_No              CHAR(15)               +
+009200130226                                               NOT NULL WITH DEFAULT, +
+009300130226                       Loan_ID                 CHAR(10)               +
+009400130226                                               NOT NULL WITH DEFAULT, +
+009500130226                       Investment_Code         CHAR(6)                +
+009600130226                                               NOT NULL WITH DEFAULT, +
+009700130226                       Investment_Name_Short   CHAR(40)               +
+009800130226                                               NOT NULL WITH DEFAULT, +
+009900130320                       Curr_Unit_Bal           NUMERIC(15, 4)         +
+010000130226                                               NOT NULL WITH DEFAULT, +
+010100130320                       Mkt_Value               NUMERIC(15, 2)         +
+010200130226                                               NOT NULL WITH DEFAULT, +
+010300130320                       Total_Mkt_Value         NUMERIC(15, 2)         +
+010400130226                                               NOT NULL WITH DEFAULT, +
+010500130226                       Eff_Date                CHAR(8)                +
+010600130226                                               NOT NULL WITH DEFAULT, +
+010700130311                       Trans_Type_Code         CHAR(25)               +
+010800130226                                               NOT NULL WITH DEFAULT, +
+010900130320                       Unit_Amt                NUMERIC(15, 4)         +
+011000130226                                               NOT NULL WITH DEFAULT, +
+011100130320                       Unit_Price              NUMERIC(25, 4)         +
+011200130226                                               NOT NULL WITH DEFAULT, +
+011300130320                       Dsc_Charge              NUMERIC(15, 4)         +
+011400130226                                               NOT NULL WITH DEFAULT, +
+011500130226                       First_Name              CHAR(25)               +
+011600130226                                               NOT NULL WITH DEFAULT, +
+011700130311                       Last_Name               CHAR(25)               +
+011800130226                                               NOT NULL WITH DEFAULT, +
+011900130226                       Addr1                   CHAR(32)               +
+012000130226                                               NOT NULL WITH DEFAULT, +
+012100130226                       Addr2                   CHAR(32)               +
+012200130226                                               NOT NULL WITH DEFAULT, +
+012300130226                       Addr3                   CHAR(32)               +
+012400130226                                               NOT NULL WITH DEFAULT, +
+012500130226                       Addr4                   CHAR(32)               +
+012600130226                                               NOT NULL WITH DEFAULT, +
+012700130226                       Addr5                   CHAR(32)               +
+012800130226                                               NOT NULL WITH DEFAULT, +
+012900130226                       Dealer_Code             CHAR(04)               +
+013000130226                                               NOT NULL WITH DEFAULT, +
+013100130226                       Rep_Name                CHAR(40)               +
+013200130226                                               NOT NULL WITH DEFAULT, +
+013300130226                       Dealer_Rep_Code         CHAR(05)               +
+013400130226                                               NOT NULL WITH DEFAULT, +
+013500130226                       Rep_Adr1                CHAR(40)               +
+013600130226                                               NOT NULL WITH DEFAULT, +
+013700130226                       Rep_Adr2                CHAR(40)               +
+013800130226                                               NOT NULL WITH DEFAULT, +
+013900130226                       Rep_Adr3                CHAR(40)               +
+014000130226                                               NOT NULL WITH DEFAULT, +
+014100130226                       Rep_Adr4                CHAR(40)               +
+014200130226                                               NOT NULL WITH DEFAULT, +
+014300130226                       Rep_Adr5                CHAR(40)               +
+014400130226                                               NOT NULL WITH DEFAULT, +
+014500130226                       Rep_PstCde1             CHAR(40)               +
+014600130226                                               NOT NULL WITH DEFAULT, +
+014700131022                       Rep_PstCde2             CHAR(09)               +
+014800131022/*126982*/                                     NOT NULL WITH DEFAULT, +
+014900131015/*126982*/             Trade_date              NUMERIC (8)            +
+015000131015/*126982*/                                     NOT NULL WITH DEFAULT, +
+015100131015/*126982*/             Gross_amount            NUMERIC(15, 2)         +
+015200131015/*126982*/                                     NOT NULL WITH DEFAULT, +
+015300131015/*126982*/             Net_amount              NUMERIC(15, 2)         +
+015400140414/*130433*/                                     NOT NULL WITH DEFAULT, +
+015600140414/*130433*/             Trans_Status_Code       CHAR(03)               +
+015700140414/*130433*/                                     NOT NULL WITH DEFAULT)')
+015800130222
+015900130225             CALL       PGM(B2BLOANEXT) PARM(&PROCDATE)
+016000130225
+016100130226        /* Create the header record   */
+016200130522
+016300130531/*123655*/   CVTDAT     DATE(&PROCDATE) TOVAR(&PDTEMDYY) +
+016400130531/*123655*/                FROMFMT(*YYMD) TOFMT(*MDYY) TOSEP(*NONE) +
+016500130226
+016600130226             DLTF       FILE(QTEMP/WRKB2BEXT)
+016700130226             MONMSG     MSGID(CPF0000)
+016800130226
+016900130226             CRTPF      FILE(QTEMP/WRKB2BEXT) RCDLEN(1000) SIZE(*NOMAX)
+017000130226
+017700130312             INSERT     INTO(QTEMP/WRKB2BEXT) SQL('SELECT ' || '"' +
+017800130522/*123655*/                || &PDTEMDYY || &CMPID || &COMPNM || '"' +
+017900130522/*123655*/                || ' from SQLEXEC')
+018000130522/*123655                  || &PROCDATE || &CMPID || &COMPNM || '"' +
+018100130522                          || ' from SQLEXEC')                        */
+018200130226
+018300130226    /* Create the  detail   */
+018400140414/* RFS130433-Start */
+018500140423             OVRDBF     FILE(WRKB2BEXT) TOFILE(QTEMP/WRKB2BEXT) +
+018600140423                          LVLCHK(*NO)
+018700140423
+018800140414             EXECUTE    VIEW(B2BLOANEXV) OUTFILE(QTEMP/WRKB2BEXT) +
+018900140414                          MBROPT(*ADD)
+019000130225
+019100140414/*           CPYF       FROMFILE(QTEMP/WRKB2BEXT1) +
+019200130312                          TOFILE(QTEMP/WRKB2BEXT) MBROPT(*ADD) +
+019300140414                          FMTOPT(*NOCHK)                           */
+019700140414/*           MONMSG     MSGID(CPF2817)                             */
+019800140414/* RFS130433-End   */
+019900130312
+020000130226    /* Create trailer records*/
+020100130226
+020200130320             RTVMBRD    FILE(QTEMP/WRKB2BEXT) NBRCURRCD(&RCDCNT)
+020300130312             CHGVAR     VAR(&RCDCNT) VALUE(&RCDCNT + 1)
+020400130312             CHGVAR     VAR(&RCDCNTX) VALUE(&RCDCNT)
+020500130226
+020600130312             CHGVAR     VAR(&TRL) VALUE(&QTE *CAT &TRAILER *CAT +
+020700130312                                        &RCDCNTX *CAT &QTE)
+020800130312             CHGVAR     VAR(&TRLV) VALUE('SELECT' *CAT &TRL *CAT +
+020900130312                                         'FROM SQLEXEC')
+021000130318
+021100130318             INSERT    INTO(QTEMP/WRKB2BEXT) SQL(&TRLV)
+021200130318
+021300130318             CHGVAR     VAR(&EFTMBR) VALUE('M' || &TODAYMMDD)
+021400130312
+021500130318             CHGVAR     VAR(&FILENAME) VALUE('B2BLOANEXT' *TCAT +
+021600130318                          &TODAYMMDD)
+021700130226
+021800130318             CHKOBJ     OBJ(&EFTLIB/&EFTFILE) OBJTYPE(*FILE)
+021900130318             MONMSG     MSGID(CPF0000) EXEC(DO)
+022000130318             CRTPF      FILE(&EFTLIB/&EFTFILE) RCDLEN(1000) +
+022100130318                          MAXMBRS(*NOMAX) SIZE(*NOMAX)
+022200130318             RMVM       FILE(&EFTLIB/&EFTFILE) MBR(&EFTFILE)
+022300130318             MONMSG     MSGID(CPF0000)
+022400130318             ENDDO
+022500130318
+022600130318             RMVM       FILE(&EFTLIB/&EFTFILE) MBR(&EFTMBR)
+022700130318             MONMSG     MSGID(CPF0000)
+022800130312
+022900130313             CPYF       FROMFILE(QTEMP/WRKB2BEXT) +
+023000130318                          TOFILE(&EFTLIB/&EFTFILE) +
+023100130313                          FROMMBR(*FIRST) TOMBR(&EFTMBR) +
+023200130313                          MBROPT(*REPLACE) FMTOPT(*NOCHK)
+023300130226             MONMSG     MSGID(CPF0000)
+023400130226
+023500130226
+023600130226
+023700130226 /* Set up for LDA     */
+023800130226
+023900130226              CHGDTAARA  DTAARA(*LDA (900 110)) VALUE(' ')
+024000130226              CHGDTAARA  DTAARA(*LDA (900 10)) VALUE(&JOBNAME) /* +
+024100130226                           &JOBNAME */
+024200130226              CHGDTAARA  DTAARA(*LDA (910 10)) VALUE('B2BLOANEXT') /* +
+024300130226                           &FORMCD  */
+024400130226              CHGDTAARA  DTAARA(*LDA (920 10)) VALUE(&EFTLIB) /* +
+024500130226                           &LIBRARY */
+024600130226              CHGDTAARA  DTAARA(*LDA (930 10)) VALUE(&EFTFILE)    /* +
+024700130226                           &FILE    */
+024701150108/* RFS 143030 - Start                                              */
+024800150108/*       CHGDTAARA  DTAARA(*LDA (940 10)) VALUE('&EFTMBR') */  /* +
+024900150108                           &MEMBER  */
+024901150108         CHGDTAARA  DTAARA(*LDA (940 10)) VALUE(&EFTMBR)       /* +
+024902150108                           &MEMBER  */
+024903150108/* RFS 143030 - End                                                */
+025000130313              CHGDTAARA  DTAARA(*LDA (960 30)) VALUE(&FILENAME) /* +
+025100130226                          filename */
+025200130226              CHGDTAARA  DTAARA(*LDA (990 8)) VALUE(&PROCDATE)   /* +
+025300130226                           &PROCESSDATE */
+025400130226              CHGDTAARA  DTAARA(*LDA (998 2)) VALUE('UT') /* &JOBMODE */
+025500130313
+025600130313    /* Update the FTP-REQUEST file by calling JOBGENFTPR  */
+025700130313
+025800130313             CALL       PGM(FXFTPIFS)
+025900130226
+026000140414 B2BMEU:     CALL       PGM(JOBB2BMEU)              /* RFS130433 */
+026100140414 EXIT:       RETURN
+026200130226             ENDPGM

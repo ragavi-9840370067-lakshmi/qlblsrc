@@ -1,0 +1,711 @@
+000100100422/* ******************************************************************/
+000200100506/* * TITLE        : Generate CRA RRSP/RRIF Reports and Extracts     */
+000300100422/* *                                                                */
+000400100422/* * PROGRAMMER   : Alan Andrade                                    */
+000500100422/* *                                                                */
+000600100422/* * DATE-WRITTEN : April 2010                                      */
+000700100422/* *                                                                */
+000800100514/* * DESCRIPTION  : Adhoc program to generate the following...      */
+000900100506/* *              * CRAADRELI - Monthly CRA RRSP/RRIF Admin Relief  */
+001000100520/* *                            Internal Report and Extract         */
+001100100506/* *              * CRAADRELE - CRA RRSP/RRIF Admin Relief External */
+001200100520/* *                            Report and Extract                  */
+001300100516/* *              * Email the CRAADRELI & CRAADRELE Extracts        */
+001400100422/* ******************************************************************/
+001500100422/* *PROGRAMMER*DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+001600100422/* ******************************************************************/
+001700100705/* Alan A.    * 2010/04/29   * RFS 75821 Creation.                  */
+001800100705/* Alan A.    * 2010/07/05   * RFS 84621 Add library ESEND to list  */
+001900100707/* Alan A.    * 2010/07/07   * RFS 84723 Add User Data to reports   */
+002000100713/* Alan A.    * 2010/07/13   * RFS 84954 Fix Case 2 selection of    */
+002100100713/*            *              *           spousal change flag.       */
+002200100719/* Alan A.    * 2010/07/15   * RFS 84986 Check Data and Change logs */
+002300100719/*            *              *           for records prior to exit  */
+002400100719/* Alan A.    * 2010/07/16   * RFS 85101 Add company code and env   */
+002500100719/*            *              *           to message and file name   */
+002600101021/* Alan A.    * 2010/09/14   * RFS 86259 Select records if auditdate*/
+002700101021/*            *              * > most recent submission date        */
+002800100930/* Brian L.   * 2010/09/30   * RFS85251 Tax group only need reports */
+002900100930/*            *              *          CRAADRELE for PDF and XLS.  */
+003000101004/*            *              *          Fix Exteranl to External    */
+003100130731/*            *              *          Fix Exteranl to External    */
+003200131011/* Tamilselvi * 2013/07/26   * RFS125894 -Recompile for MFAPRORPP   */
+003300100422/* ******************************************************************/
+003400011105
+003500100506      PGM
+003600100429
+003700100429             DCL        VAR(&AsAtDte)    TYPE(*CHAR) LEN(8)
+003800100429             DCL        VAR(&AsAtMD)     TYPE(*CHAR) LEN(4)
+003900100429             DCL        VAR(&LstAsAtDte) TYPE(*CHAR) LEN(8)
+004000100429             DCL        VAR(&LstAsAtMD)  TYPE(*CHAR) LEN(4)
+004100100429             DCL        VAR(&JobName)    TYPE(*CHAR) LEN(10) +
+004200100429                                         VALUE('JOBDLYRPT3')
+004300100429             DCL        VAR(&RptName1)   TYPE(*CHAR) LEN(10) +
+004400100429                                         VALUE('CRAADRELI')
+004500100429             DCL        VAR(&RptName2)   TYPE(*CHAR) LEN(10) +
+004600100429                                         VALUE('CRAADRELE')
+004700100429             DCL        VAR(&FrqMo)      TYPE(*CHAR) LEN(2)  +
+004800100429                                         VALUE('MO')
+004900100429             DCL        VAR(&MoEndInd)   TYPE(*CHAR) LEN(1)
+005000100614             DCL        VAR(&CraRptDt01) TYPE(*CHAR) LEN(4)
+005100100614             DCL        VAR(&CraRptDt02) TYPE(*CHAR) LEN(4)
+005200100614             DCL        VAR(&CraRptDt03) TYPE(*CHAR) LEN(4)
+005300100614             DCL        VAR(&CraRptDt04) TYPE(*CHAR) LEN(4)
+005400100614             DCL        VAR(&CraRptDt05) TYPE(*CHAR) LEN(4)
+005500100614             DCL        VAR(&CraRptDt06) TYPE(*CHAR) LEN(4)
+005600100614             DCL        VAR(&CraRptDt07) TYPE(*CHAR) LEN(4)
+005700100614             DCL        VAR(&CraRptDt08) TYPE(*CHAR) LEN(4)
+005800100614             DCL        VAR(&CraRptDt09) TYPE(*CHAR) LEN(4)
+005900100614             DCL        VAR(&CraRptDt10) TYPE(*CHAR) LEN(4)
+006000100614             DCL        VAR(&CraRptDt11) TYPE(*CHAR) LEN(4)
+006100100614             DCL        VAR(&CraRptDt12) TYPE(*CHAR) LEN(4)
+006200100429             DCL        VAR(&RptNme1)    TYPE(*CHAR) LEN(10)
+006300100510             DCL        VAR(&PrvRunDte)  TYPE(*CHAR) LEN(8)
+006400100510             DCL        VAR(&PrvRunTme)  TYPE(*CHAR) LEN(8)
+006500100429             DCL        VAR(&PrvRunDte1) TYPE(*CHAR) LEN(8)
+006600100429             DCL        VAR(&PrvRunTme1) TYPE(*CHAR) LEN(8)
+006700100429             DCL        VAR(&RptNme2)    TYPE(*CHAR) LEN(10)
+006800100429             DCL        VAR(&PrvRunDte2) TYPE(*CHAR) LEN(8)
+006900100429             DCL        VAR(&PrvRunTme2) TYPE(*CHAR) LEN(8)
+007000100429             DCL        VAR(&CurrDate)   TYPE(*CHAR) LEN(8)
+007100100429             DCL        VAR(&CurrTime)   TYPE(*CHAR) LEN(8)
+007200100505             DCL        VAR(&RCount)     TYPE(*DEC)  LEN(10 0)
+007300100719/*R84986*/   DCL        VAR(&RCount2)    TYPE(*DEC)  LEN(10 0)
+007400100517             DCL        VAR(&ExtRcount)  TYPE(*DEC)  LEN(10 0)
+007500100505             DCL        VAR(&Pos)        TYPE(*DEC)  LEN(5 0)
+007600100505             DCL        VAR(&Pos2)       TYPE(*DEC)  LEN(5 0)
+007700100505             DCL        VAR(&Max)        TYPE(*DEC)  LEN(5 0) VALUE(30)
+007800100505             DCL        VAR(&Cmp)        TYPE(*CHAR) LEN(3)
+007900100505             DCL        VAR(&CmpNme)     TYPE(*CHAR) LEN(40)
+008000100505             DCL        VAR(&CmpNme2)    TYPE(*CHAR) LEN(30)
+008100100506             DCL        VAR(&IfsType)    TYPE(*CHAR) LEN(02)
+008200100506             DCL        VAR(&IfsOwner)   TYPE(*CHAR) LEN(04)
+008300100506             DCL        VAR(&IfsMethod)  TYPE(*CHAR) LEN(03)
+008400100506             DCL        VAR(&IfsDir)     TYPE(*CHAR) LEN(300)
+008500100520             DCL        VAR(&IfsFile)    TYPE(*CHAR) LEN(400)
+008600100520             DCL        VAR(&IfsFile1)   TYPE(*CHAR) LEN(400)
+008700100520             DCL        VAR(&IfsFile2)   TYPE(*CHAR) LEN(400)
+008800100506             DCL        VAR(&lb_Eof)     TYPE(*LGL)  VALUE('0')
+008900100506             DCL        VAR(&lb_Eol)     TYPE(*LGL)  VALUE('0')
+009000100513             DCL        VAR(&lb_EmlEof)  TYPE(*LGL)  VALUE('0')
+009100100611             DCL        VAR(&FileName)   TYPE(*CHAR) LEN(30)
+009200100513             DCL        VAR(&EmailAddr)  TYPE(*CHAR) LEN(200)
+009300100930/*R85251*/   DCL        VAR(&EmailATax)  TYPE(*CHAR) LEN(200)
+009400100513             DCL        VAR(&EmailSubj)  TYPE(*CHAR) LEN(80)
+009500100516             DCL        VAR(&Attach)     TYPE(*CHAR) LEN(300)
+009600100719/*R85101*/   DCL        VAR(&CmpEnv)     TYPE(*CHAR) LEN(7)
+009700100719/*R85101*/   DCL        VAR(&Env)        TYPE(*CHAR) LEN(1)
+009800100716/*R85101*/   DCL        VAR(&RptTitle1)  TYPE(*CHAR) LEN(60) +
+009900100716                          VALUE('CRAADRELI Monthly Control Internal +
+010000100716                          Report - ')
+010100100716/*R85101*/   DCL        VAR(&RptTitle2)  TYPE(*CHAR) LEN(60) +
+010200101004/*R85251*/                VALUE('CRAADRELE Monthly Control External +
+010300100716                          Report - ')
+010400100516             DCL        VAR(&EmailMsg)   TYPE(*CHAR) LEN(200)
+010500100513             DCL        VAR(&EmailSubj1) TYPE(*CHAR) LEN(80) +
+010600100719                          VALUE('CRAADRELI-CRA RRSP/RRIF Adm +
+010700100716                          Relief Internal Extract-')
+010800100513             DCL        VAR(&EmailSubj2) TYPE(*CHAR) LEN(80) +
+010900100719                          VALUE('CRAADRELE-FULL RRSP/RRIF Adm +
+011000100716                          Relief External Extract-')
+011100100608             DCL        VAR(&EmailSubj3) TYPE(*CHAR) LEN(80) +
+011200100719                          VALUE('CRAADRELE-CRA RRSP/RRIF Adm +
+011300100716                          Relief External Extract-')
+011400100516             DCL        VAR(&EmailMsg1) TYPE(*CHAR) LEN(200) +
+011500100716                          VALUE('   Enclosed please find the +
+011600100516                          CRAADRELI - CRA RRSP/RRIF Admin Relief +
+011700100611                          Internal Control Report.  Please do not +
+011800100516                          reply to this email.   Regards, JBGENCRARP')
+011900100516             DCL        VAR(&EmailMsg2) TYPE(*CHAR) LEN(200) +
+012000100716                          VALUE('   Enclosed please find the +
+012100100608                          CRAADRELE - FULL RRSP/RRIF Admin Relief +
+012200100516                          External report.  Please do not +
+012300100516                          reply to this email.   Regards, JBGENCRARP')
+012400100608             DCL        VAR(&EmailMsg3) TYPE(*CHAR) LEN(200) +
+012500100716                          VALUE('   Enclosed please find the +
+012600100608                          CRAADRELE - CRA RRSP/RRIF Admin Relief +
+012700100608                          External report.  Please do not +
+012800100608                          reply to this email.   Regards, JBGENCRARP')
+012900100513             DCL        VAR(&JobName1)   TYPE(*CHAR) LEN(10) +
+013000100513                                         VALUE('JBGENCRARP')
+013100100429
+013200100429             DCLF       FILE(MFAPRORPP)
+013300100513             DCLF       FILE(MFAJBSCPRP) OPNID(SCPRP)
+013400100429
+013500100429/* Get misc parameters                                               */
+013600100429
+013700100429             CALL       PGM(GETDAT) PARM(&CurrDate)
+013800100429             RTVSYSVAL  SYSVAL(QTIME) RTNVAR(&CurrTime)
+013900100505             RTVDTAARA  DTAARA(MFAPRCDTP (1 8))  RTNVAR(&AsAtDte)
+014000100429             RTVDTAARA  DTAARA(MFACRADMN (1 10)) RTNVAR(&RptNme1)
+014100100429             RTVDTAARA  DTAARA(MFACRADMN (21 8)) RTNVAR(&PrvRunDte1)
+014200100429             RTVDTAARA  DTAARA(MFACRADMN (29 8)) RTNVAR(&PrvRunTme1)
+014300100505             RTVDTAARA  DTAARA(MFACRADMN (51 10)) RTNVAR(&RptNme2)
+014400100429             RTVDTAARA  DTAARA(MFACRADMN (61 8)) RTNVAR(&PrvRunDte2)
+014500100429             RTVDTAARA  DTAARA(MFACRADMN (69 8)) RTNVAR(&PrvRunTme2)
+014600100429             RTVDTAARA  DTAARA(MFAPRCDTP (10 1)) RTNVAR(&MoEndInd)
+014700100429             RTVDTAARA  DTAARA(MFAPRCDTP (54 8)) RTNVAR(&LstAsAtDte)
+014800100429             RTVDTAARA  DTAARA(MFAPRCDTP (58 4)) RTNVAR(&LstAsAtMD)
+014900100505             RTVDTAARA  DTAARA(MFACMPNMA (1 30)) RTNVAR(&CmpNme2)
+015000100505             RTVDTAARA  DTAARA(MFACMPCDP (1 3))  RTNVAR(&Cmp)
+015100100429             CHGVAR     VAR(&LstAsAtMD) VALUE(%SST(&LstAsAtDte 5 4))
+015200100429             CHGVAR     VAR(&AsAtMD)    VALUE(%SST(&AsAtDte 5 4))
+015300100614
+015400100614/* Update CRA RRSP/RRIF Admin Relief monthly control data area      */
+015500100614
+015600100614             CHGDTAARA  DTAARA(MFACRADMN (21 8)) VALUE(&CurrDate)
+015700100614             CHGDTAARA  DTAARA(MFACRADMN (29 8)) VALUE(&CurrTime)
+015800100614             CHGDTAARA  DTAARA(MFACRADMN (61 8)) VALUE(&CurrDate)
+015900100614             CHGDTAARA  DTAARA(MFACRADMN (69 8)) VALUE(&CurrTime)
+016000100512
+016100100517/* Get MfaIvrDtp data from TmpIvrDlp.                                */
+016200100512
+016300100517          DLTF       FILE(QTEMP/TmpIvrDlp1)
+016400100516          MONMSG     MSGID(CPF0000)
+016500100512
+016600100517          EXECUTE    VIEW(CRAADDLPV) OUTFILE(QTEMP/TmpIvrDlp1) +
+016700100512                          MBROPT(*REPLACE)
+016800100517          RTVMBRD    FILE(QTEMP/TmpIvrDlp1) NBRCURRCD(&Rcount)
+016900100517          IF         COND(&Rcount > 0) THEN(DO)
+017000100517             CPYF     FROMFILE(QTEMP/TmpIvrDlp1) TOFILE(MfaIvrDtp) +
+017100100516                       MBROPT(*ADD)
+017200100516          ENDDO
+017300100505
+017400100512/* Get Job & Report records to check if process = Y/N               */
+017500100505
+017600100516          CPYF FROMFILE(Mfaprorpp) TOFILE(Qtemp/Mfaprorpp) +
+017700100516               MBROPT(*REPLACE) CRTFILE(*YES) +
+017800100516               INCREL((*IF F0000 *EQ &Jobname) (*AND +
+017900100516                       F0001 *EQ &Rptname1))
+018000100505
+018100100516          CPYF FROMFILE(Mfaprorpp) TOFILE(Qtemp/Mfaprorpp) +
+018200100516               MBROPT(*ADD) CRTFILE(*YES) +
+018300100516               INCREL((*IF F0000 *EQ &Jobname) (*AND +
+018400100516                       F0001 *EQ &Rptname2))
+018500100517          RTVMBRD    FILE(QTEMP/Mfaprorpp) NBRCURRCD(&Rcount)
+018600100517          IF         COND(&Rcount = 0) THEN(DO)
+018700100516             RETURN
+018800100516          ENDDO
+018900100506
+019000100516          OVRDBF  FILE(MFAPRORPP) TOFILE(QTEMP/MFAPRORPP)
+019100100516
+019200100516/* Initial Logic                                                    */
+019300100516
+019400100516          CALLSUBR SUBR(InitLogic)
+019500100423
+019600100507/* Main Line - Do Until loop - Get Job/Report info and process       */
+019700100507/* -----------------------------------------                         */
+019800100506          DOUNTIL    COND(&lb_Eof)
+019900100507/* -----------------------------------------                         */
+020000100506
+020100100506             RCVF
+020200100506             MONMSG     MSGID(CPF0864) EXEC(DO)
+020300100506                CHGVAR  VAR(&lb_Eof) VALUE('1')
+020400100507                DLTOVR     FILE(*ALL)
+020500100506                LEAVE
+020600100506             ENDDO
+020700100506
+020800100506             IF COND(&F0003 *NE 'Y') THEN(DO)
+020900100506                ITERATE
+021000100429             ENDDO
+021100100520/* CRAADRELI - CRA Internal                                          */
+021200100506             IF COND(&F0001 *EQ &RptName1 *AND +
+021300100506                     &F0004 *EQ &FrqMo    *AND +
+021400100506                     &MoEndInd *EQ 'Y') THEN(DO)
+021500100509                CALLSUBR SUBR(CraAdrEli)
+021600100513                CALLSUBR SUBR(EmailFile)
+021700100429             ENDDO
+021800100509
+021900100520/* CRAADRELE - CRA External                                         */
+022000100429             IF COND(&F0001 *EQ &RptName2) THEN(DO)
+022100100614                CHGVAR VAR(&CraRptDt01) VALUE(%SST(&F0006 1 4))
+022200100614                CHGVAR VAR(&CraRptDt02) VALUE(%SST(&F0006 5 4))
+022300100614                CHGVAR VAR(&CraRptDt03) VALUE(%SST(&F0006 9 4))
+022400100614                CHGVAR VAR(&CraRptDt04) VALUE(%SST(&F0006 13 4))
+022500100614                CHGVAR VAR(&CraRptDt05) VALUE(%SST(&F0006 17 4))
+022600100614                CHGVAR VAR(&CraRptDt06) VALUE(%SST(&F0006 21 4))
+022700100614                CHGVAR VAR(&CraRptDt07) VALUE(%SST(&F0006 25 4))
+022800100614                CHGVAR VAR(&CraRptDt08) VALUE(%SST(&F0006 29 4))
+022900100614                CHGVAR VAR(&CraRptDt09) VALUE(%SST(&F0006 33 4))
+023000100614                CHGVAR VAR(&CraRptDt10) VALUE(%SST(&F0006 37 4))
+023100100614                CHGVAR VAR(&CraRptDt11) VALUE(%SST(&F0006 41 4))
+023200100614                CHGVAR VAR(&CraRptDt12) VALUE(%SST(&F0006 45 4))
+023300100429
+023400100615                IF COND(((&CraRptDt01 *GT &LstAsAtMD) *AND +
+023500100614                         (&CraRptDt01 *LE &AsAtMD))   *OR  +
+023600100614                        ((&CraRptDt02 *GT &LstAsAtMD) *AND +
+023700100614                         (&CraRptDt02 *LE &AsAtMD))   *OR  +
+023800100614                        ((&CraRptDt03 *GT &LstAsAtMD) *AND +
+023900100614                         (&CraRptDt03 *LE &AsAtMD))   *OR  +
+024000100614                        ((&CraRptDt04 *GT &LstAsAtMD) *AND +
+024100100614                         (&CraRptDt04 *LE &AsAtMD))   *OR  +
+024200100614                        ((&CraRptDt05 *GT &LstAsAtMD) *AND +
+024300100614                         (&CraRptDt05 *LE &AsAtMD))   *OR  +
+024400100614                        ((&CraRptDt06 *GT &LstAsAtMD) *AND +
+024500100614                         (&CraRptDt06 *LE &AsAtMD))   *OR  +
+024600100614                        ((&CraRptDt07 *GT &LstAsAtMD) *AND +
+024700100614                         (&CraRptDt07 *LE &AsAtMD))   *OR  +
+024800100614                        ((&CraRptDt08 *GT &LstAsAtMD) *AND +
+024900100614                         (&CraRptDt08 *LE &AsAtMD))   *OR  +
+025000100614                        ((&CraRptDt09 *GT &LstAsAtMD) *AND +
+025100100614                         (&CraRptDt09 *LE &AsAtMD))   *OR  +
+025200100614                        ((&CraRptDt10 *GT &LstAsAtMD) *AND +
+025300100614                         (&CraRptDt10 *LE &AsAtMD))   *OR  +
+025400100614                        ((&CraRptDt11 *GT &LstAsAtMD) *AND +
+025500100614                         (&CraRptDt11 *LE &AsAtMD))   *OR  +
+025600100614                        ((&CraRptDt12 *GT &LstAsAtMD) *AND +
+025700100614                         (&CraRptDt12 *LE &AsAtMD))) THEN(DO)
+025800100514                     CALLSUBR SUBR(CraAdrEle)
+025900100514                     CALLSUBR SUBR(EmailFile)
+026000100429                ENDDO
+026100100429             ENDDO
+026200100506
+026300100507/* End Main Line - End of DoWhile loop                               */
+026400100506          ENDDO
+026500101021
+026600101021          DLTOVR     FILE(MFAPRORPP)                  /*R86259*/
+026700101021          MONMSG     MSGID(CPF0000)                   /*R86259*/
+026800100505
+026900100520/* CRAADRELI - Monthly CRA RRSP/RRIF Admin Relief Internal Rpt & Ext */
+027000100506/* -----------------------------------------                         */
+027100100506          SUBR       SUBR(CraAdrEli)
+027200100506/* -----------------------------------------                         */
+027300100505             CLRPFM     FILE(CRAADRLIVP)
+027400100505             MONMSG     MSGID(CPF0000)
+027500100511             DLTF       FILE(QTEMP/CRAADRLIV1)
+027600100511             MONMSG     MSGID(CPF0000)
+027700100511             DLTF       FILE(QTEMP/CRAADRLIV2)
+027800100511             MONMSG     MSGID(CPF0000)
+027900100719             DLTF       FILE(QTEMP/TmpIvrDtp)
+028000100719             MONMSG     MSGID(CPF0000)
+028100101021             DLTF       FILE(QTEMP/MFAACRGFP)         /*R86259*/
+028200101021             MONMSG     MSGID(CPF0000)                /*R86259*/
+028300100510
+028400100517             EXECUTE    VIEW(CRAADRLDV1) OUTFILE(QTEMP/TmpIvrDtp) +
+028500100510                          MBROPT(*REPLACE) SETVAR((&PrvRunDte +
+028600100510                          &PrvRunDte1) (&PrvRunTme &PrvRunTme1) +
+028700100509                          (&CurrDate &CurrDate) (&CurrTime &CurrTime))
+028800101021
+028900101021/*R86259 - Start */
+029000101021/* Extract MfaAcrGfp Max submission date records                    */
+029100101021             EXECUTE    VIEW(CRAADRLDV5) OUTFILE(QTEMP/MfaAcrGfp) +
+029200101021                          MBROPT(*REPLACE)
+029300101021
+029400101021             OVRDBF     FILE(MfaAcrGfp) TOFILE(QTEMP/MfaAcrGfp)
+029500101021/*R86259 - End   */
+029600100509
+029700100517             RTVMBRD    FILE(QTEMP/TmpIvrDtp) NBRCURRCD(&Rcount)
+029800100509             IF         COND(&Rcount = 0) THEN(RTNSUBR)
+029900100509
+030000100517             OVRDBF     FILE(TmpIvrDtp) TOFILE(QTEMP/TmpIvrDtp)
+030100100505
+030200100603/* CRAADRELI - Element codes 003/007 & Screen codes ACCRIF/ACCLIF   */
+030300100506             EXECUTE    VIEW(CRAADRLIV1) OUTFILE(QTEMP/CRAADRLIV1) +
+030400100510                          MBROPT(*REPLACE) SETVAR((&AsAtDte &AsAtDte))
+030500100506             CPYF       FROMFILE(QTEMP/CRAADRLIV1) +
+030600100511                          TOFILE(CRAADRLIVP) MBROPT(*ADD) +
+030700100505                          FMTOPT(*NOCHK)
+030800100505
+030900100518/* CRAADRELI -Acctype RRSP/RRIF(2,3,5) to CASH(1) Screen code ACCDTL*/
+031000100506             EXECUTE    VIEW(CRAADRLIV2) OUTFILE(QTEMP/CRAADRLIV2) +
+031100100510                          MBROPT(*REPLACE) SETVAR((&AsAtDte &AsAtDte))
+031200100506             CPYF       FROMFILE(QTEMP/CRAADRLIV2) +
+031300100505                          TOFILE(CRAADRLIVP) MBROPT(*ADD) +
+031400100505                          FMTOPT(*NOCHK)
+031500100604
+031600100604/* CRAADRELI - Element code 021 Screen code ACCDTL                 */
+031700100607             RTVMBRD    FILE(CRAADRLIVP) NBRCURRCD(&Rcount)
+031800100607             IF         COND(&Rcount > 0) THEN(DO)
+031900100607                CALL       CRAADRLI3
+032000100607             ENDDO
+032100100505
+032200100517             DLTOVR     FILE(TmpIvrDtp)
+032300101021             DLTOVR     FILE(MfaAcrGfp)                    /*R86259*/
+032400100611
+032500100611/* Email CraAdrEli Internal Report in *PDF format                  */
+032600100611
+032700100611             IF       COND(&EmailAddr *NE ' ') THEN(DO)
+032800100708                OVRPRTF FILE(SQLPRT1) USRDTA(&RptName1)    /*R84723*/
+032900100611                REPORT  REPORT(CRAADRLI) VIEW(CRAADRLIV)      +
+033000100716                          TITLE(&RptTitle1)                   +
+033100100611                        SETVAR((&AsAtDte &AsAtDte) (&Cmp &Cmp) +
+033200100611                        (&CmpNme &CmpNme))  PCFMT(*PDF) +
+033300100611                         RECIPIENT(&EmailAddr) EMLMSG(&EmailMsg1)
+033400100708                DLTOVR     FILE(&RptName1)                 /*R84723*/
+033500100708                MONMSG     MSGID(CPF0000)                  /*R84723*/
+033600100611             ENDDO
+033700100506
+033800100615/* Generate CraAdrEli Internal Extract in Excel format             */
+033900100517
+034000100518             RTVMBRD    FILE(CRAADRLIVP) NBRCURRCD(&ExtRcount)
+034100100517             IF         COND(&ExtRcount = 0) THEN(RTNSUBR)
+034200100517             IF         COND(&IfsDir = ' ')  THEN(RTNSUBR)
+034300100506
+034400100506             CHGVAR     VAR(&FileName)                             +
+034500100611                           VALUE(&RptName1 *TCAT %SST(&AsAtDte 3 6) +
+034600100719                           *TCAT &CmpEnv *TCAT '.XLS')      /*R85101*/
+034700100517
+034800100520             CHGVAR     VAR(&IfsFile)                             +
+034900100517                           VALUE(&IfsDir *TCAT '/' *TCAT &FileName)
+035000100520             RMVLNK     OBJLNK(&IfsFile)
+035100100517             MONMSG     MSGID(CPF0000)
+035200100506
+035300100611             EXECUTE   VIEW(CRAADRLIV) PCFMT(*XLS)               +
+035400100506                          TOSTMF(&IfsFile) REPLACE(*YES)         +
+035500100506                          SETVAR((&AsAtDte &AsAtDte) (&Cmp &Cmp) +
+035600100506                          (&CmpNme &CmpNme))
+035700100506
+035800100506             CHGAUT     OBJ(&IfsFile) USER(*PUBLIC) DTAAUT(*RWX) +
+035900100506                          OBJAUT(*ALL)
+036000100506             MONMSG     MSGID(CPF0000)
+036100100506
+036200100506          ENDSUBR
+036300100505
+036400100506/* CRAADRELE - CRA RRSP/RRIF Admin Relief External Report           */
+036500100506/* -----------------------------------------                        */
+036600100506          SUBR       SUBR(CraAdrEle)
+036700100506/* -----------------------------------------                        */
+036800100509
+036900100520             CLRPFM     FILE(CRAADRLE1P)
+037000100511             MONMSG     MSGID(CPF0000)
+037100100520             CLRPFM     FILE(CRAADRLE2P)
+037200100520             MONMSG     MSGID(CPF0000)
+037300100520             DLTF       FILE(QTEMP/TmpIvrDtp)
+037400100520             MONMSG     MSGID(CPF0000)
+037500100511             DLTF       FILE(QTEMP/TMPIVRCLP)
+037600100511             MONMSG     MSGID(CPF0000)
+037700100511             DLTF       FILE(QTEMP/TMPIVRCLP1)
+037800100511             MONMSG     MSGID(CPF0000)
+037900100518             DLTF       FILE(QTEMP/TMPIVRCLP2)
+038000100518             MONMSG     MSGID(CPF0000)
+038100101021             DLTF       FILE(QTEMP/TMPIVRCLP4)        /*R86259*/
+038200101021             MONMSG     MSGID(CPF0000)                /*R86259*/
+038300101021             DLTF       FILE(QTEMP/MFAACRGFP)         /*R86259*/
+038400101021             MONMSG     MSGID(CPF0000)                /*R86259*/
+038500100511             DLTF       FILE(QTEMP/CRAADRLEV1)
+038600100511             MONMSG     MSGID(CPF0000)
+038700100713             DLTF       FILE(QTEMP/CRAADRLEV2)        /*R84954*/
+038800100713             MONMSG     MSGID(CPF0000)                /*R84954*/
+038900100511             DLTF       FILE(QTEMP/CRAADRLEV3)
+039000100511             MONMSG     MSGID(CPF0000)
+039100100512             DLTF       FILE(QTEMP/CRAADRLEV4)
+039200100512             MONMSG     MSGID(CPF0000)
+039300100512             DLTF       FILE(QTEMP/CRAADRLEV5)
+039400100512             MONMSG     MSGID(CPF0000)
+039500100513             DLTF       FILE(QTEMP/CRAADRLEV6)
+039600100513             MONMSG     MSGID(CPF0000)
+039700100511
+039800100510/* Extract MfaIvrDtp records by date range                          */
+039900100517             EXECUTE    VIEW(CRAADRLDV1) OUTFILE(QTEMP/TmpIvrDtp) +
+040000100510                          MBROPT(*REPLACE) SETVAR((&PrvRunDte +
+040100100510                          &PrvRunDte2) (&PrvRunTme &PrvRunTme2) +
+040200100510                          (&CurrDate &CurrDate) (&CurrTime &CurrTime))
+040300100509
+040400100517             OVRDBF     FILE(TmpIvrDtp) TOFILE(QTEMP/TmpIvrDtp)
+040500100507
+040600100525/* Extract MfaIvrClp records by date range for all Screen codes     */
+040700100525             EXECUTE    VIEW(CRAADRLDV2) OUTFILE(QTEMP/TmpIvrClp) +
+040800100510                          MBROPT(*REPLACE) SETVAR((&PrvRunDte +
+040900100510                          &PrvRunDte2) (&PrvRunTme &PrvRunTme2) +
+041000100510                          (&CurrDate &CurrDate) (&CurrTime &CurrTime))
+041100100525
+041200100719             RTVMBRD    FILE(QTEMP/TmpIvrDtp) NBRCURRCD(&Rcount)    /*R84986*/
+041300100719             RTVMBRD    FILE(QTEMP/TmpIvrClp) NBRCURRCD(&Rcount2)   /*R84986*/
+041400100719             IF         COND(&Rcount = 0 *AND &Rcount2 = 0) +
+041500100719                          THEN(RTNSUBR)                             /*R84986*/
+041600101021
+041700101021/*R86259 - Start */
+041800101021/* Summarize TmpIvrClp records by max audit date                    */
+041900101021             EXECUTE    VIEW(CRAADRLDV4) OUTFILE(QTEMP/TmpIvrClp4) +
+042000101021                          MBROPT(*REPLACE)
+042100101021
+042200101021             OVRDBF     FILE(TmpIvrClp) TOFILE(QTEMP/TmpIvrClp4)
+042300101021/*           OVRDBF     FILE(TmpIvrClp) TOFILE(QTEMP/TmpIvrClp)     */
+042400101021/*R86259 - End   */
+042500100510
+042600100525/* Extract MfaIvrClp ACCDTL/ACCT. SPOUSAL odd number changes only   */
+042700100525             EXECUTE    VIEW(CRAADRLDV3) OUTFILE(QTEMP/TmpIvrClp1) +
+042800100518                          MBROPT(*REPLACE)
+042900100511
+043000100511             OVRDBF     FILE(TmpIvrClp1) TOFILE(QTEMP/TmpIvrClp1)
+043100101021
+043200101021/*R86259 - Start */
+043300101021/* Extract MfaAcrGfp Max submission date records                    */
+043400101021             EXECUTE    VIEW(CRAADRLDV5) OUTFILE(QTEMP/MfaAcrGfp) +
+043500101021                          MBROPT(*REPLACE)
+043600101021
+043700101021             OVRDBF     FILE(MfaAcrGfp) TOFILE(QTEMP/MfaAcrGfp)
+043800101021/*R86259 - End   */
+043900100511
+044000100518/* Extract MfaIvrDtp and MfaIvrClp Case 2 records                   */
+044100100510             EXECUTE    VIEW(CRAADRLEV1) OUTFILE(QTEMP/CRAADRLEV1) +
+044200100510                          MBROPT(*REPLACE) SETVAR((&AsAtDte +
+044300100520                          &AsAtDte))
+044400100511             CPYF       FROMFILE(QTEMP/CRAADRLEV1) +
+044500100520                          TOFILE(CRAADRLE1P) MBROPT(*ADD) +
+044600100511                          FMTOPT(*NOCHK)
+044700100713
+044800100713/*R84954 - Begin */
+044900100713/* Extract MfaIvrClp Case 2 records where no MfaIvrDtp exists       */
+045000100713             EXECUTE    VIEW(CRAADRLEV2) OUTFILE(QTEMP/CRAADRLEV2) +
+045100100713                          MBROPT(*REPLACE) SETVAR((&AsAtDte +
+045200100713                          &AsAtDte))
+045300100713             CPYF       FROMFILE(QTEMP/CRAADRLEV2) +
+045400100713                          TOFILE(CRAADRLE1P) MBROPT(*ADD) +
+045500100713                          FMTOPT(*NOCHK)
+045600100713/*R84954 - End   */
+045700100511
+045800100512/* Extract MfaIvrClp Case 5 records                                 */
+045900100511             EXECUTE    VIEW(CRAADRLEV3) OUTFILE(QTEMP/CRAADRLEV3) +
+046000100511                          MBROPT(*REPLACE) SETVAR((&AsAtDte +
+046100100511                          &AsAtDte) (&PrvRunDte &PrvRunDte2) +
+046200100511                          (&CurrDate &CurrDate))
+046300100511             CPYF       FROMFILE(QTEMP/CRAADRLEV3) +
+046400100520                          TOFILE(CRAADRLE1P) MBROPT(*ADD) +
+046500100511                          FMTOPT(*NOCHK)
+046600100512
+046700100512/* Extract MfaIvrDtp Case 5 records                                 */
+046800100512             EXECUTE    VIEW(CRAADRLEV4) OUTFILE(QTEMP/CRAADRLEV4) +
+046900100512                          MBROPT(*REPLACE) SETVAR((&AsAtDte +
+047000100512                          &AsAtDte) (&PrvRunDte &PrvRunDte2) +
+047100100512                          (&CurrDate &CurrDate))
+047200100512             CPYF       FROMFILE(QTEMP/CRAADRLEV4) +
+047300100520                          TOFILE(CRAADRLE1P) MBROPT(*ADD) +
+047400100512                          FMTOPT(*NOCHK)
+047500100512
+047600100512/* Extract MfaIvrClp Case 6 records                                 */
+047700100512             EXECUTE    VIEW(CRAADRLEV5) OUTFILE(QTEMP/CRAADRLEV5) +
+047800100512                          MBROPT(*REPLACE) SETVAR((&AsAtDte +
+047900100512                          &AsAtDte))
+048000100512             CPYF       FROMFILE(QTEMP/CRAADRLEV5) +
+048100100520                          TOFILE(CRAADRLE1P) MBROPT(*ADD) +
+048200100512                          FMTOPT(*NOCHK)
+048300100507
+048400100513/* Extract MfaIvrDtp Case 8 records                                 */
+048500100513             EXECUTE    VIEW(CRAADRLEV6) OUTFILE(QTEMP/CRAADRLEV6) +
+048600100513                          MBROPT(*REPLACE) SETVAR((&AsAtDte +
+048700100513                          &AsAtDte))
+048800100513             CPYF       FROMFILE(QTEMP/CRAADRLEV6) +
+048900100520                          TOFILE(CRAADRLE1P) MBROPT(*ADD) +
+049000100513                          FMTOPT(*NOCHK)
+049100100517
+049200100517             DLTOVR     FILE(TmpIvrDtp)
+049300100517             DLTOVR     FILE(TmpIvrClp)
+049400100517             DLTOVR     FILE(TmpIvrClp1)
+049500101021             DLTOVR     FILE(MfaAcrGfp)                    /*R86259*/
+049600100611
+049700100611/* Email CraAdrEle External Report in *PDF format                    */
+049800100611
+049900100611             IF       COND(&EmailAddr *NE ' ') THEN(DO)
+050000100708                OVRPRTF FILE(SQLPRT1) USRDTA(&RptName2)    /*R84723*/
+050100100611                REPORT  REPORT(CRAADRLE) VIEW(CRAADRLEV)      +
+050200100716                          TITLE(&RptTitle2)                   +
+050300100611                        SETVAR((&AsAtDte &AsAtDte) (&Cmp &Cmp) +
+050400100611                        (&CmpNme &CmpNme)) PCFMT(*PDF) +
+050500100930/*R85251*/              RECIPIENT(&EmailATax) EMLMSG(&EmailMsg3)
+050600100708                DLTOVR     FILE(&RptName2)                 /*R84723*/
+050700100708                MONMSG     MSGID(CPF0000)                  /*R84723*/
+050800100611             ENDDO
+050900100514
+051000100520/* Generate CraAdrEle External Extract                               */
+051100100517
+051200100520             RTVMBRD    FILE(CRAADRLE1P) NBRCURRCD(&ExtRcount)
+051300100517             IF         COND(&ExtRcount = 0) THEN(RTNSUBR)
+051400100517             IF         COND(&IfsDir = ' ')  THEN(RTNSUBR)
+051500100520
+051600100520             CPYF       FROMFILE(CRAADRLE1P) TOFILE(CRAADRLE2P) +
+051700100520                          MBROPT(*ADD) FMTOPT(*MAP *DROP)
+051800100520
+051900100611/* Generate CraAdrEle Client/CRA Extract in Text Excel format       */
+052000100520
+052100100520             CHGVAR     VAR(&FileName)                             +
+052200100611                           VALUE(&RptName2 *TCAT %SST(&AsAtDte 3 6) +
+052300100719                           *TCAT &CmpEnv *TCAT '.XLS')     /*R85101*/
+052400100517
+052500100520             CHGVAR     VAR(&IfsFile1)                             +
+052600100517                           VALUE(&IfsDir *TCAT '/' *TCAT &FileName)
+052700100520             RMVLNK     OBJLNK(&IfsFile1)
+052800100517             MONMSG     MSGID(CPF0000)
+052900100514
+053000100611             EXECUTE   VIEW(CRAADRLE1P) PCFMT(*XLS)               +
+053100100520                          TOSTMF(&IfsFile1) REPLACE(*YES)
+053200100514
+053300100520             CHGAUT     OBJ(&IfsFile1) USER(*PUBLIC) DTAAUT(*RWX) +
+053400100514                          OBJAUT(*ALL)
+053500100514             MONMSG     MSGID(CPF0000)
+053600100520
+053700100611/* Generate CraAdrEle CRA Extract in Excel format                    */
+053800100520
+053900100520             CHGVAR     VAR(&FileName) VALUE(&RptName2 *TCAT 'CRA' +
+054000100716                          *TCAT %SST(&AsAtDte 3 6) +
+054100100719                          *TCAT &CmpEnv *TCAT '.XLS')     /*R85101*/
+054200100520
+054300100520             CHGVAR     VAR(&IfsFile2)                             +
+054400100520                           VALUE(&IfsDir *TCAT '/' *TCAT &FileName)
+054500100520             RMVLNK     OBJLNK(&IfsFile2)
+054600100520             MONMSG     MSGID(CPF0000)
+054700100520
+054800100611             EXECUTE   VIEW(CRAADRLE2P) PCFMT(*XLS)               +
+054900100520                          TOSTMF(&IfsFile2) REPLACE(*YES)
+055000100520
+055100100520             CHGAUT     OBJ(&IfsFile2) USER(*PUBLIC) DTAAUT(*RWX) +
+055200100520                          OBJAUT(*ALL)
+055300100520             MONMSG     MSGID(CPF0000)
+055400100507
+055500100506          ENDSUBR
+055600100422
+055700100506/* Initial Logic section                                            */
+055800100506/* -----------------------------------------                        */
+055900100506          SUBR       SUBR(InitLogic)
+056000100506/* -----------------------------------------                        */
+056100100506
+056200100506             CHGDTAARA  DTAARA(*LDA (44 8)) VALUE(&AsAtDte)
+056300100705
+056400100705             ADDLIBLE   LIB(ESEND) POSITION(*LAST) /*R84621*/
+056500100705             MONMSG     MSGID(CPF2103)             /*R84621*/
+056600100506/* Center company name for Reports                                  */
+056700100506
+056800100506             CHGVAR     VAR(&POS) VALUE(&MAX)
+056900100506
+057000100506             CHGVAR     VAR(&lb_Eol) VALUE('0')
+057100100506             DOUNTIL (&lb_Eol)
+057200100506               IF         COND((&POS *NE 0) & (%SST(&CMPNME2 &POS 1) +
+057300100506                          = ' ')) THEN(DO)
+057400100506                 CHGVAR     VAR(&POS) VALUE(&POS - 1)
+057500100506               ENDDO
+057600100506               ELSE (DO)
+057700100506                 CHGVAR     VAR(&lb_Eol) VALUE('1')
+057800100506               ENDDO
+057900100506             ENDDO
+058000100506
+058100100506             CHGVAR     VAR(&POS2) VALUE(((40  - &POS) / 2) + 105)
+058200100506             CHGDTAARA  DTAARA(*LDA (&POS2 &POS)) VALUE(&CmpNme2)
+058300100506             RTVDTAARA  DTAARA(*LDA (104 40)) RTNVAR(&CmpNme)
+058400100506             CHGDTAARA  DTAARA(*LDA (4 40)) VALUE(&CmpNme)
+058500100506
+058600100513/* Get Email Address for extract files                              */
+058700100513
+058800100517             CHGVAR     VAR(&EmailAddr) VALUE(' ')
+058900100930/*R85251*/   CHGVAR     VAR(&EmailATax) VALUE(' ')
+059000100513             CPYF       FROMFILE(MfaJbScPrp) +
+059100100513                          TOFILE(QTEMP/MfaJbScPrp) MBROPT(*REPLACE) +
+059200100513                          CRTFILE(*YES) INCCHAR(*RCD 1 *EQ &JobName1)
+059300100517
+059400100517             RTVMBRD    FILE(QTEMP/MfaJbScPrp) NBRCURRCD(&Rcount)
+059500100608             IF         COND(&Rcount > 0) THEN(DO)
+059600100517               OVRDBF     FILE(MfaJbScPrp) TOFILE(QTEMP/MfaJbScPrp)
+059700100513
+059800100517               CHGVAR     VAR(&lb_EmlEof) VALUE('0')
+059900100517               DOUNTIL    COND(&lb_EmlEof)
+060000100517                 RCVF       RCDFMT(MfaJbScPrp) OPNID(ScPrp)
+060100100517                 MONMSG     MSGID(CPF0864) EXEC(DO)
+060200100517                    CHGVAR  VAR(&lb_EmlEof) VALUE('1')
+060300100517                    LEAVE
+060400100517                 ENDDO
+060500100513
+060600100930/*R85251         CHGVAR     VAR(&EmailAddr) VALUE(&ScPrp_F0003 *TCAT ',' +
+060700100930                            *TCAT &ScPrp_F0004)     */
+060800100930
+060900100930/*R85251*/       CHGVAR     VAR(&EmailAddr) VALUE(&ScPrp_F0003)
+061000100930/*R85251*/       CHGVAR     VAR(&EmailATax) VALUE(&ScPrp_F0003 *TCAT ',' +
+061100100930                            *TCAT &ScPrp_F0004)
+061200100930
+061300100930/*R85251         IF         COND(&EmailAddr *EQ ',') THEN(CHGVAR +
+061400100930                            VAR(&EmailAddr) VALUE(' ')) */  /*R84621*/
+061500100707
+061600100930/*R85251*/       IF         COND(&EmailAddr *EQ ' ') THEN(CHGVAR +
+061700100930                            VAR(&EmailAddr) VALUE(' '))
+061800100930/*R85251*/       IF         COND(&EmailATax *EQ ',') THEN(CHGVAR +
+061900100930                            VAR(&EmailATax) VALUE(' '))
+062000100517                 LEAVE
+062100100517/* End DoUnitl                                                      */
+062200100517               ENDDO
+062300100517               DLTOVR     FILE(MfaJbScPrp)
+062400100513             ENDDO
+062500100506
+062600100615/* Get IFS Folder to store the file                                 */
+062700100506
+062800100506             CHGVAR    VAR(&IfsType)   VALUE('TX')
+062900100506             CHGVAR    VAR(&IfsOwner)  VALUE('TAXS')
+063000100506             CHGVAR    VAR(&IfsMethod) VALUE('EXT')
+063100100506             CALL       PGM(FxGetIfsD) PARM(&IfsType &IfsOwner +
+063200100506                               &IfsMethod &IfsDir)
+063300100506             IF (&IfsDir *EQ ' ') THEN(DO)
+063400100506                SNDPGMMSG MSG('CRAADRELI/E extract not create +
+063500100506                         because IFS folder not setup correctly')  +
+063600100506                         TOMSGQ(QSYSOPR)
+063700100506             ENDDO
+063800100716
+063900100716/*R85101 Begin */
+064000100719/* Create Email subject and message with company code and env.      */
+064100100719             RTVDTAARA  DTAARA(MfaDbase (4 1)) RTNVAR(&Env)
+064200100719             IF         COND(&Env = 'P') THEN(DO)
+064300100719                CHGVAR  VAR(&CmpEnv) VALUE(&Cmp *CAT '-' *CAT 'PRD')
+064400100719             ENDDO
+064500100719             ELSE       CMD(DO)
+064600100719                CHGVAR  VAR(&CmpEnv) VALUE(&Cmp *CAT '-' *CAT 'ACC')
+064700100719             ENDDO
+064800100719             CHGVAR     VAR(&EmailSubj1) VALUE(&EmailSubj1 *TCAT &CmpEnv)
+064900100719             CHGVAR     VAR(&EmailMsg1)  VALUE('Hello ' *CAT &CmpEnv +
+065000100716                        *CAT ',' *CAT &EmailMsg1)
+065100100719             CHGVAR     VAR(&EmailSubj2) VALUE(&EmailSubj2 *TCAT &CmpEnv)
+065200100719             CHGVAR     VAR(&EmailMsg2)  VALUE('Hello ' *CAT &CmpEnv +
+065300100716                        *CAT ',' *CAT &EmailMsg2)
+065400100719             CHGVAR     VAR(&EmailSubj3) VALUE(&EmailSubj3 *TCAT &CmpEnv)
+065500100719             CHGVAR     VAR(&EmailMsg3)  VALUE('Hello ' *CAT &CmpEnv +
+065600100716                        *CAT ',' *CAT &EmailMsg3)
+065700100719             CHGVAR  VAR(&RptTitle1) VALUE(&RptTitle1 *TCAT &CmpEnv)
+065800100719             CHGVAR  VAR(&RptTitle2) VALUE(&RptTitle2 *TCAT &CmpEnv)
+065900100716/*R85101 End   */
+066000100506
+066100100517          ENDSUBR
+066200100506
+066300100516/* Email the extract file                                           */
+066400100506/* -----------------------------------------                        */
+066500100513          SUBR       SUBR(EmailFile)
+066600100506/* -----------------------------------------                        */
+066700100520             SELECT
+066800100520               WHEN     COND(&EmailAddr = ' ') THEN(RTNSUBR)
+066900100520               WHEN     COND(&ExtRcount = 0)   THEN(RTNSUBR)
+067000100520               WHEN     COND(&IfsDir = ' ')    THEN(RTNSUBR)
+067100100520             ENDSELECT
+067200100520
+067300100520             SELECT
+067400100520              WHEN      COND(&F0001 *EQ &RptName1) THEN(DO)
+067500100520
+067600100520/* CraAdrEli - Email CRA Internal Extract file                       */
+067700100520                CHGVAR     VAR(&EmailSubj) VALUE(&EmailSubj1)
+067800100520                CHGVAR     VAR(&EmailMsg)  VALUE(&EmailMsg1)
+067900100520                CHGVAR     VAR(&Attach)    VALUE(&IfsFile)
+068000100520
+068100100520                ESNDMAIL   RECIPIENT(&EmailAddr) SUBJECT(&EmailSubj) +
+068200100520                          MSG(&EmailMsg) ATTLIST((* *DFT &Attach))
+068300100615                CHGVAR     VAR(&EXTRCOUNT) VALUE(0)
+068400100520              ENDDO
+068500100608
+068600100608/* CraAdrEle - Email FULL & CRA External Extract file                */
+068700100520              WHEN      COND(&F0001 *EQ &RptName2) THEN(DO)
+068800100520                CHGVAR     VAR(&EmailSubj) VALUE(&EmailSubj2)
+068900100520                CHGVAR     VAR(&EmailMsg)  VALUE(&EmailMsg2)
+069000100520
+069100100608/* CraAdrEle - Email FULL External Extract file                      */
+069200100520                CHGVAR     VAR(&Attach)    VALUE(&IfsFile1)
+069300100520
+069400100520                ESNDMAIL   RECIPIENT(&EmailAddr) SUBJECT(&EmailSubj) +
+069500100520                          MSG(&EmailMsg) ATTLIST((* *DFT &Attach))
+069600100520
+069700100520/* CraAdrEle - Email CRA External Extract file                       */
+069800100520                CHGVAR     VAR(&Attach)    VALUE(&IfsFile2)
+069900100608                CHGVAR     VAR(&EmailSubj) VALUE(&EmailSubj3)
+070000100608                CHGVAR     VAR(&EmailMsg)  VALUE(&EmailMsg3)
+070100100520
+070200100930/*R85251        ESNDMAIL   RECIPIENT(&EmailAddr) SUBJECT(&EmailSubj) + */
+070300100930/*R85251*/      ESNDMAIL   RECIPIENT(&EmailATax) SUBJECT(&EmailSubj) +
+070400100520                          MSG(&EmailMsg) ATTLIST((* *DFT &Attach))
+070500100615                CHGVAR     VAR(&EXTRCOUNT) VALUE(0)
+070600100520              ENDDO
+070700100520             ENDSELECT
+070800100520
+070900100506          ENDSUBR
+071000100506
+071100100506      ENDPGM

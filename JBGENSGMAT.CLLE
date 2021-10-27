@@ -1,0 +1,87 @@
+000100091118   /*****************************************************************/
+000200091118   /* TITLE        : To Create Adhoc SEG Forecast Maturity Deposit  */
+000300091118   /*                Report                                         */
+000400091118   /* SYSTEM       : CITI                                           */
+000500091118   /* PROGRAM TYPE : CL                                             */
+000600091118   /* PROGRAMMER   : Brian Lu                                       */
+000700091118   /* PROGRAM      : JBGENSGMAT                                     */
+000800091118   /* DATE         : 2009/11/18                                     */
+000900091118   /* DESCRIPTION  : RFS63637 Process seg. fund reports.            */
+001000091118   /*              : Called by Report (REPMNU)                      */
+001100091118/* ******************************************************************/
+001200091118/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+001300091118/* ******************************************************************/
+001400091118/* Brian Lu   * 2009/11/18   * RFS63637 - Created                   */
+001401091217/* Daisy Ly   * 2009/12/17   * -defect #6 - fix the company name    */
+001500091118/* ******************************************************************/
+001600091118             PGM
+001700091118
+001800091118 /*  These 3 variables are used by Cobol program RPTCHK              */
+001900091203             DCL        VAR(&DATFMT)   TYPE(*CHAR) LEN(4)
+002000091203             DCL        VAR(&BKUP_LDA) TYPE(*CHAR) LEN(1024)
+002100091118             DCL        VAR(&JOBNAME) TYPE(*CHAR) LEN(10)
+002200091118             DCL        VAR(&RPTNAME)   TYPE(*CHAR) LEN(10)
+002300091118             DCL        VAR(&PROCESS)   TYPE(*CHAR) LEN(1) VALUE('N')
+002400091118
+002500091118             DCL        VAR(&FromDate)    TYPE(*CHAR) LEN(8)
+002600091118             DCL        VAR(&ToDate)      TYPE(*CHAR) LEN(8)
+002700091125             DCL        VAR(&TopUp)       TYPE(*CHAR) LEN(1)
+002800091118             DCL        VAR(&MFAEFTLIB) TYPE(*CHAR) LEN(10)
+002900091118             DCL        VAR(&msg)        TYPE(*CHAR) LEN(80)
+003000091118
+003001091216             DCL        VAR(&CMPNME)   TYPE(*CHAR) LEN(40)
+003002091216             DCL        VAR(&CMPNME2)  TYPE(*CHAR) LEN(30)
+003003091216             DCL        VAR(&POS)      TYPE(*DEC)  LEN(5 0)
+003004091216             DCL        VAR(&POS2)     TYPE(*DEC)  LEN(5 0)
+003005091216             DCL        VAR(&MAX)      TYPE(*DEC)  LEN(5 0) VALUE(30)
+003006091216
+003100091118             MONMSG     MSGID(CPF0000) EXEC(GOTO CMDLBL(PGM_ERROR))
+003200091118
+003300091118             OVRPRTF    FILE(QPDSPDTA) HOLD(*YES) SAVE(*YES)
+003400091118             DSPDTAARA  DTAARA(*LDA) OUTPUT(*PRINT)
+003500091118             DLTOVR     FILE(QPDSPDTA)
+003600091203             RTVDTAARA  DTAARA(*LDA)              RTNVAR(&BKUP_LDA)
+003700091118
+003800091118             RTVDTAARA  DTAARA(*LDA (1 8))  RTNVAR(&FromDate)
+003900091118             RTVDTAARA  DTAARA(*LDA (9 8))  RTNVAR(&ToDate)
+004000091125             RTVDTAARA  DTAARA(*LDA (17 1)) RTNVAR(&TopUp)
+004100091118
+004200091118             RTVDTAARA  DTAARA(MFAEFTLIB (1 10)) RTNVAR(&MFAEFTLIB)
+004300091203             RTVJOBA    DATFMT(&DATFMT)
+004400091118
+004500091203
+004600091125             CALL       PGM(SGMATTOP) PARM(&FromDate &ToDate &TopUp)
+004700091118
+005000091203
+005100091130             EXECUTE VIEW(GENSGMATV) OUTFILE(&MFAEFTLIB/SGMAT) +
+005200091130                     REPLACE(*YES)
+005201091216
+005203091216             RTVDTAARA  DTAARA(MFACMPNMA  (1 30)) RTNVAR(&CMPNME2)
+005204091216             CHGVAR     VAR(&POS) VALUE(&MAX)
+005205091216
+005206091216 $CENTER:    IF         COND((&POS *NE 0) & (%SST(&CMPNME2 &POS 1) +
+005207091216                          = ' ')) THEN(DO)
+005208091216             CHGVAR     VAR(&POS) VALUE(&POS - 1)
+005209091216             GOTO       CMDLBL($CENTER)
+005210091216             ENDDO
+005211091216
+005212091216             CHGVAR     VAR(&POS2) VALUE(((40  - &POS) / 2) + 105)
+005213091216
+005214091216/* Populate company name in the LDA                                  */
+005215091216
+005216091216             CHGDTAARA  DTAARA(*LDA (&POS2 &POS)) VALUE(&CMPNME2)
+005220091216             CHGJOB     DATFMT(*YMD)
+005221091216             OVRPRTF    FILE(SQLPRT1) USRDTA('GENSGMAT')
+005300091216             REPORT  REPORT(GENSGMAT) VIEW(GENSGMATV) SAVE(*YES)
+005400091216
+005500091203             CHGJOB     DATFMT(&DATFMT)
+005600091203             CHGDTAARA  DTAARA(*LDA) VALUE(&BKUP_LDA)
+005700091118 PGM_ERROR:
+005800091118             RCVMSG     MSGTYPE(*LAST) MSG(&msg)
+005900091118             MONMSG     CPF0000
+006000091118             SNDPGMMSG  MSG(&msg)
+006100091118             MONMSG     CPF0000
+006200091118
+006300091118 ENDCLPGM:
+006400091118             DMPCLPGM
+006500091118             ENDPGM

@@ -1,0 +1,65 @@
+000100110818/* ******************************************************************/
+000200110818/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000300110818/* ******************************************************************/
+000400110818/* ******************************************************************/
+000500110818/* Richard Shi | 2011/08/18  * RFS99302 - Program Created.          */
+000600110818/*             |             * This CL will be called by GUI FrameW */
+000700110818/*             |             * submit the AdHoc job JBINVAGFTP.     */
+000800110818/*             |             * Input Parameters from *LDA           */
+000900110818/*             |             *   1. Mode -  Char (2) w. pos = 600   */
+001000110818/*             |             *   2. AhRunDate - Dec (8) pos = 602   */
+001100110818/* ************************* *Last* *********************************/
+001200110818             PGM
+001300110818
+001400110818/* Declaring Variables */
+001500110818             dcl        var(&Mode)         type(*char) len(2)
+001600110818             dcl        var(&AhRunDate)    type(*dec)  len(8)
+001700110818             dcl        var(&AhRunDateC)   type(*char) len(8)
+001800110818             dcl        var(&lc_user)      type(*char) len(10)
+001900110818             dcl        var(&lc_jobD)      type(*char) len(10)
+002000110818             dcl        var(&lc_grpprf)    type(*char) len(10)
+002100110818             dcl        var(&Msg_Err)      type(*char) len(01)
+002200110818             dcl        var(&lc_memgrp)    type(*char) len(10) +
+002300110818                        value('MEMGRPPRF')
+002400110818             dcl        var(&lc_dftjobd)   type(*char) len(10) +
+002500110818                        value('QDFTJOBD')
+002600110818/*********************************************************************/
+002700110818/* Retrieve jobd & grpprf of the current user passed to job variable */
+002800110818/*********************************************************************/
+002900110818             RTVUSRPRF  USRPRF(*CURRENT) RTNUSRPRF(&LC_USER) +
+003000110818                          JOBD(&LC_JOBD) GRPPRF(&LC_GRPPRF)
+003100110818
+003200110818             if      cond(&lc_grpprf *eq &lc_memgrp) then(do)
+003300110818             chgvar var(&lc_jobd) value(&lc_dftjobd)
+003400110818             enddo
+003500110818             ChgVar &Msg_Err Value('N')
+003600110818
+003700110818   /* Retrieve data area information for the parms  */
+003800110818LDAPARMS:
+003900110818             RTVDTAARA  DTAARA(*LDA (600 2)) RTNVAR(&Mode)
+004000110818             RTVDTAARA  DTAARA(*LDA (602 8)) RTNVAR(&AhRunDateC)
+004100110818             MONMSG     MSGID(CPF0812) EXEC(ChgVar &Msg_Err Value('Y'))
+004200110818             IF         COND(&Msg_Err *EQ 'Y') THEN(DO)
+004300110818                RTVDTAARA  DTAARA(*LDA (602 8)) RTNVAR(&AhRunDate)
+004400110818             ENDDO
+004500110818             ELSE (DO)
+004600110818                CHGVAR     VAR(&AhRunDate) VALUE(&AhRunDateC)
+004700110818             ENDDO
+004800110818
+004900110818             IF         COND(&MODE *EQ 'AM') THEN(DO)
+005000110818             SBMJOB     CMD(CALL PGM(JBINVAMFTP)             +
+005100110818                          PARM(&MODE &AHRUNDATE))            +
+005200110818                          JOB(JBGUIAMFTP)                    +
+005300110818                          JOBD(*LIBL/&LC_JOBD)               +
+005400110818                          OUTQ(*JOBD) USER(&LC_USER)
+005500110818             ENDDO
+005600110818
+005700110818             IF         COND(&MODE *EQ 'AY') THEN(DO)
+005800110818             SBMJOB     CMD(CALL PGM(JBINVRCFTP)             +
+005900110818                          PARM(&MODE &AHRUNDATE))            +
+006000110818                          JOB(JBGUIRCFTP)                    +
+006100110818                          JOBD(*LIBL/&LC_JOBD)               +
+006200110818                          OUTQ(*JOBD) USER(&LC_USER)
+006300110818             ENDDO
+006400110818
+006500110818end:       endpgm

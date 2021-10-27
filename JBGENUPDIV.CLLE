@@ -1,0 +1,96 @@
+000100030417/* ******************************************************************/
+000200030417/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000300030417/* ******************************************************************/
+000400030417/* ******************************************************************/
+000500090714/* John O'Call. 2009/07/14   * RFS 65049 - New program.             */
+000600150925/* Prashant   . 2015/09/25   * RFS151276 - Recompile for MFAIVRMDP  */
+000601191105/* Jebastin K *  2019/02/22  * RFS1020192- Recompile for MFAIVRCMP*/
+000700180503/* ******************************************************************/
+000800930729PGM
+000900090714             DCL        VAR(&MODE)         TYPE(*CHAR) LEN(1)
+001000090714             DCL        VAR(&MRFPFRQ) TYPE(*CHAR) LEN(1) VALUE('Y')
+001100090714             DCL        VAR(&FINSTMTFRQ) TYPE(*CHAR) LEN(1) VALUE('Y')
+001200090714             DCL        VAR(&ASATDTE) TYPE(*CHAR) LEN(8)
+001300090714
+001400030417/* -----------------------------------------------------------------*/
+001500030417/* Begin Processing                                                 */
+001600030417/* -----------------------------------------------------------------*/
+001700090715
+001800090714/* Get the processing date ........                                 */
+001900090714             RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&ASATDTE)
+002000090714             RTVDTAARA  DTAARA(*LDA (600 1)) RTNVAR(&MODE)
+002100090717
+002200090717             IF         COND(&MODE *EQ 'M') THEN(DO)
+002300090717                RTVDTAARA  DTAARA(*LDA (618 1)) RTNVAR(&MRFPFRQ)
+002400090717                RTVDTAARA  DTAARA(*LDA (619 1)) RTNVAR(&FINSTMTFRQ)
+002500090717             ENDDO
+002600090717
+002700090716             DSPDTAARA  DTAARA(*LDA) OUTPUT(*PRINT)
+002800090715             IF         COND(&FINSTMTFRQ *NE 'Y') THEN(GOTO +
+002900090716                          CMDLBL(UPDMRFP))
+003000090715
+003100090715             EXECUTE    VIEW(GENUPDIV1) OUTFILE(QTEMP/DLYIVR) +
+003200090715                          SETVAR((&ASATDTE &ASATDTE) (&INDFLG +
+003300090715                          &FINSTMTFRQ))
+003400090715
+003500090715             UPDATE     SET((F0014 '" "')) SQL('select * from +
+003600090715                          mfaivrp a where a.f0000 in    (select +
+003700090716                          b.ivrpivrno from qtemp/dlyivr b) ')
+003800090715
+003900090716             INSERT     INTO(MFAIVRDLP) FIELDS(F0000 F0001 F0002 +
+004000090716                          F0003 F0004 F0005 F0006 F0007 F0008 F0009 +
+004100090716                          F0010) SQL('select   ivrpivrno, 0, " ", +
+004200090716                          finfreq, " ", "030", "GENUPDIV", "C", +
+004300090716                          "IVRDTL",(hour(current time) * 10000) + +
+004400090716                          (minute(current time) *100) + +
+004500090716                          (second(current time)), yyyymmdd(current date) +
+004600090716                           from qtemp/DLYIVR')
+004700090715
+004800090715
+004900090716             INSERT     INTO(MFAIVRCLP) FIELDS(F0000 F0001 F0002 +
+005000090716                          F0003 F0004 F0005 F0006 F0007) +
+005100090716                          SQL('select   ivrpivrno, yyyymmdd(current +
+005200090716                          date), (hour(current time) * 10000) + +
+005300090716                          (minute(current time) *100) + +
+005400090716                          second(current time), "GENUPDIV", +
+005500090716                          "IVRDTL", 0, " ",  "Investor Change"  +
+005600090716                          from qtemp/DLYIVR')
+005700090715
+005800090715
+005900090716UPDMRFP:
+006000090715
+006100090716             IF         COND(&MRFPFRQ *NE 'Y') THEN(GOTO +
+006200090716                          CMDLBL(PGM_EXIT))
+006300090715
+006400090715             EXECUTE    VIEW(GENUPDIV1) OUTFILE(QTEMP/DLYIVR) +
+006500090715                          SETVAR((&ASATDTE &ASATDTE) (&INDFLG +
+006600090716                          &MRFPFRQ))
+006700090715
+006800090715             UPDATE     SET((F0002 '" "')) SQL('select * from +
+006900090716                          mfaivrmdp a where a.f0000 in  (select +
+007000090716                          b.ivrmdivrno from qtemp/dlyivr b) ')
+007100090715
+007200090715             INSERT     INTO(MFAIVRDLP) FIELDS(F0000 F0001 F0002 +
+007300090715                          F0003 F0004 F0005 F0006 F0007 F0008 F0009 +
+007400090716                          F0010) SQL('select   ivrmdivrno, 0, " ",   +
+007500090715                          mrfpfreq, " ", "031", "GENUPDIV", "C", +
+007600090715                          "IVRDTL",(hour(current time) * 10000) + +
+007700090715                          (minute(current time) *100) + +
+007800090716                          second(current time),  YYYYMMDD(current +
+007900090716                          date)     from qtemp/DLYIVR')
+008000090715
+008100090715
+008200090716             INSERT     INTO(MFAIVRCLP) FIELDS(F0000 F0001 F0002 +
+008300090716                          F0003 F0004 F0005 F0006 F0007) +
+008400090716                          SQL('select   ivrmdivrno, +
+008500090716                          YYYYMMDD(current date),   (hour(current +
+008600090716                          time) * 10000) + (minute(current time) +
+008700090716                          *100) + second(current time), "GENUPDIV", +
+008800090716                          "IVRDTL", 0, "  ", "Investor Change"  from +
+008900090716                          qtemp/DLYIVR')
+009000090715
+009100090715
+009200090715
+009300030421/* End                                                              */
+009400030421/* ........................                                         */
+009500020103PGM_EXIT:    ENDPGM

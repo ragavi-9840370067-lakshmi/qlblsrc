@@ -1,0 +1,86 @@
+000100161201/*********************************************************************/
+000200161201/* TITLE        : JBGENCALVA                                         */
+000300161201/* PROGRAM TYPE : CL                                                 */
+000400161201/* PROGRAM      : JBGENCALVA                                         */
+000500161201/* CREATED BY   : Ragavi Selvaraj                                    */
+000600161201/* DESCRIPTION  : This job is used to generate the CRS low  Value    */
+000700161201/*                account report.                                    */
+000800170512/********************************************************************/
+000900170512/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+001000170512/* ******************************************************************/
+001100170512/* Ragavi S   * 2016/01/12   * RFS158737 - Created new program      */
+001200170920/* Daisy Ly   * 2017/03/24   * RFS169253 - remove extra call of     */
+001300170512/*            *              * GENCRSV                              */
+001400170512/* Sairam     * 2017/05/12   * RFS169993 - To fix Date issue.       */
+001500170908/* Swathi J   * 2017/09/08   * RFS171545 - Changes to CRS High and  */
+001600170908/*            *              * Low Value Acct Reports               */
+001700170512/********************************************************************/
+001800170512PGM
+001900170512             DCL        VAR(&MODULE) TYPE(*CHAR) LEN(10) +
+002000170512                          VALUE('CRSMOD')
+002100170512             DCL        VAR(&AUTHORIZE) TYPE(*CHAR) LEN(1) VALUE(' ')
+002200170512             DCL        VAR(&N) TYPE(*CHAR) LEN(1) VALUE('N')
+002300150929             DCL        VAR(&RPTIND)    TYPE(*CHAR) LEN(01) VALUE('L')
+002400151023             DCL        VAR(&EFFDT) TYPE(*CHAR) LEN(08)
+002500170908/*171545*/   DCL        VAR(&NOMINEE) TYPE(*CHAR) LEN(01)
+002600150929             DCL        VAR(&RPTNME) TYPE(*CHAR) LEN(10) +
+002700161202                          VALUE('GENCRSLVA')
+002800150929             DCL        VAR(&VIWNME) TYPE(*CHAR) LEN(10) +
+002900161202                          VALUE('GENCRSV')
+003000151001             DCL        VAR(&EXPR1) TYPE(*CHAR) LEN(100) VALUE(' ')
+003100151001             DCL        VAR(&EXPR2) TYPE(*CHAR) LEN(100) VALUE(' ')
+003200151001             DCL        VAR(&EXPR3) TYPE(*CHAR) LEN(100) VALUE(' ')
+003300161201             DCL        VAR(&REPORTTYP) TYPE(*CHAR) LEN(10) VALUE('CRS')
+003400161228
+003500170512/*169993*/   DCL        VAR(&CMPNME)     TYPE(*CHAR) LEN(40)
+003600170512/*169993*/   DCL        VAR(&CMP)        TYPE(*CHAR) LEN(3)
+003700170512/*169993*/   DCL        VAR(&ASATDTE)    TYPE(*CHAR) LEN(8)
+003800170512/*169993*/   DCL        VAR(&POS)        TYPE(*DEC) LEN(5 0)
+003900170512/*169993*/   DCL        VAR(&MAX)        TYPE(*DEC) LEN(5 0) VALUE(30)
+004000170512/*169993*/   DCL        VAR(&BLANKS)     TYPE(*CHAR) LEN(40)
+004100170512/*169993*/   DCL        VAR(&CMPNME2)    TYPE(*CHAR) LEN(30)
+004200151023             CALL       PGM(RTVMODAUTH) PARM(&MODULE &AUTHORIZE)
+004300150929             IF         COND(&AUTHORIZE *EQ &N) THEN(GOTO +
+004400151008                        CMDLBL(ENDPGM))
+004500151008
+004600170327 /*169253*/  DSPDTAARA  DTAARA(*LDA)
+004700161230             RTVDTAARA  DTAARA(*LDA (1 8)) RTNVAR(&EFFDT)
+004800170908/*171545*/   RTVDTAARA  DTAARA(*LDA (9 1)) RTNVAR(&NOMINEE)
+004900170908/*171545     CALL       PGM(GENAGGACCT) PARM(&RPTIND &EFFDT &REPORTTYP) */
+005000170908/*171545*/   CALL       PGM(GENAGGACCT) PARM(&RPTIND &EFFDT &REPORTTYP +
+005100170908/*171545*/                                     &NOMINEE)
+005200161201
+005300160406             CHGDTAARA  DTAARA(*LDA (150 8)) VALUE(&EFFDT)
+005400161227             DLTF       FILE(QTEMP/WRKAGGACT)
+005500160406             MONMSG     MSGID(CPF2105)
+005600161230
+005700170324 /*169253    EXECUTE    VIEW(GENCRSV) OUTFILE(QTEMP/WRKAGGACT) */
+005800170327 /*169253    MONMSG     MSGID(CPF0000)                         */
+005900170512 /*169993    CALL       PGM(JOBSEQLRUN) PARM(&RPTNME &VIWNME &EXPR1 +
+006000170512                          &EXPR2 &EXPR3) */
+006100170512 /*169993-Start*/
+006200170512             RTVDTAARA  DTAARA(*LDA (1 8)) RTNVAR(&ASATDTE)
+006300170512             RTVDTAARA  DTAARA(MFACMPCDP (1 3)) RTNVAR(&CMP)
+006400170512             RTVDTAARA  DTAARA(MFACMPNMA (1 30)) RTNVAR(&CMPNME)
+006500170512
+006600170512             RTVDTAARA  DTAARA(MFACMPNMA (1 30)) RTNVAR(&CMPNME2)
+006700170512             CHGVAR     VAR(&POS) VALUE(&MAX)
+006800170512 $CENTER:
+006900170512             IF         COND((&POS *NE 0) & (%SST(&CMPNME2 &POS 1) = +
+007000170512                          ' ')) THEN(DO)
+007100170512             CHGVAR     VAR(&POS) VALUE(&POS - 1)
+007200170512             GOTO       CMDLBL($CENTER)
+007300170512             ENDDO
+007400170512
+007500170512             CHGVAR     VAR(&POS)    VALUE(((&MAX - &POS) / 2)+6)
+007600170512             CHGVAR     VAR(&CMPNME) VALUE(%SST(&BLANKS 1 &POS) +
+007700170512                                           *CAT  &CMPNME2)
+007800170512             OVRPRTF    FILE(SQLPRT1) MAXRCDS(*NOMAX) USRDTA(GENCRSLVA)
+007900170512             REPORT     REPORT(GENCRSLVA) VIEW(GENCRSV) +
+008000170512                        SETVAR((&CMP &CMP) +
+008100170512                              (&CMPNME &CMPNME) +
+008200170512                              (&ASATDTE &ASATDTE))
+008300170512 /*169993-End*/
+008400020220
+008500151008 ENDPGM:
+008600151008             ENDPGM

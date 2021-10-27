@@ -1,0 +1,136 @@
+000100030417/* ******************************************************************/
+000200030417/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000300030417/* ******************************************************************/
+000400030417/* ******************************************************************/
+000500091216/* John O'Callaghan          * RFS71448 - generate non taxable      */
+000600091216/*            * 2009/12/16   * switch / transfer ou detail and     */
+000700091216/*            *              * summary - new program                */
+000701100108/* Daisy Ly   * 2010/01/08   * -fix the data type for spool file    */
+000900030417/* ******************************************************************/
+000901091216PGM
+000902091216
+000903091216             DCL        VAR(&PRCDTE) TYPE(*CHAR) LEN(8)
+000905091216
+000906091216             DCL        VAR(&PRDCDE) TYPE(*CHAR) LEN(5)
+000907091216             DCL        VAR(&FNDYREND) TYPE(*CHAR) LEN(4)
+000908091216             DCL        VAR(&FNDTYP) TYPE(*CHAR) LEN(1)
+000909091216             DCL        VAR(&FRMSDTE) TYPE(*CHAR) LEN(8)
+000910091216             DCL        VAR(&TOSDTE) TYPE(*CHAR) LEN(8)
+000911091216             DCL        VAR(&date1) TYPE(*CHAR) LEN(14)
+000912091216             DCL        VAR(&date1) TYPE(*CHAR) LEN(14)
+000913091216
+000914091216             DCL        VAR(&DEFTOUTQ) TYPE(*CHAR) LEN(10)
+000915091216
+000926091216
+001200030417/* -----------------------------------------------------------------*/
+001300030417/* Begin Processing                                                 */
+001400030417/* -----------------------------------------------------------------*/
+001401091216
+001402091216             RTVJOBA    OUTQ(&DEFTOUTQ)
+001403091224
+001404091224             DSPDTAARA  DTAARA(*LDA)
+001405091224
+001406091216             RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&PRCDTE)
+001408091216
+001409091216             RTVDTAARA  DTAARA(*lda (1 5)) RTNVAR(&PRDCDE)
+001410091230             RTVDTAARA  DTAARA(*lda (6 4)) RTNVAR(&FNDYREND)
+001411091231             RTVDTAARA  DTAARA(*lda (10 1)) RTNVAR(&FNDTYP)
+001412091231             RTVDTAARA  DTAARA(*lda (20 8)) RTNVAR(&FRMSDTE)
+001413091231             RTVDTAARA  DTAARA(*lda (28 8)) RTNVAR(&TOSDTE)
+001414091216
+001420091216/* Create the detail file  */
+001421091216             DLTF       FILE(QTEMP/NONTAXDET)
+001422091216             MONMSG     MSGID(CPF2105)
+001423091216
+001424091216             CRTPF      FILE(QTEMP/NONTAXDET) RCDLEN(378) SIZE(*NOMAX)
+001425091216
+001426091216/* Create the header record for detail   */
+001427100105             INSERT     INTO(QTEMP/NONTAXDET) FIELDS(NONTAXDET) +
+001428100105                          VALUES('"From Settlement Date, To +
+001429100105                          Settlement Date, Product, Tax Year-End"')
+001431091216
+001432100105             UPDATE     SET((NONTAXDET 'sst(NONTAXDET,1,63) || ", +
+001433100105                          Account Number, Fund Group Code, Fund +
+001434100105                          Group Name"')) SQL('select * from +
+001435100105                          qtemp/NONTAXDET')
+001436091216
+001437100105             UPDATE     SET((NONTAXDET 'sst(NONTAXDET,1,113) || ", +
+001438100105                          Trust Fund (Y/N), Settlement Date, To +
+001439100115                          Fund Number"')) SQL('select * from +
+001440100105                          qtemp/NONTAXDET')
+001441100105
+001442100115             UPDATE     SET((NONTAXDET 'sst(NONTAXDET,1,164) || ", +
+001443100115                          From Fund Number, Gross Amount, Share +
+001444100105                          Amount"')) SQL('select * from +
+001445100105                          qtemp/NONTAXDET')
+001446100105
+001447100115             UPDATE     SET((NONTAXDET 'sst(NONTAXDET,1,210) || ", +
+001448100105                          Currency of Redemption Fund, Same +
+001449100105                          Fund"')) SQL('select * from qtemp/NONTAXDET')
+001451091216
+001452091216/* Create the summary file  */
+001453091216             DLTF       FILE(QTEMP/NONTAXSUM)
+001454091216             MONMSG     MSGID(CPF2105)
+001455091216
+001456091216             CRTPF      FILE(QTEMP/NONTAXSUM) RCDLEN(378) SIZE(*NOMAX)
+001457091216
+001458091216/* Create the header record for summary  */
+001459100105             INSERT     INTO(QTEMP/NONTAXSUM) FIELDS(NONTAXSUM) +
+001460100105                          VALUES('"From Settlement Date, To +
+001461100105                          Settlement Date, Product, Tax Year-End"')
+001463091216
+001464100105             UPDATE     SET((NONTAXSUM 'sst(NONTAXSUM,1,63) || ", +
+001465100105                          Fund Group Code, Fund Group Name, Trust +
+001466100105                          Fund (Y/N)"')) SQL('select * from +
+001467100105                          qtemp/NONTAXSUM')
+001468091216
+001469100105             UPDATE     SET((NONTAXSUM 'sst(NONTAXSUM,1,115) || ", +
+001470100105                          Gross Amount, Share Amount"')) +
+001471100105                          SQL('select * from qtemp/NONTAXSUM')
+001473100105
+001474091216/* run the Non Taxable Switch / Transfer out detail      */
+001475091230             EXECUTE    VIEW(NONTAXSWTD) OUTFILE(QTEMP/SFNONTAXD) +
+001476091230                          SETVAR((&PRDNAME &PRDCDE) (&YREND +
+001477091230                          &FNDYREND) (&FNDTYP &FNDTYP) (&FRMDATE +
+001478091230                          &FRMSDTE) (&TODATE &TOSDTE))
+001479091216
+001480091216/* run the Non Taxable Switch / Transfer out summary     */
+001481091231             EXECUTE    VIEW(NONTAXSWTS) OUTFILE(QTEMP/SFNONTAXS)
+001482091216
+001483091216/* Convert to Comma Delimited   */
+001484091216             CPYTOIMPF  FROMFILE(QTEMP/SFNONTAXD) +
+001485091216                          TOFILE(QTEMP/NONTAXDET) MBROPT(*ADD) +
+001486091216                          DTAFMT(*DLM) STRDLM(*DBLQUOTE) +
+001487091216                          RMVBLANK(*BOTH) FLDDLM(',')
+001488091216
+001489091216/* Override the Spool Width to 378  */
+001490100115             OVRPRTF    FILE(QSYSPRT) PAGESIZE(255 378) OVRFLW(255) +
+001491100115                          OUTQ(&DEFTOUTQ) SAVE(*YES) +
+001492100115                          USRDTA(NONTAXDET) SPLFNAME(INVNONTAXD)
+001494091216
+001495091216/* Copy the sequel output to spool file   */
+001496091216             CPYF       FROMFILE(QTEMP/NONTAXDET) TOFILE(QSYSPRT)
+001497091216
+001498091216/* Delete override the Spool Width etc  */
+001499091216             DLTOVR     FILE(QSYSPRT)
+001500091216
+001501091216/* Convert to Comma Delimited   */
+001502091216             CPYTOIMPF  FROMFILE(QTEMP/SFNONTAXS) +
+001503091216                          TOFILE(QTEMP/NONTAXSUM) MBROPT(*ADD) +
+001504091216                          DTAFMT(*DLM) STRDLM(*DBLQUOTE) +
+001505091216                          RMVBLANK(*BOTH) FLDDLM(',')
+001506091216
+001507091216/* Override the Spool Width to 378  */
+001508100115             OVRPRTF    FILE(QSYSPRT) PAGESIZE(255 378) OVRFLW(255) +
+001509100115                          OUTQ(&DEFTOUTQ) SAVE(*YES) +
+001510100115                          USRDTA(NONTAXSUM) SPLFNAME(INVNONTAXS)
+001512091216
+001513091216/* Copy the sequel output to spool file   */
+001514100104             CPYF       FROMFILE(QTEMP/NONTAXSUM) TOFILE(QSYSPRT)
+001515091216
+001516091216/* Delete override the Spool Width etc  */
+001517091216             DLTOVR     FILE(QSYSPRT)
+001518091216
+003400030421/* End                                                              */
+003500030421/* ........................                                         */
+003600020103PGM_EXIT:    ENDPGM

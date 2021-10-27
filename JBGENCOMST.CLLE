@@ -1,0 +1,308 @@
+000100170102/* ******************************************************************/
+000200170102/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000300170102/* ******************************************************************/
+000400170102/* Program    : JOBCOMSPLT                                          */
+000500170102/* Date       : 2017/01/02                                          */
+000600170102/* Description: Generates Extracts for Split/Trailer/TrailerPurchase*/
+000700170102/*              Commission extracts in batch mode                   */
+000800170102/* Parameters : None                                                */
+000900170102/* Author     : Arthy K                                             */
+001000170102/* ******************************************************************/
+001100170102/* ******************************************************************/
+001200170102/* Arthy K    * 2017/01/02   * RFS 161542 Created New Program       */
+001201170502/* Arthy K    * 2017/05/02   * RFS 169898 Fixed issues in upfront   */
+001203170502/*                             & trailing commission extract        */
+001300170102/* ******************************************************************/
+001400170209PGM
+001500170104             DCL        VAR(&DTAPRCDTP) TYPE(*CHAR) LEN(13)
+001600170112             DCL        VAR(&MODE) TYPE(*CHAR) LEN(1) VALUE('A')
+001700170104             DCL        VAR(&EXTRACTTYP) TYPE(*CHAR) LEN(1)
+001800170110             DCL        VAR(&ASATDT) TYPE(*CHAR) LEN(08)
+001900170104             DCL        VAR(&ASATDTE) TYPE(*CHAR) LEN(08)
+002000170104             DCL        VAR(&ASATMD) TYPE(*CHAR) LEN(04)
+002100170104             DCL        VAR(&DATE) TYPE(*CHAR) LEN(08)
+002200170111             DCL        VAR(&YYYYDD) TYPE(*CHAR) LEN(06)
+002300170109             DCL        VAR(&ASATDTN) TYPE(*DEC) LEN(8 0)
+002400170109             DCL        VAR(&LEAP) TYPE(*CHAR) LEN(1)
+002500170209             DCL        VAR(&FREQ) TYPE(*CHAR) LEN(2) VALUE('MO')
+002600170112             DCL        VAR(&FNAME) TYPE(*CHAR) LEN(14)
+002700170103             DCL        VAR(&IFSDIR)  TYPE(*CHAR) LEN(300)
+002800170104             DCL        VAR(&IFSFNAME) TYPE(*CHAR) LEN(300)
+002900170103             DCL        VAR(&IFS)     TYPE(*CHAR) LEN(1) VALUE('N')
+003000170103             DCL        VAR(&IFSTYPE)   TYPE(*CHAR) LEN(2) VALUE('UX')
+003100170103             DCL        VAR(&IFSOWNER)  TYPE(*CHAR) LEN(4) VALUE('OUT')
+003101170502/* RFS169898 Begin */
+003200170103             DCL        VAR(&IFSMETHOD) TYPE(*CHAR) LEN(3) VALUE('EXT')
+003300170419             DCL        VAR(&PROCESIND1) TYPE(*CHAR) LEN(1) VALUE('N')
+003301170419             DCL        VAR(&PROCESIND2) TYPE(*CHAR) LEN(1) VALUE('N')
+003302170419             DCL        VAR(&PROCESIND3) TYPE(*CHAR) LEN(1) VALUE('N')
+003303170419             DCL        VAR(&PROCESIND4) TYPE(*CHAR) LEN(1) VALUE('N')
+003304170419             DCL        VAR(&MFAEFTLIB) TYPE(*CHAR) LEN(10)
+003305170419             DCL        VAR(&MEMBER)    TYPE(*CHAR) LEN(10)
+003306170419             DCL        VAR(&EFTFNAME)  TYPE(*CHAR) LEN(10)
+003307170502/* RFS169898 End   */
+003308170419
+003500170103/* Get Process date details                                          */
+003600170103
+003700170104             RTVDTAARA  DTAARA(MFAPRCDTP (1 13)) RTNVAR(&DTAPRCDTP)
+003800170209
+003900170209             RTVDTAARA  DTAARA(*LDA (1 1)) RTNVAR(&EXTRACTTYP)
+004000170209             RTVDTAARA  DTAARA(*LDA (2 6)) RTNVAR(&YYYYDD)
+004001170502             RTVDTAARA  DTAARA(MFAEFTLIB (1 10)) RTNVAR(&MFAEFTLIB)
+004100170209
+004200170104             CHGVAR     VAR(&ASATDTE) VALUE(%SST(&DTAPRCDTP 1 8))
+004300170109             CHGVAR     VAR(&ASATMD) VALUE(%SST(&ASATDTE 5 4))
+004400170102
+004500170109             IF         COND((%SST(&YYYYDD 5 2) *EQ '01') *OR +
+004600170110                          (%SST(&YYYYDD 5 2) *EQ '03') *OR +
+004700170110                          (%SST(&YYYYDD 5 2) *EQ '05') *OR +
+004800170110                          (%SST(&YYYYDD 5 2) *EQ '07') *OR +
+004900170110                          (%SST(&YYYYDD 5 2) *EQ '08') *OR +
+005000170110                          (%SST(&YYYYDD 5 2) *EQ '10') *OR +
+005100170110                          (%SST(&YYYYDD 5 2) *EQ '12')) THEN(CHGVAR +
+005200170109                          VAR(&DATE) VALUE(%SST(&YYYYDD 1 6) *CAT +
+005300170109                          '31'))
+005400170109             ELSE       CMD(CHGVAR VAR(&DATE) VALUE(%SST(&YYYYDD 1 +
+005500170109                          6) *CAT '30'))
+005600170109             IF         COND(%SST(&YYYYDD 5 2) *EQ '02') THEN(DO)
+005700170110             CHGVAR     VAR(&ASATDT) VALUE(%SST(&YYYYDD 1 6) *CAT '01')
+005800170110             CHGVAR     VAR(&ASATDTN) VALUE(&ASATDT)
+005900170109             CALLPRC    PRC(FXISLEAP) PARM(&ASATDTN &LEAP)
+006000170109             IF         COND(&LEAP *EQ 'Y') THEN(CHGVAR VAR(&DATE) +
+006100170109                          VALUE(%SST(&YYYYDD 1 6) *CAT '29'))
+006200170109             ELSE       CMD(CHGVAR VAR(&DATE) VALUE(%SST(&YYYYDD 1 +
+006300170109                          6) *CAT '28'))
+006400170109             ENDDO
+006500170109
+006501170502/* RFS169898 Begin */
+006502170419             RUNCMD     CMD('CHGDTAARA  DTAARA(*LDA (333 1)) +
+006503170419                          VALUE(''&&PROCESIND1'')') SQL('SELECT F0003 +
+006504170419                          NAME(PROCESIND1)     FROM MFAPRORPP WHERE F0000 +
+006505170419                          = "JOBCOMSPLT" AND F0001 = "COMMSPLT" AND F0004 +
+006506170419                          ="MO"')
+006507170419             RTVDTAARA  DTAARA(*LDA (333 1)) RTNVAR(&PROCESIND1)
+006508170419
+006509170419             RUNCMD     CMD('CHGDTAARA  DTAARA(*LDA (333 1)) +
+006510170419                          VALUE(''&&PROCESIND2'')') SQL('SELECT F0003 +
+006511170419                          NAME(PROCESIND2)     FROM MFAPRORPP WHERE F0000 +
+006512170419                          = "JOBCOMSPLT" AND F0001 = "COMMSPLT" AND F0004 +
+006513170419                          ="QT"')
+006514170419             RTVDTAARA  DTAARA(*LDA (333 1)) RTNVAR(&PROCESIND2)
+006515170419
+006516170419             RUNCMD     CMD('CHGDTAARA  DTAARA(*LDA (333 1)) +
+006517170419                          VALUE(''&&PROCESIND3'')') SQL('SELECT F0003 +
+006518170419                          NAME(PROCESIND3)     FROM MFAPRORPP WHERE F0000 +
+006519170419                          = "JOBCOMSPLT" AND F0001 = "TCOMSPLT" AND F0004 +
+006520170419                          ="MO"')
+006521170419             RTVDTAARA  DTAARA(*LDA (333 1)) RTNVAR(&PROCESIND3)
+006522170419
+006523170419             RUNCMD     CMD('CHGDTAARA  DTAARA(*LDA (333 1)) +
+006524170419                          VALUE(''&&PROCESIND4'')') SQL('SELECT F0003 +
+006525170419                          NAME(PROCESIND4)     FROM MFAPRORPP WHERE F0000 +
+006526170419                          = "JOBCOMSPLT" AND F0001 = "TCOMSPLT" AND F0004 +
+006527170419                          ="QT"')
+006528170419             RTVDTAARA  DTAARA(*LDA (333 1)) RTNVAR(&PROCESIND4)
+006529170419
+006530170419             IF         COND(&PROCESIND1 *EQ 'N' *AND &PROCESIND2 *EQ 'N' +
+006531170419                          *AND &PROCESIND3 *EQ 'N' *AND &PROCESIND4 *EQ +
+006532170419                          'N') THEN(GOTO CMDLBL(PGM_EXIT))
+006533170419
+006553170419             IF         COND((%SST(&YYYYDD 5 2) *EQ '03') *OR +
+006554170419                          (%SST(&YYYYDD 5 2) *EQ '06') *OR (%SST(&YYYYDD 5 +
+006555170419                          2) *EQ '09') *OR (%SST(&YYYYDD 5 2) *EQ '12')) +
+006556170419                          THEN(DO)
+006557170419                IF         COND(&PROCESIND2 *EQ 'Y' *OR &PROCESIND4 *EQ +
+006558170419                             'Y') THEN(DO)
+006559170419                   CHGVAR     VAR(&FREQ) VALUE('QT')
+006560170419                ENDDO
+006561170419                IF         COND(&PROCESIND1 *EQ 'Y' *OR &PROCESIND3 *EQ +
+006562170419                             'Y') THEN(DO)
+006563170419                   CHGVAR     VAR(&FREQ) VALUE('MO')
+006564170419                ENDDO
+006565170419
+006566170419                ELSE
+006574170419
+006575170419                IF         COND(&PROCESIND1 *EQ 'Y' *OR &PROCESIND3 *EQ +
+006576170419                             'Y') THEN(DO)
+006577170419                   CHGVAR     VAR(&FREQ) VALUE('MO')
+006578170419                ENDDO
+006579170419
+006580170419             ENDDO
+006581170502/* RFS169898 End   */
+006600170109
+006700170103             DLTF       FILE(QTEMP/WKSPCOMEXT)
+006800170103             MONMSG     MSGID(CPF0000)
+006900170103
+007000170103             DLTF       FILE(QTEMP/WKT1COMEXT)
+007100170103             MONMSG     MSGID(CPF0000)
+007200170103
+007300170103             DLTF       FILE(QTEMP/WKT2COMEXT)
+007400170103             MONMSG     MSGID(CPF0000)
+007500170103
+007600170103             DYNSQL     SQL('CREATE TABLE QTEMP/WKSPCOMEXT (          +
+007700170103                       Account_No              CHAR(9)               +
+007800170103                                               NOT NULL WITH DEFAULT, +
+007900170103                       Investment_Code         CHAR(5)                +
+008000170103                                               NOT NULL WITH DEFAULT, +
+008100170103                       Currency                CHAR(3)                +
+008200170103                                               NOT NULL WITH DEFAULT, +
+008300170103                       Process_Date            CHAR(08)               +
+008400170103                                               NOT NULL WITH DEFAULT, +
+008500170103                       Settlement_Date         CHAR(08)               +
+008600170103                                               NOT NULL WITH DEFAULT, +
+008700170103                       Dealer_Code             CHAR(04)               +
+008800170103                                               NOT NULL WITH DEFAULT, +
+008900170103                       Rep_Code                CHAR(06)               +
+009000170103                                               NOT NULL WITH DEFAULT, +
+009100170103                       Broker_Code             CHAR(05)               +
+009200170103                                               NOT NULL WITH DEFAULT, +
+009300170103                       Agent_Code              CHAR(05)               +
+009400170103                                               NOT NULL WITH DEFAULT, +
+009500170103                       Split_Percentage        NUMERIC(05, 2)         +
+009600170103                                               NOT NULL WITH DEFAULT, +
+009700170103                       Total_Commission        NUMERIC(13, 2)         +
+009800170103                                               NOT NULL WITH DEFAULT, +
+009900170103                       Commission_Calculated   NUMERIC(13, 2)         +
+010000170103                                               NOT NULL WITH DEFAULT)')
+010100170103
+010200170103             DYNSQL     SQL('CREATE TABLE QTEMP/WKT1COMEXT (          +
+010300170103                       Account_No              CHAR(9)               +
+010400170103                                               NOT NULL WITH DEFAULT, +
+010500170103                       Investment_Code         CHAR(5)                +
+010600170103                                               NOT NULL WITH DEFAULT, +
+010700170103                       Currency                CHAR(3)                +
+010800170103                                               NOT NULL WITH DEFAULT, +
+010900170103                       Dealer_Code             CHAR(04)               +
+011000170103                                               NOT NULL WITH DEFAULT, +
+011100170103                       Rep_Code                CHAR(06)               +
+011200170103                                               NOT NULL WITH DEFAULT, +
+011300170103                       Broker_Code             CHAR(05)               +
+011400170103                                               NOT NULL WITH DEFAULT, +
+011500170103                       Agent_Code              CHAR(05)               +
+011600170103                                               NOT NULL WITH DEFAULT, +
+011700170103                       Split_Percentage        NUMERIC(05, 2)         +
+011800170103                                               NOT NULL WITH DEFAULT, +
+011900170103                       Market_Value            NUMERIC(13, 2)         +
+012000170103                                               NOT NULL WITH DEFAULT, +
+012100170103                       Total_Commission        NUMERIC(13, 2)         +
+012200170103                                               NOT NULL WITH DEFAULT, +
+012300170103                       Commission_Calculated   NUMERIC(13, 2)         +
+012400170103                                               NOT NULL WITH DEFAULT)')
+012500170103
+012600170103             DYNSQL     SQL('CREATE TABLE QTEMP/WKT2COMEXT (          +
+012700170103                       Account_No              CHAR(9)               +
+012800170103                                               NOT NULL WITH DEFAULT, +
+012900170103                       Investment_Code         CHAR(5)                +
+013000170103                                               NOT NULL WITH DEFAULT, +
+013100170103                       Currency                CHAR(3)                +
+013200170103                                               NOT NULL WITH DEFAULT, +
+013300170103                       Transaction_Amount      NUMERIC(13, 2)         +
+013400170103                                               NOT NULL WITH DEFAULT, +
+013500170103                       Process_Date            CHAR(08)               +
+013600170103                                               NOT NULL WITH DEFAULT, +
+013700170103                       Settlement_Date         CHAR(08)               +
+013800170103                                               NOT NULL WITH DEFAULT, +
+013900170103                       No_Days_units_held      CHAR(03)               +
+014000170103                                               NOT NULL WITH DEFAULT, +
+014100170103                       Dealer_Code             CHAR(04)               +
+014200170103                                               NOT NULL WITH DEFAULT, +
+014300170103                       Rep_Code                CHAR(06)               +
+014400170103                                               NOT NULL WITH DEFAULT, +
+014500170103                       Broker_Code             CHAR(05)               +
+014600170103                                               NOT NULL WITH DEFAULT, +
+014700170103                       Agent_Code              CHAR(05)               +
+014800170103                                               NOT NULL WITH DEFAULT, +
+014900170103                       Split_Percentage        NUMERIC(05, 2)         +
+015000170103                                               NOT NULL WITH DEFAULT, +
+015100170103                       Total_Commission        NUMERIC(13, 2)         +
+015200170103                                               NOT NULL WITH DEFAULT, +
+015300170103                       Commission_Calculated   NUMERIC(13, 2)         +
+015400170103                                               NOT NULL WITH DEFAULT)')
+015500170103
+015600170105             CHGVAR     VAR(&MODE) VALUE('A')
+015700170104
+015800170112             CALL       PGM(COMSPLTEXT) PARM(&MODE &DATE &EXTRACTTYP +
+015900170112                          &FREQ)
+016000170103
+016100170103    /*Retrieve the target location */
+016200170103
+016300170103             CALL       PGM(FXGETIFSD) PARM(&IFSTYPE &IFSOWNER +
+016400170103                            &IFSMETHOD &IFSDIR)
+016500170103
+016600170103             IF (&IFSDIR *EQ ' ') THEN(DO)
+016700170103             SNDPGMMSG  MSG('IFS folder not setup correctly') +
+016800170103                          TOMSGQ(QSYSOPR)
+016900170103                CHGVAR     VAR(&IFS) VALUE('Y')
+017000170103                GOTO CMDLBL(PGM_EXIT)
+017100170103             ENDDO
+017200170103
+017201170502/* RFS169898 Begin */
+017202170419             IF         COND(&EXTRACTTYP *EQ 'B' *OR &EXTRACTTYP *EQ 'C') +
+017203170419                          THEN(DO)
+017204170502/* RFS169898 End   */
+017300170411             CHGVAR     VAR(&FNAME) VALUE('SCOMSA' *TCAT &ASATMD *TCAT +
+017301170411                          '.CSV')
+017400170103
+017500170103             CHGVAR     VAR(&IFSFNAME) VALUE(&IFSDIR *TCAT '/' *TCAT +
+017600170103                          &FNAME)
+017700170104
+017800170104             RMVLNK     OBJLNK(&IFSFNAME)
+017900170104             MONMSG     MSGID(CPF0000)
+018000170103
+018100170103             EXECUTE    SQL('SELECT * FROM QTEMP/WKSPCOMEXT') +
+018200170103                          PCFMT(*SCDELIM) TOSTMF(&IFSFNAME) +
+018300170103                          REPLACE(*YES)
+018400170103
+018401170502/* RFS169898 Begin */
+019301170419             CHGVAR     VAR(&MEMBER) VALUE('SCOMSA' *TCAT &ASATMD)
+019302170419             CHGVAR     VAR(&EFTFNAME) VALUE('SCOMSA' *TCAT &ASATMD)
+019303170419
+019304170419             CPYF       FROMFILE(QTEMP/WKSPCOMEXT) +
+019305170419                          TOFILE(&MFAEFTLIB/&EFTFNAME) TOMBR(&MEMBER) +
+019306170419                          MBROPT(*REPLACE) CRTFILE(*YES)
+019308170419             MONMSG     MSGID(CPF0000)
+019309170419
+019310170419             ENDDO
+019311170419
+019312170419             IF         COND(&EXTRACTTYP *EQ 'B' *OR &EXTRACTTYP *EQ 'T') +
+019313170419                          THEN(DO)
+019314170419
+019315170419                CHGVAR     VAR(&FNAME) VALUE('TACOM1' *TCAT &ASATMD *TCAT +
+019316170419                             '.CSV')
+019317170419
+019318170419                CHGVAR     VAR(&IFSFNAME) VALUE(&IFSDIR *TCAT '/' *TCAT +
+019319170419                             &FNAME)
+019320170419
+019321170419                EXECUTE    SQL('SELECT * FROM QTEMP/WKT1COMEXT') +
+019322170419                             PCFMT(*SCDELIM) TOSTMF(&IFSFNAME) +
+019323170419                             REPLACE(*YES)
+019324170419
+019326170419                CHGVAR     VAR(&MEMBER) VALUE('TACOM1' *TCAT &ASATMD )
+019327170419                CHGVAR     VAR(&EFTFNAME) VALUE('TACOM1' *TCAT &ASATMD )
+019328170419
+019329170419                CPYF       FROMFILE(QTEMP/WKT1COMEXT) +
+019330170419                             TOFILE(&MFAEFTLIB/&EFTFNAME) TOMBR(&MEMBER) +
+019331170419                             MBROPT(*REPLACE) CRTFILE(*YES)
+019332170419                MONMSG     MSGID(CPF0000)
+019333170502/* RFS169898 End   */
+019340170419
+019400170411             CHGVAR     VAR(&FNAME) VALUE('TACOM2' *TCAT &ASATMD *TCAT +
+019401170411                          '.CSV')
+019500170104
+019600170104             CHGVAR     VAR(&IFSFNAME) VALUE(&IFSDIR *TCAT '/' *TCAT +
+019700170104                          &FNAME)
+019800170104
+019900170104             EXECUTE    SQL('SELECT * FROM QTEMP/WKT2COMEXT') +
+020000170104                          PCFMT(*SCDELIM) TOSTMF(&IFSFNAME) +
+020100170104                          REPLACE(*YES)
+020101170502/* RFS169898 Begin */
+020102170419             CHGVAR     VAR(&MEMBER) VALUE('TACOM2' *TCAT &ASATMD )
+020103170419             CHGVAR     VAR(&EFTFNAME) VALUE('TACOM2' *TCAT &ASATMD )
+020104170419
+020105170419             CPYF       FROMFILE(QTEMP/WKT2COMEXT) +
+020106170419                          TOFILE(&MFAEFTLIB/&EFTFNAME) TOMBR(&MEMBER) +
+020107170419                          MBROPT(*REPLACE) CRTFILE(*YES)
+020108170419             MONMSG     MSGID(CPF0000)
+020109170419             ENDDO
+020110170502/* RFS169898 End   */
+020200170102 PGM_EXIT:   ENDPGM

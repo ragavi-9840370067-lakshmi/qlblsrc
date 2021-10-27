@@ -1,0 +1,106 @@
+000001170313     /* %ATTR OPTION(*XREF) DBGVIEW(*SOURCE) */
+000101120824/********************************************************************/
+000201120824/* TITLE        : Fund Name Upload/Download.                        */
+000301120824/* SYSTEM       : L&T Financial Services Technology Inc.            */
+000401120824/* PROGRAM TYPE : CL                                                */
+000501120824/* PROGRAMMER   : Suresh G.                                         */
+000601120828/* PROGRAM      : JBGENFDDSD                                        */
+000701120824/* DESCRIPTION  : This Job is used to extract and download          */
+000801120824/*                Unitrax's Fund Descriptions into a Fund Name      */
+000901120824/*                Spreadsheet of a predefined IFS Directory.        */
+001501120824/* DATE CREATED : 2012/08/24                                        */
+001601120824/* RFS NUMBER   : RFS109636                                         */
+001701120824/* CALLED BY    : NONE                                              */
+001801120824/* PARAMETERS   : NONE                                              */
+001901120824/* CALLS PROGRAM: NONE                                              */
+002001120824/********************************************************************/
+002101120824/*                C H A N G E   H I S T O R Y                       */
+002501030417/* ******************************************************************/
+002601030417/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+002701120824/*            *  YYYY/MM/DD  * RFS ###### -                         */
+002901030417/* ******************************************************************/
+003101120824/* Suresh G.  * 2012/08/24   * RFS 109636 - Created The Program.    */
+003201120824/*            *              *                                      */
+003501030417/* ******************************************************************/
+003601120824             PGM
+003701120828             DCL        VAR(&PROCESSDT) TYPE(*CHAR) LEN(08)
+003801120828             DCL        VAR(&ASATDATE)  TYPE(*CHAR) LEN(08)
+003901120830             DCL        VAR(&RTNCDE)    TYPE(*CHAR) LEN(02)          +
+004001120830                        VALUE('  ')
+004101120924             DCL        VAR(&FNAME)     TYPE(*CHAR) LEN(38)
+004201120924             DCL        VAR(&FILEDESC)  TYPE(*CHAR) LEN(23)          +
+004301120924                        VALUE('CurrentFundDescriptions')
+004401120830             DCL        VAR(&FILEXT)    TYPE(*CHAR) LEN(04)          +
+004501120830                        VALUE('.CSV')
+004601120828             DCL        VAR(&IFSTYPE)   TYPE(*CHAR) LEN(02)
+004701120828             DCL        VAR(&IFSOWNER)  TYPE(*CHAR) LEN(04)
+004801120828             DCL        VAR(&IFSMETHOD) TYPE(*CHAR) LEN(03)
+004901120828             DCL        VAR(&IFSDIR)    TYPE(*CHAR) LEN(300)
+005001120828             DCL        VAR(&IFSFNAM)   TYPE(*CHAR) LEN(300)
+005101120828             DCL        VAR(&LDA)       TYPE(*CHAR) LEN(1024)
+005201120828             DCL        VAR(&CMPCDE)    TYPE(*CHAR) LEN(03)
+005301120830             DCL        VAR(&POS)       TYPE(*DEC)  LEN(04)          +
+005401120830                        VALUE(0)
+005501120830             DCL        VAR(&INVCDE)    TYPE(*CHAR) LEN(05)
+005601120828
+005701030417/* -----------------------------------------------------------------*/
+005801030417/* Begin Processing                                                 */
+005901030417/* -----------------------------------------------------------------*/
+006001120828
+006101120828             RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&PROCESSDT)
+006102120911             RTVDTAARA  DTAARA(MFACMPCDP (1 3)) RTNVAR(&CMPCDE)
+006201120828
+006301120903/* Get Next Business date.                                          */
+006501120830             CALL       PGM(GETNXTDAY) PARM(&PROCESSDT &ASATDATE    +
+006601120830                        &RTNCDE)
+006701120828
+006801120903/* Format Upload File Name:'CurrentFundDescription'.                */
+007001120911             CHGVAR     VAR(&FNAME) VALUE(&FILEDESC |< &ASATDATE +
+007101120911                         |< &CMPCDE |< &FILEXT)
+007201120828
+007301120903/* Get IFS Directory information from MFAIFSDIRP by Calling         */
+007401120903/* Function FXGETIFSD.                                              */
+007501120828             CHGVAR     VAR(&IFSTYPE)   VALUE('FN')
+007601120828             CHGVAR     VAR(&IFSOWNER)  VALUE('CLNT')
+007701120903             CHGVAR     VAR(&IFSMETHOD) VALUE('PUT')
+007801120828
+008101120830             CALL       PGM(FXGETIFSD) PARM(&IFSTYPE &IFSOWNER       +
+008201120830                        &IFSMETHOD &IFSDIR)
+008301120828
+008401120830/* Construct the Full File Path by adding File Name to the          */
+008501120903/* IFS Director.                                                    */
+008701120831             CHGVAR     VAR(&IFSFNAM) VALUE(&IFSDIR |< '/' |< &FNAME)
+008801120828
+008901120828             RMVLNK     OBJLNK(&IFSFNAM)
+009001120828             MONMSG     MSGID(CPF0000)
+009201120828
+009301120828             DLTF       FILE(QTEMP/SQSELINV)
+009401120828             MONMSG     MSGID(CPF2105)
+009501120828
+009601120830             EXECUTE    SQL('Select Investment_Code from MFAINVP')   +
+009701120830                        OUTFILE(QTEMP/SQSELINV)
+009801120828
+009901120903/* Retrive DATAARE from *LDA.                                       */
+010201120830             RTVDTAARA  DTAARA(*LDA (1 1024)) RTNVAR(&LDA)
+010401120828
+010501120830             IF         COND(%SST(&LDA 1 5) *NE '*ALL') THEN(DO)
+010601120830             CLRPFM     FILE(QTEMP/SQSELINV)
+010701120828             ENDDO
+010801120830
+010901120830             CHGVAR     VAR(&POS) VALUE('1')
+011001120830
+011101120830 NEXT:       IF         COND(%SST(&LDA &POS 5) *NE ' ') THEN(DO)
+011201120830             CHGVAR     VAR(&INVCDE) VALUE(%SST(&LDA &POS 5))
+011301120828
+011401120831             INSERT     INTO(QTEMP/SQSELINV) VALUES(('"' || &INVCDE  +
+011501120831                          || '"'))
+011701120828             ENDDO
+011801120830
+011901120828             CHGVAR     VAR(&POS) VALUE(&POS + 5)
+012001120828
+012101120828             IF         COND((&POS) *LT 1020) THEN(GOTO CMDLBL(NEXT))
+012401120828
+012801120903             EXECUTE    VIEW(GENFDDSD) PCFMT(*DELIMITED)             +
+012901120903                        TOSTMF(&IFSFNAM) SETVAR((&CMPCDE &CMPCDE))
+013301120828
+013401120830             ENDPGM

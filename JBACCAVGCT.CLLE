@@ -1,0 +1,64 @@
+000001150616/********************************************************************/
+000002150616/* TITLE        :  Adhoc report for ACCAVGCT data extract           */
+000003150616/*                                                                  */
+000004150616/* AUTHOR       :  R Miguel                                         */
+000005150616/*                                                                  */
+000006150616/* PROGRAM      :  JBACCAVGCT                                       */
+000007150616/*                                                                  */
+000008150616/* DATE-WRITTEN :  JUN 2015                                         */
+000009150616/*                                                                  */
+000010150616/* RFS #        :  145152                                           */
+000011150616/*                                                                  */
+000012150616/* DESCRIPTION  :  Adhoc Job to generate data extract for           */
+000013150616/*              :  incorrect Average Unit cost for account-funds.   */
+000014150616/********************************************************************/
+000015150616/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION                          */
+000016150616/*            *  yyyy/mm/dd  *                                      */
+000017150616/********************************************************************/
+001000930729PGM
+001100030417             DCL        VAR(&REPLY)      TYPE(*CHAR) LEN(1)
+001101150616             DCL        VAR(&QDATE)     TYPE(*CHAR) LEN(6)
+001102150616             DCL        VAR(&SYSYY)     TYPE(*CHAR) LEN(2)
+001103150616             DCL        VAR(&SYSMM)     TYPE(*CHAR) LEN(2)
+001104150616             DCL        VAR(&SYSDD)     TYPE(*CHAR) LEN(2)
+001105150616             DCL        VAR(&IFSTYPE)   TYPE(*CHAR) LEN(02)
+001106150616             DCL        VAR(&IFSOWNER)  TYPE(*CHAR) LEN(04)
+001107150616             DCL        VAR(&IFSMETHOD) TYPE(*CHAR) LEN(03)
+001108150616             DCL        VAR(&IFSDIR)    TYPE(*CHAR) LEN(300)
+001109150616             DCL        VAR(&IFSFILE)   TYPE(*CHAR) LEN(300)
+001110150616             DCL        VAR(&RPTNAME) TYPE(*CHAR) LEN(10)
+001111150616             DCL        VAR(&VIEWNME) TYPE(*CHAR) LEN(10)
+001112150616             DCL        VAR(&EXPR1) TYPE(*CHAR) LEN(100)
+001113150616             DCL        VAR(&EXPR2) TYPE(*CHAR) LEN(100)
+001114150616             DCL        VAR(&EXPR3) TYPE(*CHAR) LEN(100)
+001115150616
+001200030417/* -----------------------------------------------------------------*/
+001300030417/* Begin Processing                                                 */
+001400030417/* -----------------------------------------------------------------*/
+001404150616
+001405150616             CHGVAR    VAR(&IFSTYPE)   VALUE('TX')
+001406150616             CHGVAR    VAR(&IFSOWNER)  VALUE('TAXS')
+001407150616             CHGVAR    VAR(&IFSMETHOD) VALUE('EXT')
+001408150616             CALL       PGM(FXGETIFSD) PARM(&IFSTYPE &IFSOWNER +
+001409150616                            &IFSMETHOD &IFSDIR)
+001410150616             IF (&IFSDIR *EQ ' ') THEN(DO)
+001411150616                SNDPGMMSG MSG('ACCAVGCT extract not created +
+001412150616                           because IFS folder not setup correctly') +
+001413150616                TOMSGQ(QSYSOPR)
+001414150616                GOTO PGM_EXIT
+001415150616             ENDDO
+001420150616
+001421150616             RTVSYSVAL  SYSVAL(QDATE) RTNVAR(&QDATE)
+001422150616             CVTDAT     DATE(&QDATE) TOVAR(&QDATE) FROMFMT(*SYSVAL) +
+001423150616                          TOFMT(*YMD) TOSEP(*NONE)
+001425150616             CHGVAR     VAR(&SYSYY) VALUE(%SST(&QDATE 1 2))
+001426150616             CHGVAR     VAR(&SYSMM) VALUE(%SST(&QDATE 3 2))
+001427150616             CHGVAR     VAR(&SYSDD) VALUE(%SST(&QDATE 5 2))
+001428150616
+001429150616             CHGVAR     VAR(&IFSFILE) VALUE(&IFSDIR *TCAT '/' +
+001430150616                        *CAT 'CORAVGUNITCOST' *CAT &SYSDD *CAT +
+001431150616                         &SYSMM *CAT &SYSYY)
+001432150616
+001433150616             EXECUTE    VIEW(ACCAVGCTV1) PCFMT(*XLS) TOSTMF(&IFSFILE)
+001439150616
+003600020103PGM_EXIT:    ENDPGM

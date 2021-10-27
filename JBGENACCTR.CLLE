@@ -1,0 +1,139 @@
+000001170313     /* %ATTR DBGVIEW(*ALL) */
+000101130204   /**************************************************************/
+000201130204   /* SYSTEM       : Unitrax (LNT Infotech)                      */
+000301130204   /* RFS NUMBER   : RFS-112923                                  */
+000401130204   /*                                                            */
+000501130204   /* PROGRAMMER   : Abdi Hassan                                 */
+000601130204   /*                                                            */
+000701130204   /* DESCRIPTION  : This program will accept excel sheet and    */
+000801130204   /*                create Account/Investor                     */
+000901130204   /*                                                            */
+001001130204   /*                                                            */
+001101130204/********************************************************************/
+001201130204/*    C H A N G E   H I S T O R Y                                   */
+001301130204/* ******************************************************************/
+001401130204/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+001501130204/* ******************************************************************/
+001601130204/* Abdi       * 2013/01/17 * RFS112923 - Create New Program         */
+001701130204/* Hassan     *            * Create Nominee account from client name*/
+001801130204/*            *            * account using client specfic .csv file.*/
+001802140624/* Vinsfy J.  * 2014/05/09   * RFS118331 - V7R1 upgrade recompile   */
+001901130204/* ******************************************************************/
+002001130204 JOBCVACCTR: PGM
+002101130204/* Program Variables */
+002201130204
+002301130204             DCL  VAR(&NumRec)   TYPE(*DEC) LEN(10 0) VALUE(0)
+002501130204             DCL  VAR(&RtnSts)   TYPE(*CHAR) LEN(10)
+002601130204
+002701130204             DCL VAR(&SrcFile) TYPE(*CHAR) LEN(100)
+002801130214             DCL VAR(&FilName) TYPE(*CHAR) LEN(20) VALUE(' ')
+002802130215             DCL VAR(&AcFile)  TYPE(*CHAR) LEN(20) VALUE('CVACCRSP')
+002803130218       /*    DCL VAR(&FdFile) TYPE(*CHAR) LEN(20) VALUE('CVINVLIST')*/
+002901130204             DCL VAR(&SysDate) TYPE(*CHAR) LEN(08)
+003001130204             DCL VAR(&CmpCde)  TYPE(*CHAR) LEN(03)
+003101130204
+003201130204/* Error Handling */
+003301130204             DCL VAR(&Reply) TYPE(*CHAR) LEN(1)
+003401130204             DCL VAR(&Msg)   TYPE(*CHAR) LEN(50)
+003501130204
+003601130204/* IFS folders */
+003701130204             DCL VAR(&RtnVal) TYPE(*INT) LEN(4)
+003801130204             DCL VAR(&FilLoc) TYPE(*CHAR) LEN(300)
+003901130204             DCL VAR(&PutDir) TYPE(*CHAR) LEN(300)
+004001130204             DCL VAR(&FilTyp) TYPE(*CHAR) LEN(2) VALUE('BU')
+004101130204             DCL VAR(&FilOwn) TYPE(*CHAR) LEN(4) VALUE('BULK')
+004201130204             DCL VAR(&DelMth) TYPE(*CHAR) LEN(3)
+004301130204
+004401130204             CALL PGM(GETSYSDATE) PARM(&SysDate)
+004501130204             RTVDTAARA DTAARA(MFACMPCDP (1 3)) RTNVAR(&CmpCde)
+004601130204
+004701130204/* Check if csv was already processed */
+004801130204             CHGVAR     VAR(&NumRec) VALUE(0)
+004901130215             RTVMBRD FILE(&AcFile) NBRCURRCD(&NumRec)
+005001130204             IF COND(&NumRec *GT 0) +
+005101130204             THEN(DO)
+005201130204                CHGVAR VAR(&Msg) +
+005301130303                       VALUE(&AcFile *BCAT 'is already processed. +
+005401130204                          - (I)gnor or (C)ancel?')
+005501130204                SNDUSRMSG MSG(&Msg) +
+005601130204                          TOMSGQ(*SYSOPR) MSGRPY(&Reply)
+005701130204                IF COND(&Reply *EQ 'I' *OR &Reply *EQ 'i') +
+005801130215                   THEN(CLRPFM FILE(&AcFile))
+005901130204                IF COND(&Reply *EQ 'C' *OR &Reply *EQ 'c') +
+006001130204                   THEN(GOTO CMDLBL(EndClPgm))
+006101130204
+006201130204
+006301130204             ENDDO
+006401130204
+006501130204/* Get Bulk Put directory */
+006601130204             CHGVAR VAR(&DelMth) VALUE('PUT')
+006701130204             CALLSUBR SUBR(GetIfsLoc) RTNVAL(&RtnVal)
+006801130204             IF COND(&RtnVal *EQ -1) THEN(GOTO CMDLBL(EndClPgm))
+006901130204             CHGVAR VAR(&PutDir) VALUE(&FilLoc)
+007001130204
+007101130204Process:
+007201130204             CHGVAR VAR(&FilName) VALUE(&CmpCde *TCAT +
+007202130214                                  %SST(&SysDate 3 6) *TCAT '.CSV')
+007401130204             CHGVAR VAR(&SrcFile) VALUE(&PutDir *TCAT &FilName)
+007501130204
+007601130204             QSYS/CPYFRMIMPF FROMSTMF(&SrcFile) +
+007701130215                  TOFILE(&AcFile) MBROPT(*REPLACE) +
+007801130204                  RCDDLM(*CRLF) RPLNULLVAL(*FLDDFT)
+007901130204
+008001130204            /** Make sure that extract was successful **/
+008101130204             CHGVAR     VAR(&NumRec) VALUE(0)
+008201130215             RTVMBRD FILE(&AcFile) NBRCURRCD(&NumRec)
+008301130214             IF  COND(&NUMREC *GT 0) +
+008401130204             THEN(DO)
+008402130226/* Start Commitment Control  */
+008403130226             STRCMTCTL  LCKLVL(*CHG) NFYOBJ(*LIBL/QSYSOPR *MSGQ) +
+008404130226                          CMTSCOPE(*JOB) OMTJRNE(*NONE)
+008501130204                CALL PGM(CVACCTR)
+008502130226/* End Commitment Control  */
+008503130226             ENDCMTCTL
+008504130226
+008701130204                CHGVAR VAR(&RtnSts) VALUE('Successful')
+008801130204             ENDDO
+008901130204             ELSE CMD(DO)
+009001130204                CHGVAR VAR(&RtnSts) VALUE('Fail')
+009101130204             ENDDO
+009201130204             CHGVAR VAR(&Msg)   +
+009301130215                    VALUE(&AcFile *BCAT &RtnSts)
+009401130215             CHGDTAARA  DTAARA(*LDA (60 50)) VALUE(&MSG)
+009501130204             DSPDTAARA DTAARA(*LDA)
+009601130204
+009602130218     /* CHGVAR VAR(&SrcFile) VALUE(' ')                           */
+009604130218     /* CHGVAR VAR(&SrcFile) VALUE(&PutDir *TCAT 'CNVINVLIST.CSV')*/
+009605130218     /*                                                           */
+009606130218     /* QSYS/CPYFRMIMPF FROMSTMF(&SrcFile) +                      */
+009607130218     /*        TOFILE(&FdFile) MBROPT(*REPLACE) +                 */
+009608130218     /*     RCDDLM(*CRLF) RPLNULLVAL(*FLDDFT)                     */
+009609130218     /*                                                           */
+009610130215
+009701130204   /* Get IFS location */
+009801130204      SUBR SUBR(GetIfsLoc)
+009901130204GetIfs:
+010001130204           CALL PGM(FxGetIfsD) +
+010101130204                PARM(&FilTyp &FilOwn &DelMth &FilLoc)
+010201130204
+010301130204           IF (&FilLoc *EQ ' ') +
+010401130204           THEN(DO)
+010501130204              SNDUSRMSG +
+010601130204                 MSG('There are no PUT, GET, or ARC +
+010701130204                     folders defined in the IFS Directory file +
+010801130204                     (MFAIFSDIRP).  Please add the missing +
+010901130204                     folder definitions so that job can +
+011001130204                     process the Orders.  (R)etry or (C)ancel?') +
+011101130204                 TOUSR(*SYSOPR) MSGRPY(&Reply)
+011201130204              IF COND(&Reply *EQ 'R' *OR &Reply *EQ 'r') +
+011301130204                 THEN(GOTO CMDLBL(GetIfs))
+011401130204              IF COND(&Reply *EQ 'C' *OR &Reply *EQ 'c') +
+011501130204                 THEN(RTNSUBR RTNVAL(-1))
+011601130204           ENDDO
+011701130204
+011801130204      ENDSUBR
+011901130204
+012001130204
+012101130204EndClPgm:
+012201130204              ENDPGM
+012301130204

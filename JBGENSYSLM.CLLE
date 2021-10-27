@@ -1,0 +1,113 @@
+000100030417/* ******************************************************************/
+000200030417/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000300030417/* ******************************************************************/
+000400030417/* ******************************************************************/
+000500130103/* GEETA S.   * 2012/11/15   * RUN Systematic Plans report (New)    */
+000600141224/* Sangeetha V* 2014/12/24   * RFS140836 - Change the default e-mail*/
+000700030417/* ******************************************************************/
+000800930729PGM
+000900121121             DCL        VAR(&RptName) TYPE(*CHAR) LEN(10) +
+001000130103                          VALUE('GENSYSLM')
+001100121119             DCL        VAR(&SysDate)    TYPE(*CHAR) LEN(08)
+001200121121             DCL        VAR(&SysTime)    TYPE(*CHAR) LEN(06) VALUE('000000')
+001300121121             DCL        VAR(&SysTime2)   TYPE(*CHAR) LEN(04) VALUE('0000')
+001400121121             DCL        VAR(&ViewNme)    TYPE(*CHAR) LEN(10)
+001500121115             DCL        VAR(&Expr1)      TYPE(*CHAR) LEN(100) VALUE(' ')
+001600121121             DCL        VAR(&EMail)      TYPE(*CHAR) LEN(100) VALUE(' ')
+001700141224 /* RFS 140836 - Begins.*/
+001800141224             DCL        VAR(&JobEmail1)  TYPE(*CHAR) LEN(100) VALUE(' ')
+001900141224             DCL        VAR(&JobEmail2)  TYPE(*CHAR) LEN(100) VALUE(' ')
+002000141224 /* RFS 140836 - Ends.*/
+002100121121             DCL        VAR(&EMail2)     TYPE(*CHAR) LEN(100) VALUE(' ')
+002200121121             DCL        VAR(&IfsDir)     TYPE(*CHAR) LEN(100)
+002300121121             DCL        VAR(&IfsDir1)     TYPE(*CHAR) LEN(100)
+002400121121             DCL        VAR(&FileName)   TYPE(*CHAR) LEN(100)
+002500121126             DCL        VAR(&RmvFile)   TYPE(*CHAR) LEN(100)
+002600030417             DCL        VAR(&REPLY)      TYPE(*CHAR) LEN(1)
+002700121120             DCL        VAR(&MFAEFTLIB)  TYPE(*CHAR) LEN(10)
+002800121121             DCL        VAR(&IfsType) TYPE(*CHAR) LEN(100) VALUE(' ')
+002900121121             DCL        VAR(&IfsMethod) TYPE(*CHAR) LEN(100) VALUE(' ')
+003000121121             DCL        VAR(&IfsOwner) TYPE(*CHAR) LEN(100) VALUE(' ')
+003100130122             DCL        VAR(&SYSNAME)   TYPE(*CHAR) LEN(10) VALUE(' ')
+003200030417/* -----------------------------------------------------------------*/
+003300030417/* Begin Processing                                                 */
+003400030417/* -----------------------------------------------------------------*/
+003500121122
+003600121121             CALL       PGM(GETSYSDATE) PARM(&SysDate)
+003700121121             RTVSYSVAL  SYSVAL(QTIME) RTNVAR(&SysTime)
+003800121121             CHGVAR     VAR(&SysTime2) VALUE(%SST(&SysTime 1 4))
+003900141224 /* RFS 140836 - Begins. */
+004000141224 /*          RTVNETA    SYSNAME(&SYSNAME)                             */
+004100141224 /*          IF         COND(&SYSNAME *EQ 'UNISEN04' *OR  &SYSNAME +  */
+004200141224 /*                       *EQ 'UATBPO') THEN(DO)                      */
+004300141224 /*          CHGVAR     VAR(&EMail) +                                 */
+004400141224 /*                       VALUE('citi.tao.empiregandhmonitoring@citi.+*/
+004500141224 /*                       com')                                       */
+004600141224 /*          ENDDO                                                    */
+004700130122
+004800141224 /*          CHGVAR     VAR(&EMail)  VALUE(' ')                       */
+004900141224
+005000141224             CALL     PGM(FXGETEMAIL) PARM('JBGENSYSLM' &JobEmail1 +
+005100141224                                    &JobEmail2)
+005200141224             CHGVAR     VAR(&Email) VALUE(&JobEmail1 *TCAT ',' +
+005300141224                        *TCAT &JobEmail2)
+005400141224 /* RFS 140836 - Ends. */
+005500121121             CHGVAR     VAR(&FileName) VALUE(&RptName *TCAT +
+005600121121                         '-' *TCAT &SYSDATE *TCAT +
+005700121121                         '-' *CAT &SysTime2)
+005800121121
+005900121126             RTVDTAARA  DTAARA(MFAEFTLIB *ALL) RTNVAR(&MFAEFTLIB)
+006000121126
+006100121126             CHGVAR    VAR(&IfsType)   VALUE('EX')
+006200121126             CHGVAR    VAR(&IfsOwner)  VALUE('SEG')
+006300121126             CHGVAR    VAR(&IfsMethod) VALUE('PUT')
+006400121126             CALL      PGM(FxGetIfsD) PARM(&IfsType &IfsOwner +
+006500121126                            &IfsMethod &IfsDir1)
+006600121126
+006700121126             IF (&IfsDir1 *EQ ' ') THEN(DO)
+006800121126                  SNDPGMMSG MSG('Trans Alert Report (CSV) not created +
+006900121126                         because IFS folder is not setup correctly')  +
+007000121126                         TOMSGQ(QSYSOPR)
+007100121126                  GOTO   CMDLBL(PGM_EXIT)
+007200121126             ENDDO
+007300121126
+007400121126             CHGVAR     VAR(&IfsDir) VALUE(&IfsDir1 *TCAT '/' +
+007500121126                          *TCAT  &FileName *TCAT '.XLS')
+007600121126
+007700121126             CHGVAR     VAR(&RmvFile) VALUE(&IfsDir1 *TCAT '/' +
+007800121126                          *TCAT  &RptName *TCAT '*')
+007900121126
+008000121126             RMVLNK (&RmvFile)
+008100121126             MONMSG     MSGID(CPF0000)
+008200121126
+008300121203             EXECUTE    VIEW(YTDCNTRBLM) OUTFILE(QTEMP/YtdTrnsTot)
+008400121203             EXECUTE    VIEW(ESTPACV)    OUTFILE(QTEMP/EstmtPAC)
+008500121203             EXECUTE    VIEW(ESTDCAV)    OUTFILE(QTEMP/EstmtDCA)
+008600121203             EXECUTE    VIEW(ESTROLV)    OUTFILE(QTEMP/EstmtROL)
+008700130106             EXECUTE    VIEW(TRNSYSSR) OUTFILE(QTEMP/SysTotSrs)
+008800121121
+008900121121 /* .xls file */
+009000130103             EXECUTE    VIEW(GENSYSLMV) PCFMT(*XLS) TOSTMF(&IfsDir) +
+009100130121                          REPLACE(*YES) RECIPIENT(&EMAIL)
+009200121126
+009300121121 /* .csv file */
+009400121126             CHGVAR     VAR(&IfsDir) VALUE(&IfsDir1 *TCAT '/' +
+009500121126                          *TCAT  &FileName *TCAT '.CSV')
+009600121126
+009700130103             EXECUTE    VIEW(GENSYSLMV) PCFMT(*DELIMTEDH) +
+009800121126                          TOSTMF(&IfsDir) REPLACE(*YES)
+009900121126
+010000121120/* Set up LDA parameterd for FTP EQ file to VPN tunnel        */
+010100121120
+010200121121   CHGDTAARA  DTAARA(*LDA (800 100)) VALUE(&IfsDir)
+010300121120   CHGDTAARA  DTAARA(*LDA (900 110)) VALUE(' ')
+010400130103   CHGDTAARA  DTAARA(*LDA (900 10)) VALUE('JBGENSYSLM')   /* &JOBNAME */
+010500130106   CHGDTAARA  DTAARA(*LDA (910 10)) VALUE('EMPRPT')     /* &FORMCD  */
+010600121121   CHGDTAARA  DTAARA(*LDA (920 10)) VALUE(' ')    /* &LIBRARY */
+010700121121   CHGDTAARA  DTAARA(*LDA (930 10)) VALUE(' ' )     /* &FILE    */
+010800121121   CHGDTAARA  DTAARA(*LDA (940 10)) VALUE(' ')     /* &MEMBER  */
+010900121120   CHGDTAARA  DTAARA(*LDA (998  2)) VALUE('UT')          /* &JOBMODE */
+011000121120   DSPDTAARA  DTAARA(*LDA)
+011100121120
+011200121120              CALL       PGM(FXFTPIFS)
+011300020103PGM_EXIT:    ENDPGM

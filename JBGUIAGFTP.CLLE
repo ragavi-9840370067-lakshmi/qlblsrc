@@ -1,0 +1,52 @@
+000001170313     /* %ATTR OPTION(*XREF) DBGVIEW(*ALL) */
+000101030417/* ******************************************************************/
+000201030417/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000301030417/* ******************************************************************/
+000401030417/* ******************************************************************/
+000501110531/* Alex       * 2011/05/17   * RFS92480 - Program Created.          */
+000601110517/*  Jayasundara              * This CL will be called by GUI to     */
+000701110517/*            *              * submit the AdHoc job JBINVAGFTP.     */
+000801110517/*            *              * Input Parameters.                    */
+000901110517/*            *              *   1. Mode -  Char (2)                */
+001001110517/*            *              *   2. AhRunDate - Dec (8)             */
+001101110531/* Richard Shi* 2011/05/31   * RFS92480 - ITG fix EGL Call.         */
+001201110525/* ************************* *Last* *********************************/
+001301110517             PGM        PARM(&MODE &AHRUNDATE)
+001401110517/* Declaring Variables */
+001501110517             dcl        var(&Mode)         type(*char) len(2)
+001601110517             dcl        var(&AhRunDate)    type(*dec)  len(8)
+001701110517             dcl        var(&lc_user)      type(*char) len(10)
+001801110517             dcl        var(&lc_jobD)      type(*char) len(10)
+001901110517             dcl        var(&lc_grpprf)    type(*char) len(10)
+002001110517             dcl        var(&lc_rtntyp)    type(*char) len(02)
+002101110517             dcl        var(&lc_memgrp)    type(*char) len(10) +
+002201110517                        value('MEMGRPPRF')
+002301110517             dcl        var(&lc_dftjobd)   type(*char) len(10) +
+002401110517                        value('QDFTJOBD')
+002501110517/*********************************************************************/
+002601110517/* Retrieve jobd & grpprf of the current user passed as parm         */
+002701110517/*********************************************************************/
+002801110517             rtvusrprf  usrprf(&lc_user) jobd(&lc_jobd) +
+002901110517                        grpprf(&lc_grpprf)
+003001110517
+003101110517             if      cond(&lc_grpprf *eq &lc_memgrp) then(do)
+003201110517             chgvar var(&lc_jobd) value(&lc_dftjobd)
+003301110517             enddo
+003401110517
+003501110531             IF         COND(&MODE *EQ 'AM') THEN(DO)
+003601110531             SBMJOB     CMD(CALL PGM(JBINVAMFTP)             +
+003701110517                          PARM(&MODE &AHRUNDATE))            +
+003801110531                          JOB(JBGUIAMFTP)                    +
+003901110517                          JOBD(*LIBL/&LC_JOBD)               +
+004001110517                          OUTQ(*JOBD) USER(&LC_USER)
+004101110531             ENDDO
+004201110531
+004301110531             IF         COND(&MODE *EQ 'AY') THEN(DO)
+004401110531             SBMJOB     CMD(CALL PGM(JBINVRCFTP)             +
+004501110531                          PARM(&MODE &AHRUNDATE))            +
+004601110531                          JOB(JBGUIRCFTP)                    +
+004701110531                          JOBD(*LIBL/&LC_JOBD)               +
+004801110531                          OUTQ(*JOBD) USER(&LC_USER)
+004901110531             ENDDO
+005001110517
+005101110517end:       endpgm

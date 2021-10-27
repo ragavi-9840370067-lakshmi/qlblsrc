@@ -1,0 +1,74 @@
+000100030417/* ******************************************************************/
+000200071221/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000300071221/* ******************************************************************/
+000400071221/* ******************************************************************/
+000500071221/* Ade A.     * 2007/12/24   * This program loads the custom service*/
+000600071221/*            *              * Fee price                            */
+000700071221/* ******************************************************************/
+000800071221             PGM
+000900071221             DCL        VAR(&FILENAME) TYPE(*CHAR) LEN(10)
+001000071221             DCL        VAR(&LIBRARY) TYPE(*CHAR) LEN(10)
+001100071227             DCL        VAR(&PRICETYPE) TYPE(*CHAR) LEN(1)
+001200071227             DCL        VAR(&NOOFREC) TYPE(*DEC) LEN(10 0) VALUE(0)
+001300071221             DCL        VAR(&RETRNCODE) TYPE(*CHAR) LEN(2) VALUE(' ')
+001400071221
+001500071221/* SEQUEL DECLARES */
+001600071221             DCL        VAR(&RPTNAME)    TYPE(*CHAR) LEN(10)
+001700071221             DCL        VAR(&VIEWNME)    TYPE(*CHAR) LEN(10)
+001800071221             DCL        VAR(&EXPR1)      TYPE(*CHAR) LEN(100)
+001900071221
+002000071221/* -----------------------------------------------------------------*/
+002100071221/* Begin Processing                                                 */
+002200071221/* -----------------------------------------------------------------*/
+002300071221/* Retrieve Processing Values                                        */
+002400071221             DSPDTAARA  DTAARA(*LDA) OUTPUT(*PRINT)
+002500071221             RTVDTAARA  DTAARA(*LDA (1 10)) RTNVAR(&LIBRARY)
+002600071221             RTVDTAARA  DTAARA(*LDA (11 10)) RTNVAR(&FILENAME)
+002700071221             RTVDTAARA  DTAARA(*LDA (21 1)) RTNVAR(&PRICETYPE)
+002800080124
+002900080221 LOADPRC:    DLTF       FILE(QTEMP/SFPRICE) /* delete old work files +
+003000080124                          if exist */
+003100080124             MONMSG     MSGID(CPF3273 CPF2105)
+003200080124
+003300080124             CALL       PGM(FXCRTPRCTB) PARM(&RETRNCODE)
+003400080124             IF         COND(&RETRNCODE *NE '00') THEN(DO)
+003500080124             SNDUSRMSG  MSG('Could not create necessary workfile') +
+003600080124                          MSGTYPE(*INFO)
+003700080124             GOTO       CMDLBL(EXIT)
+003800080124             ENDDO
+003900080124
+004000080124/* Convert the CSV  to a structured table in QTEMP                   */
+004100080221             CPYFRMIMPF FROMFILE(&LIBRARY/&FILENAME) +
+004200080221                          TOFILE(QTEMP/SFPRICE) MBROPT(*ADD)
+004300080124             MONMSG     MSGID(CPF2817) EXEC(DO)
+004400080124             SNDUSRMSG  MSG('Could not convert CSV file, format not +
+004500080124                          compatible') MSGTYPE(*INFO)
+004600080124             GOTO       CMDLBL(EXIT)
+004700080124             ENDDO
+004800080124
+004900080124/* Check if the file is empty                                        */
+005000080221             RTVMBRD    FILE(QTEMP/SFPRICE) NBRCURRCD(&NOOFREC)
+005100080124             IF         COND(&NOOFREC = 0) THEN(DO)
+005200080124             SNDUSRMSG  MSG('Empty price load file') MSGTYPE(*INFO)
+005300080124             GOTO       CMDLBL(EXIT)
+005400080124             ENDDO
+005500071221
+005600071221
+005700071221/* If not empty member then load the custom prices                   */
+005800080124/*                                                                   */
+005900080124/*           CPYF       FROMFILE(&LIBRARY/&FILENAME) +               */
+006000080124/*                        TOFILE(QTEMP/SFPRICE) MBROPT(*REPLACE) +   */
+006100080124/*                        CRTFILE(*YES)                              */
+006200080124
+006300071227             CALL       PGM(FXLODCUPRC) PARM(&PRICETYPE &RETRNCODE) +
+006400071227                          /* load and validate the prices */
+006500071221
+006600071221CRTRPT:
+006700071221/* If return code of program is ok then print exception report       */
+006800071221             IF         COND(&RETRNCODE = '00') THEN(DO)
+006900071227              CHGVAR     VAR(&RPTNAME) VALUE('GENCUPRCR')
+007000071227              CHGVAR     VAR(&VIEWNME) VALUE('GENCUPRCV')
+007100071221              CALL       PGM(JOBSEQRUN) PARM(&RPTNAME &VIEWNME &EXPR1)
+007200071221             ENDDO
+007300071221
+007400071227 EXIT:       ENDPGM

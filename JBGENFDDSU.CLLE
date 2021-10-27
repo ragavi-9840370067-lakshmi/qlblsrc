@@ -1,0 +1,142 @@
+000001170313     /* %ATTR OPTION(*XREF) DBGVIEW(*SOURCE) */
+000101120824/********************************************************************/
+000201120824/* TITLE        : Fund Name Upload/Download.                        */
+000301120824/* SYSTEM       : L&T Financial Services Technology Inc.            */
+000401120824/* PROGRAM TYPE : CL                                                */
+000501120824/* PROGRAMMER   : Suresh G.                                         */
+000601120828/* PROGRAM      : JBGENFDDSU                                        */
+000701120824/* DESCRIPTION  : This Job is used to process an upload of a        */
+000801120824/*                Fund Name Spreadsheet from IFS Directory into     */
+000901120824/*                Unitrax Database.                                 */
+001501120824/* DATE CREATED : 2012/08/24                                        */
+001601120824/* RFS NUMBER   : RFS109636                                         */
+001701120824/* CALLED BY    : NONE                                              */
+001801120824/* PARAMETERS   : NONE                                              */
+001901120831/* CALLS PROGRAM: GENFDDSU                                          */
+002001120824/********************************************************************/
+002101120824/*                C H A N G E   H I S T O R Y                       */
+002201030417/* ******************************************************************/
+002301030417/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+002401120824/*            *  YYYY/MM/DD  * RFS ###### -                         */
+002501030417/* ******************************************************************/
+002701120824/* Suresh G.  * 2012/08/24   * RFS 109636 - Created The Program.    */
+002702121205/* Andy Chan  * 2012/12/05   * RFS 117204 - Add Taatool             */
+002801120824/*            *              *                                      */
+003101030417/* ******************************************************************/
+003201120824             PGM
+003301120827             DCL        VAR(&PROCESSDT) TYPE(*CHAR) LEN(08)
+003401120827             DCL        VAR(&ASATDATE)  TYPE(*CHAR) LEN(08)
+003501120831             DCL        VAR(&RTNCDE)    TYPE(*CHAR) LEN(02)          +
+003601120831                        VALUE('  ')
+003701120926             DCL        VAR(&FNAME)     TYPE(*CHAR) LEN(31)
+003801120926             DCL        VAR(&FILEDESC)  TYPE(*CHAR) LEN(16)          +
+003901120926                        VALUE('FundDescriptions')
+004001120831             DCL        VAR(&FILEXT)    TYPE(*CHAR) LEN(04)          +
+004101120831                        VALUE('.CSV')
+004201120827             DCL        VAR(&IFSTYPE)   TYPE(*CHAR) LEN(02)
+004301120827             DCL        VAR(&IFSOWNER)  TYPE(*CHAR) LEN(04)
+004401120827             DCL        VAR(&IFSMETHOD) TYPE(*CHAR) LEN(03)
+004501120827             DCL        VAR(&IFSDIR)    TYPE(*CHAR) LEN(300)
+004601120827             DCL        VAR(&IFSFNAM)   TYPE(*CHAR) LEN(300)
+004701120827             DCL        VAR(&IFSFDONE)  TYPE(*CHAR) LEN(300)
+004702120911             DCL        VAR(&CMPCDE)    TYPE(*CHAR) LEN(03)
+004901120904             DCL        VAR(&ERROR)     TYPE(*CHAR) LEN(100)         +
+005001120831                        VALUE(' ')
+005101120831             DCL        VAR(&QUOTE)     TYPE(*CHAR) LEN(01)          +
+005201120831                        VALUE('"')
+005301120831             DCL        VAR(&IFSEXIST)  TYPE(*CHAR) LEN(01)          +
+005401120831                        VALUE('N')
+005501120831
+005601030417/* -----------------------------------------------------------------*/
+005701030417/* Begin Processing                                                 */
+005801030417/* -----------------------------------------------------------------*/
+005901120827
+006001120829             RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&PROCESSDT)
+006002120911             RTVDTAARA  DTAARA(MFACMPCDP (1 3)) RTNVAR(&CMPCDE)
+006101120827
+006201120903/* Get Next Business date.                                          */
+006301120829             CALL       PGM(GETNXTDAY) PARM(&PROCESSDT &ASATDATE +
+006401120831                        &RTNCDE)
+006501120827
+006601120827
+006701120926/* Format Upload File Name:'FundDescriptions'.                      */
+006801120911             CHGVAR     VAR(&FNAME) VALUE(&FILEDESC |< &ASATDATE |< +
+006901120911                          &CMPCDE |< &FILEXT)
+007001120827
+007101120903/* Get IFS Directory information from MFAIFSDIRP by Calling         */
+007201120903/* Function FXGETIFSD.                                              */
+007301120903             CHGVAR     VAR(&IFSTYPE)   VALUE('FN')
+007401120903             CHGVAR     VAR(&IFSOWNER)  VALUE('CLNT')
+007501120827             CHGVAR     VAR(&IFSMETHOD) VALUE('GET')
+007601120827
+007701120831             CALL       PGM(FXGETIFSD) PARM(&IFSTYPE &IFSOWNER      +
+007801120831                        &IFSMETHOD &IFSDIR)
+008301120827
+008401120831/* Construct the Full File Path by adding File Name to the IFS       */
+008501120903/* Directory.                                                        */
+008601120831             CHGVAR     VAR(&IFSFNAM) VALUE(&IFSDIR |< '/' |< &FNAME)
+008801120831
+008901120903/* Construct a Processed file directory to move the processed  csv   */
+009001120903/* file from upload directory to processed directory.                */
+009101120831             CHGVAR     VAR(&IFSFDONE) VALUE(&IFSDIR |< '/' |<       +
+009201120903                        'ProcessedFiles/' |< &FNAME)
+009301120827
+009302121205/* 117204 Begin */
+009303121205             RMVLIBLE   LIB(TAATOOL)
+009304121205             MONMSG     MSGID(CPF0000)
+009305121205
+009306121205             ADDLIBLE   LIB(TAATOOL) POSITION(*LAST)
+009307121205             MONMSG     MSGID(CPF0000)
+009308121205/* 117204 End */
+009309121205
+009501120903/* Check if objects exist.                                           */
+009601120831             CHKIFSE    OBJ(&IFSFNAM)
+009801120904             MONMSG     MSGID(CPFA0A9) EXEC(GOTO CMDLBL(ERRMSG))
+011201120827
+011301120903/* Check and Create a temporary table in QTEMP.                      */
+011501120829             DLTF       FILE(QTEMP/SQFNDNAME)
+011601120827             MONMSG     MSGID(CPF0000)
+011701120827
+011801120827             DYNSQL     SQL('CREATE TABLE QTEMP/SQFNDNAME             +
+012001120912                        (COMPANY_CODE      CHAR (03) NOT NULL DEFAULT,+
+012002120912                        FUND_NUM           CHAR (05) NOT NULL DEFAULT,+
+012101120912                        FUND_NAME_LONG     CHAR (35) NOT NULL DEFAULT,+
+012102120912                        FUND_NAME_SHORT    CHAR (15) NOT NULL DEFAULT,+
+012103120912                        FUND_NAME_LONG_FR  CHAR (35) NOT NULL DEFAULT,+
+012104120912                        FUND_NAME_SHORT_FR CHAR (15) NOT NULL DEFAULT,+
+012201120831                        FUND_LONG_NAME     CHAR (80) NOT NULL DEFAULT,+
+012301120831                        FUND_MED_NAME      CHAR (43) NOT NULL DEFAULT,+
+012401120831                        FUND_SHT_NAME      CHAR (13) NOT NULL DEFAULT,+
+012501120925                        FUND_LEGAL_NAME    CHAR (80) NOT NULL DEFAULT,+
+012601120831                        FUND_LONG_NAME_FR  CHAR (80) NOT NULL DEFAULT,+
+012701120831                        FUND_MED_NAME_FR   CHAR (43) NOT NULL DEFAULT,+
+012801120831                        FUND_SHT_NAME_FR   CHAR (13) NOT NULL DEFAULT,+
+012901120925                        FUND_LEGAL_NAME_FR CHAR (80) NOT NULL DEFAULT +
+013201120827                        )')
+013301120827
+013501120831/* Using a command CPYFRMIMPF to map the .csv file into the          */
+013601120831/* QTEMP file.                                                       */
+013701120904             CPYFRMIMPF FROMSTMF(&IFSFNAM) TOFILE(QTEMP/SQFNDNAME)   +
+013801120904                        RCDDLM(*CRLF) RPLNULLVAL(*FLDDFT)
+014101120827             MONMSG     MSGID(CPF2817) EXEC(DO)
+014201120831
+014301120904             CHGVAR     VAR(&ERROR) VALUE(&QUOTE *TCAT 'Failed to +
+014401120904                        Convert Input File:' *TCAT &IFSFNAM *TCAT +
+014501120904                        &QUOTE)
+014601120904             SNDPGMMSG  MSG(&ERROR)
+014801120827             GOTO       CMDLBL(PGM_EXIT)
+014901120827             ENDDO
+015001120827
+015101120827             CALL       PGM(GENFDDSU)
+015201120827
+015301120827             RMVLNK     OBJLNK(&IFSFDONE)
+015401120827             MONMSG     MSGID(CPF0000)
+015501120903
+015801120903             MOV        OBJ(&IFSFNAM) TOOBJ(&IFSFDONE) DTAFMT(*TEXT)
+016001120903             MONMSG     MSGID(CPF0000)
+016101120829
+016201120904 ERRMSG:     IF         COND(&IFSEXIST *EQ 'N') THEN(DO)
+016301120829             SNDPGMMSG  MSG('*** FILE NOT FOUND ****')
+016401120829             ENDDO
+016501120829
+016601020103PGM_EXIT:    ENDPGM

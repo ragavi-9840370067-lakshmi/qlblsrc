@@ -1,0 +1,131 @@
+000100070911/********************************************************************/
+000200080820/* TITLE        :  Adhoc report for ACCGWFEE report                 */
+000300070911/*                                                                  */
+000400070911/* AUTHOR       :  CITI                                             */
+000500070911/*                                                                  */
+000600080820/* PROGRAM      :  JBACCGWFEE                                       */
+000700070911/*                                                                  */
+000800080820/* DATE-WRITTEN :  2008/08/20                                       */
+000900070911/*                                                                  */
+001000080821/* RFS #        :  50646                                            */
+001100070911/*                                                                  */
+001200080820/* DESCRIPTION  :  Adhoc Job to generate GLWB Fee Report.           */
+001300080820/*              :                                                   */
+001400070911/********************************************************************/
+001500070911/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION                          */
+001600070911/*            *  yyyy/mm/dd  *                                      */
+001601100505/* Sanjeev P  *  2008/08/21  * RFS50646 Created new program         */
+001700100505/* J. O'calla *  2010/05/05  * RFS78575 Company name incorrect      */
+001701100505/*            *              * add center                           */
+001800070911/********************************************************************/
+001900070911PGM
+002100070911
+002200100506             DCL        VAR(&CMPNME) TYPE(*CHAR) LEN(40) VALUE(' ')
+002300080909             DCL        VAR(&CMP)          TYPE(*CHAR) LEN(3)
+002400080909             DCL        VAR(&ASATDTE)      TYPE(*CHAR) LEN(8)
+002500080826             DCL        VAR(&STRDAY)       TYPE(*CHAR) LEN(2)
+002600080909             DCL        VAR(&STRDATE)      TYPE(*CHAR) LEN(8)
+002800080909             DCL        VAR(&ENDDATE)      TYPE(*CHAR) LEN(8)
+002900080826             DCL        VAR(&ENDYEAR)      TYPE(*CHAR) LEN(4)
+003000080826             DCL        VAR(&ENDMTH)       TYPE(*CHAR) LEN(2)
+003100080826             DCL        VAR(&STRDLR)       TYPE(*CHAR) LEN(4)
+003200080826             DCL        VAR(&ENDDLR)       TYPE(*CHAR) LEN(4)
+003300080826             DCL        VAR(&STRREP)       TYPE(*CHAR) LEN(6)
+003400080826             DCL        VAR(&ENDREP)       TYPE(*CHAR) LEN(6)
+004100080915             DCL        VAR(&LDAY)       TYPE(*CHAR) LEN(1) VALUE("L")
+004200080915             DCL        VAR(&MTHDATE)    TYPE(*CHAR) LEN(8)
+004201100506/*  RFS78575 starts  */
+004301100506             DCL        VAR(&POS)      TYPE(*DEC)  LEN(5 0) value(40)
+004302100505             DCL        VAR(&POS2)     TYPE(*DEC)  LEN(5 0)
+004304100506             DCL        VAR(&CMPNM2)       TYPE(*CHAR) LEN(40)
+004305100506/*  RFS78575 ends   */
+004306100505
+004400070911/* -----------------------------------------------------------------*/
+004500070911/* Begin Processing                                                 */
+004600070911/* -----------------------------------------------------------------*/
+004700070913
+004800081016 /*          DSPDTAARA  DTAARA(*LDA)    */
+005000080910             RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&ASATDTE)
+005100080910             RTVDTAARA  DTAARA(MFACMPCDP (1 3)) RTNVAR(&CMP)
+005101100506
+005102100505/* rfs78575 starts */
+005200100506             RTVDTAARA  DTAARA(MFACMPNMA (1 30)) RTNVAR(&CMPNM2)
+005203100505
+005205100506 $CENTER:    IF         COND((&POS *NE 0) & (%SST(&CMPNM2  &POS 1) +
+005206100505                          = ' ')) THEN(DO)
+005207100505             CHGVAR     VAR(&POS) VALUE(&POS - 1)
+005208100505             GOTO       CMDLBL($CENTER)
+005209100505             ENDDO
+005210100505
+005211100506             CHGVAR     VAR(&POS2) VALUE(((40  - &POS) / 2) + 1)
+005212100506             CHGVAR     VAR(%SST(&CMPNME &POS2 &POS)) VALUE(&CMPNM2)
+005214100506
+005215100505/* rfs78575 ends */
+005300080910
+005400080826
+005500080909             RTVDTAARA  DTAARA(*LDA (13 2)) RTNVAR(&ENDMTH)
+005600080909             RTVDTAARA  DTAARA(*LDA (7 2)) RTNVAR(&STRDAY)
+005700080915             RTVDTAARA  DTAARA(*LDA (9 8)) RTNVAR(&ENDDATE)
+005800080909             RTVDTAARA  DTAARA(*LDA (17 4)) RTNVAR(&STRDLR)
+005900080909             RTVDTAARA  DTAARA(*LDA (21 6)) RTNVAR(&STRREP)
+006000080908
+006100080826             IF COND(&STRDAY *NE '01') +
+006200080826             THEN(DO)
+006300080908                CHGDTAARA  DTAARA(*LDA (7 2)) VALUE('01')
+006400080826             ENDDO
+006500080915             CALL       PGM(FXGETDAY) PARM(&ENDDATE &LDAY &MTHDATE)
+006600080915
+006700080915             CHGDTAARA  DTAARA(*LDA (15 2)) VALUE(%SST(&MTHDATE 7 2))
+006800081016             IF COND(&ENDMTH *EQ '03') +
+006900081016             THEN(DO)
+007000081016                CHGDTAARA  DTAARA(*LDA (15 2)) VALUE('31')
+007100081016             ENDDO
+007200080909
+007300080908             IF COND(&STRDLR *EQ ' ') +
+007400080826             THEN(DO)
+007500080910                CHGDTAARA  DTAARA(*LDA (27 4)) VALUE('9999')
+007600080826             ENDDO
+007700080908             IF COND(&STRREP *EQ ' ') +
+007800080826             THEN(DO)
+007900080910                CHGDTAARA  DTAARA(*LDA (31 6)) VALUE('999999')
+008000080826             ENDDO
+008100080908             IF COND(&STRDLR *NE ' ') +
+008200080826             THEN(DO)
+008300080909                CHGDTAARA  DTAARA(*LDA (27 4)) VALUE(&STRDLR)
+008400080826             ENDDO
+008500080908             IF COND(&STRREP *NE ' ') +
+008600080826             THEN(DO)
+008700080909                CHGDTAARA  DTAARA(*LDA (31 6)) VALUE(&STRREP)
+008800080826             ENDDO
+008900080911
+009000080909             RTVDTAARA  DTAARA(*LDA (1 8)) RTNVAR(&STRDATE)
+009100080909             RTVDTAARA  DTAARA(*LDA (9 8)) RTNVAR(&ENDDATE)
+009200080909             RTVDTAARA  DTAARA(*LDA (7 2)) RTNVAR(&STRDAY)
+009300080909             RTVDTAARA  DTAARA(*LDA (9 4)) RTNVAR(&ENDYEAR)
+009400080909             RTVDTAARA  DTAARA(*LDA (13 2)) RTNVAR(&ENDMTH)
+009500080909             RTVDTAARA  DTAARA(*LDA (17 4)) RTNVAR(&STRDLR)
+009600080909             RTVDTAARA  DTAARA(*LDA (21 6)) RTNVAR(&STRREP)
+009700080909             RTVDTAARA  DTAARA(*LDA (27 4)) RTNVAR(&ENDDLR)
+009800080909             RTVDTAARA  DTAARA(*LDA (31 6)) RTNVAR(&ENDREP)
+009900080911
+010000080911             CHGDTAARA  DTAARA(*LDA (1 3)) VALUE(&CMP)
+010100080911             CHGDTAARA  DTAARA(*LDA (1 40)) VALUE(&CMPNME)
+010200080911             CHGDTAARA  DTAARA(*LDA (44 8)) VALUE(&ASATDTE)
+010300080911             CHGDTAARA  DTAARA(*LDA (52 8)) VALUE(&STRDATE)
+010400080911             CHGDTAARA  DTAARA(*LDA (60 8)) VALUE(&ENDDATE)
+010500080911             CHGDTAARA  DTAARA(*LDA (68 4)) VALUE(&STRDLR)
+010600080911             CHGDTAARA  DTAARA(*LDA (72 6)) VALUE(&STRREP)
+010700080911             CHGDTAARA  DTAARA(*LDA (78 4)) VALUE(&ENDDLR)
+010800080911             CHGDTAARA  DTAARA(*LDA (82 6)) VALUE(&ENDREP)
+010900081016             CLRPFM     FILE(*LIBL/SFACCGWFEE)
+011000081015             CALL      PGM(ACCGWFEEXT) PARM( &STRDATE &ENDDATE  +
+011100081015                         &STRDLR &ENDDLR &STRREP &ENDREP)
+011200081016    /*      Generate report */
+011300081016    /*      CHGPRTF FILE(SQLPRT1) DUPLEX(*NO) MAXRCDS(*NOMAX)  */
+011400081016             OVRPRTF    FILE(SQLPRT1) USRDTA(ACCGWFEE)
+011500081016             REPORT     REPORT(ACCGWFEE) VIEW(ACCGWFEEV)  +
+011600080909                          SETVAR((&ASATDTE &ASATDTE) (&CMP &CMP) +
+011700080910                          (&CMPNME &CMPNME) (&STRDATE &STRDATE) +
+011800081016                          (&ENDDATE &ENDDATE))
+011900080820
+012000070911PGM_EXIT:    ENDPGM

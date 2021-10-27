@@ -1,0 +1,88 @@
+000100181029     /* %ATTR DBGVIEW(*LIST) */
+000200181029/* TITLE        : Settlement Instruction XML Creation               */
+000300181029/* SYSTEM       : L&T Infotech Financial Services Technology Inc.   */
+000400181029/* PROGRAM TYPE : CLP                                               */
+000500181029/* PROGRAMMER   : Prasanna V                                        */
+000600191122/* PROGRAM      : JBGENLNARC                                        */
+000700181029/* DESCRIPTION  : This program will reprocess all the redemption     */
+000800181029/*                impacted due to ROC Adjustment                    */
+000900181029/*                                                                   */
+001000181029/*  CALLED FROM : GENLNARC                                           */
+001100181029/*                Scheduled in daily batch after JOBAUCROC           */
+001200181029/* ******************************************************************/
+001300181029/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+001400181029/* ******************************************************************/
+001500181029/* ******************************************************************/
+001600181029/* Prasanna V     *2018/10/05*RFS178083 - Program Creation. */
+001700181029/* ******************************************************************/
+001800181029             PGM
+001900181029
+002000181029             DCL        VAR(&AUTHORIZED) TYPE(*CHAR) LEN(01) VALUE(' ')
+002100181029             DCL        VAR(&MODULE) TYPE(*CHAR) LEN(10) +
+002200181029                        VALUE('LNPMAREC')
+002300181029             DCL        VAR(&VERSN)    TYPE(*CHAR) LEN(1)
+002400181029             DCL        VAR(&VERSN2)    TYPE(*CHAR) LEN(2)
+002500181029             DCL        VAR(&DATE2)    TYPE(*CHAR) LEN(8)
+002600181029             DCL        VAR(&LNRCALPER) TYPE(*CHAR) LEN(5)
+002700181029             DCL        VAR(&LNRCALVRN) TYPE(*CHAR) LEN(1)
+002800181029             DCL        VAR(&LNSTRDATE) TYPE(*CHAR) LEN(8)
+002900181029             DCL        VAR(&LDA_DATA) TYPE(*CHAR) LEN(1024)
+002901181207             DCL        VAR(&LDA_DATA5) TYPE(*CHAR) LEN(5)
+003000181029
+003100181029             CALL       PGM(RTVSPECMOD) PARM(&MODULE &AUTHORIZED)
+003200181029             MONMSG     MSGID(CPF0000)
+003300181029             IF  COND(&AUTHORIZED *NE 'Y') THEN(GOTO +
+003400181029                            CMDLBL(ENDCLPGM))
+003500181101             DSPDTAARA  DTAARA(*LDA) OUTPUT(*PRINT)
+003600181029             CRTDTAARA  DTAARA(QTEMP/LNRCALTMP) TYPE(*CHAR) LEN(08) +
+003700181029                          VALUE(' ')
+003800181029             MONMSG MSGID(CPF1023)
+003900181029
+004000181101             RUNCMD     CMD('CHGDTAARA DTAARA(QTEMP/LNRCALTMP)   +
+004100181101                          VALUE(''&&VERSN'')') SQL('SELECT PARAMETERS +
+004200181101                          LEN(01) NAME(VERSN) FROM     MFAPRORPP WHERE +
+004300181101                          JOBNAME = "JBGENLNARC"    AND REPORTING_FLAG = +
+004400181101                          "Y"   AND REPORT_NAME = "LNAUTORCL"')
+004600181029             RTVDTAARA  DTAARA(QTEMP/LNRCALTMP (1 1)) RTNVAR(&LNRCALVRN)
+004700181029             IF         COND(&LNRCALVRN *NE '1' *AND &LNRCALVRN *NE '2') +
+004800181029                          THEN(DO)
+004900181029                SNDUSRMSG  MSG('Linked Notes Recalculation version from +
+005000181029                             PARAMETERS in RFBATRPT is not valid. Please +
+005100181029                             check') TOUSR(*SYSOPR) MSGTYPE(*INFO)
+005200181029                GOTO       CMDLBL(ENDCLPGM)
+005300181029             ENDDO
+005400181029             CHGDTAARA DTAARA(QTEMP/LNRCALTMP) VALUE(' ')
+005500181101             RUNCMD     CMD('CHGDTAARA DTAARA(QTEMP/LNRCALTMP)   +
+005600181101                          VALUE(''&&VERSN2'')') SQL('SELECT PARAMETERS2 +
+005700181101                          LEN(02) NAME(VERSN2) FROM     MFAPRORPP WHERE +
+005800181101                          JOBNAME = "JBGENLNARC"    AND REPORTING_FLAG = +
+005900181101                          "Y"   AND REPORT_NAME = "LNAUTORCL"')
+006100181029             RTVDTAARA  DTAARA(QTEMP/LNRCALTMP (1 2)) RTNVAR(&LNRCALPER)
+006200181029             IF   COND(&LNRCALVRN *EQ '2' *AND &LNRCALPER *EQ ' ') +
+006300181029                      THEN(DO)
+006400181029                SNDUSRMSG  MSG('Linked Notes Recalculation Payment period +
+006500181029                             from PARAMETERS2 of RFBATRPT is not +
+006600181029                             valid.Please check') TOUSR(*SYSOPR) +
+006700181029                             MSGTYPE(*INFO)
+006800181029                  GOTO       CMDLBL(ENDCLPGM)
+006900181029             ENDDO
+007000181029             CHGDTAARA  DTAARA(QTEMP/LNRCALTMP) VALUE(' ')
+007100181101             RUNCMD     CMD('CHGDTAARA DTAARA(QTEMP/LNRCALTMP)   +
+007200181101                          VALUE(''&&DATE2'')') SQL('SELECT +
+007300181101                          SUBSTR(PARAMETERS2,2040,8) LEN(8) NAME(DATE2) +
+007400181101                          FROM     MFAPRORPP WHERE JOBNAME = "JBGENLNARC"  +
+007500181101                          AND REPORTING_FLAG = "Y"   AND REPORT_NAME = +
+007600181101                          "LNAUTORCL"')
+007700181029             RTVDTAARA  DTAARA(QTEMP/LNRCALTMP *ALL) RTNVAR(&LNSTRDATE)
+007701181207             RTVDTAARA  DTAARA(*LDA (1 5)) RTNVAR(&LDA_DATA5)
+007702181207             RTVDTAARA  DTAARA(*LDA (6 1019)) RTNVAR(&LDA_DATA)
+007703181207             IF         COND(&LDA_DATA5 *EQ 'ADHOC') THEN(DO)
+007704181207             CHGDTAARA  DTAARA(*LDA *ALL) VALUE(&LDA_DATA)
+007705181207             CALL       PGM(ADHLNARCAL) PARM(&LNRCALVRN &LNRCALPER +
+007706181207                          &LNSTRDATE)
+008200181029             ENDDO
+008300181029             ELSE DO
+008301181207                CALL       PGM(LNARCAL) PARM(&LNRCALVRN &LNRCALPER +
+008500181029                             &LNSTRDATE)
+008600181029             ENDDO
+008700181029ENDCLPGM:    ENDPGM

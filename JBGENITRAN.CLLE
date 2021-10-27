@@ -1,0 +1,97 @@
+000100090330/********************************************************************/
+000200090330/* TITLE        :  To generate the iTrax transactions               */
+000300090330/* AUTHOR       :  Andy Lo                                          */
+000400090330/* PROGRAM      :  JOBGENITRAN                                      */
+000500090330/* DATE-WRITTEN :  MARCH, 2009                                      */
+000600090330/* DESCRIPTION  :  The CL generate the iTrax transactions           */
+000700090330/*                                                                  */
+000800090330/********************************************************************/
+000900090330/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION                          */
+001000090330/*            *  yyyy/mm/dd  *                                      */
+001100090330/********************************************************************/
+001200090330/* Andy L.    *  2009/03/30  * RFS 56739- To generate the iTrax     */
+001300090330/*            *              * transaction report and data for      */
+001400090330/*            *              * transactions placed via iTrax.       */
+001500090330/********************************************************************/
+001600090330             PGM
+001700090330
+001800090330             DCL        VAR(&STRDTE) TYPE(*CHAR) LEN(8)
+001900090330             DCL        VAR(&ENDDTE) TYPE(*CHAR) LEN(8)
+002000090330
+002100090414             DCL        VAR(&IFSTYPE)   TYPE(*CHAR) LEN(02)
+002200090414             DCL        VAR(&IFSOWNER)  TYPE(*CHAR) LEN(04)
+002300090414             DCL        VAR(&IFSMETHOD) TYPE(*CHAR) LEN(03)
+002400090414             DCL        VAR(&IFSDIR)    TYPE(*CHAR) LEN(300)
+002500090414             DCL        VAR(&IFSFILE)   TYPE(*CHAR) LEN(400)
+002600090414             DCL        VAR(&DRDOWLS)   TYPE(*CHAR) LEN(09)
+002700090414
+002800090414             DCL        VAR(&ASATDT) TYPE(*CHAR) LEN(8)
+002900090414
+003000090415             DCL        VAR(&CMPNME)   TYPE(*CHAR) LEN(40)
+003100090415             DCL        VAR(&CMPNME2)  TYPE(*CHAR) LEN(30)
+003200090415             DCL        VAR(&POS)      TYPE(*DEC)  LEN(5 0)
+003300090415             DCL        VAR(&POS2)     TYPE(*DEC)  LEN(5 0)
+003400090415             DCL        VAR(&MAX)      TYPE(*DEC)  LEN(5 0) VALUE(30)
+003500090415
+003600090330             RTVDTAARA  DTAARA(*LDA (01 8)) RTNVAR(&STRDTE)
+003700090330             RTVDTAARA  DTAARA(*LDA (09 8)) RTNVAR(&ENDDTE)
+003800090330
+003900090330             DSPDTAARA  DTAARA(*LDA) OUTPUT(*PRINT)
+004000090414             RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&ASATDT)
+004100090330
+004200090330             EXECUTE    VIEW(GENITRANV) OUTFILE(*LIBL/WRKITRAN) +
+004300090330                          MBROPT(*REPLACE) SETVAR((&STRDTE &STRDTE) +
+004400090330                          (&ENDDTE &ENDDTE))
+004500090501
+004600090501/* get the last unit price for each fund */
+004700090501
+004800090501             EXECUTE    SQL('select f0000, +
+004900090501                          zoned(substr(max(cat(f0000, f0002, +
+005000090501                          digits(f0004))),14,9),9,4)    +
+005100090501                          name(unit_price) from mfainvupp  group by +
+005200090501                          f0000 order by f0000') OUTFILE(QTEMP/TPRICE)
+005300090501
+005400090501/* update the PUR and SWI with no price for pending trades  */
+005500090501
+005600090501             UPDATE     SET((F0013 'UNIT_PRICE.2')) SQL('from +
+005700090501                          wrkitran, tprice join f0004.1=f0000.2   +
+005800090501                          where f0013 = 0 and f0008 in ("BUY", "SWI")')
+005900090501
+006000090414             CALL       PGM(GENITDRP)
+006100090330
+006200090414             CHGVAR    VAR(&IFSTYPE)   VALUE('TX')
+006300090414             CHGVAR    VAR(&IFSOWNER)  VALUE('CLNT')
+006400090414             CHGVAR    VAR(&IFSMETHOD) VALUE('EXT')
+006500090414             CALL       PGM(FXGETIFSD) PARM(&IFSTYPE &IFSOWNER +
+006600090414                          &IFSMETHOD &IFSDIR)
+006700090414             IF (&IFSDIR *NE ' ') THEN(DO)
+006800090414                CHGVAR     VAR(&DRDOWLS)  VALUE(&ASATDT)
+006900090414                CALL       PGM(DRDOW) PARM(&DRDOWLS)
+007000090414                CHGVAR     VAR(&IFSFILE)                           +
+007100090414                           VALUE(&IFSDIR *TCAT '/' *TCAT           +
+007200090414                           'GENITRANV2' *TCAT %SST(&DRDOWLS 9 1))
+007300090414                EXECUTE   VIEW(GENITRANV2) PCFMT(*DELIMITED)         +
+007400090414                          TOSTMF(&IFSFILE) REPLACE(*YES)
+007500090414             ENDDO
+007600090414
+007700090415             RTVDTAARA  DTAARA(MFACMPNMA  (1 30)) RTNVAR(&CMPNME2)
+007800090415             CHGVAR     VAR(&POS) VALUE(&MAX)
+007900090415
+008000090415 $CENTER:    IF         COND((&POS *NE 0) & (%SST(&CMPNME2 &POS 1) +
+008100090415                          = ' ')) THEN(DO)
+008200090415             CHGVAR     VAR(&POS) VALUE(&POS - 1)
+008300090415             GOTO       CMDLBL($CENTER)
+008400090415             ENDDO
+008500090415
+008600090415             CHGVAR     VAR(&POS2) VALUE(((40  - &POS) / 2) + 105)
+008700090415
+008800090415/* Populate company name in the LDA                                  */
+008900090415
+009000090415             CHGDTAARA  DTAARA(*LDA (&POS2 &POS)) VALUE(&CMPNME2)
+009100090415
+009200090415             OVRPRTF    FILE(SQLPRT1) MAXRCDS(*NOMAX) SAVE(*YES) +
+009300090415                          USRDTA(GENITRAN) SHARE(*YES)
+009400090415
+009500090414             REPORT     REPORT(GENITRAN) VIEW(GENITRANV2)
+009600090414
+009700090330PGM_EXIT:    ENDPGM

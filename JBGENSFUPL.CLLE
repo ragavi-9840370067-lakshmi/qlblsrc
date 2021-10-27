@@ -1,0 +1,60 @@
+000001170313     /* %ATTR OPTION(*XREF) DBGVIEW(*SOURCE) */
+000101030417/* ******************************************************************/
+000201110919/* * Deacription :                                                  */
+000301110919/* * This program creates the service fee adjustment from a file.   */
+000401110919/* ******************************************************************/
+000501071221/* ******************************************************************/
+000601110919/* PROGRAMMER   * DATE OF CHANGE * DESCRIPTION OF CHANGE            */
+000701111010/* Muthulakshmi *  11/12/23      * RFS64348 - Initial Creation.     */
+000801071221/* ******************************************************************/
+000901110919/* ******************************************************************/
+001001071221             PGM
+001101071221             DCL        VAR(&FILENAME) TYPE(*CHAR) LEN(10)
+001201071221             DCL        VAR(&LIBRARY) TYPE(*CHAR) LEN(10)
+001301071227             DCL        VAR(&NOOFREC) TYPE(*DEC) LEN(10 0) VALUE(0)
+001401071221             DCL        VAR(&RETRNCODE) TYPE(*CHAR) LEN(2) VALUE(' ')
+001501071221
+001601071221
+001701071221/* -----------------------------------------------------------------*/
+001801071221/* Begin Processing                                                 */
+001901071221/* -----------------------------------------------------------------*/
+002001110830/* Retrieve Processing Values                                       */
+002101071221             DSPDTAARA  DTAARA(*LDA) OUTPUT(*PRINT)
+002201071221             RTVDTAARA  DTAARA(*LDA (1 10)) RTNVAR(&LIBRARY)
+002301071221             RTVDTAARA  DTAARA(*LDA (11 10)) RTNVAR(&FILENAME)
+002401080124
+002501110714 LOADPRC:    DLTF       FILE(QTEMP/SFUPLSF) /* delete old work files +
+002601080124                          if exist */
+002701080124             MONMSG     MSGID(CPF3273 CPF2105)
+002801080124
+002901110714             CALL       PGM(FXCRTSFUPL) PARM(&RETRNCODE)
+003001080124             IF         COND(&RETRNCODE *NE '00') THEN(DO)
+003101080124             SNDUSRMSG  MSG('Could not create necessary workfile') +
+003201080124                          MSGTYPE(*INFO)
+003301080124             GOTO       CMDLBL(EXIT)
+003401080124             ENDDO
+003501080124
+003601080124/* Convert the CSV  to a structured table in QTEMP                   */
+003701080221             CPYFRMIMPF FROMFILE(&LIBRARY/&FILENAME) +
+003801110714                          TOFILE(QTEMP/SFUPLSF) MBROPT(*ADD)
+003901080124             MONMSG     MSGID(CPF2817) EXEC(DO)
+004001080124             SNDUSRMSG  MSG('Could not convert CSV file, format not +
+004101080124                          compatible') MSGTYPE(*INFO)
+004201080124             GOTO       CMDLBL(EXIT)
+004301080124             ENDDO
+004401080124
+004501080124/* Check if the file is empty                                        */
+004601110714             RTVMBRD    FILE(QTEMP/SFUPLSF) NBRCURRCD(&NOOFREC)
+004701080124             IF         COND(&NOOFREC = 0) THEN(DO)
+004801110830             SNDUSRMSG  MSG('Empty load file') MSGTYPE(*INFO)
+004901080124             GOTO       CMDLBL(EXIT)
+005001080124             ENDDO
+005101071221
+005201071221
+005301110830/* If not empty member then load the custom                          */
+005401080124
+005501110830             CALL       PGM(FXLODSFADJ)
+005601110830                          /* load and validate            */
+005701071221
+005801071221
+005901071227 EXIT:       ENDPGM

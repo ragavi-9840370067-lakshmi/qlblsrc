@@ -1,0 +1,142 @@
+000100151023   /*****************************************************************/
+000200151023   /* TITLE        : EX IFS Cleanup Process                         */
+000300151023   /*                                                               */
+000400151023   /* PROGRAM      : JBDLRTHIFS                                     */
+000500151023   /*                                                               */
+000600151023   /* SYSTEM       : Unitrax (Unisen Inc.)                          */
+000700151023   /*                                                               */
+000800151023   /* RFS NUMBER   : RFS144819                                      */
+000900151023   /*                                                               */
+001000151023   /* CREATE DATE  : October 23, 2015                               */
+001100151023   /*                                                               */
+001200151023   /* PROGRAMMER   : Sethu Bharathi D                               */
+001300151023   /*                                                               */
+001400151023   /* DESCRIPTION  : This CL program will archive the EX and all    */
+001500151023   /*                related error files created in the IFS         */
+001600151023   /*                directory in PUT folder for the previous days  */
+001700151023   /*                and place it in Archive folder.                */
+001800151023   /*                                                               */
+001900151023   /* PARAMETERS   : NONE                                           */
+002000151023   /*                                                               */
+002100151023   /* CALLED BY    : NONE                                           */
+002200151023   /*                                                               */
+002300151023   /* CALLS PROGRAM: JOBDLRTHR                                      */
+002400151023   /*                                                               */
+002500151023   /*****************************************************************/
+002600151023   /*    C H A N G E   H I S T O R Y                                */
+002700151023   /*****************************************************************/
+002800151023   /* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE             */
+002900151023   /*****************************************************************/
+003000151023   /* Sethu B    * 2015/10/23 * RFS144819 - Initial Version         */
+003100151023   /*****************************************************************/
+003200151023
+003300151030 JBDLRTHIFS: PGM
+003400151030
+003500151030             DCLF FILE(Mfaifsdirp)
+003600151030
+003700151030             DCL VAR(&Action) TYPE(*CHAR) LEN(3)
+003800151030             DCL VAR(&ArcDays) TYPE(*CHAR) LEN(5)
+003900151030             DCL VAR(&PurDays) TYPE(*CHAR) LEN(5)
+004000151030             DCL VAR(&ArcNum) TYPE(*DEC) LEN(5)
+004100151030             DCL VAR(&PurNum) TYPE(*DEC) LEN(5)
+004200151030             DCL VAR(&ArcRecon) TYPE(*CHAR) LEN(05)
+004300151030             DCL VAR(&PurRecon) TYPE(*CHAR) LEN(05)
+004400151030
+004500151030             DCL VAR(&EX) TYPE(*CHAR) LEN(02) VALUE('EX')
+004600151030
+004700151030             DCL VAR(&Put) TYPE(*CHAR) LEN(03) VALUE('PUT')
+004800151030             DCL VAR(&Pur) TYPE(*CHAR) LEN(03) VALUE('PUR')
+004900151030             DCL VAR(&Arc) TYPE(*CHAR) LEN(03) VALUE('ARC')
+005000151030
+005100151030/* QSH Variables */
+005200151030             DCL VAR(&Cmd) TYPE(*CHAR) LEN(500) VALUE(' ')
+005300151030             DCL VAR(&Shell) TYPE(*CHAR) LEN(300)
+005400151030             DCL VAR(&Path) TYPE(*CHAR) LEN(300)
+005500151030
+005600151030             DCL VAR(&Arcprgs) TYPE(*CHAR) LEN(10) VALUE('Arcprgs')
+005700151030             DCL VAR(&QshlSrc) TYPE(*CHAR) LEN(10) VALUE('QshlSrc')
+005800151030
+005900151030             DCL VAR(&Lib)  TYPE(*CHAR) LEN(10)
+006000151030             DCL VAR(&Qsys) TYPE(*CHAR) LEN(10) VALUE('/QSYS.LIB/')
+006100151030             DCL VAR(&Qshl) TYPE(*CHAR) LEN(20) +
+006200151030                                 VALUE('.LIB/QshlSrc.FILE')
+006300151030             DCL VAR(&Mbr)  TYPE(*CHAR) LEN(15) +
+006400151030                                 VALUE('/Arcprgs.MBR')
+006500151030
+006600151030             RTVDTAARA  DTAARA(MFADLRTHR (14 5)) RTNVAR(&PurDays)
+006700151030             MONMSG MSGID(CPF0000)
+006800151030
+006900151030             IF COND(%SST(&PurDays 1 1) *EQ ' ' *OR +
+007000151030                     %SST(&PurDays 2 1) *EQ ' ') +
+007100151030             THEN(DO)
+007200151030                CHGVAR VAR(&PurDays) VALUE('00030')
+007300151030             ENDDO
+007400151030
+007500151030             RTVDTAARA  DTAARA(MFADLRTHR (9 5)) RTNVAR(&ArcDays)
+007600151030             MONMSG MSGID(CPF0000)
+007700151030             IF COND(%SST(&ArcDays 1 1) *EQ ' ' *OR +
+007800151030                     %SST(&ArcDays 2 1) *EQ ' ') +
+007900151030             THEN(DO)
+008000151109                CHGVAR VAR(&ArcDays) VALUE('00030')
+008100151030             ENDDO
+008200151030
+008300151030             RTVMBRD FILE(&Qshlsrc) MBR(&Arcprgs) RTNLIB(&Lib)
+008400151030             CHGVAR VAR(&Shell) VALUE(&Qsys *TCAT &Lib *TCAT           +
+008500151030                                &Qshl *TCAT  &Mbr)
+008600151030             CHGVAR VAR(&ArcNum) VALUE(&ArcDays)
+008700151030             MONMSG MSGID(CPF0000)
+008800151030             CHGVAR VAR(&PurNum) VALUE(&PurDays)
+008900151030             MONMSG MSGID(CPF0000)
+009000151030             DLTF   FILE(QTEMP/Mfaifsdirp)
+009100151030             MONMSG MSGID(CPF0000)
+009200151030
+009300151030             CPYF   FROMFILE(MFAIFSDIRP) +
+009400151030                    TOFILE(QTEMP/MFAIFSDIRP) MBROPT(*REPLACE) +
+009500151030                       CRTFILE(*YES) INCREL( +
+009600151030                       (*IF F0000 *EQ &EX))
+009700151030
+009800151030             MONMSG MSGID(CPF0000)
+009900151030
+010000151030             OVRDBF FILE(Mfaifsdirp) TOFILE(QTEMP/Mfaifsdirp)
+010100151030             MONMSG MSGID(CPF0000)
+010200151030
+010300151030 Read:       RCVF
+010400151030             MONMSG MSGID(CPF0000) EXEC(GOTO CMDLBL(EndClPgm))
+010500151030
+010600151030              CHGJOB * LOG(4 0 *NOLIST)
+010700151030
+010800151030             IF COND(&F0002 *EQ &Put) +
+010900151030             THEN(DO)
+011000151030/*Archiving*/
+011100151030                CHGVAR VAR(&ArcRecon) VALUE(&ArcNum)
+011200151030                CHGVAR VAR(&Action)   VALUE(&Arc)
+011300151030                CHGVAR VAR(&Path)     VALUE(&F0003)
+011400151030                CHGVAR VAR(&Cmd)      VALUE(&Shell *BCAT +
+011500151030                                            &Path  *BCAT +
+011600151030                                            &Action *BCAT +
+011700151030                                            &ArcRecon)
+011800151030                QSH CMD(&Cmd)
+011900151030                MONMSG MSGID(CPF0000)
+012000151030                GOTO CMDLBL(Read)
+012100151030             ENDDO
+012200151030
+012300151030             IF COND(&F0002 *EQ &Arc) +
+012400151030             THEN(DO)
+012500151030/*Purging*/
+012600151030                CHGVAR VAR(&PurRecon)  VALUE(&PurNum)
+012700151030                CHGVAR VAR(&Action) VALUE(&Pur)
+012800151030                CHGVAR VAR(&Path) VALUE(&F0003)
+012900151030                CHGVAR VAR(&Cmd) VALUE(&Shell  *BCAT +
+013000151030                                       &Path   *BCAT +
+013100151030                                       &Action *BCAT +
+013200151030                                       &PurRecon)
+013300151030                QSH CMD(&Cmd)
+013400151030                MONMSG MSGID(CPF0000)
+013500151030                GOTO CMDLBL(Read)
+013600151030             ENDDO
+013700151030
+013800151030
+013900151030ENDCLPGM:
+014000151030             CHGJOB     JOB(*) LOG(4 0 *SECLVL) LOGCLPGM(*YES)
+014100151030             DLTOVR     FILE(*ALL)
+014200151030             ENDPGM

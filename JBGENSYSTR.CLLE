@@ -1,0 +1,51 @@
+000001170313     /* %ATTR DBGVIEW(*ALL) */
+000101130204/* ******************************************************************/
+000201130204/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000301130204/* ******************************************************************/
+000401130204/* ******************************************************************/
+000501130204/* Ganbold L. * 2013/02/04   * RFS 112923 - Created New program     */
+000601130204/*            *              * To process automated systematic plan */
+000701130204/*            *              * transfer - client specific           */
+000801131008/* B. Vergara * 2013/10/08   * RFS 129281 - Add to generate create  */
+000901131008/*            *              * AWD file to sum AWD Amount by Acct/  */
+001001131008/*            *              * SeqNo/Investment and update record   */
+001101131008/*            *              * in AWD Acct Investment (MFAACCAIP)   */
+001201131008/*            *              * for those transferred as REGSEL      */
+001301130204/* ******************************************************************/
+001401130204PGM
+001501130204
+001601130204             DCL        VAR(&MFADBASE) TYPE(*CHAR) LEN(10)
+001701130204             DCL        VAR(&ASATDATE) TYPE(*CHAR) LEN(8)
+001801130204
+001901130204             RMVLIBLE   LIB(QTEMP)
+002001130204             ADDLIBLE   LIB(QTEMP)
+002101130204
+002201130204             RTVDTAARA  DTAARA(MFADBASE *ALL) RTNVAR(&MFADBASE)
+002301130204             RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&ASATDATE)
+002401130204
+002501130204
+002601130204/* Process Systematic Plan Transfers */
+002701130204
+002801130204             CALL       PGM(CVSYSTR)
+002901130204
+003001131008/* RFS129281 - Create sum of AWD Amt by Acct/AwdSeq/Invest */
+003101131008/* and update accordingly record in MFAACCAIP for those    */
+003201131008/* transferred as REGSEL                                   */
+003301131008
+003401131009        EXECUTE   VIEW(GENAWDSUMM) OUTFILE(QTEMP/CVAWDSUM) +
+003501131008                  MBROPT(*REPLACE)
+003601131008
+003701131008dynsql sql('UPDATE MFAACCAIP A SET A.AWD_AMOUNT  =              +
+003801131009            (SELECT B.SUMOFAMT FROM QTEMP/CVAWDSUM B WHERE      +
+003901131008                  A.ACCOUNT_NO = B.TO_ACCOUNT_NO  AND           +
+004001131009                  A.AWD_SEQ_NO = B.AWD_SEQ_NO AND               +
+004101131008                  A.INVESTMENT_CODE = B.INVESTMENT_CODE)        +
+004201131008           WHERE                                                +
+004301131009           EXISTS(SELECT * FROM QTEMP/CVAWDSUM C WHERE          +
+004401131008                  A.ACCOUNT_NO = C.TO_ACCOUNT_NO  AND           +
+004501131008                  A.AWD_SEQ_NO = C.AWD_SEQ_NO     AND           +
+004601131009                  A.INVESTMENT_CODE = C.INVESTMENT_CODE)')
+004701131008
+004801130204 ENDCLPGM:   DMPCLPGM
+004901130204
+005001130204             ENDPGM

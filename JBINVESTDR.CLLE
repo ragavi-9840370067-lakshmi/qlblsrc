@@ -1,0 +1,64 @@
+000100030417/* ******************************************************************/
+000200030417/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000300030417/* ******************************************************************/
+000400100105/* Kevin Shen * 2010/01/05   * RFS71448 - program creation          */
+000500100111/*            *              * Estimate Distribution extract        */
+000600091221/* ******************************************************************/
+000700930729PGM
+000800100113             DCL        VAR(&NXTBUSDAT)  TYPE(*CHAR) LEN(46)
+000900100113             DCL        VAR(&ASATDAT)    TYPE(*CHAR) LEN(08)
+001000100113             DCL        VAR(&NXTDAT)     TYPE(*CHAR) LEN(08)
+001100100106             DCL        VAR(&Rptname)    TYPE(*CHAR) LEN(10)
+001200100106             DCL        VAR(&Viewnme)    TYPE(*CHAR) LEN(10)
+001300100106             DCL        VAR(&Expr1)      TYPE(*CHAR) LEN(100)
+001400100106             DCL        VAR(&Expr2)      TYPE(*CHAR) LEN(100)
+001500100106             DCL        VAR(&Expr3)      TYPE(*CHAR) LEN(100)
+001600100106             DCL        VAR(&DEFTOUTQ)   TYPE(*CHAR) LEN(10)
+001700091221
+001800100106/* Create the report file  */
+001900100106             DLTF       FILE(QTEMP/INVESTDR)
+002000100106             MONMSG     MSGID(CPF2105)
+002100100106
+002200100106             CRTPF      FILE(QTEMP/INVESTDR) RCDLEN(378) SIZE(*NOMAX)
+002300100106
+002400100105/* Get next business day                                            */
+002500100113             RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&ASATDAT)
+002600100113             CHGVAR     VAR(&NXTBUSDAT) VALUE('00000000' || &ASATDAT)
+002700100113             CALL       PGM(GETBUSDAY) PARM(&NXTBUSDAT)
+002800100113             CHGVAR     VAR(&NXTDAT) VALUE(%SST(&NXTBUSDAT 9 8))
+002900100105
+003000100111/* Create INVESTDREX and Create header record in extract file */
+003100100113             CALL       PGM(INVESTDP) PARM(&ASATDAT &NXTDAT)
+003200100111/* Sort INVESTDREX so CSV file has the desired sorting        */
+003300100111             RGZPFM     FILE(INVESTDREX) KEYFILE(*FILE)
+003400100113/* If no data, skip the rest                                  */
+003500100113             MONMSG     MSGID(CPF2995 CPF2981) EXEC(DO)
+003600100113             SNDPGMMSG  MSG('No distribution payment on ' || +
+003700100113                          &NXTDAT)
+003800100113             ENDDO
+003900100105
+004000100106/* Create Sequel Report as PDF format */
+004100100106             CHGVAR     VAR(&Rptname) VALUE('INVESTDR')
+004200100106             CHGVAR     VAR(&Viewnme) VALUE('INVESTDV')
+004300100106             CALL       PGM(JOBSEQLRUN) PARM(&RPTNAME &VIEWNME +
+004400100106                          &EXPR1 &EXPR2 &EXPR3)
+004500100106
+004600100106/* Convert to Comma Delimited   */
+004700100106             CPYTOIMPF  FROMFILE(INVESTDREX) +
+004800100105                          TOFILE(QTEMP/INVESTDR) MBROPT(*ADD) +
+004900091221                          DTAFMT(*DLM) STRDLM(*DBLQUOTE) +
+005000091221                          RMVBLANK(*BOTH) FLDDLM(',')
+005100091221
+005200091221/* Override the Spool Width to 378  */
+005300100106             RTVJOBA    OUTQ(&DEFTOUTQ)
+005400100106             OVRPRTF    FILE(QSYSPRT) PAGESIZE(255 378) OVRFLW(255) +
+005500100106                          OUTQ(&DEFTOUTQ) SAVE(*YES) +
+005600100106                          USRDTA(INVESTDREX) SPLFNAME(INVESTDREX)
+005700091221
+005800091221/* Copy the sequel output to spool file   */
+005900100105             CPYF       FROMFILE(QTEMP/INVESTDR) TOFILE(QSYSPRT)
+006000091221
+006100091221/* Delete override the Spool Width etc  */
+006200091221             DLTOVR     FILE(QSYSPRT)
+006300091221
+006400091221PGM_EXIT:    ENDPGM

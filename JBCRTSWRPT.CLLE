@@ -1,0 +1,76 @@
+000001170313     /* %ATTR DBGVIEW(*SOURCE) */
+000101160630/*********************************************************************/
+000201160630/* TITLE        : JBCRTSWRPT                                         */
+000301160630/* PROGRAM TYPE : CL                                                 */
+000401160630/* PROGRAM      : JBCRTSWRPT                                         */
+000501160630/* CREATED BY   : Ragavi Selvaraj                                    */
+000601160630/* DESCRIPTION  :                                                    */
+000701160630/*                This job will submit JOBSWRPT to generate          */
+000801160630/*                reports and extracts                               */
+000901180706/*                                                                   */
+001001160630/*            Input parameters:                                      */
+001101160630/*               1. Job Name              char 10      IN            */
+001201160630/*               2. User                  char 10      IN            */
+001301160719/*               3. MEM flag              char 1       IN            */
+001401160719/*               4. Table Name 1          char 10      IN            */
+001501160719/*               5. Table Name 2          char 10      IN            */
+001601160719/*               6. Table Name 3          char 10      IN            */
+001701160630/*********************************************************************/
+001801160630/* ******************************************************************/
+001901160630/* ******************************************************************/
+002001160630/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+002101160630/* ******************************************************************/
+002201160630/* ******************************************************************/
+002301160630/* RAGAVI S   * 2016/06/30   * RFS150102 - ALLOWABLE SWITCH         */
+002401160630/*            *              *             FUNCTIONALITY            */
+002402180704/* JEYARAJAN V* 2018/06/13   * RFS178426 - RECOMPILE                */
+002501160630/* ******************************************************************/
+002601160719             PGM        PARM(&LC_JOBNM &LC_USER &LC_MEMFLAG +
+002701160719                          &LC_TABLEN1 &LC_TABLEN2 &LC_TABLEN3)
+002801160719
+002901160630/* declaring variable */
+003001160705
+003101160719             DCL        VAR(&LC_JOBNM) TYPE(*CHAR) LEN(09)
+003201160719             DCL        VAR(&LC_TABLEN1) TYPE(*CHAR) LEN(10)
+003301160719             DCL        VAR(&LC_TABLEN2) TYPE(*CHAR) LEN(10)
+003401160719             DCL        VAR(&LC_TABLEN3) TYPE(*CHAR) LEN(10)
+003501160719             DCL        VAR(&LC_RTGDTA) TYPE(*CHAR) LEN(5)
+003601160719             DCL        VAR(&LC_USER) TYPE(*CHAR) LEN(10)
+003701160719             DCL        VAR(&LC_MEMFLAG) TYPE(*CHAR) LEN(1)
+003801160705
+003901160719             DCL        VAR(&LC_JOBD) TYPE(*CHAR) LEN(10)
+004001160719             DCL        VAR(&LC_DFTJOBD) TYPE(*CHAR) LEN(10) +
+004101160719                          VALUE('QDFTJOBD')
+004201160705
+004301160719             CHGVAR     VAR(&LC_RTGDTA) VALUE(' ')
+004401160719             CHGVAR     VAR(&LC_JOBD) VALUE(' ')
+004501160719
+004601160705/*********************************************************************/
+004701160705/* Retrieve jobd  of the current user passed as parm                 */
+004801160705/*********************************************************************/
+004901160719             RTVUSRPRF  USRPRF(&LC_USER) JOBD(&LC_JOBD)
+005001160705
+005101160705/********************************************************************/
+005201160705/* Set up a jobd for MEM or SSO user into QDFTJOBD                  */
+005301160705/********************************************************************/
+005401160719             IF         COND(&LC_MEMFLAG *EQ 'Y') THEN(DO)
+005501160719             CHGVAR     VAR(&LC_JOBD) VALUE(&LC_DFTJOBD)
+005601160719             ENDDO
+005701160705
+005801160705/********************************************************************/
+005901160705/* Call GETRTGDTA pgm to retrieve a value of routing data (RTGDTA)  */
+006001160705/********************************************************************/
+006101160719             CALLPRC    PRC(GETRTGDTA) PARM((&LC_USER) (&LC_RTGDTA))
+006201160705
+006301160705/********************************************************************/
+006401160705/* Call PARSEPARMS pgm to parse parameters and call &lc_PgmNm       */
+006501160705/********************************************************************/
+006601160719             SBMJOB     CMD(CALL PGM(JOBSWRPT) PARM(&LC_JOBNM +
+006701160719                          &LC_MEMFLAG &LC_TABLEN1 &LC_TABLEN2 +
+006801160719                          &LC_TABLEN3)) JOB(&LC_JOBNM) +
+006901160719                          JOBD(*LIBL/&LC_JOBD) JOBQ(*JOBD) +
+007001160719                          OUTQ(*JOBD) USER(&LC_USER) RTGDTA(&LC_RTGDTA)
+007101160719             MONMSG     MSGID(CPF1338)
+007201160705
+007301160719 END:        ENDPGM
+007401160705

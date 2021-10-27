@@ -1,0 +1,183 @@
+000100130227/********************************************************************/
+000200130227/* TITLE        : Fund Name Upload/Download.                        */
+000300130227/* SYSTEM       : L&T Financial Services Technology Inc.            */
+000400130227/* PROGRAM TYPE : CL                                                */
+000500130306/* PROGRAMMER   : Ramya K.                                          */
+000600130306/* PROGRAM      : JBGENGLEID                                        */
+000700130306/* DESCRIPTION  : Job is used to process an download of GL accounts */
+000800130227/*                associated with a new fund launch.                */
+000900130306/* DATE CREATED : 2013/03/05                                        */
+001000130227/* RFS NUMBER   : RFS113436                                         */
+001100130227/* CALLED BY    : NONE                                              */
+001200130227/* PARAMETERS   : NONE                                              */
+001300130227/********************************************************************/
+001400000000/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+001500000000/* ---------------------------------------------------------------- */
+001600130306/* Ramya K     * 2013/03/05 * Rfs113436- Custom GL Account Data     */
+001700130306/*             *            *            Upload And Extarct         */
+001701140624/* Vinsfy J.  * 2014/05/09   * RFS118331 - V7R1 upgrade recompile   */
+001702210309/* Aarthi M.  * 2020/12/21   * RFS1107785- To fix download issue.   */
+001800000000/* ---------------------------------------------------------------- */
+001900130227 PGM
+002000110813/* IFS Directory  */
+002100130228           DCL VAR(&FilTyp)   TYPE(*CHAR) LEN(02) VALUE('EX')
+002200130228           DCL VAR(&FilOwn)   TYPE(*CHAR) LEN(04) VALUE('GLEI')
+002300130228           DCL VAR(&PutDel)   TYPE(*CHAR) LEN(03) VALUE('PUT')
+002400130228           DCL VAR(&GetDel)   TYPE(*CHAR) LEN(03) VALUE('GET')
+002500130228           DCL VAR(&ArcDel)   TYPE(*CHAR) LEN(03) VALUE('ARC')
+002600130228           DCL VAR(&Put)      TYPE(*CHAR) LEN(300) VALUE(' ')
+002700130228           DCL VAR(&Get)      TYPE(*CHAR) LEN(300) VALUE(' ')
+002800130326           DCL VAR(&DownloadG) TYPE(*CHAR) LEN(300) +
+002900130326                          VALUE('DownloadGLEIT')
+003000130228           DCL VAR(&RecCount) TYPE(*DEC) LEN(10) VALUE(0)
+003100130228           DCL VAR(&Csv) TYPE(*CHAR) LEN(03) VALUE('csv')
+003200130228           DCL VAR(&ErrorMsg) TYPE(*CHAR) LEN(300) VALUE(' ')
+003300130306           DCL VAR(&Reqid) TYPE(*CHAR) LEN(14) VALUE(' ')
+003400130306           DCL VAR(&User)  TYPE(*CHAR) LEN(10) VALUE(' ')
+003500130308           DCL VAR(&Select)  TYPE(*CHAR) LEN(03) VALUE(' ')
+003600130228
+003700000000/* IFS Directory  */
+003800130228             DCL        VAR(&ProcDate) TYPE(*CHAR) LEN(08)
+003900130228             DCL        VAR(&CmpCode)  TYPE(*CHAR) LEN(03)
+004000130228             DCL        VAR(&SysDate)  TYPE(*CHAR) LEN(08)
+004100130228             DCL        VAR(&DelMth)   TYPE(*CHAR) LEN(03)
+004200130228             DCL        VAR(&Reply)    TYPE(*CHAR) LEN(01)
+004300130228             DCL        VAR(&RtnVal)   TYPE(*INT) LEN(4)
+004400130228             DCL        VAR(&FilLoc)   TYPE(*CHAR) LEN(300) VALUE(' ')
+004500130228             DCL        VAR(&Filename1)  TYPE(*CHAR) LEN(50)
+004600130228             DCL        VAR(&Filename2)  TYPE(*CHAR) LEN(300)
+004700130228             DCL        VAR(&Path1)    TYPE(*CHAR) LEN(300)
+004800130228             DCL        VAR(&Path2)    TYPE(*CHAR) LEN(300)
+004900130228             DCL        VAR(&ProcCsv)  TYPE(*CHAR) LEN(300)
+005000130228             DCL        VAR(&GetPath)  TYPE(*CHAR) LEN(300)
+005100130308
+005200110823/* MISC Variables */
+005300110812
+005400130228        RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&ProcDate)
+005500130227        RTVDTAARA  DTAARA(MFACMPCDP (1 3)) RTNVAR(&CmpCode)
+005600130227
+005700130306        RTVDTAARA  DTAARA(*LDA (1 14)) RTNVAR(&Reqid)
+005800130307        RTVDTAARA  DTAARA(*LDA (15 10)) RTNVAR(&User)
+005900130308        RTVDTAARA  DTAARA(*LDA (25 03)) RTNVAR(&Select)
+006000130306
+006100130227        CALL       PGM(GETSYSDATE) PARM(&SysDate)
+006200130227
+006300110811   /* Get "GET" folder */
+006400110811        CHGVAR VAR(&DelMth) VALUE(&GetDel)
+006500110811        CALLSUBR SUBR(GetIfsLoc) RTNVAL(&RtnVal)
+006600110811        IF COND(&RtnVal *EQ -1) THEN(GOTO CMDLBL(EndClPgm))
+006700110811        CHGVAR VAR(&Get) VALUE(&FilLoc)
+006800130306
+006900130307        DLTF       FILE(QTEMP/CSVCGLACP)
+007000130307        MONMSG     MSGID(CPF0000)
+007100130308
+007101210317        /* RFS1107785 - Starts*/
+007102210317        DLYJOB     DLY(10)
+007103210317        /* RFS1107785 - Ends*/
+007104210317
+007200130308        IF COND(&Select *EQ 'ALL') THEN(DO)
+007300130311           CALLSUBR SUBR(GetAllRecs)
+007400130308        ENDDO
+007500130308        ELSE DO
+007600130311           CALLSUBR SUBR(GetSelRecs)
+007700130308        ENDDO
+007800130307
+007801210315        /* RFS1107785 - Starts*/
+007802210317        DLYJOB     DLY(10)
+007803210315        /* RFS1107785 - Ends*/
+007804210315
+007900130307        RTVMBRD    FILE(QTEMP/CSVCGLACP) NBRCURRCD(&RecCount)
+008000130307
+008100130307        IF COND(&RecCount *EQ 0) THEN(DO)
+008200130307           GOTO CMDLBL(Error)
+008300130307        ENDDO
+008400130307
+008500130326        CHGVAR VAR(&ProcCsv) VALUE(&DownloadG *TCAT &SysDate *TCAT +
+008600130308                  &CmpCode *TCAT '.' *TCAT &CSV)
+008700130307
+008800130308        CHGVAR VAR(&Path1) VALUE(&Get *TCAT &ProcCsv)
+008900130308
+009000130308        RMVLNK     OBJLNK(&Path1)
+009100130308        MONMSG     MSGID(CPF0000)
+009200130307
+009300130401             CPYTOIMPF  FROMFILE(QTEMP/CSVCGLACP) TOSTMF(&PATH1) +
+009400130401                          MBROPT(*REPLACE) STMFCODPAG(*PCASCII) +
+009500130401                          RCDDLM(*CRLF) DTAFMT(*FIXED) STRDLM(*NONE)
+009600130308        MONMSG MSGID(CPF2817) EXEC(GOTO CMDLBL(ERROR))
+009700130307        QSYS/CHGAUT OBJ(&Path1) USER(*PUBLIC) DTAAUT(*RWX) +
+009800130308        OBJAUT(*ALL)
+009900130307        MONMSG MSGID(CPFA0B1)
+010000130307
+010100130228Error:
+010200130308       CHGVAR    VAR(&ErrorMsg) VALUE(&ProcCsv *TCAT '     +
+010300130307                                      :Failed to Process')
+010400130228       SNDPGMMSG  MSG(&ErrorMsg)
+010500130307
+010600130307       GOTO   CMDLBL(EndClPgm)
+010700130228
+010800130228/* Check IFS location subroutine */
+010900130228   SUBR SUBR(GetIfsLoc)
+011000130228GetIfs:
+011100130228      CALL PGM(FxGetIfsD) +
+011200130228           PARM(&FilTyp &FilOwn &DelMth &FilLoc)
+011300130228      IF (&FilLoc *EQ ' ') +
+011400130228      THEN(DO)
+011500130228         SNDUSRMSG +
+011600130228            MSG('There are no PUT, GET, or ARC +
+011700130228                folders defined in the IFS Directory file +
+011800130228                (MFAIFSDIRP).  Please add the missing +
+011900130228                folder definitions so that job can +
+012000130228                process the Orders.  (R)etry or (C)ancel?') +
+012100130228         TOUSR(*SYSOPR) MSGRPY(&Reply)
+012200130228         IF COND(&Reply *EQ 'R' *OR &Reply *EQ 'r') +
+012300130228            THEN(GOTO CMDLBL(GetIfs))
+012400130228         IF COND(&Reply *EQ 'C' *OR &Reply *EQ 'c') +
+012500130228            THEN(RTNSUBR RTNVAL(-1))
+012600130228      ENDDO
+012700130228   ENDSUBR
+012800130307
+012900130308/* Copy Selected Records */
+013000130308   SUBR SUBR(GetSelRecs)
+013100130308
+013200130308        EXECUTE    SQL('SELECT                                +
+013300130308                             INVESTMENT_CODE|| ",",           +
+013400130308                                  GL_COMPANY|| ",",           +
+013500130308                             TRANS_TYPE_CODE|| ",",           +
+013600130308                           TRANS_ORIGIN_CODE|| ",",           +
+013700130308                                GAIN_OR_LOSS|| ",",           +
+013800130308                               GL_ACCOUNT_NO|| ",",           +
+013900130308                              DESCRIPTION_35                  +
+014000130308                        FROM MFACGLEXP                        +
+014100130308                        WHERE F0000        =                  +
+014200130308                                     "' *TCAT &REQID *TCAT '" +
+014300130308                        AND   F0001        =                  +
+014400130308                                     "' *TCAT &USER *TCAT '"  +
+014500130308                        AND   F0003        = "Y"')            +
+014600130308                        OUTFILE(QTEMP/CSVCGLACP)
+014700130308
+014800130308   ENDSUBR
+014900130308
+015000130308/* Copy All Records */
+015100130308   SUBR SUBR(GetAllRecs)
+015200130308
+015300130308        EXECUTE    SQL('SELECT                                +
+015400130308                             INVESTMENT_CODE|| ",",           +
+015500130308                                  GL_COMPANY|| ",",           +
+015600130308                             TRANS_TYPE_CODE|| ",",           +
+015700130308                           TRANS_ORIGIN_CODE|| ",",           +
+015800130308                                GAIN_OR_LOSS|| ",",           +
+015900130308                               GL_ACCOUNT_NO|| ",",           +
+016000130308                              DESCRIPTION_35                  +
+016100130308                        FROM MFACGLEXP                        +
+016200130308                        WHERE F0000        =                  +
+016300130308                                     "' *TCAT &REQID *TCAT '" +
+016400130308                        AND   F0001        =                  +
+016500130311                                     "' *TCAT &USER *TCAT '" ') +
+016600130308                        OUTFILE(QTEMP/CSVCGLACP)
+016700130308
+016800130308   ENDSUBR
+016900130228
+017000130227EndClPgm:
+017100130227            ENDPGM
+017200130227
+017300110715

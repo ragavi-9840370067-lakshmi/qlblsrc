@@ -1,0 +1,66 @@
+000100030417/* ******************************************************************/
+000200030417/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000300030417/* ******************************************************************/
+000400030417/* ******************************************************************/
+000500161228/* Divya V    * 2016/12/22   * RFS161954 - Generate the output file */
+000600161228/*            *              * by using the received lib and file.  */
+000700161222/*            *              * Sends the file output to specified   */
+000800161222/*            *              * recipient email address with         */
+000900161222/*            *              * requested file format                */
+001000170317/*Janapriya J * 2017/03/08   * RFS168108 - Issues with RFS161954    */
+001100030417/* ******************************************************************/
+001200161208    PGM
+001300161222             DCL        VAR(&LIB)     TYPE(*CHAR) LEN(10)
+001400161222             DCL        VAR(&FILE)    TYPE(*CHAR) LEN(10)
+001500161222             DCL        VAR(&EMAIL)   TYPE(*CHAR) LEN(50)
+001600161222             DCL        VAR(&FILETYP) TYPE(*CHAR) LEN(10)
+001700161227             DCL        VAR(&FORMAT)  TYPE(*CHAR) LEN(10)
+001800170317 /* RFS168108 Start */
+001900170317             DCL        VAR(&SUBJECT) TYPE(*CHAR) LEN(50)
+002000170317             DCL        VAR(&SQLSTMT) TYPE(*CHAR) LEN(100)
+002100170317             DCL        VAR(&IFSFILE) TYPE(*CHAR) LEN(100)
+002200170317             DCL        VAR(&OUTFMT)  TYPE(*CHAR) LEN(10)
+002300170317             DCL        VAR(&OUTFILE) TYPE(*CHAR) LEN(50)
+002400170317 /* RFS168108 End   */
+002500161208
+002600161208   /* Display Local-Data-Area             */
+002700161208             DSPDTAARA  DTAARA(*LDA) OUTPUT(*PRINT)
+002800161222
+002900161222             RTVDTAARA  DTAARA(*LDA (1 10))  RTNVAR(&LIB)
+003000161208             RTVDTAARA  DTAARA(*LDA (11 10)) RTNVAR(&FILE)
+003100161208             RTVDTAARA  DTAARA(*LDA (21 50)) RTNVAR(&EMAIL)
+003200161222             RTVDTAARA  DTAARA(*LDA (71 10)) RTNVAR(&FILETYP)
+003300161222
+003400161226             CHGVAR     VAR(&FORMAT) VALUE('*' *TCAT &FILETYP)
+003500161208
+003600170317 /* RFS168108 Start */
+003700170317
+003800170317             RTVDTAARA  DTAARA(*LDA (81 50)) RTNVAR(&SUBJECT)
+003900170317             IF  COND(&SUBJECT *EQ '  ')  THEN(DO)
+004000170317                 CHGVAR VAR(&SUBJECT) VALUE(&FILE)
+004100170317             ENDDO
+004200170317
+004300170317             IF         COND(&FILETYP *EQ 'PDELHD') THEN(CHGVAR +
+004400170317                          VAR(&OUTFMT) VALUE('TXT'))
+004500170317             ELSE       CMD(CHGVAR VAR(&OUTFMT) VALUE(&FILETYP))
+004600170317
+004700170317             CHGVAR     VAR(&IFSFILE) VALUE('/' *CAT &FILE *TCAT '.' +
+004800170317                          *CAT &OUTFMT)
+004900170317             CHGVAR     VAR(&OUTFILE) VALUE(&FILE *TCAT '.' *CAT +
+005000170317                          &OUTFMT)
+005100170317             CHGVAR     VAR(&SQLSTMT) VALUE('SELECT * FROM ' *CAT +
+005200170317                          &LIB *TCAT '/' *CAT &FILE)
+005300170317
+005400170317             EXECUTE    SQL(&SQLSTMT) PCFMT(&FORMAT) +
+005500170317                          TOSTMF(&IFSFILE) REPLACE(*YES)
+005600170317
+005700170317             ESNDMAIL   RECIPIENT(&EMAIL) SUBJECT(&SUBJECT) +
+005800170317                          ATTLIST((&OUTFILE *DFT &IFSFILE))
+005900170317
+006000170317 /*          SBMJOB     CMD(OUTFILE SQL('SELECT * FROM ' *BCAT &LIB +
+006100161226                          *TCAT '/' *TCAT &FILE *TCAT ' ') +
+006200161226                          PCFMT(&FORMAT) RECIPIENT(&EMAIL)) +
+006300170317                          JOB(QRYEMAIL)    */
+006400170317/* RFS168108 End    */
+006500161208
+006600161208EXIT:       ENDPGM

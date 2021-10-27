@@ -1,0 +1,65 @@
+000100090211   /*****************************************************************/
+000200090211   /* TITLE        : Build FD Investment Select job                 */
+000300090211   /*                                                               */
+000400090211   /* PROGRAM      : JBAREBF1                                       */
+000500090211   /*                                                               */
+000600090211   /* SYSTEM       : Unitrax (Unisen Inc.)                          */
+000700090211   /*                                                               */
+000800090211   /* RFS NUMBER   : RFS-57879                                     */
+000900090211   /*                                                               */
+001000090211   /* CREATE DATE  : Feb. 11, 2009                                  */
+001100090211   /*                                                               */
+001200090211   /* DESCRIPTION  : This job will build a work file, in QTEMP, that*/
+001300090211   /*                contains all the selected investments based on */
+001400090211   /*                the selection criteria provided on the FD Adhoc*/
+001500090211   /*                Parameters screen.                             */
+001600090211   /*                                                               */
+001700090211   /* PARAMETERS   : 1) Action Code                                 */
+001800090211   /*                2) Investment Group                            */
+001900090211   /*                3) Investment Status Code                      */
+002000090211   /*                                                               */
+002100090211   /* USED BY      : GENFUND (quick)                                */
+002200090211   /*                                                               */
+002300090211   /* CALLS PROGRAM: BLDFDINV.                                      */
+002400090211   /*                                                               */
+002500090211   /*****************************************************************/
+002600090211   /*    C H A N G E   H I S T O R Y                                */
+002700090211   /*****************************************************************/
+002800090211   /* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE             */
+002900090211   /*****************************************************************/
+003000090211   /* Brian Lu   * 2009/02/11   * RFS57879 - Created                */
+003100090512   /* Andy Chan  * 2009/04/12   * RFS68861 - Add logical            */
+003200090211   /*****************************************************************/
+003300090211
+003400090211             PGM
+003500090211
+003600090512/*68861*/    DLTF       FILE(QTEMP/MFAFDINVL)
+003700090512/*68861*/    MONMSG     MSGID(CPF0000)
+003800090512
+003900090211             DLTF       FILE(QTEMP/MFAFDINVP)
+004000090211             MONMSG     MSGID(CPF2105)
+004100090211
+004200090402             CRTDUPOBJ  OBJ(MFAFDINVP) FROMLIB(*LIBL) OBJTYPE(*FILE) +
+004300090402                          TOLIB(QTEMP) DATA(*NO) CST(*NO) TRG(*NO)
+004400090211
+004500090512/*68861*/    CRTDUPOBJ  OBJ(MFAFDINVL) FROMLIB(*LIBL) OBJTYPE(*FILE) +
+004600090512                          TOLIB(QTEMP) DATA(*NO) CST(*NO) TRG(*NO)
+004700090512
+004800090211             INSERT     INTO(QTEMP/MFAFDINVP)                    +
+004900090211                        SQL('SELECT '' '', A.INVESTMENT_CODE,    +
+005000090211                            A.INVESTMENT_GROUP_CODE,             +
+005100090211                            A.INDUSTRY_FUND_CODE,                +
+005200090320                            A.INVESTMENT_STATUS_CODE,            +
+005300090320                            '' '', '' '', '' '', '' ''           +
+005400090211                            FROM MFAINVP A, MFAPRTCDP B          +
+005500090211                            WHERE A.INVESTMENT_STATUS_CODE = ''A'' +
+005600090211                              AND A.PRODUCT_TYPE_CODE =          +
+005700090211                                  B.PRODUCT_TYPE_CODE            +
+005800090322                              AND B.PRODUCT_TYPE_RULE = ''3''   +
+005900090322                             ORDER BY A.INVESTMENT_CODE')
+006000090211             OVRDBF     FILE(MFAFDINVP) TOFILE(QTEMP/MFAFDINVP) +
+006100090211                          OVRSCOPE(*JOB)
+006200090512/*68861*/    OVRDBF     FILE(MFAFDINVL) TOFILE(QTEMP/MFAFDINVL) +
+006300090512                          OVRSCOPE(*JOB)
+006400090211 ENDCLPGM:
+006500090211             ENDPGM

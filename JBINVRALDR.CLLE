@@ -1,0 +1,90 @@
+000100030417/* ******************************************************************/
+000200030417/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000300030417/* ******************************************************************/
+000400030417/* ******************************************************************/
+000401091221/* John O'Callaghan          * RFS71448 - generate non reallocation */
+000402091221/*            * 2009/12/16   * distribution reate                   */
+000403091221/*            *              * summary - new program                */
+000404100108/* Daisy Ly   * 2010/01/08   * -fix the data type for spool file    */
+000405091221/* ******************************************************************/
+001000930729PGM
+001001091221
+001002091221             DCL        VAR(&PRCDTE) TYPE(*CHAR) LEN(8)
+001003091221             DCL        VAR(&PRDCDE) TYPE(*CHAR) LEN(5)
+001004091221
+001005091221             DCL        VAR(&TRSTFND) TYPE(*CHAR) LEN(1)
+001006091221             DCL        VAR(&FRMPDATE) TYPE(*CHAR) LEN(8)
+001007091221             DCL        VAR(&TOPDATE) TYPE(*CHAR) LEN(8)
+001008091231             DCL        VAR(&DEFTOUTQ) TYPE(*CHAR) LEN(10)
+001027091221
+001028091221/* -----------------------------------------------------------------*/
+001029091221/* Begin Processing                                                 */
+001030091221/* -----------------------------------------------------------------*/
+001031091221
+001032091221             RTVJOBA    OUTQ(&DEFTOUTQ)
+001033091221
+001034091229             DSPDTAARA  DTAARA(*LDA)
+001035091229
+001036091221             RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&PRCDTE)
+001038091221
+001039091221             RTVDTAARA  DTAARA(*lda (1 5)) RTNVAR(&PRDCDE)
+001041091221
+001043091221             RTVDTAARA  DTAARA(*LDA (6 1)) RTNVAR(&TRSTFND)
+001044091231             RTVDTAARA  DTAARA(*LDA (16 8)) RTNVAR(&FRMPDATE)
+001045091231             RTVDTAARA  DTAARA(*LDA (24 8)) RTNVAR(&TOPDATE)
+001046091221
+001047091221/* Create the detail file  */
+001048091221             DLTF       FILE(QTEMP/INVRALDR)
+001049091221             MONMSG     MSGID(CPF2105)
+001050091221
+001051091221             CRTPF      FILE(QTEMP/INVRALDR) RCDLEN(378) SIZE(*NOMAX)
+001052091221
+001053091221/* Create the header record for detail   */
+001054100105             INSERT     INTO(QTEMP/INVRALDR) FIELDS(INVRALDR) +
+001055100105                          VALUES('"As At Date, From Date, To Date, +
+001056100105                          Product, Fund Number, Fund Name"')
+001058091221
+001059100105             UPDATE     SET((INVRALDR 'sst(INVRALDR,1,63) || ", Fund +
+001060100105                          Series, Payment Date, ROC Rate, Income +
+001061100105                          Rate"')) SQL('select * from qtemp/INVRALDR')
+001063091221
+001064100105             UPDATE     SET((INVRALDR 'sst(INVRALDR,1,113) || ", +
+001065100115                          Capital Gain Rate, ROC (%), INC +
+001066100115                          (%), CAP Gain (%)"')) SQL('select +
+001067100105                          * from qtemp/INVRALDR')
+001072091221
+001077100105
+001078100105/* run the pre Reallocation distribution to eliminiate the single pay dates   */
+001079100105             EXECUTE    VIEW(INVRALDR1) OUTFILE(QTEMP/INVRALDR1) +
+001080100105                          SETVAR((&FRMDTE &FRMPDATE) (&TODTE &TOPDATE))
+001081100105
+001089091221
+001090091221/* run the Non Reallocation distribution rate  by type Sequel View    */
+001091100105             EXECUTE    VIEW(INVRALDR) OUTFILE(QTEMP/SFINVRALDR) +
+001092100105                          SETVAR((&PRDCDE &PRDCDE) (&FNDTYP +
+001093100105                          &TRSTFND) (&FRMDTE &FRMPDATE) (&TODTE +
+001094100105                          &TOPDATE) (&PDATE &PRCDTE))
+001095091221
+001101091221
+001102091221/* Convert to Comma Delimited   */
+001103091221             CPYTOIMPF  FROMFILE(QTEMP/SFINVRALDR) +
+001104091221                          TOFILE(QTEMP/INVRALDR) MBROPT(*ADD) +
+001105091221                          DTAFMT(*DLM) STRDLM(*DBLQUOTE) +
+001106091221                          RMVBLANK(*BOTH) FLDDLM(',')
+001107091221
+001108091221/* Override the Spool Width to 378  */
+001109091221             OVRPRTF    FILE(QSYSPRT) PAGESIZE(255 378) OVRFLW(255) +
+001110100108                          OUTQ(&DEFTOUTQ) SAVE(*YES)   +
+001111100108                          USRDTA(INVRALDR)             +
+001112091221                          SPLFNAME(INVRALDR)
+001113091221
+001114091221/* Copy the sequel output to spool file   */
+001115091221             CPYF       FROMFILE(QTEMP/INVRALDR) TOFILE(QSYSPRT)
+001116091221
+001117091221/* Delete override the Spool Width etc  */
+001118091221             DLTOVR     FILE(QSYSPRT)
+001119091221
+001135091221
+001136091221/* End                                                              */
+001137091221/* ........................                                         */
+001138091221PGM_EXIT:    ENDPGM

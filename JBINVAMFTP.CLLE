@@ -1,0 +1,151 @@
+000100110531/* ******************************************************************/
+000200110531/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000300110531/* ******************************************************************/
+000400110531/* Richard Shi* 2011/04/27   * RFS92480 - Tiger Distribution file   */
+000500110531/*            *              * to AGF.com driver.                   */
+000600110531/*            *              * &Mode:                               */
+000700110531/*            *              * "SM" - regular MonthEnd feed.        */
+000800110531/*            *              * "AM" - AdHoc Monthend by GUI Sumbit  */
+000900110531/*            *              * "SY" - regular December feed.        */
+001000110531/*            *              * "AY" - AdHoc Annual ROC by GUI Sumbit*/
+001100110531/*            *              * "YE" - non-MM DEC Daily feed.        */
+001200110531/*            *              * This program will perform the file   */
+001300110531/*            *              * dstrbn_MO extraction (AM)  include   */
+001400110531/*            *              * all distributed "paid" during the    */
+001500110531/*            *              * month, and that would include        */
+001600110531/*            *              * mon-MM and MM funds only for Jan-Nov.*/
+001700131203/* TamilSelvi * 2013/12/02   * RFS131011 -Recompile for MFAINSTFNP  */
+001800110531/* *************************** *Last* *******************************/
+001900110531             PGM        PARM(&MODE &AHRUNDATE)
+002000110531
+002100110531             DCL        VAR(&MODE) TYPE(*CHAR) LEN(2)
+002200110531             DCL        VAR(&AHRUNDATE) TYPE(*CHAR) LEN(8)
+002300110531
+002400110531             DCL        VAR(&FILE1) TYPE(*CHAR) LEN(30) +
+002500110531                          VALUE('dstrbn_mo_')
+002600110531             DCL        VAR(&FILE2) TYPE(*CHAR) LEN(30) +
+002700110531                          VALUE('ftpfin_mo_')
+002800110531             DCL        VAR(&PROCESSDT) TYPE(*CHAR) LEN(8)
+002900110531             DCL        VAR(&MONTHEND)   TYPE(*CHAR) LEN(1)
+003000110531             DCL        VAR(&YEAREND)   TYPE(*CHAR) LEN(1)
+003100110531             DCL        VAR(&EFTLIB) TYPE(*CHAR) LEN(10)
+003200110531             DCL        VAR(&EFTFILE) TYPE(*CHAR) LEN(10)
+003300110531             DCL        VAR(&SYSTIME)   TYPE(*CHAR) LEN(6)
+003400110531             DCL        VAR(&SYSDATE) TYPE(*CHAR) LEN(8)
+003500110531             DCL        VAR(&STARTDATE) TYPE(*CHAR) LEN(8)
+003600110531             DCL        VAR(&ENDDATE) TYPE(*CHAR) LEN(8)
+003700110531             DCL        VAR(&PARAMODE) TYPE(*CHAR) LEN(2)
+003800110531             DCL        VAR(&FTPFILE) TYPE(*CHAR) LEN(30)
+003900110531             DCL        VAR(&STRUCDE) TYPE(*CHAR) LEN(5)
+004000110531             DCL        VAR(&JOBNAME) TYPE(*CHAR) LEN(10)
+004100110531             DCL        VAR(&FORMCD) TYPE(*CHAR) LEN(10)
+004200110531             DCL        VAR(&RHCODE) TYPE(*CHAR) LEN(10) +
+004300110531                          VALUE('MGR.com')
+004400110531             DCL        VAR(&FILENAME)  TYPE(*CHAR) LEN(10)
+004500110531             DCL        VAR(&MEMBERNM)  TYPE(*CHAR) LEN(10)
+004600110531             DCL        VAR(&LIBRARY) TYPE(*CHAR) LEN(10)
+004700110531             DCL        VAR(&FTPMODE) TYPE(*CHAR) LEN(2)
+004800110531
+004900110531             DCLF       FILE(WRKISTFNP)
+005000110531
+005100110531/* Create the Function-Code & Investment-Structure-Code Work Temp File */
+005200110531             DLTF       FILE(QTEMP/WRKISTFNP)
+005300110531             MONMSG     MSGID(CPF2105)
+005400110531             CPYF       FROMFILE(WRKISTFNP) TOFILE(QTEMP/WRKISTFNP) +
+005500110531                          CRTFILE(*YES)
+005600110531
+005700110531             CPYF       FROMFILE(MFAISTFNP) TOFILE(QTEMP/WRKISTFNP) +
+005800110531                          MBROPT(*UPDADD) CRTFILE(*NO) INCREL((*IF +
+005900110531                          F0001 *EQ 'PRD')) FMTOPT(*MAP *DROP)
+006000110531             OVRDBF     FILE(WRKISTFNP) TOFILE(QTEMP/WRKISTFNP)
+006100110531
+006200110531             RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&PROCESSDT)
+006300110531             RTVDTAARA  DTAARA(MFAPRCDTP (10 1)) RTNVAR(&MONTHEND)
+006400110531             RTVDTAARA  DTAARA(MFAPRCDTP (13 1)) RTNVAR(&YEAREND)
+006500110531             RTVDTAARA  DTAARA(MFAEFTLIB) RTNVAR(&EFTLIB)
+006600110531
+006700110531             RTVSYSVAL  SYSVAL(QTIME) RTNVAR(&SYSTIME)
+006800110531             CALL (*LIBL/GETSYSDATE) PARM(&SYSDATE)
+006900110531
+007000110608/* Loop through the work temp file based on Function */
+007100110531READ:
+007200110531             RCVF
+007300110531             MONMSG     MSGID(CPF0000 CPF0864) EXEC(GOTO +
+007400110531                          CMDLBL(ENDCLPGM))
+007500110531
+007600110531/* Build Structure-Code-Level FTP files */
+007700110531             CHGVAR     VAR(&STRUCDE) VALUE(&F0002)
+007800110531
+007900110608/* GUI/SRP Ad-Hoc Monthly Extract Fund-Rate Distribution file */
+008000110531       IF         COND(&MODE = 'AM') THEN(DO)
+008100110531             CHGVAR     VAR(&STARTDATE) VALUE((%SST(&PROCESSDT 1 +
+008200110531                          6)) || '01')
+008300110531             CHGVAR     VAR(&ENDDATE) VALUE(&AHRUNDATE)
+008400110531
+008500110531             DLTF       FILE(QTEMP/FTPDSTRATE)
+008600110531             MONMSG     MSGID(CPF0000)
+008700110531             DLTF       FILE(QTEMP/FTPDSTFLAG)
+008800110531             MONMSG     MSGID(CPF0000)
+008900110531             CHGVAR     VAR(&PARAMODE) VALUE('AM')
+009000110531
+009100110531/* Extract record based on various business logic */
+009200110531             CALL       PGM(INVRATEDP) PARM(&PARAMODE &STARTDATE +
+009300110531                          &ENDDATE &STRUCDE)
+009400110531/* Initialize the parameters for the FTP program */
+009500110531             CHGVAR     VAR(&FILENAME) VALUE('FTPDSTRATE')
+009600110531             CHGVAR     VAR(&MEMBERNM) VALUE('FTPDSTRATE')
+009700110531             CHGVAR     VAR(&LIBRARY) VALUE('QTEMP')
+009800110531
+009900110531/* Copy FTP file to EFTLIB */
+010000110531             CHGVAR     VAR(&EFTFILE) VALUE(&PARAMODE *TCAT +
+010100110531                          &STRUCDE *TCAT  %SST(&SYSDATE 5 4) )
+010200110531             CPYF       FROMFILE(&LIBRARY/&FILENAME)                +
+010300110531                          TOFILE(&EFTLIB/&EFTFILE) MBROPT(*REPLACE) +
+010400110531                          CRTFILE(*YES)
+010500110531             MONMSG     MSGID(CPF2817)
+010600110531
+010700110531 FTPFILE5:
+010800110531             CHGVAR     VAR(&FTPFILE) VALUE('dstrbn_mo_' *TCAT +
+010900110531                          &STRUCDE *TCAT '_' *TCAT &SYSDATE *TCAT +
+011000110531                          '.dat')
+011100110531
+011200110531             CHGVAR     VAR(&JOBNAME) VALUE('JOBDSTADN')
+011300110531             CHGVAR     VAR(&FORMCD) VALUE('JOBDSTADN')
+011400110531             CHGVAR     VAR(&FTPMODE) VALUE('UT')
+011500110531
+011600110531             CALL       PGM(FTPUTIL) PARM(&JOBNAME &FORMCD &LIBRARY +
+011700110531                          &FILENAME &MEMBERNM &RHCODE &FTPFILE +
+011800110531                          &SYSDATE &FTPMODE)
+011900110531
+012000110531/* Sending FTP Flag file */
+012100110531             CHGVAR     VAR(&FILENAME) VALUE('FTPDSTFLAG')
+012200110531             CHGVAR     VAR(&MEMBERNM) VALUE('FTPDSTFLAG')
+012300110531             CHGVAR     VAR(&LIBRARY) VALUE('QTEMP')
+012400110531
+012500110531/* Copy FTP file to EFTLIB */
+012600110531             CHGVAR     VAR(&EFTFILE) VALUE(&PARAMODE *TCAT +
+012700110531                          &STRUCDE *TCAT 'F' *TCAT  %SST(&SYSDATE 5 4) )
+012800110531             CPYF       FROMFILE(&LIBRARY/&FILENAME)                +
+012900110531                          TOFILE(&EFTLIB/&EFTFILE) MBROPT(*REPLACE) +
+013000110531                          CRTFILE(*YES)
+013100110531             MONMSG     MSGID(CPF2817)
+013200110531
+013300110531 FTPFILE6:
+013400110531             CHGVAR     VAR(&FTPFILE) VALUE('ftpfin_mo_' *TCAT +
+013500110531                          &STRUCDE *TCAT '_' *TCAT &SYSDATE *TCAT +
+013600110531                          '.dat')
+013700110531
+013800110531             CHGVAR     VAR(&JOBNAME) VALUE('JOBDSTFAM')
+013900110531             CHGVAR     VAR(&FORMCD) VALUE('JOBDSTFAM')
+014000110531             CHGVAR     VAR(&FTPMODE) VALUE('UT')
+014100110531
+014200110531             CALL       PGM(FTPUTIL) PARM(&JOBNAME &FORMCD &LIBRARY +
+014300110531                          &FILENAME &MEMBERNM &RHCODE &FTPFILE +
+014400110531                          &SYSDATE &FTPMODE)
+014500110531
+014600110531             GOTO       CMDLBL(READ)
+014700110531       ENDDO /* 'AM' - GUI/SRP Ad-Hoc */
+014800110531
+014900110531ENDCLPGM:
+015000110531             RETURN
+015100110531             ENDPGM

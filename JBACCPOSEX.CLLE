@@ -1,0 +1,126 @@
+000100120403
+000200120403     /*****************************************************************/
+000300120403     /*                                                               */
+000400120403     /*    JBACCPOSEX :  Account position extraction                  */
+000500120403     /*                                                               */
+000600120403     /*    PURPOSE:    This job will create the new account position  */
+000700120403     /*                extract for a specific date                    */
+000800120403     /*                                                               */
+000900120403     /*    DEVELOPER : Andy Lo                                        */
+001000120403     /*                                                               */
+001100120403     /*    CREATED:    03/Apr/2012                                    */
+001200120403     /*                (RFS 100894)                                   */
+001300120403     /*    CHANGED:                                                   */
+001400120403     /*                                                               */
+001500120403     /*****************************************************************/
+001600120403     /*****************************************************************/
+001700120403     /*                                                               */
+001800120403     /*    C H A N G E   H I S T O R Y                                */
+001900120403     /*                                                               */
+002000120403     /*****************************************************************/
+002100120403     /*****************************************************************/
+002200120403     /* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE             */
+002300120403     /*****************************************************************/
+002400121004     /* Rupesh Kr. *  2012/10/01  * RFS113439 - CHANGE TO GLUSKIN'S   */
+002500121004     /*            *              * ACCPOSEX FILE NAMING CONVENTION.  */
+002600120403     /*****************************************************************/
+002700120403             PGM
+002800120403
+002900120403             DCL        VAR(&ADHOC)        TYPE(*CHAR) LEN(01)
+003000120403             DCL        VAR(&DATEUSE)      TYPE(*CHAR) LEN(08)
+003100120403             DCL        VAR(&DATETYPE)     TYPE(*CHAR) LEN(01)
+003200120403             DCL        VAR(&TYPE)         TYPE(*CHAR) LEN(10)
+003300120403             DCL        VAR(&MFAEFTLIB)    TYPE(*CHAR) LEN(10)
+003400120403             DCL        VAR(&NBRCURRCD)    TYPE(*DEC)  LEN(10 0) VALUE(0)
+003500120411             DCL        VAR(&CNT)          TYPE(*CHAR) LEN(07)
+003600120403             DCL        VAR(&SYSDATE)      TYPE(*CHAR) LEN(08)
+003700120410             DCL        VAR(&RECDATA)      TYPE(*CHAR) LEN(100)
+003800120403             DCL        VAR(&RECLEN)       TYPE(*DEC)  LEN(5 0)
+003900120410             DCL        VAR(&QTE)          TYPE(*CHAR) LEN(2) VALUE('"')
+004000121001/*R113439*/  DCL        VAR(&mbrname)      TYPE(*CHAR) LEN(10)
+004100121001/*R113439*/  DCL        VAR(&procdate)     TYPE(*CHAR) LEN(08)
+004200120403
+004300120403             ADDLIBLE   LIB(TAATOOL) POSITION(*LAST)
+004400120403             MONMSG     MSGID(CPF0000)
+004500120403
+004600120403             CALL       PGM(GETSYSDATE) PARM(&SYSDATE)
+004700120403
+004800120403             RTVDTAARA  DTAARA(MFAEFTLIB) RTNVAR(&MFAEFTLIB)
+004900120403
+005000120403             RTVDTAARA  DTAARA(*LDA     (600 1))  RTNVAR(&ADHOC)
+005100121001/*R113439*/  RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&procdate)
+005200121001/*R113439*/  CHGVAR     VAR(&mbrname) VALUE('S' *CAT  &procdate)
+005300120403             IF   COND(&ADHOC *EQ 'A') THEN(DO)
+005400120403                  RTVDTAARA  DTAARA(*LDA (601 8)) RTNVAR(&DATEUSE)
+005500120403                  RTVDTAARA  DTAARA(*LDA (609 1)) RTNVAR(&DATETYPE)
+005600120403                  ENDDO
+005700120403             ELSE CMD(DO)
+005800120403                  RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&DATEUSE)
+005900120403                  CHGVAR VAR(&DATETYPE) VALUE('P')
+006000120403             ENDDO
+006100120403
+006200120403             IF   COND(&DATETYPE *EQ 'T') THEN(DO)
+006300120403                  CHGVAR VAR(&TYPE) VALUE('TRADE')
+006400120403                  ENDDO
+006500120403             ELSE CMD(DO)
+006600120403                  CHGVAR VAR(&TYPE) VALUE('PROCESS')
+006700120403             ENDDO
+006800120403
+006900120410             CALL       PGM(ACCPOSEX) PARM(&DATEUSE &DATETYPE)
+007000120403
+007100120403             RTVMBRD    FILE(QTEMP/SFACTDTL)  NBRCURRCD(&NBRCURRCD)
+007200120403
+007300120403             CHGVAR VAR(&CNT) VALUE(&NBRCURRCD)
+007400120403
+007500120403             RTVPFA     FILE(QTEMP/SFACTDTL) MAXRCDLEN(&RECLEN)
+007600121001
+007700121001     /* RFS113439 Starts */
+007800121001
+007900121001             CHKOBJ     OBJ(&MFAEFTLIB/ACCPOSEX) OBJTYPE(*FILE)
+008000121001             MONMSG     MSGID(CPF9801)  EXEC(DO)
+008100121001             CRTPF      FILE(&MFAEFTLIB/ACCPOSEX) RCDLEN(&RECLEN) +
+008200121001                          MAXMBRS(*NOMAX) SIZE(*NOMAX)
+008300121004             RMVM       FILE(&MFAEFTLIB/ACCPOSEX) MBR(ACCPOSEX)
+008400121001             ENDDO
+008500121001
+008600121004             RMVM       FILE(&MFAEFTLIB/ACCPOSEX) MBR(&MBRNAME)
+008700121004             MONMSG     MSGID(CPF320A CPF3203 CPF3220 CPF7310)
+008800121004
+008900121001             ADDPFM     FILE(&MFAEFTLIB/ACCPOSEX) MBR(&MBRNAME)
+009000121001
+009100121001    /*       DLTF       &MFAEFTLIB/ACCPOSEX                          */
+009200121001    /*       MONMSG     MSGID(CPF0000)                               */
+009300121001
+009400121001    /*       CRTPF      FILE(&MFAEFTLIB/ACCPOSEX) RCDLEN(&RECLEN) +  */
+009500121001    /*                    SIZE(*NOMAX)                               */
+009600120403
+009700121001     /* RFS113439 Ends   */
+009800121001
+009900120410             CHGVAR     VAR(&RECDATA) VALUE(&QTE *TCAT 'HDR' *CAT +
+010000120410                          &TYPE *CAT &DATEUSE *CAT &SYSDATE *TCAT &QTE)
+010100120410
+010200121001     /* RFS113439 Starts */
+010300121001     /*      INSERT INTO(&MFAEFTLIB/ACCPOSEX) VALUES(&RECDATA)   */
+010400121001             INSERT     INTO(&MFAEFTLIB/ACCPOSEX &MBRNAME) +
+010500121001                          VALUES(&RECDATA)
+010600120403
+010700121001     /*      CPYF       FROMFILE(QTEMP/SFACTDTL) +
+010800120403                          TOFILE(&MFAEFTLIB/ACCPOSEX) MBROPT(*ADD) +
+010900121001                          FMTOPT(*NOCHK)   */
+011000120403
+011100121001             CPYF       FROMFILE(QTEMP/SFACTDTL) +
+011200121001                          TOFILE(&MFAEFTLIB/ACCPOSEX) +
+011300121001                          TOMBR(&MBRNAME) MBROPT(*ADD) +
+011400121001                          FMTOPT(*NOCHK)
+011500121001     /* RFS113439 Ends   */
+011600121001
+011700120410             CHGVAR     VAR(&RECDATA) VALUE(&QTE *TCAT 'TRL' *CAT +
+011800120410                          &CNT *TCAT &QTE)
+011900121001
+012000121001     /* RFS113439 Starts */
+012100121001     /*      INSERT INTO(&MFAEFTLIB/ACCPOSEX) VALUES(&RECDATA)  */
+012200121001             INSERT     INTO(&MFAEFTLIB/ACCPOSEX &MBRNAME) +
+012300121001                          VALUES(&RECDATA)
+012400121001     /* RFS113439 Ends   */
+012500120403
+012600120403 EXIT: ENDPGM

@@ -1,0 +1,102 @@
+000100090121   /*****************************************************************/
+000200090121   /* SYSTEM       : Citigroup                                      */
+000300090121   /* PROGRAMMER   : Andy Chan                                      */
+000400090121   /* DESCRIPTION  : The purpose of this program is to produce Group*/
+000500090121   /*                Business Type Report (PwrHse Rewrite)          */
+000600090121   /*****************************************************************/
+000700090121   /*    C H A N G E   H I S T O R Y                                */
+000800090121   /*****************************************************************/
+000900090121   /* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE             */
+001000090121   /*****************************************************************/
+001100090121   /* Andy Chan  * 2008/01/21   * RFS 55932 - Powerhouse re-write   */
+001200090121   /*****************************************************************/
+001300090121             PGM
+001400090121             DCL        VAR(&LDA)    TYPE(*CHAR) LEN(1024)
+001500090121             DCL        VAR(&GRPLST) TYPE(*CHAR) LEN(1000) VALUE(' ')
+001600090121             DCL        VAR(&GRPALL) TYPE(*CHAR) LEN(3) VALUE(' ')
+001700090121             DCL        VAR(&GRPNUM) TYPE(*DEC)  LEN(5 0)  VALUE(91)
+001800090121             DCL        VAR(&DATFMT)       TYPE(*CHAR)  LEN(4)
+001900090121             DCL        VAR(&CMPNME)       TYPE(*CHAR)  LEN(30)
+002000090121             DCL        VAR(&CMPNME2)      TYPE(*CHAR)  LEN(30)
+002100090121             DCL        VAR(&POS)          TYPE(*DEC)   LEN(5 0) VALUE(30)
+002200090121             DCL        VAR(&POS2)         TYPE(*DEC)   LEN(5 0)
+002300090123             DCL        VAR(&ASATDATE)     TYPE(*CHAR)  LEN(8)
+002400090121             DCL        VAR(&EdtScp)   TYPE(*CHAR) LEN(46)
+002500090121             DCL        VAR(&ScrCd)    TYPE(*CHAR) LEN(8) +
+002600090121                        VALUE('GRPRPT  ')
+002700090121             DCL        VAR(&EditCode) TYPE(*CHAR) LEN(6) +
+002800090121                        VALUE('GRPSIN')
+002900090121             DCL        VAR(&Severe)   TYPE(*CHAR) LEN(1)
+003000090121             DCL        VAR(&LvlCode)  TYPE(*CHAR) LEN(1) VALUE('I')
+003100090121             DCL        VAR(&ScrnMsg)  TYPE(*CHAR) LEN(30)
+003200090121             DCL        VAR(&RetCode)  TYPE(*CHAR) LEN(2) VALUE('00')
+003300090121             DCL        VAR(&SqlLog)   TYPE(*CHAR) LEN(1) VALUE('N')
+003400090121             DCL        VAR(&EDT)      TYPE(*CHAR) LEN(1)
+003500090121             DCL        VAR(&BusType)  TYPE(*CHAR) LEN(3)
+003600090121             DCL        VAR(&BusStyp)  TYPE(*CHAR) LEN(3)
+003700090121
+003800090121             RTVDTAARA  DTAARA(*LDA (1 1024)) RTNVAR(&LDA)
+003900090121CRTLIST:
+004000090121             IF (%SST(&LDA &GRPNUM 6) *NE ' ') THEN(DO)
+004100090121
+004200090121             IF         COND(&GRPLST *NE ' ') THEN(CHGVAR +
+004300090121                          VAR(&GRPLST) VALUE(&GRPLST |< ','))
+004400090121
+004500090121             CHGVAR     VAR(&GRPLST) VALUE(&GRPLST |< '"' || +
+004600090121                          %SST(&LDA &GRPNUM 6) |< '"')
+004700090121
+004800090121             IF         COND(%SST(&LDA 91 6) *EQ '@') THEN(CHGVAR +
+004900090121                          VAR(&GRPALL) VALUE('@'))
+005000090121
+005100090121             CHGVAR     VAR(&GRPNUM) VALUE(&GRPNUM + 6)
+005200090121             GOTO       CMDLBL(CRTLIST)
+005300090121
+005400090121             ENDDO
+005500090121
+005600090121             CHGVAR     VAR(&BusType) VALUE(%SST(&LDA 901 3))
+005700090121             CHGVAR     VAR(&BusStyp) VALUE(%SST(&LDA 904 3))
+005800090121/* select group accounts */
+005900090121
+006000090121             RTVJOBA    DATFMT(&DATFMT)
+006100090121
+006200090121             CHGDTAARA  DTAARA(*LDA (1 200)) VALUE(' ')
+006300090121
+006400090121             RTVDTAARA  DTAARA(MFACMPNMA (1 30)) RTNVAR(&CMPNME2)
+006500090123             RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&ASATDATE)
+006600090121
+006700090121 $CENTER:    IF         COND((&POS *NE 0) & (%SST(&CMPNME2 &POS 1) +
+006800090121                          = ' ')) THEN(DO)
+006900090121             CHGVAR     VAR(&POS) VALUE(&POS - 1)
+007000090121             GOTO       CMDLBL($CENTER)
+007100090121             ENDDO
+007200090121
+007300090121             CHGVAR     VAR(&POS2) VALUE(((40  - &POS) / 2) + 5)
+007400090121/* Populate company name in the LDA                                  */
+007500090121             CHGDTAARA  DTAARA(*LDA (&POS2 &POS)) VALUE(&CMPNME2)
+007600090123             CHGDTAARA  DTAARA(*LDA (44 8)) VALUE(&ASATDATE)
+007700090121
+007800090121             CHGJOB     DATFMT(*YMD)
+007900090121
+008000090121             CHGVAR     VAR(&EDTSCP) VALUE(&SCRCD *CAT &EDITCODE +
+008100090121                          *CAT &SEVERE *CAT &LVLCODE *CAT &SCRNMSG)
+008200090121
+008300090121             CALL       PGM(FXSCEDTALW) PARM(&EDTSCP &SQLLOG &RETCODE)
+008400090121
+008500090121             CHGVAR     VAR(&EDT) VALUE('Y')
+008600090121             IF         COND(&RetCode *NE '00') THEN(DO)
+008700090121             CHGVAR     VAR(&EDT) VALUE('N')
+008800090121             ENDDO
+008900090121
+009000090121             OVRPRTF    FILE(SQLPRT1) PAGESIZE(60 150) +
+009100090121                          MAXRCDS(*NOMAX) SAVE(*YES) USRDTA(GRPBTSUM) +
+009200090121                          SPLFNAME(GRPBTSUM)
+009300090121
+009400090123             REPORT     REPORT(GRPBTSUMR) VIEW(GRPBTSUMV) +
+009500090123                          SETVAR((&ASATDATE &ASATDATE) (&GRPALL +
+009600090123                          &GRPALL) (&GRPLST &GRPLST) (&BUSTYPE +
+009700090123                          &BUSTYPE) (&BUSSTYP &BUSSTYP))
+009800090121
+009900090121             DLTOVR     FILE(SQLPRT1)
+010000090121             MONMSG     MSGID(CPF0000)
+010100090121
+010200090121             ENDPGM
