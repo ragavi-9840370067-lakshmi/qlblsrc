@@ -1,0 +1,1492 @@
+000100000000       IDENTIFICATION DIVISION.
+000200000000       PROGRAM-ID.     MTHDPST.
+000300000000       AUTHOR.        John O Callaghan.
+000400000000       INSTALLATION.  Citigroup.
+000500000000       DATE-WRITTEN.  Sep   2011.
+000600000000       DATE-COMPILED.
+000700000000
+000800180327      ******************************************************************
+000900180327      *                                                                *
+001000211007      *    Description: Month deposit or ADHOC                         *
+001100180327      *                                                                *
+001200180327      * =============================================================  *
+001300180327      *    Programmer   Creation/          Description                 *
+001400180327      *               * Modification *                                 *
+001500180327      * john O'Calla  * 2011/09/27   * RFS100358 -monthly depossit     *
+001600180327      *               *              *            extract              *
+001700180327      * Alan Andrade  * 2011/09/27   * RFS102934 -Fix duplicate        *
+001800180327      *               *              *            records in reports   *
+001900180327      * Brian Lu      * 2012/05/24   * RFS107112 - Using calendar date *
+002000180327      * Geeta S.      * 2012/08/02   * RFS 112313- Fix DAE calculation *
+002100180327      * Naveen K.     * 2012/09/20   * RFS 112717- Fix DCA calculation *
+002200180327      *               *              * in deposit file is incorrect for*
+002300180327      *               *              * last day of DSC schedule.       *
+002400130611      * Aashish K.    * 2013/05/09   * RFS 115054- Adding two new      *
+002500130611      *               *              * fields in Program               *
+002600131004      * Ashmitha K.   * 2013/10/03   * RFS128456 -Not all deposits     *
+002700131004      *               *              * are being reported in the       *
+002800131004      *               *              * Monthly  Deposit Extract        *
+002900180327      *TamilSelvi     * 2013/12/02   * RFS131011 -Recompile MFAINSTFNP *
+003000140122      * Thilaga K   * 2014/01/21 * RFS133150 - Recompile for MFATRCODP
+003100140602      * Sushmita J    * 2014/04/01   * RFS134626-Recompile for MFAACMDP*
+003200140509      * Tamilselvi * 2014/05/09   * RFS136015- Recompile for MFAACMDP.
+003300140602      * Thilaga    * 2014/05/15      * RFS133150 - Recompile.          *
+003400140606      * Arthy K    | 2014/06/06   | RFS136335 - Fix for SQL 1004 error *
+003500141014      * Banupriya V* 2014/10/14   * RFS141507 - Recompile for MFATRNCPP*
+003600180326      * Suresh G.  * 2018/03/26   * RFS1001925 - To create PFs instead *
+003700180326      *            *              * of tables for ECFNPAYOUT, ECFPAYOUT*
+003800190226      * Kavya K    *  2019/02/25  * RFS181057 - Recompile for MFAACMDP *
+003900200206      * Ashwini B  * 2020/02/05   * RFS185365 - Recompile for MFATRCODP*
+004000200501      * Kirthigaa S*  2020/04/17  * RFS186069 - Recompile for MFAACMDP *
+004100200716      * M K SINDHU * 2020/07/08   * RFS185172 - Recompile for MFATRCODP*
+004200201207      * Kavya K    * 2020/10/19   * RFS186497 - Recompile for MFAACMDP *
+004300201230      * Chaya SP   * 2020/10/19   * RFS180721 - Recompile for MFATRCODP*
+004400201230      * Rajesh     * 2020/10/27   * RFS185174 - Account Level DSC Tier *
+004500210130      *            *              * Changes
+004600210503      * Vignesh    * 2021/04/21   * RFS186584 - Valuation new data dsc *
+004700210817      *            *              * deposite info
+004704210817      * Vignesh    * 2021/07/07   * RFS187254 - Recompile for MFATRCODP
+004705210817      * Vignesh    * 2021/08/12   * RFS1119071- changed MFAINVUPP to
+004706210823      *            *              * MFAINVLPP                          *
+004707210924      * Lev O      * 2021/09/24   * RFS1119917- Report onlY ACINDSC
+004900000000      *  Linked Modules perform I/O on the follwoing files:            *
+005000000000      *  Module-Name      file Name                    Service Program
+005100000000      *  ----------    -------------------             ---------------
+005200000000      *                                                                *
+005300000000      *                                                                *
+005400000000      *                                                                *
+005500000000      *                                                                *
+005600000000      ******************************************************************
+005700000000
+005800180327      * ====================
+005900200327       ENVIRONMENT DIVISION.
+006000180327      * ====================
+006100000000
+006200000000       CONFIGURATION SECTION.
+006300000000       SOURCE-COMPUTER. ISeries.
+006400000000       OBJECT-COMPUTER. ISeries.
+006500000000       SPECIAL-NAMES. DATA-AREA IS WS-DATA-AREA
+006600000000                      LOCAL-DATA IS WS-LOCAL.
+006700000000
+006800000000
+006900000000       INPUT-OUTPUT SECTION.
+007000000000       FILE-CONTROL.
+007100000000
+007200000000       DATA DIVISION.
+007300000000       FILE SECTION.
+007400000000
+007500180327      *------------------------
+007600000000       WORKING-STORAGE SECTION.
+007700180327      *------------------------
+007800000000
+007900000000          COPY CPYSQLFLD
+008000000000               REPLACING == "CURRENT_PROGRAM" == BY == "MTHDPST" ==.
+008100000000
+008200000000           EXEC SQL
+008300000000             INCLUDE SQLCA
+008400000000           END-EXEC.
+008500000000
+008600000000
+008700180327      * Error Codes, Uniquely Identify where the error happened
+008800000000
+008900000000       01 WS-ERR-CODE                 PIC X(02) VALUE SPACES.
+009000000000          88 WS-ERR-OK                          VALUE SPACES.
+009100000000          88 WS-ERR-10                          VALUE "10".
+009200000000          88 WS-ERR-11                          VALUE "11".
+009300000000          88 WS-ERR-12                          VALUE "12".
+009400000000          88 WS-ERR-13                          VALUE "13".
+009500000000          88 WS-ERR-14                          VALUE "14".
+009600000000          88 WS-ERR-15                          VALUE "15".
+009700000000          88 WS-ERR-16                          VALUE "16".
+009800000000          88 WS-ERR-17                          VALUE "17".
+009900000000          88 WS-ERR-18                          VALUE "18".
+010000000000          88 WS-ERR-19                          VALUE "19".
+010100000000          88 WS-ERR-20                          VALUE "20".
+010200000000          88 WS-ERR-21                          VALUE "21".
+010300210618186584    88 WS-ERR-22                          VALUE "22".
+010400210618186584    88 WS-ERR-23                          VALUE "23".
+010500210618186584    88 WS-ERR-24                          VALUE "24".
+010600210618186584    88 WS-ERR-25                          VALUE "25".
+010700210618186584    88 WS-ERR-26                          VALUE "26".
+010800210618186584    88 WS-ERR-27                          VALUE "27".
+010900000000
+011000000000
+011100180327      * Work fields for columns with default values
+011200000000
+011300000000       01 lc_WorkFields.
+011400000000          05 ln_Sysdate                  PIC S9(8).
+011500000000          05 ln_as_atdate                FORMAT DATE "@Y%m%d".
+011600120430107112    05 ln_as_atdate2.
+011700120430  |           07 ln_as_atdate2YM         PIC S9(6).
+011800120430  |           07 ln_as_atdate2D          PIC S9(2).
+011900120430  |       05 ln_MonthEnd                 PIC S9(9).
+012000120430  |       05 ln_MonthEnd9x redefines ln_MonthEnd.
+012100120430  V          07 ln_MonthEnd9x1           pic x.
+012200120430107112       07 ln_MonthEnd9x2           FORMAT DATE "@Y%m%d".
+012300000000          05 ln_date9                    PIC 9(9).
+012400000000          05 ln_date9x redefines ln_date9.
+012500000000             07 ln_date9x1               pic x.
+012600000000             07 ln_date9x2               FORMAT DATE "@Y%m%d".
+012700000000          05 ln_Market_value_cdn         PIC s9(11)v9(2).
+012800000000          05 lc_ExchangeRateType         PIC X(01) VALUE "N".
+012900000000          05 WS-DATE                     PIC 9(9).
+013000000000          05 WS-DATEA      redefines     WS-DATE.
+013100000000             07 WS-DATE-Filler           PIC X.
+013200000000             07 WS-CC                    PIC XX.
+013300000000             07 WS-YY                    PIC XX.
+013400000000             07 WS-MM                    PIC XX.
+013500000000             07 WS-DD                    PIC XX.
+013600000000          05 WS-DATE-DDMMYY.
+013700000000             07 WS-DD                    PIC XX.
+013800000000             07 WS-MM                    PIC XX.
+013900000000             07 WS-YY                    PIC XX.
+014000000000          05 WS-DATE-DDMMCCYY.
+014100000000             07 WS-DD                    PIC XX.
+014200000000             07 WS-MM                    PIC XX.
+014300000000             07 WS-CC                    PIC XX.
+014400000000             07 WS-YY                    PIC XX.
+014500000000          05 WS-file-name                pic x(15).
+014600000000          05 ln_deposit_charge           PIC s9(2)v9(2).
+014700000000          05 ln_ypercent                 PIC s9(4)v9(3).
+014800000000          05 ln_mdays                    PIC s9(5).
+014900000000          05 ln_records_bypassed         PIC 9(15) value 0.
+015000000000          05 ln_records_read             PIC 9(15) value 0.
+015100000000          05 lc_counts                   PIC x(15).
+015200130611      *   05 WS-OUTREC                   PIC X(88).
+015300130611115054    05 WS-OUTREC                   PIC X(102).
+015400000000          05 lc_class_lit                PIC x(5) value "CLASS".
+015500180326      * RFS1001925 - Starts.
+015600180326      * CL Program(CRTFLATPF) Parameters
+015700180327          05 lc_LibraryName              PIC X(10)  VALUE "QTEMP".
+015800180327          05 lc_FileName                 PIC X(10)  VALUE SPACES.
+015900180327          05 li_RecordLength             PIC S9(03) COMP-3 VALUE 102.
+016000180326      * RFS1001925 - Ends.
+016100201230      * RFS185174 - Start *
+016200201230          05 ln_MonthEndYYYY             PIC 9(5) VALUE ZEROS.
+016300201230          05 ln_date9YYYY                PIC 9(5) VALUE ZEROS.
+016400201029
+016500201230      * RFS185174 - End *
+016600210503      * RFS186584 - Starts*
+016700210428          05 lc_FundDSC-Out              PIC x(88).
+016800210428          05 LI_COUNT                    PIC S9(05) COMP-3.
+016900210503      * RFS186584 - Ends*
+017000000000       01 ld_ProcessDate.
+017100000000          05 ld_AsAtDate                 PIC X(8) VALUE Zero.
+017200000000          05 ld_AsAtDate-N   REDEFINES ld_AsAtDate
+017300000000                                         PIC S9(8).
+017400000000
+017500000000        01 CDX                           PIC S9(4).
+017600000000        01 CDX2                          PIC S9(4).
+017700000000
+017800000000        01 CDSC-Table.
+017900000000          03 CDSC-ARRAY               OCCURS  1000 TIMES.
+018000000000
+018100000000             05  CDSC_SCHEDULE           PIC X(5).
+018200000000             05  LOWER_LIMIT_DAYS        PIC s9(5).
+018300000000             05  APPLICABLE_RATE         PIC S9(4)v9(3).
+018400000000
+018500000000        01 CDSC-Table2.
+018600000000          03 CDSC-ARRAY2              OCCURS  100  TIMES.
+018700000000             05  CDSC_SCHEDULE           PIC X(5).
+018800000000             05  YPERCENT                PIC S9(4)v9(3).
+018900000000             05  MDAYS                   PIC S9(5).
+019000000000
+019100000000       01 lt_Literals.
+019200000000         03 lt_A                         PIC X(01) VALUE "A".
+019300000000         03 lt_Y                         PIC X(01) VALUE "Y".
+019400000000         03 lt_N                         PIC X(01) VALUE "N".
+019500111116102952   03 lncc_Space                   PIC X(01) VALUE " ".
+019600180326      * RFS1001925 - Starts.
+019700180326         03 lncc_ECFPAYOUT              PIC X(09) VALUE "ECFPAYOUT".
+019800180326         03 lncc_ECFNPAYOUT             PIC X(10) VALUE "ECFNPAYOUT".
+019900180326      * RFS1001925 - Ends
+020000210428      * RFS186584 - Starts
+020100210428         03 lncc_CLGDEPEXT              PIC X(10) VALUE "CLGDEPEXT".
+020200210428      * RFS186584 - Ends
+020300000000
+020400000000       01 lc_LocalDataArea.
+020500000000          05 lc_PassFillerX550           PIC X(550).
+020600000000          05 lc_PassFormCode             PIC X(10).
+020700000000          05 lc_PassFillerX464           PIC X(464).
+020800000000
+020900000000
+021000180327      * Record Structure for the main cursor select
+021100000000
+021200000000       01 LEVEL1_REC.
+021300000000          05 ln_account_no               PIC S9(9).
+021400000000          05 lc_class                    PIC x(5).
+021500000000          05 lc_CPPinvestment_code       PIC X(5).
+021600000000          05 lc_investment_code          PIC X(5).
+021700000000          05 lc_trans_type_code          PIC X(3).
+021800000000          05 ln_trade_date               PIC S9(9) comp-3.
+021900000000          05 ln_gross_amt                PIC S9(11)v99 comp-3.
+022000000000          05 ln_net_amt                  PIC S9(11)v99 comp-3.
+022100000000          05 ln_deposit_date             PIC S9(9) comp-3.
+022200000000          05 ln_curr_unit_bal            PIC S9(10)v999 comp-3.
+022300000000          05 lc_CDSC_schedule            PIC X(5).
+022400000000          05 ln_curr_unit_Chg            PIC S9(10)v999 comp-3.
+022500000000          05 lc_load_structure           PIC X.
+022600000000          05 lc_industry_fund_code       PIC X(5).
+022700000000          05 ln_unit_price               PIC S9(5)v9(4) comp-3.
+022800000000          05 lc_account_type_code        PIC X(5).
+022900000000          05 lc_account_type_rule        PIC X.
+023000000000          05 lc_nominee_type_rule        PIC X.
+023100000000          05 ln_placement_date           PIC S9(9) comp-3.
+023200000000          05 ln_trans_no                 PIC S9(9) comp-3.
+023300130611115054    05 lc_Account_Inv_Grp          PIC X(5).
+023400130611115054    05 ln_Contract_Number          PIC S9(9).
+023500130611
+023600180327      * SWO data
+023700000000
+023800000000       01 WS_SWO_Data.
+023900000000          05 ln_SWO_account_no           PIC S9(9).
+024000000000          05 lc_SWO_investment_code      PIC X(5).
+024100000000          05 lc_SWO_load_structure       PIC X.
+024200000000
+024300180327      * header output fields
+024400000000
+024500000000       01 HEADER-REC.
+024600000000          05 lc_record_type              PIC XX.
+024700000000          05 lc_cycle_date               PIC X(8).
+024800000000          05 lc_file_name                PIC X(15).
+024900210428
+025000180327      * detail output fields
+025100000000
+025200000000       01 DETAIL-WORK-REC.
+025300000000          05 ln_gross_amt                PIC S9(12)V99.
+025400000000          05 ln_net_amt                  PIC S9(12)V99.
+025500000000          05 ln_dpst_pct_charge          PIC 9(2)V99.
+025600000000          05 ln_dpst_be_charge           PIC S9(8)V99.
+025700000000          05 ln_dae_amt                  PIC S9(8)V99.
+025800000000
+025900000000       01 DETAIL-REC.
+026000000000          05 lc_record_type              PIC XX.
+026100000000          05 lc_industry_fund_code       PIC X(5).
+026200130611115054    05 lc_Account_Inv_Grp          PIC X(5).
+026300000000          05 ln_account_no               PIC S9(9).
+026400000000          05 FILLER                      pic x.
+026500130611115054    05 ln_Contract_Number          PIC S9(9).
+026600000000          05 ln_trade_date               PIC X(6).
+026700000000          05 ln_deposit_age              PIC S9(4).
+026800000000          05 ln_gross_amt                PIC -9(12).99.
+026900000000          05 ln_net_amt                  PIC -9(12).99.
+027000000000          05 ln_dpst_pct_charge          PIC 9(2).99.
+027100000000          05 ln_dpst_be_charge           PIC -9(8).99.
+027200000000          05 ln_dae_amt                  PIC -9(8).99.
+027300000000
+027400180327      * TRAILER output fields ECFPAYOUT
+027500000000
+027600000000       01 PAY-TRAILER-REC.
+027700000000          05 lc_record_type              PIC XX.
+027800000000          05 ln_record_cnt               PIC 9(15).
+027900000000          05 lc_Tot_gross_amt            PIC s9(15)v99.
+028000000000          05 lc_Tot_BE_chge              PIC s9(15)v99.
+028100000000          05 lc_Tot_DAE_amt              PIC s9(15)v99.
+028200000000
+028300210618186584 01 PAY-TRAILER1-REC.
+028400210618186584    05 lc_record_type1             PIC XX.
+028500210618186584    05 ln_record_cnt1              PIC 9(15).
+028600210618186584    05 lc_Tot_gross_amt1           PIC s9(15)v99.
+028700210618186584    05 lc_Tot_BE_chge1             PIC s9(15)v99.
+028800210618186584    05 lc_Tot_DAE_amt1             PIC s9(15)v99.
+028900210428
+029000180327      * TRAILER output fields ECFNPAYOUT
+029100000000
+029200000000       01 NON-TRAILER-REC.
+029300000000          05 lc_record_type              PIC XX.
+029400000000          05 ln_record_cnt               PIC 9(15).
+029500000000          05 lc_Tot_gross_amt            PIC s9(15)v99.
+029600000000          05 lc_Tot_BE_chge              PIC s9(15)v99.
+029700000000          05 lc_Tot_DAE_amt              PIC s9(15)v99.
+029800000000
+029900180327      * TRAILER output field EDITED.
+030000000000
+030100210428       01 TRAILER-REC.
+030200210428          05 lc_record_type              PIC XX.
+030300210428          05 ln_record_cnt               PIC 9(15).
+030400210428          05 lc_Tot_gross_amt            PIC -9(15).99.
+030500210428          05 lc_Tot_BE_chge              PIC -9(15).99.
+030600210428          05 lc_Tot_DAE_amt              PIC -9(15).99.
+030700210428
+030800210430      * Detail temp fields of CLGDEPEXT
+030900210503186584 01 lc_DTL_TMP.
+031000210430186584    05 lc_record_type              PIC XX.
+031100210430186584    05 ln_account_no               PIC S9(9).
+031200210503186584    05 lc_Age_date                 PIC X(8).
+031300210503186584    05 ln_DSCcurr_unit_bal         PIC S9(10)V999.
+031400210503186584    05 ln_dpst_mkt_value           PIC S9(12)V99.
+031500210503186584    05 lc_investment_code          PIC X(5).
+031600210503186584    05 lc_load_structure           PIC X(1).
+031700210503186584    05 lc_ext_lod_typ_cod          PIC X(10).
+031800210430
+031900210430      * Detail output fields of CLGDEPEXT
+032000210430186584 01 lc_FundDSC_DTL.
+032100210430186584    05 lc_record_type              PIC XX.
+032200210430186584    05 ln_account_no               PIC S9(9).
+032201210510186584    05 FILLER                      pic X.
+032300210503186584    05 lc_Age_date                 PIC X(8).
+032400210503186584    05 ln_DSCcurr_unit_bal         PIC -9(10).999.
+032500210503186584    05 ln_dpst_mkt_value           PIC -9(12).99.
+032600210503186584    05 lc_investment_code          PIC X(5).
+032700210503186584    05 lc_load_structure           PIC X(1).
+032800210503186584    05 lc_ext_lod_typ_cod          PIC X(10).
+032900210430
+033000210430      * TRAILER temp fields of CLGDEPEXT
+033100210503186584 01 lc_TR_TMP.
+033200210430186584    05 lc_record_type              PIC XX.
+033300210430186584    05 ln_record_cnt               PIC 9(15).
+033400210503186584    05 ln_Tot_Net_Deposit          PIC s9(15)v999.
+033500210430
+033600210430      * TRAILER output fields of CLGDEPEXT
+033700210428186584 01 lc_FundDSC_TR.
+033800210428186584    05 lc_record_type              PIC XX.
+033900210428186584    05 ln_record_cnt               PIC 9(15).
+034000210505186584    05 ln_Tot_Net_Deposit          PIC -9(15).999.
+034100210428
+034200210430
+034300180327      * Control level variables for control break logic
+034400000000
+034500000000       01 CURR-CONTROLS.
+034600000000          02 CURR-LEVEL1.
+034700000000             05 ACCOUNT-NO               PIC 9(9).
+034800000000             05 INVESTMENT-CODE          PIC X(5).
+034900000000
+035000000000       01 PREV-CONTROLS.
+035100000000          02 PREV-LEVEL1.
+035200000000             05 ACCOUNT-NO               PIC 9(9).
+035300000000             05 INVESTMENT-CODE          PIC X(5).
+035400000000
+035500210428      * RFS186584 - Starts
+035600210428       01 lc_CLGDEPEXTExtract     PIC X(01).
+035700210428          88 lncc_CLGDEPEXTNo           VALUE SPACE.
+035800210428          88 lncc_CLGDEPEXTYes          VALUE "Y".
+035900210428       01 lb_EndOfCursorFlag       PIC 1.
+036000210428          88 lb_EndOfCursorTrue         VALUE B"1".
+036100210428          88 lb_EndOfCursorFalse        VALUE B"0".
+036200210428      * RFS186584 - Ends
+036201210806      * RFS1119071 - Starts
+036202210806       01 lc_ECFPAYOUTExtract     PIC X(01).
+036203210806          88 lncc_ECFPAYOUTNo           VALUE SPACE.
+036204210806          88 lncc_ECFPAYOUTYes          VALUE "Y".
+036205210806       01 lc_MiscFields.
+036206210806          03  lc_Reporting_Flag            PIC X(01) VALUE "       ".
+036207210806          03  lc_Frequency                 PIC X(02) VALUE " ".
+036208210806          03  lc_Rptname                   PIC X(10) VALUE "ECFPAYOUT".
+036209210806          03  lc_JobName                   PIC X(10) VALUE "JOBMTHDPST".
+036210210806          03  lnc_Y                        PIC X(01) VALUE "Y".
+036211210806          03  lnc_DA                       PIC X(02) VALUE "DA".
+036212210806          03  lnc_WK                       PIC X(02) VALUE "WK".
+036213210806          03  lnc_MO                       PIC X(02) VALUE "MO".
+036214210806          03  lc_MoEnd_Ind                 PIC X(01).
+036215210806          03  lc_WkEnd_Ind                 PIC X(01).
+036216210806      * RFS1119071 - Ends
+036300180327      * -----------------
+036400000000      * Copybooks - Begin
+036500180327      * -----------------
+036600000000
+036700180327      * Copybook to get data from Process-Date Data Area
+036800000000
+036900000000       COPY CPPRCDTP.
+037000201029
+037100201230      * RFS185174 - Start
+037200201230       COPY CPWSYSPARM.
+037300201230      * RFS185174  - End
+037400201230
+037500000000      * ---------------------------------
+037600000000      * Copybooks - End
+037700000000      * ---------------------------------
+037800000000
+037900000000       LINKAGE SECTION.
+038000000000
+038100000000       PROCEDURE DIVISION.
+038200000000
+038300180327      *-------------
+038400180327       Main-Process.
+038500180327      *-------------
+038600000000
+038700000000           PERFORM Initial-Logic.
+038800000000
+038900210503      *    RFS186584 Starts
+039000210427           IF lncc_CLGDEPEXTYes
+039100210427              PERFORM Fetch-FundDSC-Details
+039200210503                UNTIL  lb_EndOfCursorTrue
+039300210427              PERFORM Termination
+039301210806111907     End-IF
+039400210806111907*     ELSE
+039401210806111907     if lncc_ECFPAYOUTYes
+039500210427              PERFORM Process-Level-logic test before
+039600210503                UNTIL Curr-Controls  =  HIGH-VALUES
+039700000000
+039800210427              PERFORM End-Job
+039900210812           END-IF.
+040001210806      *    PERFORM End-Job.
+040100210503      *    RFS186584 Ends.
+040200000000           GOBACK.
+040300000000
+040400180327      *--------------
+040500000000       Initial-Logic.
+040600180327      *--------------
+040700000000
+040800180327      * Display info.that program Start
+040900000000
+041000000000           DISPLAY "PROGRAM MTHDPST starts ....."
+041100000000
+041200180327      * Get local data and sysdate
+041300000000
+041400000000           ACCEPT lc_LocalDataArea   FROM WS-LOCAL.
+041500000000           ACCEPT ln_Sysdate         FROM DATE YYYYMMDD.
+041600000000
+041700180327      * initialize the controls
+041800000000
+041900000000           MOVE   Low-Values           TO  Curr-Controls
+042000000000                                           Prev-Controls.
+042100000000
+042200201230      * RFS185174 Start
+042300201230      * Retrieve data area MFASYSPARM to get DSC Calender Year.
+042400201230           INITIALIZE CPWSYSPARM-LINKAGE.
+042500201230           CALL "RTVSYSPARM" USING CPWSYSPARM-LINKAGE.
+042600201230      * RFS185174 End
+042700201230
+042800180327      * Get the process date
+042900000000
+043000000000           PERFORM Get-Process-Date.
+043100000000
+043200210427      * RFS186584 starts
+043300210427           Set lncc_CLGDEPEXTNo to TRUE
+043301210806111907     Set lncc_ECFPAYOUTNo  to TRUE
+043400210427           Set  lb_EndOfCursorFalse TO TRUE
+043500210427           PERFORM Get-Mfaactp
+043501210806111907     PERFORM Get-Mfaprorpp
+043600210427           if lncc_CLGDEPEXTYes
+043700210427              PERFORM Generate-FundDSC-HD
+043800210427              PERFORM Initialize-FundDSC-TR
+043900210427              PERFORM Declare-Cursor-FundDSC
+044000210427              PERFORM Open-Cursor-FundDSC
+044101210806111907     End-IF
+044102210806111907*     Else
+044200180327      * Declare & Open files and Cursors .....
+044300000000
+044301210806111907     if lncc_ECFPAYOUTYes
+044400210503              PERFORM SQL-Header-File
+044500210503              PERFORM Load-CDSC-Schedule
+044600210503              PERFORM SQL-Declare-Driver-file
+044700210503              PERFORM SQL-Open-Driver-file
+044800210427           End-IF.
+044900000000
+045000210427      * Declare & Open files and Cursors .....
+045100210427
+045200210427      *    PERFORM SQL-Header-File.
+045300210427      *    PERFORM Load-CDSC-Schedule.
+045400210427      *    PERFORM SQL-Declare-Driver-file.
+045500210427      *    PERFORM SQL-Open-Driver-file.
+045600210503      * RFS186584 Ends
+045700180327      *------------------
+045800000000        Get-Process-Date.
+045900180327      *------------------
+046000000000
+046100180327      *  Call program FXPRCDTP to get As At Date
+046200000000
+046300000000           SET PASS-ACTION-GETDTA OF COMM-CPPRCDTP-PARAMETERS  TO TRUE
+046400000000           CALL "FXPRCDTP" USING CPWPRCDTP-LINKAGE
+046500000000                                 COMM-CPPRCDTP-PARAMETERS
+046600000000
+046700000000           MOVE PRCDTP-AS-AT-DATE OF CPWPRCDTP-LINKAGE  TO
+046800000000                ln_as_atdate.
+046900120430107112     MOVE PRCDTP-AS-AT-DATE OF CPWPRCDTP-LINKAGE  TO
+047000120430   |            ln_as_atdate2.
+047001210806111907     MOVE PRCDTP-MONTH-END OF CPWPRCDTP-LINKAGE  TO
+047002210806111907          LC_MOEND_IND.
+047003210806111907     MOVE PRCDTP-WEEK-END  OF CPWPRCDTP-LINKAGE  TO
+047004210806111907          LC_WKEND_IND.
+047100120430   |
+047200120430   |       EXEC SQL
+047300120430   |         SELECT MAX(BUSINESS_DAY)
+047400120430   |            INTO :ln_MonthEnd
+047500120430   |         FROM MFABUSDAP
+047600120430   V         WHERE substr(BUSINESS_DAY,1,6) = :ln_as_atdate2YM
+047700120430107112     END-EXEC.
+047800120430
+047900140606136335     MOVE SQLSTATE TO lc_sqlStates
+048000140606136335*    IF SQLSTATE = WS-SQL-TBL-NOT-EXIST OR WS-SQL-SUCCESSFUL
+048100140606136335     IF lncc_sqlTblNotExists OR lncc_sqlSuccessful
+048200120430               CONTINUE
+048300120430           ELSE
+048400120430               SET WS-ERR-21         TO TRUE
+048500120430               MOVE SQLSTATE   TO WS-SQLSTATE
+048600120430               PERFORM DSP-ERROR
+048700120430107712     END-IF.
+048800120430
+048900180327      *----------------
+049000000000       SQL-Header-File.
+049100180327      *----------------
+049200000000
+049300180326      * RFS1001925 - Starts.
+049400180327      *  Create 2 output files and add the header records to both
+049500180326      *
+049600180326      *    EXEC SQL
+049700180326      *      DROP TABLE QTEMP/ECFPAYOUT
+049800180326      *    END-EXEC.
+049900180326      *
+050000180326136335*    MOVE SQLSTATE TO lc_sqlStates
+050100140606136335*    IF SQLSTATE = WS-SQL-TBL-NOT-EXIST OR WS-SQL-SUCCESSFUL
+050200180326136335*    IF lncc_sqlTblNotExists OR lncc_sqlSuccessful
+050300180326      *        CONTINUE
+050400180326      *    ELSE
+050500180326      *        SET WS-ERR-10         TO TRUE
+050600180326      *        MOVE SQLSTATE   TO WS-SQLSTATE
+050700180326      *        PERFORM DSP-ERROR
+050800180326      *    END-IF.
+050900180326      *
+051000180326      *    EXEC SQL
+051100180326      *     CREATE  TABLE QTEMP/ECFPAYOUT
+051200130611      *       ( ECFPAYOUT             CHAR (88) NOT NULL WITH DEFAULT)
+051300180326115054*       ( ECFPAYOUT             CHAR (102) NOT NULL WITH DEFAULT)
+051400180326      *    END-EXEC.
+051500180326      *
+051600180326136335*    MOVE SQLSTATE TO lc_sqlStates
+051700140606136335*    IF SQLSTATE NOT = WS-SQL-SUCCESSFUL
+051800180326136335*    IF NOT lncc_sqlSuccessful
+051900180326      *        MOVE SQLSTATE   TO WS-SQLSTATE
+052000180326      *        SET WS-ERR-11         TO TRUE
+052100180326      *        PERFORM DSP-ERROR
+052200180326      *        PERFORM FORCE-MSGW
+052300180326      *        PERFORM END-JOB
+052400180326      *    END-IF.
+052500180326      *
+052600180326      *
+052700180326      *    EXEC SQL
+052800180326      *      DROP TABLE QTEMP/ECFNPAYOUT
+052900180326      *    END-EXEC.
+053000180326      *
+053100180326136335*    MOVE SQLSTATE TO lc_sqlStates
+053200140606136335*    IF SQLSTATE = WS-SQL-TBL-NOT-EXIST OR WS-SQL-SUCCESSFUL
+053300180326136335*    IF lncc_sqlTblNotExists OR lncc_sqlSuccessful
+053400180326      *        CONTINUE
+053500180326      *    ELSE
+053600180326      *        SET WS-ERR-12         TO TRUE
+053700180326      *        MOVE SQLSTATE   TO WS-SQLSTATE
+053800180326      *        PERFORM DSP-ERROR
+053900180326      *    END-IF.
+054000180326      *
+054100180326      *    EXEC SQL
+054200180326      *     CREATE  TABLE QTEMP/ECFNPAYOUT
+054300130611      *       ( ECFNPAYOUT             CHAR (88) NOT NULL WITH DEFAULT)
+054400180326115054*       ( ECFNPAYOUT             CHAR (102) NOT NULL WITH DEFAULT)
+054500180326      *    END-EXEC.
+054600180326      *
+054700180326136335*    MOVE SQLSTATE TO lc_sqlStates
+054800140606136335*    IF SQLSTATE NOT = WS-SQL-SUCCESSFUL
+054900180326136335*    IF NOT lncc_sqlSuccessful
+055000180326      *        MOVE SQLSTATE   TO WS-SQLSTATE
+055100180326      *        SET WS-ERR-13         TO TRUE
+055200180326      *        PERFORM DSP-ERROR
+055300180326      *        PERFORM FORCE-MSGW
+055400180326      *        PERFORM END-JOB
+055500180327      *    END-IF.
+055600180327
+055700180327           INITIALIZE  lc_FileName.
+055701210817111907     COMPUTE li_RecordLength = 102
+055800180327           MOVE lncc_ECFPAYOUT TO lc_FileName.
+055900180327           CALL "CRTFLATPF" USING lc_LibraryName
+056000180327                                  lc_FileName
+056100180327                                  li_RecordLength.
+056200180327      * RFS1001925 - Ends.
+056300180327      *  insert 1 header records to both files
+056400000000
+056500000000           INITIALIZE HEADER-REC.
+056600000000           move "HD"                   TO lc_record_type of HEADER-REC.
+056700000000           MOVE ln_as_atdate           TO WS-DATE.
+056800000000           MOVE CORR WS-DATEA          TO WS-DATE-DDMMCCYY.
+056900000000           MOVE WS-DATE-DDMMCCYY       TO lc_cycle_date of HEADER-REC.
+057000000000           move "ECFPAYOUT"            TO lc_file_name  of HEADER-REC.
+057100000000
+057200000000           move HEADER-REC             to ws-outrec.
+057300000000
+057400000000           EXEC SQL
+057500000000               INSERT INTO QTEMP/ECFPAYOUT
+057600000000                  VALUES    :ws-outrec
+057700000000           END-EXEC.
+057800000000
+057900140606136335     MOVE SQLSTATE TO lc_sqlStates
+058000140606136335*    IF SQLSTATE NOT = WS-SQL-SUCCESSFUL
+058100140606136335     IF NOT lncc_sqlSuccessful
+058200000000               MOVE SQLSTATE   TO WS-SQLSTATE
+058300000000               SET WS-ERR-14         TO TRUE
+058400000000               PERFORM DSP-ERROR
+058500000000               PERFORM FORCE-MSGW
+058600000000               PERFORM END-JOB
+058700000000           END-IF.
+058800180327
+058900180327      * RFS1001925 - Starts.
+059000180327           INITIALIZE  lc_FileName.
+059001210817111907     COMPUTE li_RecordLength = 102
+059100180327           MOVE lncc_ECFNPAYOUT TO lc_FileName.
+059200180327           CALL "CRTFLATPF"  USING lc_LibraryName
+059300180327                                   lc_FileName
+059400180327                                   li_RecordLength.
+059500180327      * RFS1001925 - Ends.
+059600180327      *  set up header for second file
+059700000000           move "ECFNONPAYOUT"         TO lc_file_name  of HEADER-REC.
+059800000000
+059900000000           move HEADER-REC             to ws-outrec.
+060000000000
+060100000000           EXEC SQL
+060200000000               INSERT INTO QTEMP/ECFNPAYOUT
+060300000000                  VALUES    :ws-outrec
+060400000000           END-EXEC.
+060500000000
+060600140606136335     MOVE SQLSTATE TO lc_sqlStates
+060700140606136335*    IF SQLSTATE NOT = WS-SQL-SUCCESSFUL
+060800140606136335     IF NOT lncc_sqlSuccessful
+060900000000               MOVE SQLSTATE   TO WS-SQLSTATE
+061000000000               SET WS-ERR-15         TO TRUE
+061100000000               PERFORM DSP-ERROR
+061200000000               PERFORM FORCE-MSGW
+061300000000               PERFORM END-JOB
+061400000000           END-IF.
+061500000000
+061600180327      *  initialize the trailer records
+061700000000
+061800000000           INITIALIZE PAY-TRAILER-REC,
+061900000000                      NON-TRAILER-REC.
+062000000000           MOVE "TR"                   TO  lc_record_type OF
+062100000000                      NON-TRAILER-REC.
+062200000000           MOVE "TR"                   TO  lc_record_type OF
+062300000000                      PAY-TRAILER-REC.
+062400000000
+062500180327      *------------------------
+062600000000       SQL-Declare-Driver-file.
+062700180327      *------------------------
+062800000000
+062900000000      * Sort the view
+063000000000
+063100000000           EXEC SQL
+063200000000              DECLARE level1_drv CURSOR FOR
+063300000000
+063400000000
+063500000000               SELECT A.ACCOUNT_NO as Account,
+063600000000                COALESCE(B.INVESTMENT_STRUCTURE_CODE," ") as CLASS,
+063700000000                A.INVESTMENT_CODE as CPP_invest_code,
+063800000000                TRNP.INVESTMENT_CODE,
+063900000000                TRNP.TRANS_TYPE_CODE,
+064000000000                decimal(0,9,0) as TRADE_DATE,
+064100000000                decimal(0,13,2) as GROSS_AMT,
+064200000000                decimal(0,13,2) as NET_AMT,
+064300000000                A.AGE_DATE,
+064400000000                A.CURR_UNIT_BAL,
+064500000000                A.CDSC_SCHEDULE,
+064600000000                A.CURR_UNITS_CHRG,
+064700000000                D.LOAD_STRUCTURE,
+064800000000                D.INDUSTRY_FUND_CODE,
+064900000000                COALESCE(C.UNIT_PRICE,0),
+065000000000                COALESCE(G.account_type_code," "),
+065100000000                h.Account_type_rule,
+065200000000                COALESCE(NMACP.Account_type_rule," "),
+065300000000                COALESCE(i.placement_date , 0),
+065400130611                COALESCE(i.trans_no, 0),
+065500130611115054          COALESCE(j.Account_Investment_Group," ") as AccInvGrp,
+065600130611115054          COALESCE(K.Contract_No, 0) as ContractNo
+065700000000
+065800000000                FROM  MFATRNCPP  A
+065900000000
+066000000000                inner  JOIN MFATRNP  trnp ON
+066100000000                  trnp.placement_date   = A.placement_date  AND
+066200000000                  trnp.trans_no   = A.trans_no
+066300000000
+066400000000                LEFT OUTER JOIN MFAISTFNP  B on
+066500000000                  TRNP.INVESTMENT_CODE = B.INVESTMENT_CODE and
+066600000000                  B.FUNCTION_CODE   = :lc_class_lit
+066700000000
+066800000000                LEFT OUTER JOIN MFAINVUPP  C on
+066900000000                  TRNP.INVESTMENT_CODE = C.INVESTMENT_CODE and
+067000000000                  C.TRADE_DATE = A.age_date
+067100111116102952            and C.Distribution_Flag = :lncc_Space
+067200000000
+067300000000                inner join MFAINVP  D on
+067400000000                  TRNP.INVESTMENT_CODE = D.INVESTMENT_CODE
+067500000000
+067600000000                inner join MFAACCNTP  G ON
+067700000000                  A.account_no = G.account_no
+067800000000
+067900000000                inner JOIN MFAACCTYP  H ON
+068000000000                  g.account_type_code = h.account_type_code
+068100000000
+068200000000                LEFT OUTER join MFAACCNMP NMP  ON
+068300000000                  A.account_no = NMP.account_no
+068400000000
+068500000000                LEFT OUTER join MFANOMACP  NMACP ON
+068600000000                  NMP.account_type_code   =
+068700000000                           NMACP.nominee_account_type
+068800000000
+068900000000                LEFT OUTER JOIN MFATRNTGP  I   ON
+069000000000                  trnp.placement_date     = I.placement_date_2  AND
+069100000000                  trnp.trans_no     = I.trans_no_2
+069200000000
+069300000000                inner join MFAACCIVP  ACIVP on
+069400000000                  TRNP.INVESTMENT_CODE = ACIVP.INVESTMENT_CODE   AND
+069500000000                  A.account_no = ACIVP.account_no
+069600130611
+069700130611      *RFS115054- Start
+069800130611
+069900130611                LEFT OUTER JOIN MFAACMDP J ON
+070000130611                  G.account_no = J.account_no
+070100130611
+070200130611                LEFT OUTER JOIN MFATRCODP K ON
+070300130611                  trnp.Placement_Date = K.Placement_Date and
+070400130611                  trnp.trans_no = K.trans_no
+070500130611
+070600130611      *RFS115054- End
+070700000000
+070800000000              WHERE       A.CURR_UNIT_BAL > 0
+070900000000                     AND  A.CDSC_STATUS = "A"
+071000000000                     and  TRNP.TRANS_TYPE_CODE in ( "BUY", "SWI", "TRI")
+071100131003128456*              AND  ACIVP.CURR_UNIT_BAL > 0
+071200000000
+071300000000              ORDER BY   CLASS, ACCOUNT
+071400000000
+071500000000              FOR FETCH ONLY
+071600000000              OPTIMIZE FOR ALL ROWS
+071700000000
+071800000000           END-EXEC.
+071900000000
+072000000000
+072100180327      * --------------------
+072200000000       SQL-Open-Driver-file.
+072300180327      * --------------------
+072400000000
+072500000000           EXEC SQL
+072600000000             OPEN level1_drv
+072700000000           END-EXEC.
+072800000000
+072900180327      * -------------------
+073000000000       Process-Level-logic.
+073100180327      * -------------------
+073200000000
+073300000000           PERFORM Get-Current-Record.
+073400000000
+073500000000           if  Curr-Level1 not = Prev-Level1
+073600000000           and  Prev-Controls not = LOW-VALUES
+073700000000               PERFORM Process-Level-Summaries
+073800000000           end-if.
+073900000000
+074000000000           If Curr-Controls not =  HIGH-VALUES
+074100000000               if  Curr-Level1 not = Prev-Level1
+074200000000                   PERFORM Process-Level-ReInitialize
+074300000000               end-if
+074400000000
+074500000000               MOVE Curr-Controls          TO Prev-Controls
+074600000000               PERFORM Detail-Processing thru DPR-Exit
+074700000000           end-if.
+074800000000
+074900180327      * -----------------------
+075000000000       Process-Level-Summaries.
+075100180327      * -----------------------
+075200000000
+075300000000           PERFORM Level-Summary-1.
+075400000000
+075500180327      * --------------------------
+075600000000       Process-Level-ReInitialize.
+075700180327      * --------------------------
+075800000000
+075900000000           PERFORM Level-ReInit-1.
+076000000000
+076100180327      * -----------------
+076200000000       Detail-Processing.
+076300180327      * -----------------
+076400000000
+076500000000
+076600000000           initialize DETAIL-REC.
+076700000000           initialize DETAIL-WORK-REC.
+076800000000
+076900000000           MOVE "DL"                   TO  lc_record_type of DETAIL-REC.
+077000000000           MOVE ln_account_no of LEVEL1_REC
+077100000000                                       TO  ln_account_no
+077200000000                              of DETAIL-REC.
+077300000000           MOVE lc_industry_fund_code  of LEVEL1_REC
+077400000000                                       TO lc_industry_fund_code
+077500000000                              of DETAIL-REC.
+077600130611      * RFS115054- Start
+077700130611           MOVE lc_Account_Inv_Grp     of LEVEL1_REC
+077800130611                                       TO lc_Account_Inv_Grp
+077900130611                              of DETAIL-REC.
+078000130611           MOVE ln_Contract_Number     of LEVEL1_REC
+078100130611                                       TO ln_Contract_Number
+078200130611                              of DETAIL-REC.
+078300130611      * RFS115054- End
+078400000000
+078500000000           if ln_deposit_date of LEVEL1_REC  = 0
+078600000000               MOVE ln_Trade_date of LEVEL1_REC
+078700000000                                           TO WS-DATE
+078800000000           else
+078900000000               MOVE ln_deposit_date of LEVEL1_REC
+079000000000                                           TO WS-DATE
+079100000000           end-if.
+079200000000
+079300000000           MOVE CORR WS-DATEA          TO WS-DATE-DDMMYY.
+079400000000           MOVE WS-DATE-DDMMYY         TO ln_trade_date of DETAIL-REC.
+079500000000
+079600000000           if ln_deposit_date of LEVEL1_REC  = 0
+079700000000               MOVE ln_Trade_date of LEVEL1_REC
+079800000000                                           TO ln_date9
+079900000000           else
+080000000000               MOVE ln_deposit_date of LEVEL1_REC
+080100000000                                           TO ln_date9
+080200000000           end-if.
+080300000000
+080400120524107112*    COMPUTE ln_deposit_age = FUNCTION FIND-DURATION
+080500120524      *             (ln_date9x2, ln_as_atdate, DAYS).
+080600201230      * RFS185174 - Start
+080700201230           IF SYSPARM-CALENDAR-YEAR-DSC OF CPWSYSPARM-LINKAGE = lt_Y
+080800201230             MOVE ZEROS  TO ln_MonthEndYYYY
+080900201230             MOVE ZEROS  TO ln_date9YYYY
+081000201230             MOVE ln_MonthEnd(1:5) TO ln_MonthEndYYYY
+081100201230             MOVE ln_date9(1:5) TO ln_date9YYYY
+081200201230             COMPUTE ln_deposit_age =
+081300201230                      ln_MonthEndYYYY - ln_date9YYYY + 1
+081400201230            ELSE
+081500201230107112       COMPUTE ln_deposit_age = FUNCTION FIND-DURATION
+081600201230                     (ln_date9x2, ln_MonthEnd9x2, DAYS)
+081700201230           END-IF.
+081800201230      * RFS185174 - End
+081900000000
+082000000000           if ln_deposit_age < 0
+082100000000               add 1                       to ln_records_bypassed
+082200000000               go to DPR-Exit
+082300000000           End-if.
+082400000000
+082500000000           if ln_deposit_date of LEVEL1_REC      =   0
+082600000000           and  lc_CDSC_Schedule  of LEVEL1_REC  =   Spaces
+082700000000               move ln_gross_amt  of LEVEL1_REC
+082800000000                               to  ln_gross_amt of DETAIL-WORK-REC
+082900000000               move ln_net_amt  of LEVEL1_REC
+083000000000                               to   ln_net_amt of DETAIL-WORK-REC
+083100000000           else
+083200000000               PERFORM Back-End-Calculation
+083300000000           end-if.
+083400000000
+083500000000
+083600120802112313*    MOVE CORR DETAIL-WORK-REC     TO DETAIL-REC.
+083700120802112313*    MOVE DETAIL-REC               TO WS-OUTREC.
+083800120802
+083900000000
+084000000000           if ln_gross_amt of DETAIL-WORK-REC = 0
+084100000000           and  ln_net_amt of DETAIL-WORK-REC = 0
+084200000000              add 1                       to ln_records_bypassed
+084300000000              go to DPR-Exit
+084400000000           End-if.
+084500000000
+084600180327      * if RIF type then insert into pay file else nonpay file
+084700000000
+084800000000           IF  lc_account_type_rule  =  "3"
+084900000000           OR  lc_account_type_rule  =  "5"
+085000000000           OR  lc_nominee_type_rule  =  "3"
+085100000000           OR  lc_nominee_type_rule  =  "5"
+085200000000
+085300180327      * RIF type are .8 of the non rif
+085400000000
+085500000000               IF lc_CDSC_Schedule  of LEVEL1_REC  not = Spaces
+085600000000                   IF ln_deposit_age < ln_mdays
+085700000000                       COMPUTE  ln_dae_amt  OF DETAIL-WORK-rec =
+085800000000                                ln_dae_amt  OF DETAIL-WORK-rec * .8
+085900000000                   END-IF
+086000000000               END-IF
+086100000000
+086200180327      * accumulate to the specific trailer record
+086300000000
+086400000000               ADD 1                       TO ln_record_cnt OF
+086500000000                                   PAY-TRAILER-REC
+086600000000               ADD ln_gross_amt of DETAIL-WORK-REC   TO
+086700000000                        lc_Tot_gross_amt  OF PAY-TRAILER-REC
+086800000000               ADD ln_dpst_be_charge   OF DETAIL-WORK-rec TO
+086900000000                        lc_Tot_BE_chge    OF PAY-TRAILER-REC
+087000000000               ADD ln_dae_amt  OF DETAIL-WORK-rec    TO
+087100000000                        lc_Tot_DAE_amt    OF PAY-TRAILER-REC
+087200120802               MOVE CORR DETAIL-WORK-REC     TO DETAIL-REC
+087300120802               MOVE DETAIL-REC               TO WS-OUTREC
+087400000000           EXEC SQL
+087500000000               INSERT INTO QTEMP/ECFPAYOUT
+087600000000                   VALUES :WS-outrec
+087700000000           END-EXEC
+087800000000
+087900140606136335     MOVE SQLSTATE TO lc_sqlStates
+088000140606136335*    IF SQLSTATE NOT = WS-SQL-SUCCESSFUL
+088100140606136335     IF NOT lncc_sqlSuccessful
+088200000000               MOVE SQLSTATE   TO WS-SQLSTATE
+088300000000               SET WS-ERR-16         TO TRUE
+088400000000               PERFORM DSP-ERROR
+088500000000               PERFORM FORCE-MSGW
+088600000000               PERFORM END-JOB
+088700000000           END-IF
+088800000000
+088900000000           ELSE
+089000000000
+089100180327      * accumulate to the specific trailer record
+089200000000
+089300000000               ADD 1                       TO ln_record_cnt
+089400000000                                          OF NON-TRAILER-REC
+089500000000               ADD ln_gross_amt of DETAIL-WORK-REC   TO
+089600000000                        lc_Tot_gross_amt  OF NON-TRAILER-REC
+089700000000               ADD ln_dpst_be_charge   OF DETAIL-WORK-rec TO
+089800000000                        lc_Tot_BE_chge    OF NON-TRAILER-REC
+089900000000               ADD ln_dae_amt  OF DETAIL-WORK-rec    TO
+090000000000                        lc_Tot_DAE_amt    OF NON-TRAILER-REC
+090100120802               MOVE CORR DETAIL-WORK-REC     TO DETAIL-REC
+090200120802               MOVE DETAIL-REC               TO WS-OUTREC
+090300000000           EXEC SQL
+090400000000               INSERT INTO QTEMP/ECFNPAYOUT
+090500000000                   VALUES :WS-OUTREC
+090600000000           END-EXEC
+090700000000
+090800140606136335     MOVE SQLSTATE TO lc_sqlStates
+090900140606136335*    IF SQLSTATE NOT = WS-SQL-SUCCESSFUL
+091000140606136335     IF NOT lncc_sqlSuccessful
+091100000000               MOVE SQLSTATE   TO WS-SQLSTATE
+091200000000               SET WS-ERR-17         TO TRUE
+091300000000               PERFORM DSP-ERROR
+091400000000               PERFORM FORCE-MSGW
+091500000000               PERFORM END-JOB
+091600000000           END-IF
+091700000000
+091800000000           END-IF.
+091900000000
+092000000000       DPR-Exit.
+092100000000           Exit.
+092200000000
+092300180327      *------------------
+092400000000       Check-Switch-Load.
+092500180327      *------------------
+092600000000
+092700000000           EXEC SQL
+092800000000
+092900000000              SELECT trp.Account_no,
+093000000000                     trp.investment_code,
+093100000000                     invp.load_structure
+093200000000
+093300000000              INTO  :WS_SWO_DATA
+093400000000
+093500000000              FROM MFATRNP TRP
+093600000000              inner join MFAINVP  invp on
+093700000000                  Invp.INVESTMENT_CODE = trp.INVESTMENT_CODE
+093800000000
+093900000000              where trp.placement_date = :Ln_placement_date
+094000000000                    and trp.trans_no = :ln_trans_no
+094100000000
+094200000000
+094300000000           END-EXEC.
+094400000000
+094500180327      *---------------------
+094600000000       Back-End-Calculation.
+094700180327      *---------------------
+094800000000
+094900000000           if   lc_CPPinvestment_code  = "ALDSC"
+095000000000               COMPUTE  ln_gross_amt of DETAIL-WORK-REC =
+095100210503                         ln_curr_unit_bal
+095200000000           else
+095300000000               COMPUTE  ln_gross_amt of DETAIL-WORK-REC =
+095400210503                         ln_curr_unit_bal *  ln_unit_price
+095500000000           end-if.
+095600000000
+095700000000           COMPUTE  ln_net_amt  OF DETAIL-WORK-rec =
+095800000000                     ln_gross_amt of DETAIL-WORK-REC.
+095900000000
+096000180327      * find the correct CDSC rate if not found value 0.
+096100000000
+096200000000           move 1                      to CDX.
+096300000000           SEARCH  CDSC-ARRAY  VARYING CDX
+096400000000               AT END
+096500000000                    move zero  TO ln_deposit_charge
+096600000000               WHEN CDSC_SCHEDULE of CDSC-ARRAY (CDX) = "  "
+096700000000                    move zero  TO ln_deposit_charge
+096800000000               WHEN lc_CDSC_schedule of LEVEL1_REC  =
+096900000000                            CDSC_SCHEDULE of CDSC-ARRAY (CDX)
+097000000000                    AND  ln_deposit_age   not greater than
+097100000000                            LOWER_LIMIT_DAYS  of CDSC-ARRAY (CDX)
+097200000000                    MOVE  APPLICABLE_RATE of CDSC-ARRAY (CDX)
+097300000000                              TO ln_deposit_charge
+097400000000           END-SEARCH.
+097500000000
+097600000000           move 1                      to CDX2.
+097700000000           SEARCH  CDSC-ARRAY2 VARYING CDX2
+097800000000               AT END
+097900000000                    move zero  TO ln_ypercent
+098000000000                    move zero  TO ln_mdays
+098100000000               WHEN CDSC_SCHEDULE of CDSC-ARRAY2(CDX2) = " "
+098200000000                    move zero  TO ln_ypercent
+098300000000                    move zero  TO ln_mdays
+098400000000               WHEN lc_CDSC_schedule of LEVEL1_REC  =
+098500000000                            CDSC_SCHEDULE of CDSC-ARRAY2(CDX2)
+098600000000                    move YPERCENT of CDSC-ARRAY2(CDX2)
+098700000000                                       TO ln_ypercent
+098800000000                    move MDAYS    of CDSC-ARRAY2(CDX2)
+098900000000                                       TO ln_mdays
+099000000000           END-SEARCH.
+099100000000
+099200180327      * calculate the deposit charge on the remaining shares
+099300000000
+099400121009      * RFS 112717 - Start
+099500121009      *    IF ln_deposit_age < ln_mdays
+099600121009           IF ln_deposit_age <= ln_mdays
+099700121009           and ln_mdays not = 0
+099800121009      * RFS 112717 - End
+099900000000               COMPUTE  ln_dpst_be_charge   OF DETAIL-WORK-rec =
+100000000000                  ln_gross_amt OF DETAIL-WORK-rec   *
+100100000000                              ln_deposit_charge / 100
+100200000000           end-if.
+100300000000
+100400000000           move ln_deposit_charge      to
+100500000000                          ln_dpst_pct_charge of DETAIL-WORK-rec.
+100600000000
+100700180327      * calculate the DAE amount
+100800000000
+100900000000           IF ln_deposit_age < ln_mdays
+101000000000           and ln_mdays not = 0
+101100000000               COMPUTE  ln_dae_amt  OF DETAIL-WORK-rec =
+101200000000                  ln_gross_amt OF DETAIL-WORK-rec *  ln_Ypercent / 100
+101300000000                  *  (ln_mdays - ln_deposit_age) / ln_mdays
+101400000000           END-IF.
+101500000000
+101600000000
+101700180327      * --------------
+101800000000       Level-Reinit-1.
+101900180327      * --------------
+102000000000
+102100000000           CONTINUE.
+102200000000
+102300180327      * ---------------
+102400000000       Level-Summary-1.
+102500180327      * ---------------
+102600000000
+102700000000           CONTINUE.
+102800000000
+102900180327      * ------------------
+103000000000       Get-Current-Record.
+103100180327      * ------------------
+103200000000
+103300180327      *   Fetch Cursor
+103400000000
+103500000000           INITIALIZE level1_rec.
+103600000000
+103700000000           EXEC SQL
+103800000000               FETCH NEXT FROM level1_drv
+103900000000                     INTO :level1_Rec
+104000000000           END-EXEC.
+104100000000
+104200180327      *            Check status after every IO.
+104300180327      * If error encountered then write error information to
+104400180327      *            error table or display error info
+104500000000
+104600000000           MOVE SQLSTATE                   TO SW-SQL-STATES
+104700000000           EVALUATE TRUE
+104800000000             WHEN SW-SQL-SUCCESSFUL OR SW-SQL-WARNING
+104900000000                 MOVE ln_account_no of level1_Rec
+105000000000                               to account-no of CURR-LEVEL1
+105100000000                 MOVE lc_investment_code of level1_Rec
+105200000000                               to investment-code of CURR-LEVEL1
+105300000000                 add 1                       to ln_records_read
+105400000000
+105500000000             WHEN SW-SQL-END
+105600000000                 MOVE HIGH-VALUES          TO CURR-CONTROLS
+105700000000                 DISPLAY "All records Processed ..."
+105800000000
+105900000000             WHEN OTHER
+106000000000                 MOVE SQLSTATE   TO WS-SQLSTATE
+106100000000                 SET WS-ERR-18         TO TRUE
+106200000000                 DISPLAY "Invalid Fetch ....."
+106300000000                 PERFORM DSP-ERROR
+106400000000                 PERFORM FORCE-MSGW
+106500000000                 PERFORM END-JOB
+106600000000
+106700000000           END-EVALUATE.
+106800000000
+106900180327      * -----------------
+107000000000       Load-CDSC-Schedule.
+107100180327      * -----------------
+107200000000
+107300180327      * initialize the load table
+107400000000
+107500000000           initialize CDSC-Table.
+107600000000
+107700000000           EXEC SQL
+107800000000              DECLARE CDSC_drv CURSOR FOR
+107900000000
+108000000000              SELECT CDSC_SCHEDULE,
+108100000000                      LOWER_LIMIT_DAYS,
+108200000000                      APPLICABLE_RATE
+108300000000
+108400000000              FROM MFACDSRDP
+108500000000              ORDER BY   CDSC_SCHEDULE,
+108600000000                         LOWER_LIMIT_DAYS
+108700000000
+108800000000              FOR FETCH ONLY
+108900000000              OPTIMIZE FOR ALL ROWS
+109000000000
+109100000000           END-EXEC.
+109200000000
+109300000000           EXEC SQL
+109400000000             OPEN CDSC_drv
+109500000000           END-EXEC.
+109600000000
+109700180327      * read records in to the table.
+109800000000
+109900000000           EXEC SQL
+110000000000             FETCH NEXT FROM CDSC_drv for 1000 rows
+110100000000             INTO :CDSC-ARRAY
+110200000000           END-EXEC.
+110300000000
+110400000000           MOVE SQLSTATE                   TO SW-SQL-STATES
+110500000000           EVALUATE TRUE
+110600000000             WHEN SW-SQL-SUCCESSFUL OR SW-SQL-WARNING or SW-SQL-END
+110700000000                 CONTINUE
+110800000000             WHEN OTHER
+110900000000                 MOVE SQLSTATE   TO WS-SQLSTATE
+111000000000                 SET WS-ERR-19         TO TRUE
+111100000000                 DISPLAY "Fill CDSC Error ...."
+111200000000                 PERFORM DSP-ERROR
+111300000000                 PERFORM FORCE-MSGW
+111400000000                 PERFORM END-JOB
+111500000000           END-EVALUATE.
+111600000000
+111700000000           initialize CDSC-Table2.
+111800000000
+111900000000           EXEC SQL
+112000000000              DECLARE CDSC_drv2 CURSOR FOR
+112100000000
+112200000000              SELECT CDSC_SCHEDULE,
+112300000000                     zoned(MAX(APPLICABLE_RATE),7,3),
+112400000000                     zoned(MAX(LOWER_LIMIT_DAYS),5,0)
+112500000000
+112600000000              FROM MFACDSRDP
+112700000000              GROUP BY   CDSC_SCHEDULE
+112800000000              ORDER BY   CDSC_SCHEDULE
+112900000000
+113000000000              FOR FETCH ONLY
+113100000000              OPTIMIZE FOR ALL ROWS
+113200000000
+113300000000           END-EXEC.
+113400000000
+113500000000           EXEC SQL
+113600000000             OPEN CDSC_drv2
+113700000000           END-EXEC.
+113800000000
+113900180327      * read records in to the table.
+114000000000
+114100000000           EXEC SQL
+114200000000             FETCH NEXT FROM CDSC_drv2 for 100 rows
+114300000000             INTO :CDSC-ARRAY2
+114400000000           END-EXEC.
+114500000000
+114600000000           MOVE SQLSTATE                   TO SW-SQL-STATES
+114700000000           EVALUATE TRUE
+114800000000             WHEN SW-SQL-SUCCESSFUL OR SW-SQL-WARNING or SW-SQL-END
+114900000000                 CONTINUE
+115000000000             WHEN OTHER
+115100000000                 MOVE SQLSTATE   TO WS-SQLSTATE
+115200000000                 SET WS-ERR-20         TO TRUE
+115300000000                 DISPLAY "Fill CDSC2 Error ...."
+115400000000                 PERFORM DSP-ERROR
+115500000000                 PERFORM FORCE-MSGW
+115600000000                 PERFORM END-JOB
+115700000000           END-EVALUATE.
+115800000000
+115900000000
+116000180327      * Dsp-Error and Force-Msgw Routines
+116100000000
+116200000000           COPY CPYSQLRTN.
+116300000000
+116400210428      * RFS186584 Starts
+116500210427      * -----------
+116600210427       Get-Mfaactp.
+116700210427      * -----------
+116800210427
+116900210427           EXEC SQL
+117000210427               SELECT COALESCE(COUNT(1), 0)
+117100210427                 INTO :li_count FROM mfaactp
+117200210427                 WHERE SUBMIT_JOBNAME = "JOBMTHDPST"
+117300210427                 AND FREQUENCY_CODE = "DA"
+117400210427           END-EXEC.
+117500210427
+117600210427           MOVE SQLSTATE                   TO lc_sqlStates
+117700210427           EVALUATE TRUE
+117800210427             WHEN lncc_sqlSuccessful  AND li_count > 0
+117900210427                 Set lncc_CLGDEPEXTYes to TRUE
+118000210427
+118100210510             WHEN (lncc_sqlSuccessful AND li_Count = 0)
+118101210510                  OR lncc_sqlEnd
+118200210427                 CONTINUE
+118300210427
+118400210427             WHEN OTHER
+118500210427                 MOVE SQLSTATE   TO WS-SQLSTATE
+118600210427                 SET WS-ERR-22         TO TRUE
+118700210427                 PERFORM DSP-ERROR
+118800210427
+118900210427           END-EVALUATE.
+119000210427
+119100210427      * ------------------
+119200210427       Generate-FundDSC-HD.
+119300210427      * ------------------
+119400210429
+119500210429           INITIALIZE  lc_FileName.
+119600210505           COMPUTE li_RecordLength = 88
+119700210429           MOVE lncc_CLGDEPEXT TO lc_FileName.
+119800210429           CALL "CRTFLATPF" USING lc_LibraryName
+119900210429                                  lc_FileName
+120000210429                                  li_RecordLength.
+120100210429      *  insert 1 header records to both files
+120200210429
+120300210429           INITIALIZE HEADER-REC.
+120400210429           MOVE "HD"                   TO lc_record_type of HEADER-REC.
+120500210429           MOVE ln_as_atdate           TO WS-DATE.
+120600210429           MOVE CORR WS-DATEA          TO WS-DATE-DDMMCCYY.
+120700210429           MOVE WS-DATE-DDMMCCYY       TO lc_cycle_date of HEADER-REC.
+120800210503           MOVE lncc_CLGDEPEXT         TO lc_file_name  of HEADER-REC.
+120900210429
+121000210429           MOVE HEADER-REC             to lc_FundDSC-Out.
+121100210429
+121200210429           EXEC SQL
+121300210429               INSERT INTO QTEMP/CLGDEPEXT
+121400210429                  VALUES    :lc_FundDSC-Out
+121500210429           END-EXEC.
+121600210429
+121700210429           MOVE SQLSTATE TO lc_sqlStates
+121800210429           IF NOT lncc_sqlSuccessful
+121900210429               MOVE SQLSTATE   TO WS-SQLSTATE
+122000210429               SET WS-ERR-27         TO TRUE
+122100210429               PERFORM DSP-ERROR
+122200210429               PERFORM FORCE-MSGW
+122300210429               PERFORM END-JOB
+122400210429           END-IF.
+122500210427
+122600210427      * --------------------
+122700210427       Initialize-FundDSC-TR.
+122800210427      * --------------------
+122900210427
+123000210503           Initialize lc_TR_TMP.
+123100210505           MOVE "TR"       TO lc_record_type of lc_TR_TMP.
+123200210427
+123300210427      * ---------------------
+123400210427       Declare-Cursor-FundDSC.
+123500210427      * ---------------------
+123600210427
+123700210427           EXEC SQL
+123800210427              DECLARE cu_FundDSC CURSOR FOR
+123900210427
+124000210427               SELECT
+124100210427                "DL" AS Record_Type,
+124200210427                trncpp.Account_no,
+124300210427                Char(
+124400210427                substring(ZONED(trncpp.Age_Date,8,0), 7, 2)   ||
+124500210427                substring(ZONED(trncpp.Age_Date,8,0), 5, 2)   ||
+124600210427                substring(ZONED(trncpp.Age_Date, 8,0), 1, 4), 8)
+124700210427                Age_Date,
+124800210503                trncpp.CURR_UNIT_BAL,
+124900210503                DEC(ROUND((trncpp.curr_unit_bal * invlpp.unit_price)
+125000210503                ,2),14,2)AS Deposit_Market_Value,
+125100210427                trnp.INVESTMENT_CODE,
+125200210427                invp.LOAD_STRUCTURE,
+125300210427                invmdp.EXTERNAL_LOAD_TYPE_CODE
+125400210427
+125500210427                FROM  MFATRNCPP  trncpp
+125600210427
+125700210427                inner  JOIN MFATRNP  trnp ON
+125800210427                  trnp.placement_date  = trncpp.placement_date  AND
+125900210427                  trnp.trans_no   = trncpp.trans_no
+126000210927      * RFS1119917 - Start: Report only ACINDSC - Replaced with EXISTS
+126100210924      *         LEFT OUTER JOIN MFAISTFNP  istfnp ON
+126200210924      *           TRNP.INVESTMENT_CODE = istfnp.INVESTMENT_CODE and
+126300210924      *           istfnp.FUNCTION_CODE in("ACINVG","ACINDSC")
+126304210924      * RFS1119917 - End
+126400210427
+126401210817111907*         LEFT OUTER JOIN MFAINVUPP  invlpp on
+126402210817111907          LEFT OUTER JOIN MFAINVLPP  invlpp on
+126600210427                  TRNP.INVESTMENT_CODE = invlpp.INVESTMENT_CODE
+126700210427
+126800210427                inner join MFAINVP  invp on
+126900210427                  TRNP.INVESTMENT_CODE = invp.INVESTMENT_CODE
+127000210427
+127100210427                inner join MFAINVMDP invmdp ON
+127200210427                  TRNP.INVESTMENT_CODE = invmdp.INVESTMENT_CODE
+127300210427
+127400210427
+127500210427              WHERE  trncpp.CURR_UNIT_BAL > 0
+127600210427                     AND  trncpp.CDSC_STATUS = "A"
+127700210427                     and  TRNP.TRANS_TYPE_CODE in ( "BUY", "SWI", "TRI")
+127701210927      * RFS1119917 - Start
+127800210927                     AND EXISTS
+127801210927                     (SELECT * FROM MFAISTFNP  istfnp
+127802210927                      WHERE
+127803210927                  TRNP.INVESTMENT_CODE = istfnp.INVESTMENT_CODE and
+127804210927                  istfnp.FUNCTION_CODE = "ACINDSC" )
+127805210927      * RFS1119917 - End
+127900210427              ORDER BY   trncpp.account_no
+128000210427
+128100210427              FOR FETCH ONLY
+128200210427              OPTIMIZE FOR ALL ROWS
+128300210427
+128400210427           END-EXEC.
+128500210505           MOVE SQLSTATE TO lc_sqlStates.
+128600210427
+128700210427
+128800210427      * --------------------
+128900210428       Open-Cursor-FundDSC.
+129000210427      * --------------------
+129100210427
+129200210427           EXEC SQL
+129300210428             OPEN cu_FundDSC
+129400210427           END-EXEC.
+129500210427
+129600210428           MOVE SQLSTATE TO lc_sqlStates.
+129700210428           IF NOT lncc_sqlSuccessful
+129800210428              MOVE SQLSTATE   TO WS-SQLSTATE
+129900210428              SET  WS-ERR-23  TO TRUE
+130000210428              PERFORM DSP-ERROR
+130100210428              PERFORM FORCE-MSGW
+130200210428              PERFORM Termination
+130300210428           END-IF.
+130400210428      * ---------------------
+130500210428       Fetch-FundDSC-Details.
+130600210428      * ---------------------
+130700210428
+130800210428      *   Fetch Cursor
+130900210428
+131000210503           INITIALIZE lc_DTL_TMP.
+131100210505           INITIALIZE lc_FundDSC_DTL.
+131200210428
+131300210428           EXEC SQL
+131400210428               FETCH NEXT FROM cu_FundDSC
+131500210503               INTO :lc_DTL_TMP
+131600210428           END-EXEC.
+131700210428
+131800210428           MOVE SQLSTATE                   TO lc_sqlStates
+131900210428           EVALUATE TRUE
+132000210428             WHEN lncc_sqlSuccessful
+132100210428                 PERFORM Process-Selected-Rec
+132200210428             WHEN lncc_sqlEnd
+132300210428                 SET lb_EndOfCursorTrue TO TRUE
+132400210428             WHEN OTHER
+132500210428                 MOVE SQLSTATE   TO WS-SQLSTATE
+132600210428                 SET WS-ERR-24         TO TRUE
+132700210428                 PERFORM DSP-ERROR
+132800210428                 PERFORM FORCE-MSGW
+132900210503                 PERFORM Termination
+133000210428
+133100210428           END-EVALUATE.
+133200210428
+133300210428      * --------------------
+133400210428       PROCESS-SELECTED-REC.
+133500210428      * --------------------
+133600210427
+133700210503           ADD 1  TO ln_record_cnt of lc_TR_TMP
+133800210503           Compute lN_Tot_Net_Deposit of  lc_TR_TMP =
+133900210503           lN_Tot_Net_Deposit of  lc_TR_TMP +
+134000210503           ln_DSCcurr_unit_bal of lc_DTL_TMP
+134100210428
+134200210428           Initialize lc_FundDSC-Out
+134300210428
+134400210505           MOVE CORR lc_DTL_TMP      TO lc_FundDSC_DTL
+134500210428           MOVE lc_FundDSC_DTL   TO lc_FundDSC-Out
+134600210428           EXEC SQL
+134700210428               INSERT INTO QTEMP/CLGDEPEXT
+134800210428               VALUES :lc_FundDSC-Out
+134900210504           END-EXEC.
+135000210427
+135001210806      * RFS1110971 starts
+135002210806      * -----------
+135003210806       Get-Mfaprorpp.
+135004210806      * -----------
+135005210806
+135011210806           EXEC SQL
+135012210806                   SELECT COALESCE(Reporting_Flag, " "),
+135013210806                    COALESCE(Frequency_Code, " ")
+135014210806               INTO :lc_Reporting_Flag,
+135015210806                    :lc_Frequency
+135016210806               FROM MFAPRORPP
+135017210806              WHERE Jobname            = :lc_JobName
+135018210806                AND Report_Name        = :lc_Rptname
+135019210806           END-EXEC
+135020210806           MOVE SQLSTATE                   TO lc_sqlStates
+135021210806           EVALUATE TRUE
+135022210806             WHEN lncc_sqlSuccessful
+135024210806                 If lc_Reporting_Flag = lnc_Y  AND
+135025210806                ((lc_Frequency  = lnc_WK AND lc_WkEnd_Ind   = lnc_Y)  OR
+135026210806                 (lc_Frequency  = lnc_MO AND lc_MoEnd_Ind   = lnc_Y)  OR
+135030210806                 (lc_Frequency  = lnc_DA ))
+135031210806                  Set lncc_ECFPAYOUTYes to TRUE
+135034210806                END-IF
+135035210806             WHEN lncc_sqlEnd
+135037210806                  Continue
+135038210806
+135039210806             WHEN OTHER
+135040210806                 MOVE SQLSTATE   TO WS-SQLSTATE
+135041210806                 SET WS-ERR-22         TO TRUE
+135042210806                 PERFORM DSP-ERROR
+135043210806
+135044210806           END-EVALUATE.
+135045210806
+135046210806      * RFS1110971 ends
+135100210428      * -----------
+135200210428       Termination.
+135300210428      * -----------
+135400210428
+135500210806           PERFORM Generate-FundDSC-TR.
+135600210806111907*     GOBACK.
+135700210428
+135800210428      * -------------------
+135900210428       Generate-FundDSC-TR.
+136000210428      * -------------------
+136100210428
+136200210428           Initialize lc_FundDSC-Out.
+136300210503           MOVE CORR lc_TR_TMP       to lc_FundDSC_TR
+136400210428           MOVE lc_FundDSC_TR         to lc_FundDSC-Out.
+136500210428           EXEC SQL
+136600210428               INSERT INTO QTEMP/CLGDEPEXT
+136700210428               VALUES    :lc_FundDSC-Out
+136800210428           END-EXEC.
+136900210428
+137000210428      * RFS186584 Ends
+137100180327      * -------
+137200000000       END-JOB.
+137300180327      * -------
+137400000000
+137500180327      * - write out the trailer record
+137600000000
+137700000000           MOVE CORR PAY-TRAILER-REC   to TRAILER-REC.
+137800000000           MOVE TRAILER-REC            to WS-OUTREC.
+137900000000           EXEC SQL
+138000000000               INSERT INTO QTEMP/ECFPAYOUT
+138100000000                  VALUES    :WS-OUTREC
+138200000000           END-EXEC
+138300000000
+138400000000           MOVE CORR NON-TRAILER-REC   to TRAILER-REC.
+138500000000           MOVE TRAILER-REC            to WS-OUTREC.
+138600000000           EXEC SQL
+138700000000               INSERT INTO QTEMP/ECFNPAYOUT
+138800000000                  VALUES    :WS-OUTREC
+138900000000           END-EXEC
+139000000000
+139100000000
+139200180327      * - records read
+139300000000
+139400000000           move ln_records_read        to lc_counts.
+139500000000           Display "Records read  ........." lc_counts.
+139600000000
+139700180327      * - records bypassed
+139800000000
+139900000000           move ln_records_bypassed    to lc_counts.
+140000000000           Display "Records bypassed ......" lc_counts.
+140100000000
+140200180327      * - ECFPAYOUT written
+140300000000
+140400000000           move ln_record_cnt of pay-trailer-rec   to lc_counts.
+140500000000           Display "ECFPAYOUT count........" lc_counts.
+140600000000
+140700180327      * - ECFPAYNONOUT written
+140800000000
+140900000000           move ln_record_cnt of non-trailer-rec   to lc_counts.
+141000000000           Display "ECFNONPAYOUT count....." lc_counts.
+141100000000
+141200180327      * - Display info, that program End
+141300000000
+141400000000           Display "Program MTHDPST ends ......".
+141500000000
+141600210806111907*    GOBACK.
+141700000000

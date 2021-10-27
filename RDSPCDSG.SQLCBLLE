@@ -1,0 +1,3382 @@
+000100211005       IDENTIFICATION DIVISION.
+000200211005       PROGRAM-ID.    RDSPCDSG.
+000300211005       AUTHOR.        Waldi R.
+000400211005       INSTALLATION.  Citigroup Fund Services Canada.
+000500211005       DATE-WRITTEN.  September 11, 2009.
+000600211005      *---------------------------------------------------------------**
+000700211005      *    DESCRIPTION: This program is used to update and generate    *
+000800211005      *                 RDSP info for the following records:           *
+000900211005      *                      101-01 - New contract registration        *
+001000211005      *                      101-02 - New beneficiary                  *
+001100211005      *                      101-03 - New holder (investor and tenants)*
+00120021100573394 *                      102-10 - Close a contract                 *
+001300211005      *                      201-02 - beneficiary changes              *
+001400211005      *                      201-03 - holder changes                   *
+001500211005      *                      201-13 - added holder                     *
+001600211005      *                      201-23 - removed holder                   *
+00170021100599071 *                      202-01 - Add Consent
+00180021100599071 *                      202-02 - Revoke Consent
+001900211005      *
+002000211007      *    CALLED BY  : JOBRDSPCSG.                                    *
+002100211005      *---------------------------------------------------------------**
+002200211005      * PROGRAMMER  * DATE       * DESCRIPTION OF CHANGE               *
+002300211005      *---------------------------------------------------------------**
+002400211005      * Waldi R.    * 2009/09/11 * RFS 69509 - New.                    *
+002500211005      * Waldi R.    * 2009/10/09 * RFS 69511 - Removed the trailer.    *
+002600211005      *                          * Added the workfile for the rejection*
+002700211005      *                          * report. Added report mode.          *
+002800211005      * Daniel M.   * 2009/11/30 * RFS 73394 - Report Mode "reporting",*
+002900211005      *                          * Record type 102-10                  *
+003000211005      * Daniel M.   * 2010/01/24 * RFS 73394.1 Month bene turns 18     *
+003100211005      * Daniel M.   * 2010/01/24 * RFS 73394.3 Process regular actions *
+003200211005      *                          * before processing closure           *
+003300211005      * Daniel M.   * 2010/02/01 * RFS 73394.9 Do not count the blank  *
+003400211005      *                          * status of Grant/Bond approval recs. *
+003500211005      * RichardS.   * 2010/02/02 * RFS 73394.10 Include status 'P' when*
+003600211005      *                          * checking to create stop bond req.   *
+003700211005      * Daniel M.   * 2010/02/02 * RFS 73394.12 Error handle bond      *
+003800211005      *                          * request not found                   *
+003900211005      * Daniel M.   * 2010/02/02 * RFS 73394.13 Limit closure to status*
+004000211005      *                          * U/R                                 *
+004100211005      * Brad Doyle  * 2010/02    * RFS 80312 - Set 201-02-UpdateDate   *
+004200211005      *             *            * to pi_EndDate                       *
+004300211005      * T. Valeri   * 2010/03/29 * RFS 81396 - 'W' Accounts are        *
+004400211005      *             *            * reporting on RDSP Validation Report *
+004500211005      * Emmanuel Y. * 2010/07/09 * RFS80658 - RDSP Phase 4.2           *
+004600211005      * L.Martin    * 2010/07/23 * RFS74620 - RDSP Phase 5.0           *
+004700211005      * Emmanuel Y. * 2010/10/20 * RFS86803 - Fixed issue on RDSP Error*
+004800211005      *             *            * Report happening on RT 201-13       *
+004900211005      * Vinsfy J    * 2012/01/30 * RFS105104 -PCG information is not   *
+005000211005      *                            captured in 101-01 records
+005100211005      *                            if beneficiary under 18.
+005200211005      * Boopathy D  * 2012/08/29 * RFS 99071 - RDSP - ITS Version 2.3  *
+005300211005      * Boopathy D  * 2012/09/28 * RFS 99071.1 - Defect Fix            *
+005400211005      * Waldi R.    * 2012/09/28 * RFS 99071.2 - Get PCG info from     *
+005500211005      *                            PCG file and update MFAHRDPCP.
+005600211005      * Boopathy D  * 2012/10/17 * RFS 99071.3 - Account No and BEN
+005700211005      *                            SIN missing in 202-02 and Consent
+005800211005      *                            Type for 202-01 moved to pos 180.
+005900211005      * L Martin    * 2013/05/21 * RFS 112336 - exclude C/R rule# 16   *
+006000211005      *                            from unprocessed count
+006100211005      * K Naveen    * 2013/06/26 * RFS123719  - Recompile for MFAIVRTEP*
+006200211005      * Thilaga K   * 2013/08/28 * RFS127129  - Recompile for MFATRNHDP*
+006300211005      * Noble T     * 2013/09/10 * RFS124268  - Exclude accounts if    *
+006400211005      *             *              closed after period end date in live*
+006500211005      *             *              run mode.                           *
+006600211005      * THILAGA K  * 2013/09/26   * RFS 128265- Recompile for MFAACBHRP*
+006700211005      * Abhisek M   * 2013/10/21 * RFS115188 - Address Line changes for*
+006800211005      *             *            * section 101-02 ,101-03 ,201-02,     *
+006900211005      *             *            * 201-03, 201-13                      *
+007000211005      * Boopathy D  * 2013/11/13 * RFS124157 - QC34651 - Initialised   *
+007100211005      *             *            * lc_Holder - Legacy Defect           *
+007200211005      * Vinsfy J   * 2014/06/20   * RFS136634 -Recompile for MFAACCATP *
+007300211005      * Sushmita J * 2014/05/09   * RFS136702 - Recompile for MFAADTNP.*
+007400211005      * Arthy K    * 2014/07/2    * Recompile for MFAIVRTEP            *
+007500211005      * Muthu      * 2015/03/27   * Recompile for MFAACBHRP
+007600211005      * Lakshmi M  *              *
+007700211005      * Amruta A   * 2015/06/01   * Recompile for MFATRNHDP
+007800211005      * Daniel M   * 2015/09/24   * RFS141190 - Select only CDSG request
+007900211005      *            *              * type's for bond validation
+008000211005      * Zaheer A   * 2016/11/11   * RFS162616 - Contract closure is not
+008100211005      *            *              * being filed when Transfer-In exists
+008200211005      *            *              * in the account.
+008300211005      * Gomathi S  * 2019/11/04   * RFS1018984- Adhoc filing record    *
+008400211005      *            *              * 501-03 (SDSP Election)             *
+008500211005      * Suresh P   * 2020/06/08   * RFS1115220 - RDPTRNPS - Didn't     *
+008600211005      *            *              * update all records from the .PRO   *
+008700211005      *            *              * file  for 102-10 records           *
+008800211005      * Suresh P   * 2021/10/01   * RFS1121283 - JOBRDSPCSG Went to    *
+008900211005      *            *              * MSGW due to Conversion error on    *
+009000211005      *            *              * variable LN_ACCOUNTMV.             *
+009100211005      *---------------------------------------------------------------**
+009200211005
+009300211005       ENVIRONMENT DIVISION.
+009400211005       CONFIGURATION SECTION.
+009500211005       SOURCE-COMPUTER. IBM-AS400.
+009600211005       OBJECT-COMPUTER. IBM-AS400.
+00970021100580658  SPECIAL-NAMES. DATA-AREA  IS lc_DataArea.
+009800211005       INPUT-OUTPUT SECTION.
+009900211005       FILE-CONTROL.
+010000211005
+010100211005           SELECT  HRDC-CDSP-INTERFACE
+010200211005                   ASSIGN TO DATABASE-HRSDCDP
+010300211005                   ORGANIZATION IS SEQUENTIAL
+010400211005                   ACCESS IS SEQUENTIAL.
+010500211005
+010600211005           SELECT  INVESTOR-TENANT
+010700211005                   ASSIGN TO DATABASE-MFAIVRTEP
+010800211005                   ORGANIZATION IS INDEXED
+010900211005                   ACCESS IS DYNAMIC
+011000211005                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY.
+011100211005
+011200211005           SELECT  HOLDER-CHANGES
+011300211005                   ASSIGN TO DATABASE-MFAHRDDHP
+011400211005                   ORGANIZATION IS INDEXED
+011500211005                   ACCESS IS DYNAMIC
+011600211005                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY.
+011700211005
+011800211005           SELECT  COUNTRY
+011900211005                   ASSIGN TO DATABASE-MFACOUP
+012000211005                   ORGANIZATION IS INDEXED
+012100211005                   ACCESS IS DYNAMIC
+012200211005                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY.
+012300211005
+012400211005       DATA DIVISION.
+012500211005       FILE SECTION.
+012600211005
+012700211005       FD  HRDC-CDSP-INTERFACE
+012800211005           LABEL RECORDS ARE STANDARD.
+012900211005       01  HRDC-CDSP-REC.             COPY DD-ALL-FORMATS OF HRSDCDP.
+013000211005
+013100211005       FD  INVESTOR-TENANT
+013200211005           LABEL RECORDS ARE STANDARD.
+013300211005       01  INVESTOR-TNT-REC.          COPY DD-ALL-FORMATS OF MFAIVRTEP.
+013400211005
+013500211005       FD  HOLDER-CHANGES
+013600211005           LABEL RECORDS ARE STANDARD.
+013700211005       01  HOLDER-CHG-REC.            COPY DD-ALL-FORMATS OF MFAHRDDHP.
+013800211005
+013900211005       FD  COUNTRY
+014000211005           LABEL RECORDS ARE STANDARD.
+014100211005       01  COUNTRY-REC.               COPY DD-ALL-FORMATS OF MFACOUP.
+014200211005
+014300211005       WORKING-STORAGE SECTION.
+014400211005           Copy Cpysqlfld
+014500211005               REPLACING == "CURRENT_PROGRAM" == BY == "RDSPCDSG" ==.
+014600211005
+014700211005           EXEC SQL
+014800211005             INCLUDE SQLCA
+014900211005           END-EXEC.
+015000211005
+015100211005      * Error Codes, Uniquely Identify where the error happened
+015200211005       01  Ws-Err-Code                     PIC X(02) VALUE SPACES.
+015300211005           88  lncc_Err_Ok                           VALUE SPACES.
+015400211005           88  lncc_Err_10                           VALUE "10".
+015500211005           88  lncc_Err_11                           VALUE "11".
+015600211005           88  lncc_Err_12                           VALUE "12".
+015700211005           88  lncc_Err_13                           VALUE "13".
+015800211005           88  lncc_Err_14                           VALUE "14".
+015900211005           88  lncc_Err_15                           VALUE "15".
+016000211005           88  lncc_Err_16                           VALUE "16".
+016100211005           88  lncc_Err_17                           VALUE "17".
+016200211005           88  lncc_Err_18                           VALUE "18".
+016300211005           88  lncc_Err_19                           VALUE "19".
+016400211005           88  lncc_Err_20                           VALUE "20".
+016500211005           88  lncc_Err_21                           VALUE "21".
+016600211005           88  lncc_Err_22                           VALUE "22".
+016700211005           88  lncc_Err_23                           VALUE "23".
+016800211005           88  lncc_Err_24                           VALUE "24".
+016900211005           88  lncc_Err_25                           VALUE "25".
+017000211005           88  lncc_Err_26                           VALUE "26".
+017100211005           88  lncc_Err_27                           VALUE "27".
+01720021100569511      88  lncc_Err_28                           VALUE "28".
+01730021100569511      88  lncc_Err_29                           VALUE "29".
+01740021100569511      88  lncc_Err_30                           VALUE "30".
+01750021100569511      88  lncc_Err_31                           VALUE "31".
+01760021100573394      88  lncc_Err_32                           VALUE "32".
+01770021100573394      88  lncc_Err_33                           VALUE "33".
+01780021100573394      88  lncc_Err_34                           VALUE "34".
+01790021100573394      88  lncc_Err_35                           VALUE "35".
+01800021100573394      88  lncc_Err_36                           VALUE "36".
+01810021100573394      88  lncc_Err_37                           VALUE "37".
+01820021100573394      88  lncc_Err_38                           VALUE "38".
+01830021100573394      88  lncc_Err_39                           VALUE "39".
+01840021100573394      88  lncc_Err_40                           VALUE "40".
+018500211005      * RFS 99071 - Start
+018600211005           88  lncc_Err_41                           VALUE "41".
+018700211005           88  lncc_Err_42                           VALUE "42".
+018800211005           88  lncc_Err_43                           VALUE "43".
+018900211005           88  lncc_Err_44                           VALUE "44".
+019000211005      * RFS 99071 - End
+019100211005115188     88  lncc_Err_45                           VALUE "45".
+019200211005115188     88  lncc_Err_46                           VALUE "46".
+019300211005      *RFS1115220 - Starts
+019400211005           88  lncc_Err_47                           VALUE "47".
+019500211005      *RFS1115220 - Ends
+019600211005
+019700211005       01  Constants.
+019800211005           03  lncc_NHRDC                  PIC  X(05) VALUE "NHRDC".
+019900211005           03  lncc_CDSP                   PIC  X(04) VALUE "CDSP".
+020000211005           03  lncc_RDSP                   PIC  X(04) VALUE "RDSP".
+020100211005           03  lncc_U                      PIC  X(01) VALUE "U".
+020200211005           03  lncc_P                      PIC  X(01) VALUE "P".
+02030021100569511      03  lncc_R                      PIC  X(01) VALUE "R".
+02040021100569511      03  lncc_W                      PIC  X(01) VALUE "W".
+020500211005           03  lncc_IVR                    PIC  X(03) VALUE "IVR".
+020600211005           03  lncc_CAN                    PIC  X(03) VALUE "CAN".
+020700211005           03  lncc_USA                    PIC  X(03) VALUE "USA".
+020800211005           03  lncc_101                    PIC  X(03) VALUE "101".
+020900211005           03  lncc_201                    PIC  9(03) VALUE 201.
+021000211005           03  lncc_01                     PIC  X(02) VALUE "01".
+021100211005           03  lncc_02                     PIC  X(02) VALUE "02".
+021200211005           03  lncc_03                     PIC  X(02) VALUE "03".
+021300211005           03  lncc_13                     PIC  X(02) VALUE "13".
+021400211005112336     03  lncc_16                     PIC  X(02) VALUE "16".
+021500211005           03  lncc_23                     PIC  X(02) VALUE "23".
+021600211005           03  lncc_001                    PIC  9(03) VALUE 001.
+021700211005           03  lncc_002                    PIC  9(03) VALUE 002.
+021800211005           03  lncc_999                    PIC  9(03) VALUE 999.
+021900211005           03  lncc_0                      PIC S9(01) VALUE 0.
+022000211005           03  lncc_1                      PIC S9(01) VALUE 1.
+022100211005           03  lncc_2                      PIC  9(01) VALUE 2.
+022200211005           03  lncc_3                      PIC  X(01) VALUE "3".
+022300211005           03  lncc_4                      PIC  X(01) VALUE "4".
+022400211005           03  lncc_6                      PIC  X(01) VALUE "6".
+022500211005           03  lncc_7                      PIC  9(01) VALUE 7.
+022600211005           03  lncc_8                      PIC  X(01) VALUE "8".
+022700211005           03  lncc_A                      PIC  X(01) VALUE "A".
+022800211005           03  lncc_Y                      PIC  X(01) VALUE "Y".
+022900211005           03  lncc_M                      PIC  X(01) VALUE "M".
+023000211005           03  lncc_N                      PIC  X(01) VALUE "N".
+023100211005           03  lncc_X                      PIC  X(01) VALUE "X".
+023200211005           03  lncc_E                      PIC  X(01) VALUE "E".
+023300211005           03  lncc_F                      PIC  X(01) VALUE "F".
+023400211005           03  lncc_C                      PIC  X(01) VALUE "C".
+023500211005           03  lncc_D                      PIC  X(01) VALUE "D".
+023600211005           03  lncc_I                      PIC  X(01) VALUE "I".
+023700211005           03  lncc_S                      PIC  X(01) VALUE "S".
+023800211005           03  lncc_T                      PIC  X(01) VALUE "T".
+023900211005           03  lncc_Space                  PIC  X(01) VALUE " ".
+024000211005      *    RFS73394 - Begins - Add more constants
+024100211005           03  lncc_102                    PIC  X(03) VALUE "102".
+024200211005           03  lncc_10                     PIC  X(02) VALUE "10".
+024300211005           03  lnci_1                      PIC S9(01) VALUE 1.
+024400211005           03  lnci_01                     PIC S9(02) VALUE 1.
+024500211005           03  lncn_1                      PIC S9(03) COMP-3 VALUE 1.
+024600211005           03  lnci_4                      PIC S9(01) VALUE 4.
+024700211005           03  lnci_60                     PIC S9(02) VALUE 60.
+024800211005           03  lncn_000                    PIC  S9(03) COMP-3 VALUE 0.
+024900211005           03  lnci_000000000              PIC  S9(09) VALUE 0.
+025000211005           03  lnci_0                      PIC  S9(09) VALUE 0.
+025100211005           03  lnci_8                      PIC  S9(09) VALUE 8.
+025200211005      *    RFS73394.1 - Begins
+025300211005           03  lnci_180000                 PIC  S9(08) VALUE 180000.
+025400211005           03  lnci_190000                 PIC  S9(08) VALUE 190000.
+025500211005      *    RFS73394.1 - Ends
+025600211005      *    RFS73394.9 - Begins
+025700211005           03  lncc2                       PIC  X(01) VALUE "2".
+025800211005      *    RFS73394.9 - Begins
+025900211005           03  lnci_20081201               PIC  S9(08) VALUE 20081201.
+026000211005           03  lncn_000000000              PIC  S9(09) COMP-3 VALUE 0.
+026100211005           03  lncc_20spaces               PIC  X(20) VALUE " ".
+026200211005           03  lncc_CDSB                   PIC  X(04) VALUE "CDSB".
+026300211005           03  lncc_R001                   PIC  X(04) VALUE "R001".
+026400211005           03  lncc_R002                   PIC  X(04) VALUE "R002".
+026500211005           03  lncc_R003                   PIC  X(04) VALUE "R003".
+026600211005           03  lncc_R004                   PIC  X(04) VALUE "R004".
+026700211005           03  lncc_8251                   PIC  X(04) VALUE "8251".
+026800211005           03  lncc_8241                   PIC  X(04) VALUE "8241".
+026900211005           03  lncc_8249                   PIC  X(04) VALUE "8249".
+027000211005           03  lncc_8230                   PIC  X(04) VALUE "8230".
+027100211005           03  lncc_8232                   PIC  X(04) VALUE "8232".
+027200211005           03  lncc_8203                   PIC  X(04) VALUE "8203".
+027300211005           03  lncc_8200                   PIC  X(04) VALUE "8200".
+027400211005           03  lncc_8246                   PIC  X(04) VALUE "8246".
+027500211005           03  lnccc_2                     PIC  X(01) VALUE "2".
+027600211005      * RFS1115220 - Start
+027700211005      * RFS1121283 - Start
+027800211005      *    03  ln_AccountMv                PIC S9(12)V99.
+027900211005      *    03  lnci_9                      PIC S9(12)V99
+028000211005      *                                    VALUE 999999999999.99.
+028100211005           03  ln_AccountMv                PIC S9(10)V99.
+028200211005           03  lnci_9                      PIC S9(10)V99
+028300211005                                           VALUE 9999999999.99.
+028400211005           03  lnc_One                     PIC  9(01) VALUES 1.
+028500211005      * RFS1121283 - End
+028600211005      * RFS1115220 - End
+028700211005      * RFS99071 - Start
+028800211005           03  lnc_1                       PIC  X(01) VALUE "1".
+028900211005           03  lncc_202                    PIC  X(03) VALUE "202".
+029000211005           03  lncc_8206                   PIC  X(04) VALUE "8206".
+029100211005           03  lncc_AddOrRevokeConsent     PIC  X(50)
+029200211005                 VALUE "Must be on or after Contract Signature date".
+029300211005      * RFS99071 - End
+029400211005           03  lncc_HolderInfo             PIC  X(30)
+029500211005                 VALUE "Holder Information".
+029600211005           03  lncc_Beneficiary            PIC  X(30)
+029700211005                 VALUE "Beneficiary".
+029800211005           03  lncc_BeneficiaryDOB         PIC  X(30)
+029900211005                 VALUE "Beneficiary Date-of-Birth".
+030000211005           03  lncc_ContractStatus         PIC  X(30)
+030100211005                 VALUE "Contract Status".
+030200211005           03  lncc_HolderSIN_BN           PIC  X(30)
+030300211005                 VALUE "Holder SIN/BN".
+030400211005           03  lncc_PCG                    PIC  X(30)
+030500211005                 VALUE "Primary Care Giver".
+030600211005           03  lncc_ContractSignDate       PIC  X(30)
+030700211005                 VALUE "Contract Signature Date".
+030800211005           03  lncc_UnitBalance            PIC  X(30)
+030900211005                 VALUE "Account Unit Balance".
+031000211005           03  lncc_GTZero                 PIC  X(30)
+031100211005                 VALUE "> 0".
+031200211005      *    RFS73394 - Ends
+031300211005      * Error messages
+031400211005           03  lncc_ErrorOpeningCursor     PIC  X(80)
+031500211005               VALUE "Error while opening cursor".
+031600211005           03  lncc_ErrorFetchingCursor    PIC  X(80)
+031700211005               VALUE "Error while fetching cursor".
+031800211005           03  lncc_ErrorClosingCursor     PIC  X(80)
+031900211005               VALUE "Error while closing cursor".
+032000211005           03  lncc_ErrorReadingMFAHRDDBP  PIC  X(80)
+032100211005               VALUE "Error while reading MFAHRDDBP".
+032200211005           03  lncc_ErrorUpdatingMFAHRDDBP  PIC  X(80)
+032300211005               VALUE "Error while updating MFAHRDDBP".
+032400211005           03  lncc_ErrorReadingMFAHRDDHP  PIC  X(80)
+032500211005               VALUE "Error while reading MFAHRDDHP".
+032600211005           03  lncc_ErrorUpdatingMFAHRDDHP  PIC  X(80)
+032700211005               VALUE "Error while updating MFAHRDDHP".
+032800211005           03  lncc_ErrorReadingMFAACPCGP  PIC  X(80)
+032900211005               VALUE "Error while reading MFAACPCGP".
+033000211005           03  lncc_ErrorFindingInvestor   PIC  X(80)
+033100211005               VALUE "Cannot find Investor info".
+033200211005           03  lncc_ErrorReadingInvestor   PIC  X(80)
+033300211005               VALUE "Error while reading IVR files".
+033400211005           03  lncc_ErrorReadingTenant     PIC  X(80)
+033500211005               VALUE "Error while reading TNT file".
+033600211005           03  lncc_ErrorReadingMFABRELTP  PIC  X(80)
+033700211005               VALUE "Error while reading MFABRELTP".
+033800211005           03  lncc_ErrorReadingMFARESPTP  PIC  X(80)
+033900211005               VALUE "Error while reading MFABRELTP".
+034000211005           03  lncc_ErrorReadingMFAADDP    PIC  X(80)
+034100211005               VALUE "Error while reading MFAADDP".
+034200211005           03  lncc_ErrorReadingMFAIVRBNP  PIC  X(80)
+034300211005               VALUE "Error while reading MFAIVRBNP".
+034400211005           03  lncc_ErrorUpdatingMFAACCDSP  PIC  X(80)
+034500211005               VALUE "Error while updating MFAACCDSP".
+03460021100569511      03  lncc_ErrorDeletingWKDSPREJP  PIC  X(80)
+03470021100569511          VALUE "Error while deleting WKDSPREJP".
+03480021100569511      03  lncc_ErrorCreatingWKDSPREJP  PIC  X(80)
+03490021100569511          VALUE "Error while creating WKDSPREJP".
+03500021100569511      03  lncc_ErrorDeletingMFAHRDDBP  PIC  X(80)
+03510021100569511          VALUE "Error while deleting MFAHRDDBP".
+03520021100569511      03  lncc_ErrorDeletingMFAHRDDHP  PIC  X(80)
+03530021100569511          VALUE "Error while deleting MFAHRDDHP".
+035400211005      *    RFS73394 - Begins - add new error descriptions
+035500211005           03  lncc_ErrorUpdatingWKDSPREJP  PIC  X(80)
+035600211005               VALUE "Error while updating WKDSPREJP".
+035700211005           03  lncc_ErrorGettingUnitBal     PIC  X(80)
+035800211005               VALUE "Error while retrieving Unit Balance".
+035900211005           03  lncc_ErrorUnprocessedCnt     PIC  X(80)
+036000211005               VALUE "Error while retrieving unprocessed count".
+036100211005           03  lncc_ErrorSetStop            PIC  X(80)
+036200211005               VALUE "Error while setting Account Stop-activity".
+036300211005           03  lncc_ErrorCloseStatus        PIC  X(80)
+036400211005               VALUE "Error while setting Account Close-Status".
+036500211005           03  lncc_ErrorLastBondRequest    PIC  X(80)
+036600211005               VALUE "Error while getting Last Bond Request".
+036700211005           03  lncc_ErrorGettingProvCode    PIC  X(80)
+036800211005               VALUE "Error while getting Province Code".
+036900211005           03  lncc_ErrorInsertMfaacbhrp    PIC  X(80)
+037000211005               VALUE "Error while inserting Stop Request".
+037100211005           03  lncc_ErrorCountingTenants    PIC  X(80)
+037200211005               VALUE "Error while Counting Tenants".
+037300211005      *    RFS73394 - Ends
+037400211005
+037500211005      *    RFS99071 - Start
+037600211005           03  lncc_ErrOpenHRDPCPCursor     PIC  X(80)
+037700211005               VALUE "Error while Opening HRDPCP Cursor".
+037800211005           03  lncc_ErrFetchHRDPCPCursor    PIC  X(80)
+037900211005               VALUE "Error while Fetching HRDPCP Cursor".
+038000211005           03  lncc_ErrClosingHRDPCPCursor  PIC  X(80)
+038100211005               VALUE "Error while Closing HRDPCP Cursor".
+038200211005           03  lncc_ErrupdateMFAHRDPCP      PIC  X(80)
+038300211005               VALUE "Error while Updating MFAHRDPCP File".
+038400211005      *    RFS99071 - End
+038500211005115188     03  lncc_ErrorGettingProvinceDesc PIC  X(80)
+038600211005115188         VALUE "Error while Reading  MFAPRVDCP File".
+038700211005115188     03  lncc_ErrorGettingCountryDesc  PIC  X(80)
+038800211005115188         VALUE "Error while Reading  MFACOUP   File".
+038900211005      *RFS1115220 - Starts
+039000211005           03  Lncc_ErrorInsertMFARDSFMVP  PIC  X(80)
+039100211005               VALUE "Error while inserting MFARDSFMVP".
+039200211005      *RFS1115220 - Ends
+039300211005
+039400211005       01  Flags.
+039500211005           03  lb_EndOfCursorFlag          PIC 1.
+039600211005               88  lb_EndOfCursorTrue              VALUE B"1".
+039700211005               88  lb_EndOfCursorFalse             VALUE B"0".
+039800211005           03  lb_EndOfIVRTEP              PIC 1.
+039900211005               88  lb_EndOfIVRTEPTrue              VALUE B"1".
+040000211005               88  lb_EndOfIVRTEPFalse             VALUE B"0".
+040100211005           03  lb_EndOfHRDDHP              PIC 1.
+040200211005               88  lb_EndOfHRDDHPTrue              VALUE B"1".
+040300211005               88  lb_EndOfHRDDHPFalse             VALUE B"0".
+040400211005           03  lb_PCGRequired              PIC X.
+040500211005               88  lb_PCGRequiredTrue              VALUE "T".
+040600211005               88  lb_PCGRequiredFalse             VALUE "F".
+040700211005      * RFS 99071 - Start
+040800211005           03  lb_EndOfHRDPCPCursorFlag    PIC 1.
+040900211005               88  lb_EndOfHRDPCPCursorTrue        VALUE B"1".
+041000211005               88  lb_EndOfHRDPCPCursorFalse       VALUE B"0".
+041100211005      * RFS 99071 - End
+041200211005
+041300211005       01  WorkingStorageFields.
+041400211005           03  lc_X                        PIC  X(01).
+041500211005           03  lc_RelTypeXref              PIC  X(02).
+041600211005           03  lc_BusNumCCRA               PIC  X(15).
+041700211005           03  li_BenAge                   PIC S9(06).
+041800211005           03  lc_TempSIN.
+041900211005               05  li_TempSIN9             PIC S9(09).
+042000211005               05  lc_FILLER               PIC  X(06).
+042100211005           03  li_CheckSIN                 PIC S9(09).
+042200211005           03  lc_VendorTransID            PIC  X(15).
+042300211005           03  lc_AddrTmp1                 PIC  X(40).
+042400211005           03  lc_AddrTmp2                 PIC  X(40).
+042500211005           03  lc_IvrTntInd                PIC  X(01).
+042600211005           03  lc_HolderAddition           PIC  X(01).
+042700211005           03  lc_ApprovalStatus101        PIC  X(01).
+042800211005 80658*CHG**   88 ValidStatus101           VALUES "U" "W" "E".
+042900211005 80658         88 ValidStatus101           VALUES "U" "R" "E".
+043000211005           03  lc_Language                 PIC  X(01).
+043100211005           03  lc_Sex                      PIC  X(01).
+043200211005           03  li_AddrNo                   PIC S9(07).
+043300211005           03  li_IvrAddrNo                PIC S9(07).
+043400211005           03  lc_IvrLanguage              PIC  X(01).
+043500211005           03  lc_IvrRecipient             PIC  X(01).
+043600211005R74620     03  li_UnapprovedTransfer_Cnt   PIC S9(03).
+043700211005      *RFS1121283 - Starts
+043800211005           03  li_HRDCfiledate             PIC S9(08)  VALUE 0.
+043900211005           03  li_fmtdtein                 FORMAT DATE "@Y%m%d".
+044000211005           03  li_fmtdteout                FORMAT DATE "@Y%m%d".
+044100211005      *RFS1121283 - Ends
+044200211005
+04430021100580658  01 lc_RDSPSysParms.
+044400211005  |       03 FILLER1                   PIC X(83).
+044500211005  |       03 lc_LimNbRegisDays       PIC X(04).
+044600211005  |         03 li_LimNbRegisDays REDEFINES lc_LimNbRegisDays PIC S9(04).
+044700211005      *R74620 Begins
+044800211005      *   03 FILLER2                   PIC  X(175).
+044900211005          03 lc_BenAgePCGReq         PIC X(03).
+045000211005            03 li_BenAgePCGReq REDEFINES lc_BenAgePCGReq PIC S9(03)    .
+045100211005          03 FILLER2                   PIC  X(172).
+045200211005      *R74620 Ends
+045300211005
+045400211005       01  lc_SpecimenPlanNo               PIC  X(07).
+045500211005       01  lc_SaveAccountTypeCode          PIC  X(05).
+04560021100569511  01  li_SysDate                      PIC S9(08).
+04570021100569511  01  li_Date                         PIC S9(08).
+045800211005
+045900211005       01  lc_ACPCGP_Info.
+046000211005           03  li_ACPCGP_SIN               PIC S9(09).
+046100211005           03  lc_ACPCGP_SIN               PIC  X(09).
+046200211005           03  lc_ACPCGP_BusinessNo        PIC  X(15).
+046300211005           03  lc_ACPCGP_BusinessName      PIC  X(40).
+046400211005           03  lc_ACPCGP_FirstName         PIC  X(20).
+046500211005           03  lc_ACPCGP_LastName          PIC  X(20).
+046600211005           03  lc_ACPCGP_PCGTypeCode       PIC  X(01).
+046700211005
+046800211005       01  lc_FetchC1Rec.
+046900211005           05  li_AccountNo                PIC S9(09).
+047000211005           05  lc_AccountNo                PIC  X(09).
+047100211005           05  li_PlanSetupDate            PIC S9(08).
+047200211005           05  lc_ApprovalStatus           PIC  X(01).
+04730021100580658      05  lc_ApprovalStatusOrig       PIC  X(01).
+047400211005           05  lc_AccountTypeCode          PIC  X(05).
+047500211005           05  li_InvestorNo               PIC S9(09).
+047600211005           05  li_BenSeqNo                 PIC S9(03).
+047700211005           05  li_BenSIN                   PIC S9(09).
+047800211005           05  lc_BenSIN                   PIC  X(09).
+047900211005           05  lc_BenFirstName             PIC  X(20).
+048000211005           05  lc_BenLastName              PIC  X(20).
+048100211005           05  lc_BenSex                   PIC  X(01).
+048200211005           05  lc_BenLanguage              PIC  X(01).
+048300211005           05  li_BenAddrNo                PIC S9(09).
+048400211005           05  li_BenBirthDate             PIC S9(08).
+048500211005           05  lc_BenBirthDate             PIC  X(08).
+048600211005           05  lc_BenRelType               PIC  X(03).
+048700211005      *    RFS73394 - Begins - Closure details
+048800211005           05  lc_CloseRsnCode             PIC  X(02).
+048900211005           05  li_CloseRsnDate             PIC S9(08).
+049000211005           05  lc_CloseStatus              PIC  X(01).
+049100211005           05  li_CloseDate                PIC S9(08).
+049200211005      *    RFS73394 - Ends
+049300211005R74620     05  lc_OtherContractID          PIC  X(15).
+049400211005R74620     05  lc_OtherSpecimenID          PIC  X(07).
+049500211005
+049600211005       01  lc_Holder.
+049700211005           05 lc_HldSinBusNo               PIC  X(15).
+049800211005           05 lc_HldFirstName              PIC  X(20).
+049900211005           05 lc_HldLastName               PIC  X(35).
+050000211005           05 lc_HldLegalName              PIC  X(35).
+050100211005           05 li_HldBirthDate              PIC S9(08).
+050200211005           05 lc_HldBirthDate              PIC  X(08).
+050300211005           05 lc_HldLanguage               PIC  X(01).
+050400211005           05 lc_HldSex                    PIC  X(01).
+050500211005           05 li_HldAddrNo                 PIC S9(07).
+050600211005           05 lc_HldRecipient              PIC  X(01).
+050700211005
+050800211005       01  lc_Address.
+050900211005           05 lc_AddressLine1              PIC  X(40).
+051000211005           05 lc_AddressLine2              PIC  X(40).
+051100211005           05 lc_AddressLine3              PIC  X(40).
+051200211005           05 lc_City                      PIC  X(30).
+051300211005           05 lc_Province                  PIC  X(02).
+051400211005           05 lc_Country                   PIC  X(03).
+051500211005           05 lc_CountryCode               PIC  X(03).
+051600211005           05 lc_PostalCode                PIC  X(06).
+051700211005           05 lc_LanguageCode              PIC  X(01).
+051800211005           05 lc_SexCode                   PIC  X(01).
+051900211005115188     05 lc_TempAddrLine1             PIC  X(40).
+052000211005115188     05 lc_TempAddrLine2             PIC  X(40).
+052100211005
+052200211005       01  001-Record.
+052300211005           05  001-RecType                 PIC  X(03).
+052400211005           05  001-PgmId                   PIC  X(04).
+052500211005           05  001-VendorBN                PIC  X(15).
+052600211005           05  001-FileDate                PIC S9(08).
+052700211005           05  001-FileSeq                 PIC S9(02).
+052800211005           05  001-DataVersion             PIC  X(04).
+052900211005           05  001-Filler                  PIC X(464).
+053000211005
+053100211005       01  101-01-Record.
+053200211005           05 101-01-RecType               PIC  X(03).
+053300211005           05 101-01-TransType             PIC  X(02).
+053400211005           05 101-01-IssuerBN              PIC  X(15).
+053500211005           05 101-01-IssuerTransId         PIC  X(15).
+053600211005           05 101-01-SpecimenId            PIC  X(07).
+053700211005           05 101-01-Filler1               PIC  X(03).
+053800211005           05 101-01-ContractId            PIC  X(15).
+053900211005           05 101-01-ContractDate          PIC  X(08).
+054000211005           05 101-01-CaregiverSIN          PIC  X(15).
+054100211005           05 101-01-CaregiverFisrt        PIC  X(30).
+054200211005           05 101-01-CaregiverLast         PIC  X(60).
+054300211005           05 101-01-CaregiverType         PIC  X(01).
+054400211005           05 101-01-TransferInd           PIC  X(01).
+054500211005           05 101-01-ContractDate2         PIC  X(08).
+054600211005R74620     05 101-01-OtherContractID       PIC  X(15).
+054700211005R74620     05 101-01-OtherSpecimenID       PIC  X(07).
+054800211005R74620*    05 101-01-Filler2               PIC X(317).
+054900211005R74620     05 101-01-Filler2               PIC X(295).
+055000211005
+055100211005       01  101-02-Record.
+055200211005           05 101-02-RecType               PIC  X(03).
+055300211005           05 101-02-TransType             PIC  X(02).
+055400211005           05 101-02-IssuerBN              PIC  X(15).
+055500211005           05 101-02-IssuerTransId         PIC  X(15).
+055600211005           05 101-02-BenSIN                PIC  X(09).
+055700211005           05 101-02-BenFirstName          PIC  X(30).
+055800211005           05 101-02-BenLastName           PIC  X(30).
+055900211005           05 101-02-BenBirthDate          PIC  X(08).
+056000211005           05 101-02-BenSex                PIC  X(01).
+056100211005           05 101-02-AddrLine1             PIC  X(40).
+056200211005           05 101-02-AddrLine2             PIC  X(40).
+056300211005           05 101-02-AddrLine3             PIC  X(40).
+056400211005           05 101-02-City                  PIC  X(30).
+056500211005           05 101-02-Province              PIC  X(02).
+056600211005           05 101-02-Country               PIC  X(03).
+056700211005           05 101-02-PostalCode            PIC  X(06).
+056800211005           05 101-02-Language              PIC  X(01).
+056900211005           05 101-02-Filler1               PIC X(225).
+057000211005
+057100211005       01  101-03-Record.
+057200211005           05 101-03-RecType               PIC  X(03).
+057300211005           05 101-03-TransType             PIC  X(02).
+057400211005           05 101-03-IssuerBN              PIC  X(15).
+057500211005           05 101-03-IssuerTransId         PIC  X(15).
+057600211005           05 101-03-HldSinBusNo           PIC  X(15).
+057700211005           05 101-03-HldFirstName          PIC  X(30).
+057800211005           05 101-03-HldLastName           PIC  X(60).
+057900211005           05 101-03-HldType               PIC  X(01).
+058000211005           05 101-03-HldRelType            PIC  X(02).
+058100211005           05 101-03-HldBirthDate          PIC  X(08).
+058200211005           05 101-03-HldSex                PIC  X(01).
+058300211005           05 101-03-AddrLine1             PIC  X(40).
+058400211005           05 101-03-AddrLine2             PIC  X(40).
+058500211005           05 101-03-AddrLine3             PIC  X(40).
+058600211005           05 101-03-City                  PIC  X(30).
+058700211005           05 101-03-Province              PIC  X(02).
+058800211005           05 101-03-Country               PIC  X(03).
+058900211005           05 101-03-PostalCode            PIC  X(06).
+059000211005           05 101-03-Language              PIC  X(01).
+059100211005           05 101-03-Filler1               PIC X(186).
+059200211005
+059300211005      *    RFS73394 Begins - Add 102-10 layout
+059400211005       01  102-10-Record.
+059500211005           05 102-10-RecType               PIC  X(03).
+059600211005           05 102-10-TransType             PIC  X(02).
+059700211005           05 102-10-IssuerBN              PIC  X(15).
+059800211005           05 102-10-IssuerTransId         PIC  X(15).
+059900211005           05 102-10-SpecimenId            PIC  X(07).
+060000211005           05 102-10-Filler1               PIC  X(03).
+060100211005           05 102-10-ContractId            PIC  X(15).
+060200211005           05 102-10-ClosureReason         PIC  X(02).
+060300211005           05 102-10-ClosRsnDate           PIC  X(08).
+060400211005           05 102-10-ClosureDate           PIC  X(08).
+060500211005           05 102-10-Filler2               PIC X(422).
+060600211005      *    RFS73394 Ends
+060700211005
+060800211005       01  201-02-Record.
+060900211005           05 201-02-RecType               PIC  X(03).
+061000211005           05 201-02-TransType             PIC  X(02).
+061100211005           05 201-02-IssuerBN              PIC  X(15).
+061200211005           05 201-02-IssuerTransId         PIC  X(15).
+061300211005           05 201-02-BenSIN                PIC  X(09).
+061400211005           05 201-02-BenFirstName          PIC  X(30).
+061500211005           05 201-02-BenLastName           PIC  X(30).
+061600211005           05 201-02-BenBirthDate          PIC  X(08).
+061700211005           05 201-02-BenSex                PIC  X(01).
+061800211005           05 201-02-AddrLine1             PIC  X(40).
+061900211005           05 201-02-AddrLine2             PIC  X(40).
+062000211005           05 201-02-AddrLine3             PIC  X(40).
+062100211005           05 201-02-City                  PIC  X(30).
+062200211005           05 201-02-Province              PIC  X(02).
+062300211005           05 201-02-Country               PIC  X(03).
+062400211005           05 201-02-PostalCode            PIC  X(06).
+062500211005           05 201-02-Language              PIC  X(01).
+062600211005           05 201-02-SpecimenId            PIC  X(07).
+062700211005           05 201-02-Filler1               PIC  X(03).
+062800211005           05 201-02-ContractId            PIC  X(15).
+062900211005           05 201-02-UpdateDate            PIC  X(08).
+063000211005           05 201-02-Filler2               PIC X(192).
+063100211005
+063200211005      * The record layout for 201-03 and 201-13 is the same
+063300211005      * and it is being shared in the program logic.
+063400211005
+063500211005       01  201-03-13-Record.
+063600211005           05 201-03-13-RecType            PIC  X(03).
+063700211005           05 201-03-13-TransType          PIC  X(02).
+063800211005           05 201-03-13-IssuerBN           PIC  X(15).
+063900211005           05 201-03-13-IssuerTransId      PIC  X(15).
+064000211005           05 201-03-13-HldSinBusNo        PIC  X(15).
+064100211005           05 201-03-13-HldFirstName       PIC  X(30).
+064200211005           05 201-03-13-HldLastName        PIC  X(60).
+064300211005           05 201-03-13-HldType            PIC  X(01).
+064400211005           05 201-03-13-HldRelType         PIC  X(02).
+064500211005           05 201-03-13-HldBirthDate       PIC  X(08).
+064600211005           05 201-03-13-HldSex             PIC  X(01).
+064700211005           05 201-03-13-AddrLine1          PIC  X(40).
+064800211005           05 201-03-13-AddrLine2          PIC  X(40).
+064900211005           05 201-03-13-AddrLine3          PIC  X(40).
+065000211005           05 201-03-13-City               PIC  X(30).
+065100211005           05 201-03-13-Province           PIC  X(02).
+065200211005           05 201-03-13-Country            PIC  X(03).
+065300211005           05 201-03-13-PostalCode         PIC  X(06).
+065400211005           05 201-03-13-Language           PIC  X(01).
+065500211005           05 201-03-13-SpecimenId         PIC  X(07).
+065600211005           05 201-03-13-Filler1            PIC  X(03).
+065700211005           05 201-03-13-ContractId         PIC  X(15).
+065800211005           05 201-03-13-UpdateDate         PIC  X(08).
+065900211005           05 201-03-13-Filler2            PIC X(153).
+066000211005
+066100211005       01  201-23-Record.
+066200211005           05 201-23-RecType               PIC  X(03).
+066300211005           05 201-23-TransType             PIC  X(02).
+066400211005           05 201-23-IssuerBN              PIC  X(15).
+066500211005           05 201-23-IssuerTransId         PIC  X(15).
+066600211005           05 201-23-HldSinBusNo           PIC  X(15).
+066700211005           05 201-23-SpecimenId            PIC  X(07).
+066800211005           05 201-23-Filler1               PIC  X(03).
+066900211005           05 201-23-ContractId            PIC  X(15).
+067000211005           05 201-23-RemovalDate           PIC  X(08).
+067100211005           05 201-23-Filler2               PIC X(417).
+067200211005
+067300211005      * RFS 99071 - Start - Added 202-01 and 202-02 record layout
+067400211005      *                     for Add and Revoke Consent data records.
+067500211005
+067600211005       01  202-01-Record.
+067700211005         03  202-01-RecType                PIC  X(03).
+067800211005         03  202-01-TransType              PIC  X(02).
+067900211005         03  202-01-IssuerBN               PIC  X(15).
+068000211005         03  202-01-IssuerTransId          PIC  X(15).
+068100211005         03  202-01-SpecimenId             PIC  X(07).
+068200211005         03  202-01-ContractId             PIC  X(15).
+068300211005         03  202-01-BenSin                 PIC  X(09).
+068400211005         03  202-01-ConsentDate            PIC  X(08).
+068500211005         03  202-01-ConsentSINorBN         PIC  X(15).
+068600211005         03  202-01-ConsentGivenName       PIC  X(30).
+068700211005      * RFS 99071.3 - Start
+068800211005      *  03  202-01-ConSurNameorAgency     PIC  X(40).
+068900211005         03  202-01-ConSurNameorAgency     PIC  X(60).
+069000211005      * RFS 99071.3 - End
+069100211005         03  202-01-ConsentType            PIC  X(01).
+069200211005      * RFS 99071.3 - Start
+069300211005      *  03  202-01-Filler                 PIC X(340).
+069400211005         03  202-01-Filler                 PIC X(320).
+069500211005      * RFS 99071.3 - End
+069600211005
+069700211005       01  202-02-Record.
+069800211005         03  202-02-RecType                PIC  X(03).
+069900211005         03  202-02-TransType              PIC  X(02).
+070000211005         03  202-02-IssuerBN               PIC  X(15).
+070100211005         03  202-02-IssuerTransId          PIC  X(15).
+070200211005         03  202-02-SpecimenId             PIC  X(07).
+070300211005         03  202-02-ContractId             PIC  X(15).
+070400211005         03  202-02-BenSin                 PIC  X(09).
+070500211005         03  202-02-RevokeConsentDate      PIC  X(08).
+070600211005         03  202-02-ConsentSINorBN         PIC  X(15).
+070700211005         03  202-02-Filler                 PIC X(411).
+070800211005
+070900211005       01  lcu_HRDPCPRec.
+071000211005         03  lc_PCP-RDSPRecordType         PIC  X(03).
+071100211005         03  lc_PCP-HRDCTransType          PIC  X(02).
+071200211005         03  li_PCP-AccountNo              PIC S9(09).
+071300211005
+071400211005      * RFS 99071.2 - begins.
+071500211005         03  lc_PCP-AccountNo              PIC  X(09).
+071600211005         03  li_PCP-PlanSetupDate          PIC S9(08).
+071700211005         03  lc_PCP-BenSIN                 PIC  X(09).
+071800211005         03  lc_PCP-AccountTypeCode        PIC  X(05).
+071900211005      * RFS 99071.2 - ends.
+072000211005
+072100211005         03  li_PCP-PCGSeqNo               PIC S9(03).
+072200211005         03  li_PCP-ConsentSequenceNo      PIC S9(03).
+072300211005         03  lc_PCP-VendorTransactionID    PIC  X(15).
+072400211005         03  lc_PCP-LastName               PIC  X(30).
+072500211005         03  lc_PCP-FirstName              PIC  X(30).
+072600211005         03  li_PCP-SocialInsuranceNo      PIC S9(09).
+072700211005         03  lc_PCP-BusinessName           PIC  X(40).
+072800211005         03  lc_PCP-BusinessNumber         PIC  X(15).
+072900211005         03  lc_PCP-ConsentType            PIC  X(01).
+073000211005         03  li_PCP-ConsentDate            PIC S9(08).
+073100211005         03  li_PCP-RevokeConsentDate      PIC S9(08).
+073200211005         03  lc_PCP-HRDCStatus             PIC  X(01).
+073300211005         03  lc_PCP-HRDCErrorCode          PIC  X(04).
+073400211005         03  li_PCP-HRDCFileDate           PIC S9(08).
+073500211005         03  li_PCP-CreationDate           PIC S9(08).
+073600211005      * RFS 99071 - End
+073700211005
+073800211005       01  lc_MFAHRDDBP_Rec.
+073900211005           COPY DD-ALL-FORMATS OF MFAHRDDBP.
+074000211005
+074100211005       01  lc_MFAADDP_Rec.
+074200211005           COPY DD-ALL-FORMATS OF MFAADDP.
+074300211005
+074400211005      * RFS73394 - Begins - Add Rejection variables
+074500211005       01  lc_RejectionRec.
+074600211005           03  lc_RejRecType               PIC  X(03).
+074700211005           03  lc_RejTransType             PIC  X(02).
+074800211005           03  li_RejAccountNo             PIC S9(09).
+074900211005           03  li_RejPlanSetupDate         PIC S9(08).
+075000211005           03  lc_RejFieldDesc             PIC  X(30).
+075100211005           03  lc_RejFieldValue            PIC  X(15).
+075200211005           03  lc_RejErrorCode             PIC  X(04).
+075300211005
+075400211005      * RFS73394 - Other variables
+075500211005       01  li_ValidateDate                 PIC S9(08).
+075600211005       01  li_LastHolderCnt                PIC S9(09).
+075700211005       01  li_RegistrationDate             PIC S9(08).
+075800211005       01  Li_AccountUnitBalance           PIC S9(10)V9(02).
+075900211005       01  Li_UnprocessedCount             PIC S9(09).
+076000211005       01  Ld_CCYYMMDD                     FORMAT DATE "@Y%m%d".
+076100211005       01  Lc_LastBondRequest              PIC X(14).
+076200211005       01  Lc_LBRParsed.
+076300211005          05 Lc_LastRequestDate           PIC  X(08).
+076400211005          05 Lc_LastRequestFlag           PIC  X(02).
+076500211005          05 Lc_LastRequestStatus         PIC  X(01).
+076600211005          05 Li_LastRequestSeqNo          PIC S9(03).
+076700211005       01  lc_ProvinceCode                PIC  X(03).
+076800211005       01  Li_TenantCount                 PIC S9(09).
+076900211005      * RFS73394.12 - Begins
+077000211005       01 Lb_Indicator                    PIC S9(4) BINARY.
+077100211005      * RFS73394.12 - Ends
+077200211005      *RFS115188 - Start
+077300211005       01  lc_ProvCode                    PIC X(03).
+077400211005       01  lc_ProvCodeDesc                PIC X(25).
+077500211005       01  lc_CountryDesc                 PIC X(25).
+077600211005      *RFS115188 - End
+077700211005
+077800211005      * RFS73394 - Add copybook
+077900211005       COPY CPRDSPVAL.
+078000211005      * RFS73394 Ends
+078100211005
+078200211005       LINKAGE SECTION.
+078300211005       01  pc_VendorBN                     PIC  X(15).
+078400211005       01  pc_IssuerBN                     PIC  X(15).
+078500211005       01  pi_FileSeq                      PIC S9(02).
+078600211005       01  pi_EndDate                      PIC S9(08).
+078700211005       01  pc_DataVersion                  PIC  X(04).
+078800211005       01  pi_VendorTransId                PIC S9(07).
+078900211005       01  pi_ProcessDate                  PIC S9(08).
+07900021100569511  01  pi_RecordCount                  PIC S9(09).
+07910021100569511  01  pc_RptMode                      PIC  X(01).
+079200211005
+079300211005       PROCEDURE DIVISION USING  pc_VendorBN
+079400211005                                 pc_IssuerBN
+079500211005                                 pi_FileSeq
+079600211005                                 pi_EndDate
+079700211005                                 pc_DataVersion
+079800211005                                 pi_VendorTransId
+079900211005                                 pi_ProcessDate
+08000021100569511                            pi_RecordCount
+08010021100569511                            pc_RptMode.
+080200211005
+080300211005      * ---------------------------------
+080400211005       Main.
+080500211005      * ---------------------------------
+080600211005      *RFS1018984-Start.
+080700211005           IF pc_RptMode = lncc_S
+080800211005              PERFORM HEADER_ONLY
+080900211005           ELSE
+081000211005              PERFORM MAIN_2
+081100211005           END-IF.
+081200211005      * ---------------------------------
+081300211005       MAIN_2.
+081400211005      * ---------------------------------
+081500211005      *RFS1018984-Ends.
+081600211005           PERFORM  Initial_Logic.
+081700211005           PERFORM  Detail_Process UNTIL lb_EndOfCursorTrue.
+08180021100599071      PERFORM  Process_Consent_Info.
+081900211005           PERFORM  End_of_Program.
+082000211005
+082100211005      *RFS1018984-Start.
+082200211005      * ---------------------------------
+082300211005       HEADER_ONLY.
+082400211005      * ---------------------------------
+082500211005           PERFORM  Initial_Logic.
+082600211005           PERFORM  End_of_Program.
+082700211005      *RFS1018984-Ends.
+082800211005      * ---------------------------------
+082900211005       Initial_Logic.
+083000211005      * ---------------------------------
+083100211005           INITIALIZE lc_sqlErrShortDESCR
+083200211005                      pi_RecordCount
+08330021100569511                 li_SysDate
+08340021100569511                 li_Date
+08350021100580658                 lc_RDSPSysParms
+083600211005      * RFS124157 - QC34651 - Fix Start
+083700211005124157                lc_Holder
+083800211005      * RFS124157 - QC34651 - Fix End
+083900211005                      lc_SaveAccountTypeCode.
+084000211005
+08410021100580658 * Get RDSP Sys Parm for limit # of Registration Days in pos 84:04
+08420021100580658      ACCEPT lc_RDSPSysParms   FROM lc_DataArea FOR "MFARDSPSP".
+084300211005
+084400211005
+084500211005           SET lb_EndOfCursorFalse TO TRUE.
+084600211005           OPEN INPUT  INVESTOR-TENANT
+084700211005                       COUNTRY.
+084800211005           OPEN I-O    HOLDER-CHANGES.
+084900211005           OPEN OUTPUT HRDC-CDSP-INTERFACE.
+085000211005
+08510021100569511      IF pc_RptMode = lncc_R
+08520021100569511         CALL "GETDAT" USING li_SysDate
+08530021100569511         CANCEL "GETDAT"
+08540021100569511         MOVE li_SysDate to li_Date
+08550021100569511      ELSE
+08560021100569511         MOVE pi_EndDate to li_Date
+08570021100569511      END-IF.
+085800211005      *    RFS73394 - Begins - Get Province-Code for Stop Requests
+085900211005           PERFORM  Get_Province_Code
+086000211005      *    RFS73394 - Ends
+08610021100569511      PERFORM  Drop_Create_WKDSPREJP.
+086200211005           PERFORM  Write_Header_Record.
+086300211005      *RFS1018984-Start.
+086400211005           IF pc_RptMode not = lncc_S
+086500211005      *    PERFORM  Create_Cursor.
+086600211005      *    PERFORM  Fetch_Cursor.
+086700211005            PERFORM  Create_Cursor
+086800211005            PERFORM  Fetch_Cursor
+086900211005           END-IF.
+087000211005
+087100211005      * RFS73394 - Begins - Split Detail_Process into Normal/Closure
+087200211005      *                     Comment Old Detail_Process
+087300211005      * ---------------------------------
+087400211005      *Detail_Process.
+087500211005      * ---------------------------------
+087600211005      *    INITIALIZE WorkingStorageFields.
+087700211005      *
+087800211005      *    IF lc_AccountTypeCode NOT = lc_SaveAccountTypeCode
+087900211005      *       PERFORM  Get_Specimen_No
+088000211005      *       MOVE lc_AccountTypeCode  TO  lc_SaveAccountTypeCode
+088100211005      *    END-IF.
+088200211005      *
+08830021100569511 *    IF lc_ApprovalStatus = lncc_W
+08840021100569511 *       PERFORM Delete_Old_101_Records
+08850021100569511 *    END-IF.
+088600211005      *
+088700211005      *    PERFORM  Process_Contract_Registration.
+088800211005      *    PERFORM  Process_Beneficiary.
+088900211005      *    PERFORM  Process_Holder.
+089000211005      *
+089100211005      *    MOVE lncc_I TO lc_IvrTntInd.
+089200211005      *    PERFORM  Process_Removed_Holders.
+089300211005      *
+089400211005      *    MOVE lncc_T TO lc_IvrTntInd.
+089500211005      *    PERFORM  Process_Removed_Holders.
+089600211005      *
+089700211005      *    PERFORM  Update_Approval_Status.
+089800211005      *
+089900211005      *    PERFORM  Fetch_Cursor.
+090000211005
+090100211005      * ---------------------------------
+090200211005       Detail_Process.
+090300211005      * ---------------------------------
+090400211005           INITIALIZE WorkingStorageFields.
+090500211005
+090600211005           IF lc_AccountTypeCode NOT = lc_SaveAccountTypeCode
+090700211005              PERFORM  Get_Specimen_No
+090800211005              MOVE lc_AccountTypeCode  TO  lc_SaveAccountTypeCode
+090900211005           END-IF.
+091000211005
+091100211005           IF li_CloseDate NOT = Lnci_0
+091200211005      *       RFS73394.3 Begins
+091300211005              IF lc_ApprovalStatus not = lncc_P AND
+091400211005                 lc_ApprovalStatus not = lncc_N AND
+091500211005                 lc_ApprovalStatus not = lncc_C AND
+09160021100580658            lc_ApprovalStatus not = lncc_W AND
+091700211005                 lc_ApprovalStatus not = lncc_D
+091800211005                 PERFORM Normal_Detail_Process
+091900211005              END-IF
+092000211005      *       RFS73394.3 Ends
+092100211005              PERFORM Validate_Closure
+092200211005           ELSE
+092300211005              PERFORM Normal_Detail_Process
+092400211005           END-IF.
+092500211005
+092600211005           PERFORM  Fetch_Cursor.
+092700211005
+092800211005      * ---------------------------------
+092900211005       Normal_Detail_Process.
+093000211005      * ---------------------------------
+093100211005
+09320021100580658 *    IF lc_ApprovalStatus = lncc_W
+093300211005      * RFS86803 Start - Commented out lines below
+093400211005      *    IF lc_ApprovalStatus = lncc_R                               80658
+093500211005      *       PERFORM Delete_Old_101_Records                           69511
+093600211005      *    END-IF.                                                     69511
+093700211005      * RFS86803 end
+093800211005
+093900211005           INITIALIZE lc_RejectionRec.
+094000211005
+094100211005           MOVE lc_ApprovalStatus TO lc_ApprovalStatus101.
+094200211005
+094300211005           IF ValidStatus101
+094400211005              PERFORM  Validate_Contract_Registration
+094500211005              PERFORM  Validate_Beneficiary
+094600211005              PERFORM  Validate_Tenant
+094700211005           END-IF
+094800211005
+094900211005           PERFORM Process_Contract_Registration
+095000211005           IF lc_RejRecType = SPACES
+095100211005              PERFORM Process_Beneficiary
+095200211005              PERFORM Process_Holder
+095300211005           END-IF.
+095400211005
+095500211005           MOVE lncc_I TO lc_IvrTntInd.
+095600211005           PERFORM  Process_Removed_Holders.
+095700211005
+095800211005           MOVE lncc_T TO lc_IvrTntInd.
+095900211005           PERFORM  Process_Removed_Holders.
+096000211005
+096100211005      *    RFS73394 - Do not update if there is an error
+096200211005      *    PERFORM  Update_Approval_Status.
+096300211005           IF lc_RejRecType = SPACES
+096400211005              PERFORM  Update_Approval_Status
+096500211005           END-IF.
+096600211005      *    RFS73394 Ends
+096700211005
+096800211005      * ---------------------------------
+096900211005       Process_Contract_Registration.
+097000211005      * ---------------------------------
+097100211005           MOVE lc_ApprovalStatus TO lc_ApprovalStatus101.
+097200211005
+097300211005           IF ValidStatus101
+097400211005              INITIALIZE lc_ACPCGP_Info
+097500211005              SET lb_PCGRequiredFalse TO TRUE
+097600211005105104*       COMPUTE li_BenAge  = pi_ProcessDate - li_BenBirthDate
+097700211005105104        COMPUTE li_BenAge  = li_PlanSetupDate - li_BenBirthDate
+097800211005
+09790021100569511 *       IF    li_BenAge < 180000
+09800021100574620         IF    li_BenAge < (li_BenAgePCGReq * 10000)
+098100211005      *         RFS 73394.1 - Begins - Change age qualifications
+09820021100569511 *         OR (li_BenAge = 180000
+09830021100574620 *         OR (li_BenAge >= Lnci_180000
+09840021100574620 *         AND Li_BenAge < Lnci_190000
+09850021100574620           OR (li_BenAge >= (li_BenAgePCGReq * 10000)
+09860021100574620           AND Li_BenAge < ((li_BenAgePCGReq + 1) * 10000)
+09870021100573394 *         RFS 73394.1 - Ends
+098800211005      *RFS105104 -START
+09890021100569511 *         AND pi_ProcessDate(5:2)  = lc_BenBirthDate(5:2)
+09900021100569511 *         AND pi_ProcessDate(7:2) >= lc_BenBirthDate(7:2))
+099100211005                AND li_PlanSetupDate(5:2)  = lc_BenBirthDate(5:2)
+099200211005                AND li_PlanSetupDate(7:2) >= lc_BenBirthDate(7:2))
+099300211005      * RFS105104 - END
+099400211005                    SET lb_PCGRequiredTrue TO TRUE
+099500211005                    PERFORM Get_Primary_Caregiver_Info
+099600211005      *             RFS73394 - Begins - Validate PCG
+099700211005                    PERFORM Validate_PCG
+099800211005      *             RFS73394 - Ends
+099900211005              END-IF
+100000211005
+100100211005      *       PERFORM  Format_and_Write_101_01
+100200211005      *       ADD   1  TO  pi_VendorTransId
+100300211005              IF lc_RejErrorCode = SPACES
+100400211005                 PERFORM  Format_and_Write_101_01
+100500211005                 ADD   1  TO  pi_VendorTransId
+100600211005              END-IF
+100700211005      *       RFS 73394 - Ends
+100800211005
+100900211005           END-IF.
+101000211005
+101100211005      * RFS 99071 - Start
+101200211005      * ---------------------------------
+101300211005       Process_Consent_Info.
+101400211005      * ---------------------------------
+101500211005      * RFS 99071.2 - begins.
+101600211005           INITIALIZE lc_SaveAccountTypeCode.
+101700211005      * RFS 99071.2 - ends.
+101800211005
+101900211005           PERFORM CreateHRDPCPCursor.
+102000211005           PERFORM FetchHRDPCPCursor UNTIL lb_EndOfHRDPCPCursorTrue.
+102100211005
+102200211005      * ---------------------------------
+102300211005       CreateHRDPCPCursor.
+102400211005      * ---------------------------------
+102500211005
+102600211005           SET lb_EndOfHRDPCPCursorFalse    TO TRUE.
+102700211005           EXEC SQL
+102800211005            DECLARE lcu_PCPCursor CURSOR FOR
+102900211005             SELECT HRDPCP.RDSP_RECORD_TYPE,
+103000211005                    HRDPCP.HRDC_TRANS_TYPE,
+103100211005                    HRDPCP.ACCOUNT_NO,
+103200211005
+103300211005      * RFS 99071.2 - begins.
+103400211005                    CHAR(HRDPCP.ACCOUNT_NO),
+103500211005                    Accdsp.Plan_Setup_Date,
+103600211005                    CHAR(DIGITS(IFNULL(
+103700211005                    Accbnp.Social_Insurance_No,:Lnci_000000000))),
+103800211005                    Accntp.Account_Type_Code,
+103900211005      * RFS 99071.2 - ends.
+104000211005
+104100211005                    HRDPCP.PCG_SEQ_NO,
+104200211005                    HRDPCP.CONSENT_SEQUENCE_NO,
+104300211005                    HRDPCP.VENDOR_TRANSACTION_ID,
+104400211005      * RFS 99071.2 - begins.
+104500211005      *             HRDPCP.LAST_NAME,
+104600211005      *             HRDPCP.FIRST_NAME,
+104700211005      *             HRDPCP.SOCIAL_INSURANCE_NO,
+104800211005      *             COALESCE(HRDPCP.BUSINESS_NAME, " "),
+104900211005      *             COALESCE(HRDPCP.BUSINESS_NUMBER, " "),
+105000211005      *             HRDPCP.CONSENT_TYPE,
+105100211005                    ACPCGP.LAST_NAME,
+105200211005                    ACPCGP.FIRST_NAME,
+105300211005                    ACPCGP.SOCIAL_INSURANCE_NO,
+105400211005                    COALESCE(ACPCGP.BUSINESS_NAME, " "),
+105500211005                    COALESCE(ACPCGP.BUSINESS_NUMBER, " "),
+105600211005                    ACPCGP.PCG_TYPE_CODE,
+105700211005      * RFS 99071.2 - ends.
+105800211005                    HRDPCP.CONSENT_DATE,
+105900211005                    HRDPCP.REVOKE_CONSENT_DATE,
+106000211005                    HRDPCP.HRDC_STATUS,
+106100211005                    COALESCE(HRDPCP.HRDC_ERROR_CODE, " "),
+106200211005                    COALESCE(HRDPCP.HRDC_FILE_DATE, 0),
+106300211005                    COALESCE(HRDPCP.CREATION_DATE, 0)
+106400211005               FROM MFAHRDPCP HRDPCP
+106500211005                    INNER JOIN MFAACPCGP ACPCGP
+106600211005                 ON ACPCGP.ACCOUNT_NO            =  HRDPCP.ACCOUNT_NO
+106700211005                AND ACPCGP.PCG_SEQ_NO            =  HRDPCP.PCG_SEQ_NO
+106800211005                    INNER JOIN MFAACCDSP ACCDSP
+106900211005                 ON ACCDSP.ACCOUNT_NO            =  HRDPCP.ACCOUNT_NO
+107000211005      * RFS99071.1 - Start
+107100211005      *         AND ACCDSP.RDSP_APPROVAL_STATUS  IN (:lncc_W, :lncc_A)
+107200211005                AND ACCDSP.RDSP_APPROVAL_STATUS
+107300211005                NOT IN(:lncc_N, :lncc_C, :lncc_D, :lncc_U)
+107400211005      * RFS99071.1 - End
+107500211005
+107600211005      * RFS99071.2 - begins.
+107700211005                    INNER JOIN MFAACCNTP Accntp ON
+107800211005                     Accntp.Account_No = Accdsp.Account_No
+107900211005
+108000211005                    INNER JOIN MFAACCTYP Acctyp  ON
+108100211005                     Accntp.Account_Type_Code = Acctyp.Account_Type_Code
+108200211005                    AND Acctyp.Account_Type_Rule = :lncc_0
+108300211005
+108400211005                    LEFT OUTER JOIN
+108500211005                    Mfaaccbnp Accbnp
+108600211005                 ON Accbnp.Account_No         = Accdsp.Account_No
+108700211005                AND Accbnp.Beneficiary_Status = :lncc_A
+108800211005      * RFS99071.2 - ends.
+108900211005
+109000211005              WHERE HRDPCP.HRDC_STATUS           IN (:lncc_U, :lncc_R)
+109100211005                AND ((HRDPCP.HRDC_TRANS_TYPE     =  :lncc_01    AND
+109200211005                      HRDPCP.CONSENT_DATE        <= :li_Date)   OR
+109300211005                     (HRDPCP.HRDC_TRANS_TYPE     =  :lncc_02    AND
+109400211005                      HRDPCP.REVOKE_CONSENT_DATE <= :li_Date))
+109500211005                   ORDER BY HRDPCP.ACCOUNT_NO
+109600211005                   FOR FETCH ONLY
+109700211005                   OPTIMIZE FOR ALL ROWS
+109800211005           END-EXEC.
+109900211005
+110000211005           EXEC SQL
+110100211005             OPEN lcu_PCPCursor
+110200211005           END-EXEC.
+110300211005
+110400211005           MOVE SQLSTATE TO lc_sqlStates.
+110500211005           IF NOT lncc_sqlSuccessful
+110600211005              SET lncc_Err_41 TO TRUE
+110700211005              MOVE lncc_ErrOpenHRDPCPCursor TO lc_sqlErrShortDESCR
+110800211005              PERFORM  SQL_Fail_Process
+110900211005           END-IF.
+111000211005
+111100211005      * ---------------------------------
+111200211005       FetchHRDPCPCursor.
+111300211005      * ---------------------------------
+111400211005           EXEC SQL
+111500211005             FETCH NEXT FROM lcu_PCPCursor
+111600211005              INTO :lcu_HRDPCPRec
+111700211005           END-EXEC.
+111800211005
+111900211005           MOVE SQLSTATE TO lc_sqlStates.
+112000211005           EVALUATE TRUE
+112100211005             WHEN lncc_sqlSuccessful
+112200211005                  PERFORM Validate_Consent_Info
+112300211005             WHEN lncc_sqlEnd
+112400211005                  SET lb_EndOfHRDPCPCursorTrue TO TRUE
+112500211005                  PERFORM Close_HRDPCP_Cursor
+112600211005             WHEN OTHER
+112700211005                  SET lncc_Err_42 TO TRUE
+112800211005                  MOVE lncc_ErrFetchHRDPCPCursor TO lc_sqlErrShortDESCR
+112900211005                  PERFORM  SQL_Fail_Process
+113000211005           END-EVALUATE.
+113100211005
+113200211005      * RFS 99071 - End
+113300211005
+113400211005      * ---------------------------------
+113500211005       Format_and_Write_101_01.
+113600211005      * ---------------------------------
+113700211005           INITIALIZE 101-01-Record.
+113800211005
+113900211005           STRING pi_ProcessDate pi_VendorTransId DELIMITED BY SIZE
+114000211005             INTO lc_VendorTransID.
+114100211005
+114200211005           MOVE lncc_101              TO  101-01-RecType.
+114300211005           MOVE lncc_01               TO  101-01-TransType.
+114400211005           MOVE pc_IssuerBN           TO  101-01-IssuerBN.
+114500211005           MOVE lc_VendorTransID      TO  101-01-IssuerTransId.
+114600211005           MOVE lc_SpecimenPlanNo     TO  101-01-SpecimenId.
+114700211005           MOVE lc_AccountNo          TO  101-01-ContractId.
+114800211005           MOVE li_PlanSetupDate      TO  101-01-ContractDate.
+114900211005           MOVE li_PlanSetupDate      TO  101-01-ContractDate2.
+115000211005
+115100211005      *Rfs74620 starts
+115200211005      *    MOVE lncc_N                TO  101-01-TransferInd.
+115300211005           IF lc_OtherContractID not = " "
+115400211005              AND lc_OtherSpecimenID not = " "
+115500211005                 MOVE lncc_Y                 TO  101-01-TransferInd
+115600211005           ELSE
+115700211005                 MOVE lncc_N                 TO  101-01-TransferInd
+115800211005           END-IF.
+115900211005
+116000211005           MOVE lc_OtherContractID    TO  101-01-OtherContractID.
+116100211005           MOVE lc_OtherSpecimenID    TO  101-01-OtherSpecimenID.
+116200211005
+116300211005      *Rfs74620 ends
+116400211005
+116500211005           IF lb_PCGRequiredTrue
+116600211005              IF lc_ACPCGP_PCGTypeCode = lncc_P
+116700211005                 MOVE lc_ACPCGP_SIN          TO  101-01-CaregiverSIN
+116800211005                 MOVE lc_ACPCGP_FirstName    TO  101-01-CaregiverFisrt
+116900211005                 MOVE lc_ACPCGP_LastName     TO  101-01-CaregiverLast
+117000211005                 MOVE lncc_1                 TO  101-01-CaregiverType
+117100211005              END-IF
+117200211005              IF lc_ACPCGP_PCGTypeCode = lncc_A
+117300211005                 MOVE lc_ACPCGP_BusinessNo   TO  101-01-CaregiverSIN
+117400211005                 MOVE lc_ACPCGP_BusinessName TO  101-01-CaregiverLast
+117500211005                 MOVE lncc_2                 TO  101-01-CaregiverType
+117600211005              END-IF
+117700211005           END-IF.
+117800211005
+117900211005           WRITE    HRDC-CDSP-REC  FROM   101-01-Record.
+118000211005
+11810021100569511      ADD 1  TO pi_RecordCount.
+118200211005
+118300211005      * ---------------------------------
+118400211005       Process_Beneficiary.
+118500211005      * ---------------------------------
+118600211005           MOVE lc_BenLanguage TO lc_Language.
+118700211005           MOVE lc_BenSex      TO lc_Sex.
+118800211005           MOVE li_BenAddrNo   TO li_AddrNo.
+118900211005           PERFORM  Get_Rel_Type_Xref.
+119000211005           PERFORM  Get_Address.
+119100211005           PERFORM  Format_Address.
+119200211005
+119300211005           IF ValidStatus101
+119400211005              PERFORM  Format_and_Write_101_02
+119500211005           ELSE
+119600211005              INITIALIZE MFAHRDDBP
+119700211005              EXEC SQL
+119800211005                SELECT *
+119900211005                  INTO :MFAHRDDBP
+120000211005                  FROM  MFAHRDDBP
+120100211005                 WHERE  ACCOUNT_NO          = :li_AccountNo
+120200211005                   AND  BENEFICIARY_SEQ_NO  = :li_BenSeqNo
+120300211005                 ORDER  BY VENDOR_TRANSACTION_ID DESC
+120400211005                 FETCH  FIRST ROW ONLY
+120500211005              END-EXEC
+120600211005
+120700211005              MOVE SQLSTATE TO lc_sqlStates
+120800211005              EVALUATE TRUE
+120900211005                WHEN lncc_sqlSuccessful
+121000211005                   PERFORM  Check_For_201_02_Changes
+121100211005
+121200211005                WHEN lncc_sqlEnd
+121300211005                   CONTINUE
+121400211005
+121500211005                WHEN OTHER
+121600211005                 SET lncc_Err_10 TO TRUE
+121700211005                 MOVE lncc_ErrorReadingMFAHRDDBP TO lc_sqlErrShortDESCR
+121800211005                 PERFORM  SQL_Fail_Process
+121900211005              END-EVALUATE
+122000211005           END-IF.
+122100211005
+122200211005      * ---------------------------------
+122300211005       Check_For_201_02_Changes.
+122400211005      * ---------------------------------
+122500211005           IF   li_BenSin      NOT =  SOCIAL-INSURANCE-NO OF MFAHRDDBP
+122600211005             OR lc_BenFirstName     NOT = FIRST-NAME      OF MFAHRDDBP
+122700211005             OR lc_BenLastname      NOT = LAST-NAME       OF MFAHRDDBP
+122800211005             OR li_BenBirthDate     NOT = DATE-OF-BIRTH   OF MFAHRDDBP
+122900211005             OR lc_SexCode          NOT = RDSP-SEX-CODE   OF MFAHRDDBP
+123000211005             OR lc_AddressLine1     NOT = ADDRESS-LINE-1  OF MFAHRDDBP
+123100211005             OR lc_AddressLine2     NOT = ADDRESS-LINE-2  OF MFAHRDDBP
+123200211005             OR lc_AddressLine3     NOT = ADDRESS-LINE-3  OF MFAHRDDBP
+123300211005             OR lc_City             NOT = CITY            OF MFAHRDDBP
+123400211005             OR lc_Province         NOT = PROVINCE-2      OF MFAHRDDBP
+123500211005             OR lc_CountryCode      NOT = COUNTRY-CODE    OF MFAHRDDBP
+123600211005             OR lc_PostalCode       NOT = POSTAL-CODE     OF MFAHRDDBP
+123700211005             OR lc_LanguageCode NOT = RDSP-LANGUAGE-CODE  OF MFAHRDDBP
+123800211005      *         RFS73394 - Begins - Move CF20102C to Validate_201_02_Changes
+123900211005      *         PERFORM  Format_and_Write_201_02
+124000211005                PERFORM  Validate_201_02_Changes
+124100211005      *         RFS73394 - Ends
+124200211005           END-IF.
+124300211005
+124400211005      * ---------------------------------
+124500211005       Format_and_Write_101_02.
+124600211005      * ---------------------------------
+124700211005           INITIALIZE 101-02-Record.
+124800211005115188     PERFORM AddrLineChanges.
+124900211005           MOVE lncc_101              TO  101-02-RecType.
+125000211005           MOVE lncc_02               TO  101-02-TransType.
+125100211005           MOVE pc_IssuerBN           TO  101-02-IssuerBN.
+125200211005           MOVE lc_VendorTransID      TO  101-02-IssuerTransId.
+125300211005           MOVE lc_BenSIN             TO  101-02-BenSIN.
+125400211005           MOVE lc_BenFirstName       TO  101-02-BenFirstName.
+125500211005           MOVE lc_BenLastName        TO  101-02-BenLastName.
+125600211005           MOVE lc_BenBirthDate       TO  101-02-BenBirthDate.
+125700211005           MOVE lc_SexCode            TO  101-02-BenSex.
+125800211005           MOVE lc_AddressLine1       TO  101-02-AddrLine1.
+125900211005           MOVE lc_AddressLine2       TO  101-02-AddrLine2.
+126000211005           MOVE lc_AddressLine3       TO  101-02-AddrLine3.
+126100211005           MOVE lc_City               TO  101-02-City.
+126200211005           MOVE lc_Province           TO  101-02-Province.
+126300211005           MOVE lc_CountryCode        TO  101-02-Country.
+126400211005           MOVE lc_PostalCode         TO  101-02-PostalCode.
+126500211005           MOVE lc_LanguageCode       TO  101-02-Language.
+126600211005
+126700211005           WRITE    HRDC-CDSP-REC  FROM   101-02-Record.
+12680021100569511      ADD 1  TO pi_RecordCount.
+126900211005
+127000211005           INITIALIZE MFAHRDDBP.
+127100211005           MOVE lncc_101  TO  RDSP-RECORD-TYPE OF MFAHRDDBP.
+127200211005           MOVE lncc_02   TO  RDSP-TRANS-TYPE  OF MFAHRDDBP.
+127300211005           PERFORM  Write_MFAHRDDBP_Record.
+127400211005
+127500211005      * ---------------------------------
+127600211005       Format_and_Write_201_02.
+127700211005      * ---------------------------------
+127800211005           INITIALIZE 201-02-Record.
+127900211005115188     PERFORM AddrLineChanges.
+128000211005           STRING pi_ProcessDate pi_VendorTransId DELIMITED BY SIZE
+128100211005             INTO lc_VendorTransID.
+128200211005
+128300211005           MOVE lncc_201              TO  201-02-RecType.
+128400211005           MOVE lncc_02               TO  201-02-TransType.
+128500211005           MOVE pc_IssuerBN           TO  201-02-IssuerBN.
+128600211005           MOVE lc_VendorTransID      TO  201-02-IssuerTransId.
+128700211005           MOVE lc_BenSIN             TO  201-02-BenSIN.
+128800211005           MOVE lc_BenFirstName       TO  201-02-BenFirstName.
+128900211005           MOVE lc_BenLastName        TO  201-02-BenLastName.
+129000211005           MOVE lc_BenBirthDate       TO  201-02-BenBirthDate.
+129100211005           MOVE lc_SexCode            TO  201-02-BenSex.
+129200211005           MOVE lc_AddressLine1       TO  201-02-AddrLine1.
+129300211005           MOVE lc_AddressLine2       TO  201-02-AddrLine2.
+129400211005           MOVE lc_AddressLine3       TO  201-02-AddrLine3.
+129500211005           MOVE lc_City               TO  201-02-City.
+129600211005           MOVE lc_Province           TO  201-02-Province.
+129700211005           MOVE lc_CountryCode        TO  201-02-Country.
+129800211005           MOVE lc_PostalCode         TO  201-02-PostalCode.
+129900211005           MOVE lc_LanguageCode       TO  201-02-Language.
+130000211005           MOVE lc_SpecimenPlanNo     TO  201-02-SpecimenId.
+130100211005           MOVE lc_AccountNo          TO  201-02-ContractId.
+130200211005      * RFS 80312 - Begin
+130300211005      **   MOVE pi_ProcessDate        TO  201-02-UpdateDate.
+130400211005           MOVE pi_EndDate            TO  201-02-UpdateDate.
+130500211005      * RFS 80312 - End
+130600211005
+130700211005           WRITE    HRDC-CDSP-REC  FROM   201-02-Record.
+13080021100569511      ADD 1  TO pi_RecordCount.
+130900211005
+131000211005           INITIALIZE MFAHRDDBP.
+131100211005           MOVE lncc_201  TO  RDSP-RECORD-TYPE OF MFAHRDDBP.
+131200211005           MOVE lncc_02   TO  RDSP-TRANS-TYPE  OF MFAHRDDBP.
+131300211005           PERFORM  Write_MFAHRDDBP_Record.
+131400211005           ADD   1  TO  pi_VendorTransId.
+131500211005
+131600211005      * ---------------------------------
+131700211005       Write_MFAHRDDBP_Record.
+131800211005      * ---------------------------------
+131900211005           MOVE li_AccountNo       TO ACCOUNT-NO          OF MFAHRDDBP.
+132000211005           MOVE li_BenSeqNo        TO BENEFICIARY-SEQ-NO  OF MFAHRDDBP.
+132100211005           MOVE lc_VendorTransID TO VENDOR-TRANSACTION-ID OF MFAHRDDBP.
+132200211005           MOVE li_BenSIN          TO SOCIAL-INSURANCE-NO OF MFAHRDDBP.
+132300211005           MOVE lc_BenFirstName    TO FIRST-NAME          OF MFAHRDDBP.
+132400211005           MOVE lc_BenLastName     TO LAST-NAME           OF MFAHRDDBP.
+132500211005           MOVE li_BenBirthDate    TO DATE-OF-BIRTH       OF MFAHRDDBP.
+132600211005           MOVE lc_SexCode         TO RDSP-SEX-CODE       OF MFAHRDDBP.
+132700211005           MOVE lc_AddressLine1    TO ADDRESS-LINE-1      OF MFAHRDDBP.
+132800211005           MOVE lc_AddressLine2    TO ADDRESS-LINE-2      OF MFAHRDDBP.
+132900211005           MOVE lc_AddressLine3    TO ADDRESS-LINE-3      OF MFAHRDDBP.
+133000211005           MOVE lc_City            TO CITY                OF MFAHRDDBP.
+133100211005           MOVE lc_Province        TO PROVINCE-2          OF MFAHRDDBP.
+133200211005           MOVE lc_CountryCode     TO COUNTRY-CODE        OF MFAHRDDBP.
+133300211005           MOVE lc_PostalCode      TO POSTAL-CODE         OF MFAHRDDBP.
+133400211005           MOVE lc_LanguageCode    TO RDSP-LANGUAGE-CODE  OF MFAHRDDBP.
+133500211005
+133600211005           EXEC SQL
+133700211005             INSERT INTO MFAHRDDBP
+133800211005               VALUES :MFAHRDDBP
+133900211005           END-EXEC.
+134000211005
+134100211005           MOVE SQLSTATE TO lc_sqlStates
+134200211005           EVALUATE TRUE
+134300211005             WHEN lncc_sqlSuccessful
+134400211005               CONTINUE
+134500211005
+134600211005             WHEN OTHER
+134700211005               SET lncc_Err_11 TO TRUE
+134800211005               MOVE lncc_ErrorUpdatingMFAHRDDBP TO lc_sqlErrShortDESCR
+134900211005               PERFORM  SQL_Fail_Process
+135000211005           END-EVALUATE.
+135100211005
+135200211005      * ---------------------------------
+135300211005       Process_Holder.
+135400211005      * ---------------------------------
+135500211005           PERFORM  Get_Investor_Info.
+135600211005
+135700211005           EVALUATE lc_HldRecipient
+135800211005
+135900211005              WHEN  lncc_1
+136000211005                 MOVE lncc_I  TO  lc_IvrTntInd
+136100211005                 PERFORM  Common_Holder_Routine
+136200211005
+136300211005              WHEN  lncc_2
+136400211005                 PERFORM  Process_Tenants
+136500211005
+136600211005              WHEN  OTHER
+136700211005                 PERFORM  Get_Business_Number
+136800211005                 MOVE lc_HldLegalName  TO  lc_HldLastName
+136900211005
+137000211005                 MOVE lncc_I  TO  lc_IvrTntInd
+137100211005                 PERFORM  Common_Holder_Routine
+137200211005
+137300211005           END-EVALUATE.
+137400211005
+137500211005      * ---------------------------------
+137600211005       Process_Tenants.
+137700211005      * ---------------------------------
+137800211005           INITIALIZE  MFAIVRTEP                OF INVESTOR-TNT-REC.
+137900211005           MOVE li_InvestorNo TO  INVESTOR-NO   OF INVESTOR-TNT-REC.
+138000211005           MOVE ZEROES        TO  TENANT-SEQ-NO OF INVESTOR-TNT-REC.
+138100211005
+138200211005           START INVESTOR-TENANT
+138300211005             KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+138400211005               INVALID KEY
+138500211005                 CONTINUE
+138600211005               NOT INVALID KEY
+138700211005                 SET lb_EndOfIVRTEPFalse TO TRUE
+138800211005                 PERFORM Read_Investor_Tenant
+138900211005                 PERFORM Process_Investor_Tenants    until
+139000211005                         INVESTOR-NO OF MFAIVRTEP NOT = li_InvestorNo
+139100211005                      OR lb_EndOfIVRTEPTrue
+139200211005           END-START.
+139300211005
+139400211005      * ---------------------------------
+139500211005       Process_Investor_Tenants.
+139600211005      * ---------------------------------
+139700211005           INITIALIZE lc_Holder.
+139800211005
+139900211005           MOVE SOCIAL-INSURANCE-NO OF INVESTOR-TNT-REC
+140000211005                                                   TO lc_HldSinBusNo.
+140100211005           MOVE FIRST-NAME     OF INVESTOR-TNT-REC TO lc_HldFirstName.
+140200211005           MOVE LAST-NAME      OF INVESTOR-TNT-REC TO lc_HldLastName.
+140300211005           MOVE DATE-OF-BIRTH  OF INVESTOR-TNT-REC TO li_HldBirthDate.
+140400211005           MOVE li_HldBirthDate                    TO lc_HldBirthDate.
+140500211005           MOVE SEX            OF INVESTOR-TNT-REC TO lc_HldSex.
+140600211005           MOVE lc_IvrLanguage                     TO lc_HldLanguage.
+140700211005           MOVE lc_IvrRecipient                    TO lc_HldRecipient.
+140800211005
+140900211005           IF  ADDR-NO OF INVESTOR-TNT-REC NOT = ZEROS
+141000211005             MOVE ADDR-NO OF INVESTOR-TNT-REC TO li_HldAddrNo
+141100211005           ELSE
+141200211005             MOVE li_IvrAddrNo  TO  li_HldAddrNo
+141300211005           END-IF.
+141400211005
+141500211005           MOVE lncc_T  TO  lc_IvrTntInd.
+141600211005           PERFORM  Common_Holder_Routine.
+141700211005
+141800211005           PERFORM  Read_Investor_Tenant.
+141900211005
+142000211005      * ---------------------------------
+142100211005       Common_Holder_Routine.
+142200211005      * ---------------------------------
+142300211005           INITIALIZE lc_HolderAddition.
+142400211005           MOVE lc_HldLanguage TO lc_Language.
+142500211005           MOVE lc_HldSex      TO lc_Sex.
+142600211005           MOVE li_HldAddrNo   TO li_AddrNo.
+142700211005           PERFORM  Get_Address.
+142800211005           PERFORM  Format_Address.
+142900211005
+143000211005           IF ValidStatus101
+143100211005              PERFORM  Format_and_Write_101_03
+143200211005           ELSE
+143300211005              INITIALIZE MFAHRDDHP OF HOLDER-CHG-REC
+143400211005              MOVE li_AccountNo   TO ACCOUNT-NO            OF MFAHRDDHP
+143500211005              MOVE lc_IvrTntInd   TO INVESTOR-TENANT-IND   OF MFAHRDDHP
+143600211005              MOVE lc_HldSINBusNo TO SIN-OR-BUSINESS-NO    OF MFAHRDDHP
+143700211005              MOVE HIGH-VALUES    TO VENDOR-TRANSACTION-ID OF MFAHRDDHP
+143800211005
+143900211005              START HOLDER-CHANGES
+144000211005                KEY IS GREATER THAN EXTERNALLY-DESCRIBED-KEY
+144100211005                INVALID KEY
+144200211005                  READ HOLDER-CHANGES LAST RECORD
+144300211005                    AT END
+144400211005                       MOVE lncc_Y  TO lc_HolderAddition
+144500211005                       PERFORM  Format_and_Write_201_03_13
+144600211005                    NOT AT END
+144700211005                       IF    li_AccountNo =
+144800211005                                ACCOUNT-NO OF MFAHRDDHP
+144900211005                         AND lc_IvrTntInd =
+145000211005                                INVESTOR-TENANT-IND OF MFAHRDDHP
+145100211005                         AND lc_HldSINBusNo =
+145200211005                                SIN-OR-BUSINESS-NO OF MFAHRDDHP
+145300211005
+145400211005                             PERFORM  Check_For_201_03_Changes
+145500211005                       ELSE
+145600211005                             MOVE lncc_Y  TO lc_HolderAddition
+145700211005                             PERFORM  Format_and_Write_201_03_13
+145800211005                       END-IF
+145900211005                  END-READ
+146000211005                NOT INVALID KEY
+146100211005                  READ HOLDER-CHANGES PRIOR RECORD
+146200211005                    AT END
+146300211005                       MOVE lncc_Y  TO lc_HolderAddition
+146400211005                       PERFORM  Format_and_Write_201_03_13
+146500211005                    NOT AT END
+146600211005                       IF    li_AccountNo =
+146700211005                                ACCOUNT-NO OF MFAHRDDHP
+146800211005                         AND lc_IvrTntInd =
+146900211005                                INVESTOR-TENANT-IND OF MFAHRDDHP
+147000211005                         AND lc_HldSINBusNo =
+147100211005                                SIN-OR-BUSINESS-NO OF MFAHRDDHP
+147200211005
+147300211005                             PERFORM  Check_For_201_03_Changes
+147400211005                       ELSE
+147500211005                             MOVE lncc_Y  TO lc_HolderAddition
+147600211005                             PERFORM  Format_and_Write_201_03_13
+147700211005                       END-IF
+147800211005                  END-READ
+147900211005              END-START
+148000211005           END-IF.
+148100211005
+148200211005      * ---------------------------------
+148300211005       Check_For_201_03_Changes.
+148400211005      * ---------------------------------
+148500211005           IF   lc_HldFirstName     NOT = FIRST-NAME      OF MFAHRDDHP
+148600211005             OR lc_HldLastname      NOT = LEGAL-NAME      OF MFAHRDDHP
+148700211005             OR li_HldBirthDate     NOT = DATE-OF-BIRTH   OF MFAHRDDHP
+148800211005             OR lc_SexCode          NOT = RDSP-SEX-CODE   OF MFAHRDDHP
+148900211005             OR lc_AddressLine1     NOT = ADDRESS-LINE-1  OF MFAHRDDHP
+149000211005             OR lc_AddressLine2     NOT = ADDRESS-LINE-2  OF MFAHRDDHP
+149100211005             OR lc_AddressLine3     NOT = ADDRESS-LINE-3  OF MFAHRDDHP
+149200211005             OR lc_City             NOT = CITY            OF MFAHRDDHP
+149300211005             OR lc_Province         NOT = PROVINCE-2      OF MFAHRDDHP
+149400211005             OR lc_CountryCode      NOT = COUNTRY-CODE    OF MFAHRDDHP
+149500211005             OR lc_PostalCode       NOT = POSTAL-CODE     OF MFAHRDDHP
+149600211005             OR lc_LanguageCode  NOT = RDSP-LANGUAGE-CODE OF MFAHRDDHP
+149700211005             OR lc_RelTypeXref      NOT =
+149800211005                              BEN-RELATION-TYPE-XREF-RDSP OF MFAHRDDHP
+149900211005                PERFORM  Format_and_Write_201_03_13
+150000211005           END-IF.
+150100211005
+150200211005      * ---------------------------------
+150300211005       Format_and_Write_101_03.
+150400211005      * ---------------------------------
+150500211005           INITIALIZE 101-03-Record.
+150600211005115188     PERFORM AddrLineChanges.
+150700211005           MOVE lncc_101              TO  101-03-RecType.
+150800211005           MOVE lncc_03               TO  101-03-TransType.
+150900211005           MOVE pc_IssuerBN           TO  101-03-IssuerBN.
+151000211005           MOVE lc_VendorTransID      TO  101-03-IssuerTransId.
+151100211005           MOVE lc_HldSinBusNo        TO  101-03-HldSinBusNo.
+151200211005           MOVE lc_HldFirstName       TO  101-03-HldFirstName.
+151300211005           MOVE lc_HldLastName        TO  101-03-HldLastName.
+151400211005           MOVE lc_RelTypeXref        TO  101-03-HldRelType.
+151500211005           MOVE lc_HldBirthDate       TO  101-03-HldBirthDate.
+151600211005           MOVE lc_SexCode            TO  101-03-HldSex.
+151700211005           MOVE lc_AddressLine1       TO  101-03-AddrLine1.
+151800211005           MOVE lc_AddressLine2       TO  101-03-AddrLine2.
+151900211005           MOVE lc_AddressLine3       TO  101-03-AddrLine3.
+152000211005           MOVE lc_City               TO  101-03-City.
+152100211005           MOVE lc_Province           TO  101-03-Province.
+152200211005           MOVE lc_CountryCode        TO  101-03-Country.
+152300211005           MOVE lc_PostalCode         TO  101-03-PostalCode.
+152400211005           MOVE lc_LanguageCode       TO  101-03-Language.
+152500211005
+152600211005           IF lc_HldRecipient = lncc_2  OR lncc_1
+152700211005              MOVE lncc_1  TO 101-03-HldType
+152800211005           ELSE
+152900211005              MOVE lncc_2  TO 101-03-HldType
+153000211005           END-IF.
+153100211005
+153200211005           INITIALIZE MFAHRDDHP OF HOLDER-CHG-REC.
+153300211005           MOVE lncc_101  TO  RDSP-RECORD-TYPE OF MFAHRDDHP.
+153400211005           MOVE lncc_03   TO  RDSP-TRANS-TYPE  OF MFAHRDDHP.
+153500211005           PERFORM  Write_MFAHRDDHP_Record.
+153600211005
+153700211005      * In case of duplicate key error for tenants with the same SIN
+153800211005      * skip writing the record.
+153900211005
+154000211005           IF lncc_Err_12
+154100211005              MOVE SPACES TO WS-ERR-CODE
+154200211005           ELSE
+154300211005              WRITE    HRDC-CDSP-REC  FROM   101-03-Record
+15440021100569511         ADD 1  TO pi_RecordCount
+154500211005           END-IF.
+154600211005
+154700211005      * ---------------------------------
+154800211005       Format_and_Write_201_03_13.
+154900211005      * ---------------------------------
+155000211005           INITIALIZE 201-03-13-Record.
+155100211005115188     PERFORM AddrLineChanges.
+155200211005           STRING pi_ProcessDate pi_VendorTransId DELIMITED BY SIZE
+155300211005             INTO lc_VendorTransID.
+155400211005
+155500211005           IF lc_HolderAddition = lncc_Y
+155600211005              MOVE lncc_13            TO  201-03-13-TransType
+155700211005           ELSE
+155800211005              MOVE lncc_03            TO  201-03-13-TransType
+155900211005           END-IF.
+156000211005
+156100211005           MOVE lncc_201              TO  201-03-13-RecType.
+156200211005           MOVE pc_IssuerBN           TO  201-03-13-IssuerBN.
+156300211005           MOVE lc_VendorTransID      TO  201-03-13-IssuerTransId.
+156400211005           MOVE lc_HldSinBusNo        TO  201-03-13-HldSinBusNo.
+156500211005           MOVE lc_HldFirstName       TO  201-03-13-HldFirstName.
+156600211005           MOVE lc_HldLastName        TO  201-03-13-HldLastName.
+156700211005           MOVE lc_RelTypeXref        TO  201-03-13-HldRelType.
+156800211005           MOVE lc_HldBirthDate       TO  201-03-13-HldBirthDate.
+156900211005           MOVE lc_SexCode            TO  201-03-13-HldSex.
+157000211005           MOVE lc_AddressLine1       TO  201-03-13-AddrLine1.
+157100211005           MOVE lc_AddressLine2       TO  201-03-13-AddrLine2.
+157200211005           MOVE lc_AddressLine3       TO  201-03-13-AddrLine3.
+157300211005           MOVE lc_City               TO  201-03-13-City.
+157400211005           MOVE lc_Province           TO  201-03-13-Province.
+157500211005           MOVE lc_CountryCode        TO  201-03-13-Country.
+157600211005           MOVE lc_PostalCode         TO  201-03-13-PostalCode.
+157700211005           MOVE lc_LanguageCode       TO  201-03-13-Language.
+157800211005           MOVE lc_SpecimenPlanNo     TO  201-03-13-SpecimenId.
+157900211005           MOVE lc_AccountNo          TO  201-03-13-ContractId.
+158000211005      * RFS 80312 - Begin
+158100211005      **   MOVE pi_ProcessDate        TO  201-03-13-UpdateDate.
+158200211005           MOVE pi_EndDate            TO  201-03-13-UpdateDate.
+158300211005      * RFS 80312 - end
+158400211005
+158500211005           IF lc_HldRecipient = lncc_2  OR lncc_1
+158600211005              MOVE lncc_1  TO 201-03-13-HldType
+158700211005           ELSE
+158800211005              MOVE lncc_2  TO 201-03-13-HldType
+158900211005           END-IF.
+159000211005
+159100211005           WRITE    HRDC-CDSP-REC  FROM   201-03-13-Record.
+15920021100569511      ADD 1  TO pi_RecordCount.
+159300211005
+159400211005           INITIALIZE MFAHRDDHP OF HOLDER-CHG-REC.
+159500211005           MOVE lncc_201  TO  RDSP-RECORD-TYPE OF MFAHRDDHP.
+159600211005           IF lc_HolderAddition = lncc_Y
+159700211005              MOVE lncc_13  TO  RDSP-TRANS-TYPE  OF MFAHRDDHP
+159800211005           ELSE
+159900211005              MOVE lncc_03  TO  RDSP-TRANS-TYPE  OF MFAHRDDHP
+160000211005           END-IF.
+160100211005
+160200211005           PERFORM  Write_MFAHRDDHP_Record.
+160300211005           ADD   1  TO  pi_VendorTransId.
+160400211005
+160500211005      * ---------------------------------
+160600211005       Write_MFAHRDDHP_Record.
+160700211005      * ---------------------------------
+160800211005           MOVE li_AccountNo       TO ACCOUNT-NO          OF MFAHRDDHP.
+160900211005           MOVE lc_IvrTntInd       TO INVESTOR-TENANT-IND OF MFAHRDDHP.
+161000211005           MOVE lc_VendorTransID TO VENDOR-TRANSACTION-ID OF MFAHRDDHP.
+161100211005           MOVE lc_HldSINBusNo     TO SIN-OR-BUSINESS-NO  OF MFAHRDDHP.
+161200211005           MOVE lc_HldFirstName    TO FIRST-NAME          OF MFAHRDDHP.
+161300211005           MOVE lc_HldLastName     TO LEGAL-NAME          OF MFAHRDDHP.
+161400211005           MOVE li_HldBirthDate    TO DATE-OF-BIRTH       OF MFAHRDDHP.
+161500211005           MOVE lc_SexCode         TO RDSP-SEX-CODE       OF MFAHRDDHP.
+161600211005           MOVE lc_RelTypeXref     TO
+161700211005                         BEN-RELATION-TYPE-XREF-RDSP      OF MFAHRDDHP.
+161800211005           MOVE lc_AddressLine1    TO ADDRESS-LINE-1      OF MFAHRDDHP.
+161900211005           MOVE lc_AddressLine2    TO ADDRESS-LINE-2      OF MFAHRDDHP.
+162000211005           MOVE lc_AddressLine3    TO ADDRESS-LINE-3      OF MFAHRDDHP.
+162100211005           MOVE lc_City            TO CITY                OF MFAHRDDHP.
+162200211005           MOVE lc_Province        TO PROVINCE-2          OF MFAHRDDHP.
+162300211005           MOVE lc_CountryCode     TO COUNTRY-CODE        OF MFAHRDDHP.
+162400211005           MOVE lc_PostalCode      TO POSTAL-CODE         OF MFAHRDDHP.
+162500211005           MOVE lc_LanguageCode    TO RDSP-LANGUAGE-CODE  OF MFAHRDDHP.
+162600211005           MOVE lc_HldRecipient    TO RECIPIENT-TYPE      OF MFAHRDDHP.
+162700211005
+162800211005           WRITE HOLDER-CHG-REC
+162900211005             INVALID KEY
+163000211005               SET lncc_Err_12 TO TRUE
+163100211005               MOVE lncc_ErrorUpdatingMFAHRDDHP TO lc_sqlErrShortDESCR
+163200211005           END-WRITE.
+163300211005
+163400211005      * ---------------------------------
+163500211005       Process_Removed_Holders.
+163600211005      * ---------------------------------
+163700211005           SET lb_EndOfHRDDHPFalse TO TRUE.
+163800211005
+163900211005           INITIALIZE MFAHRDDHP OF HOLDER-CHG-REC.
+164000211005           MOVE li_AccountNo   TO ACCOUNT-NO            OF MFAHRDDHP.
+164100211005           MOVE lc_IvrTntInd   TO INVESTOR-TENANT-IND   OF MFAHRDDHP.
+164200211005           MOVE HIGH-VALUES    TO SIN-OR-BUSINESS-NO    OF MFAHRDDHP.
+164300211005           MOVE HIGH-VALUES    TO VENDOR-TRANSACTION-ID OF MFAHRDDHP.
+164400211005
+164500211005           PERFORM  Start_Read_Holder_Changes.
+164600211005
+164700211005           PERFORM Process_Holder_Records   until
+164800211005                ACCOUNT-NO OF MFAHRDDHP          NOT = li_AccountNo
+164900211005             OR INVESTOR-TENANT-IND OF MFAHRDDHP NOT = lc_IvrTntInd
+165000211005             OR lb_EndOfHRDDHPTrue.
+165100211005
+165200211005      * ---------------------------------
+165300211005       Process_Holder_Records.
+165400211005      * ---------------------------------
+165500211005           IF SIN-OR-BUSINESS-NO OF MFAHRDDHP(1:9) IS NUMERIC
+165600211005              MOVE SIN-OR-BUSINESS-NO OF MFAHRDDHP(1:9) TO li_TempSIN9
+165700211005                COMPUTE li_TempSIN9 = li_TempSIN9 - 1
+165800211005           ELSE
+165900211005              MOVE SPACES TO lc_TempSin
+166000211005           END-IF.
+166100211005
+166200211005           INITIALIZE MFAHRDDHP OF HOLDER-CHG-REC.
+166300211005           MOVE li_AccountNo   TO ACCOUNT-NO            OF MFAHRDDHP.
+166400211005           MOVE lc_IvrTntInd   TO INVESTOR-TENANT-IND   OF MFAHRDDHP.
+166500211005           MOVE lc_TempSIN     TO SIN-OR-BUSINESS-NO    OF MFAHRDDHP.
+166600211005           MOVE HIGH-VALUES    TO VENDOR-TRANSACTION-ID OF MFAHRDDHP.
+166700211005
+166800211005           PERFORM  Start_Read_Holder_Changes.
+166900211005
+167000211005      * ---------------------------------
+167100211005       Start_Read_Holder_Changes.
+167200211005      * ---------------------------------
+167300211005           START HOLDER-CHANGES
+167400211005             KEY IS GREATER THAN EXTERNALLY-DESCRIBED-KEY
+167500211005              INVALID KEY
+167600211005                READ HOLDER-CHANGES LAST RECORD
+167700211005                  AT END
+167800211005                   SET lb_EndOfHRDDHPTrue  TO TRUE
+167900211005                  NOT AT END
+168000211005                   IF ACCOUNT-NO          OF MFAHRDDHP = li_AccountNo
+168100211005                 AND  INVESTOR-TENANT-IND OF MFAHRDDHP = lc_IvrTntInd
+168200211005                 AND  RDSP-TRANS-TYPE     OF MFAHRDDHP NOT = lncc_23
+168300211005                 AND (RECIPIENT-TYPE OF MFAHRDDHP = lncc_1 OR lncc_2)
+168400211005                       PERFORM Check_if_SIN_Exists
+168500211005                   END-IF
+168600211005                END-READ
+168700211005              NOT INVALID KEY
+168800211005                READ HOLDER-CHANGES PRIOR RECORD
+168900211005                  AT END
+169000211005                   SET lb_EndOfHRDDHPTrue  TO TRUE
+169100211005                  NOT AT END
+169200211005                   IF ACCOUNT-NO          OF MFAHRDDHP = li_AccountNo
+169300211005                 AND  INVESTOR-TENANT-IND OF MFAHRDDHP = lc_IvrTntInd
+169400211005                 AND  RDSP-TRANS-TYPE     OF MFAHRDDHP NOT = lncc_23
+169500211005                 AND (RECIPIENT-TYPE OF MFAHRDDHP = lncc_1 OR lncc_2)
+169600211005                       PERFORM Check_if_SIN_Exists
+169700211005                   END-IF
+169800211005                END-READ
+169900211005           END-START.
+170000211005
+170100211005      * ---------------------------------
+170200211005       Check_if_SIN_Exists.
+170300211005      * ---------------------------------
+170400211005           INITIALIZE li_CheckSIN.
+170500211005           IF SIN-OR-BUSINESS-NO OF MFAHRDDHP(1:9) IS NUMERIC
+170600211005              MOVE SIN-OR-BUSINESS-NO OF MFAHRDDHP(1:9) TO li_CheckSIN
+170700211005           END-IF.
+170800211005
+170900211005           IF RECIPIENT-TYPE OF MFAHRDDHP = lncc_1
+171000211005              EXEC SQL
+171100211005                SELECT :lncc_X
+171200211005                  INTO :lc_X
+171300211005R74620*           FROM  MFAACCNTP A, MFAIVRP B
+171400211005R74620            FROM  MFAACCNTP A
+171500211005R74620            INNER JOIN MFAIVRP B
+171600211005                     ON A.INVESTOR_NO   =  B.INVESTOR_NO
+171700211005R74620*           WHERE A.INVESTOR_NO         =  B.INVESTOR_NO
+171800211005R74620*            AND  A.ACCOUNT_NO          = :li_AccountNo
+171900211005R74620            WHERE A.ACCOUNT_NO          = :li_AccountNo
+172000211005                   AND  B.SOCIAL_INSURANCE_NO = :li_CheckSIN
+172100211005                 FETCH  FIRST ROW ONLY
+172200211005              END-EXEC
+172300211005
+172400211005              MOVE SQLSTATE TO lc_sqlStates
+172500211005              EVALUATE TRUE
+172600211005                WHEN lncc_sqlSuccessful
+172700211005                  CONTINUE
+172800211005
+172900211005                WHEN lncc_sqlEnd
+173000211005      *           RFS73394 - Begins - Add Validate
+173100211005      *           PERFORM Format_and_Write_201_23
+173200211005                  PERFORM Validate_201_23
+173300211005      *           RFS73394 - Ends
+173400211005
+173500211005                WHEN OTHER
+173600211005                  SET lncc_Err_13 TO TRUE
+173700211005                  MOVE lncc_ErrorReadingInvestor TO lc_sqlErrShortDESCR
+173800211005                  PERFORM  SQL_Fail_Process
+173900211005              END-EVALUATE
+174000211005           END-IF.
+174100211005
+174200211005           IF RECIPIENT-TYPE OF MFAHRDDHP = lncc_2
+174300211005              EXEC SQL
+174400211005                SELECT :lncc_X
+174500211005                  INTO :lc_X
+174600211005R74620*           FROM  MFAACCNTP A, MFAIVRTEP B
+174700211005R74620            FROM  MFAACCNTP A
+174800211005R74620            INNER JOIN MFAIVRTEP B
+174900211005R74620               ON A.INVESTOR_NO         =  B.INVESTOR_NO
+175000211005R74620*           WHERE A.INVESTOR_NO         =  B.INVESTOR_NO
+175100211005R74620*            AND  A.ACCOUNT_NO          = :li_AccountNo
+175200211005R74620            WHERE A.ACCOUNT_NO          = :li_AccountNo
+175300211005                   AND  B.SOCIAL_INSURANCE_NO = :li_CheckSIN
+175400211005                 FETCH  FIRST ROW ONLY
+175500211005              END-EXEC
+175600211005
+175700211005              MOVE SQLSTATE TO lc_sqlStates
+175800211005              EVALUATE TRUE
+175900211005                WHEN lncc_sqlSuccessful
+176000211005                  CONTINUE
+176100211005
+176200211005                WHEN lncc_sqlEnd
+176300211005      *           RFS73394 - Begins - Add Validate
+176400211005      *           PERFORM Format_and_Write_201_23
+176500211005                  PERFORM Validate_201_23
+176600211005      *           RFS73394 - Ends
+176700211005
+176800211005                WHEN OTHER
+176900211005                  SET lncc_Err_14 TO TRUE
+177000211005                  MOVE lncc_ErrorReadingTenant TO lc_sqlErrShortDESCR
+177100211005                  PERFORM  SQL_Fail_Process
+177200211005              END-EVALUATE
+177300211005           END-IF.
+177400211005
+177500211005      * ---------------------------------
+177600211005       Format_and_Write_201_23.
+177700211005      * ---------------------------------
+177800211005           INITIALIZE 201-23-Record.
+177900211005
+178000211005           STRING pi_ProcessDate pi_VendorTransId DELIMITED BY SIZE
+178100211005             INTO lc_VendorTransID.
+178200211005
+178300211005           MOVE lncc_201              TO  201-23-RecType.
+178400211005           MOVE lncc_23               TO  201-23-TransType
+178500211005           MOVE pc_IssuerBN           TO  201-23-IssuerBN.
+178600211005           MOVE lc_VendorTransID      TO  201-23-IssuerTransId.
+178700211005           MOVE li_CheckSIN           TO  201-23-HldSinBusNo.
+178800211005           MOVE lc_SpecimenPlanNo     TO  201-23-SpecimenId.
+178900211005           MOVE lc_AccountNo          TO  201-23-ContractId.
+179000211005      * RFS 80312 - Begin
+179100211005      **   MOVE pi_ProcessDate        TO  201-23-RemovalDate.
+179200211005           MOVE pi_EndDate            TO  201-23-RemovalDate.
+179300211005      * RFS 80312 - end
+179400211005
+179500211005           WRITE    HRDC-CDSP-REC  FROM   201-23-Record.
+17960021100569511      ADD 1  TO pi_RecordCount.
+179700211005
+179800211005           MOVE lncc_201  TO  RDSP-RECORD-TYPE  OF MFAHRDDHP.
+179900211005           MOVE lncc_23   TO  RDSP-TRANS-TYPE   OF MFAHRDDHP.
+180000211005           MOVE lc_VendorTransID TO VENDOR-TRANSACTION-ID OF MFAHRDDHP.
+180100211005
+180200211005           WRITE HOLDER-CHG-REC
+180300211005             INVALID KEY
+180400211005               SET lncc_Err_15 TO TRUE
+180500211005               MOVE lncc_ErrorUpdatingMFAHRDDHP TO lc_sqlErrShortDESCR
+180600211005           END-WRITE.
+180700211005
+180800211005           ADD   1  TO  pi_VendorTransId.
+180900211005
+181000211005      * ---------------------------------
+181100211005       Get_Primary_Caregiver_Info.
+181200211005      * ---------------------------------
+181300211005           INITIALIZE lc_ACPCGP_Info.
+181400211005           EXEC SQL
+181500211005             SELECT  Acpcgp.Social_Insurance_No,
+181600211005                     CHAR(DIGITS(Acpcgp.Social_Insurance_No)),
+181700211005                     Acpcgp.Business_Number,
+181800211005                     Acpcgp.Business_Name,
+181900211005                     Acpcgp.First_Name,
+182000211005                     Acpcgp.Last_Name,
+182100211005                     Acpcgp.PCG_Type_Code
+182200211005
+182300211005               INTO :lc_ACPCGP_Info
+182400211005               FROM  MFAACPCGP Acpcgp
+182500211005              WHERE Acpcgp.Account_No  = :li_AccountNo
+182600211005                AND Acpcgp.PCG_Seq_No  = :lncc_1
+182700211005           END-EXEC.
+182800211005
+182900211005           MOVE SQLSTATE TO lc_sqlStates.
+183000211005           EVALUATE TRUE
+183100211005             WHEN lncc_sqlSuccessful
+183200211005                CONTINUE
+183300211005
+183400211005             WHEN lncc_sqlEnd
+183500211005                INITIALIZE lc_ACPCGP_Info
+183600211005
+183700211005             WHEN OTHER
+183800211005                SET lncc_Err_16 TO TRUE
+183900211005                MOVE lncc_ErrorReadingMFAACPCGP TO lc_sqlErrShortDESCR
+184000211005                PERFORM  SQL_Fail_Process
+184100211005           END-EVALUATE.
+184200211005
+184300211005      * ---------------------------------
+184400211005       Get_Investor_Info.
+184500211005      * ---------------------------------
+184600211005           INITIALIZE lc_Holder
+184700211005                      li_IvrAddrNo
+184800211005                      lc_IvrLanguage
+184900211005                      lc_IvrRecipient.
+185000211005           EXEC SQL
+185100211005             SELECT  CHAR(DIGITS(Ivrp.Social_Insurance_No)),
+185200211005                     Ivrp.First_Name,
+185300211005                     Ivrp.Last_Name,
+185400211005                     Ivrp.Legal_Name,
+185500211005                     Ivrp.Date_of_Birth,
+185600211005                     CHAR(Ivrp.Date_of_Birth),
+185700211005                     Ivrp.Language_Code,
+185800211005                     COALESCE(Ivrmkp.Sex, " "),
+185900211005                     Ivradp.Addr_No,
+186000211005                     Ivrtyp.Recipient_Type
+186100211005
+186200211005               INTO :lc_Holder
+186300211005
+186400211005R74620*        FROM  MFAIVRP   Ivrp,
+186500211005R74620*              MFAIVRTYP Ivrtyp,
+186600211005R74620*              MFAIVRADP Ivradp
+186700211005R74620         FROM  MFAIVRP   Ivrp
+186800211005R74620         INNER JOIN MFAIVRTYP IVRTYP
+186900211005R74620            ON Ivrp.Investor_Type_Code =
+187000211005R74620                       Ivrtyp.Investor_Type_Code
+187100211005R74620         INNER JOIN MFAIVRADP Ivradp
+187200211005R74620            ON Ivrp.Investor_No = Ivradp.Investor_No
+187300211005               LEFT OUTER JOIN MFAIVRMKP Ivrmkp ON
+187400211005               (Ivrp.Investor_No = Ivrmkp.Investor_No)
+187500211005
+187600211005              WHERE Ivrp.Investor_No        = :li_InvestorNo
+187700211005R74620*         AND Ivrp.Investor_Type_Code = Ivrtyp.Investor_Type_Code
+187800211005R74620*         AND Ivrp.Investor_No        = Ivradp.Investor_No
+187900211005                AND Ivradp.Addr_Type_Code   = :lncc_IVR
+188000211005           END-EXEC.
+188100211005
+188200211005           MOVE SQLSTATE TO lc_sqlStates.
+188300211005           EVALUATE TRUE
+188400211005             WHEN lncc_sqlSuccessful
+188500211005                MOVE lc_HldLanguage  TO lc_IvrLanguage
+188600211005                MOVE li_HldAddrNo    TO li_IvrAddrNo
+188700211005                MOVE lc_HldRecipient TO lc_IvrRecipient
+188800211005
+188900211005             WHEN lncc_sqlEnd
+189000211005                SET lncc_Err_17 TO TRUE
+189100211005                MOVE lncc_ErrorFindingInvestor TO lc_sqlErrShortDESCR
+189200211005                PERFORM  SQL_Fail_Process
+189300211005
+189400211005             WHEN OTHER
+189500211005                SET lncc_Err_18 TO TRUE
+189600211005                MOVE lncc_ErrorReadingInvestor TO lc_sqlErrShortDESCR
+189700211005                PERFORM  SQL_Fail_Process
+189800211005           END-EVALUATE.
+189900211005
+190000211005      * RFS 69511 - begins.
+190100211005      * ---------------------------------
+190200211005       Drop_Create_WKDSPREJP.
+190300211005      * ---------------------------------
+190400211005           EXEC SQL
+190500211005             DROP TABLE WKDSPREJP
+190600211005           END-EXEC.
+190700211005
+190800211005           MOVE SQLSTATE TO lc_sqlStates.
+190900211005           IF lncc_sqlTblNotExists OR lncc_sqlSuccessful
+191000211005              CONTINUE
+191100211005           ELSE
+191200211005              SET lncc_Err_28 TO TRUE
+191300211005              MOVE lncc_ErrorDeletingWKDSPREJP TO lc_sqlErrShortDESCR
+191400211005              PERFORM  SQL_Fail_Process
+191500211005           END-IF.
+191600211005
+191700211005           EXEC SQL
+191800211005             CREATE TABLE WKDSPREJP
+191900211005              (REC_TYPE            CHAR ( 3) NOT NULL WITH DEFAULT,
+192000211005               TRANS_TYPE          CHAR ( 2) NOT NULL WITH DEFAULT,
+192100211005               ACCOUNT_NO       NUMERIC ( 9) NOT NULL WITH DEFAULT,
+192200211005               PLAN_SETUP       NUMERIC ( 8) NOT NULL WITH DEFAULT,
+192300211005               FIELD_DESC          CHAR (30) NOT NULL WITH DEFAULT,
+192400211005               FIELD_VAL           CHAR (15) NOT NULL WITH DEFAULT,
+192500211005               ERROR_CODE          CHAR ( 4) NOT NULL WITH DEFAULT)
+192600211005           END-EXEC.
+192700211005
+192800211005           MOVE SQLSTATE TO lc_sqlStates.
+192900211005           IF lncc_sqlTblCrtedNotJrned OR lncc_sqlSuccessful
+193000211005              CONTINUE
+193100211005           ELSE
+193200211005              SET lncc_Err_29 TO TRUE
+193300211005              MOVE lncc_ErrorCreatingWKDSPREJP TO lc_sqlErrShortDESCR
+193400211005              PERFORM  SQL_Fail_Process
+193500211005           END-IF.
+193600211005      * RFS 69511 - ends.
+193700211005
+193800211005      * ---------------------------------
+193900211005       Get_Specimen_No.
+194000211005      * ---------------------------------
+194100211005           INITIALIZE lc_SpecimenPlanNo.
+194200211005           EXEC SQL
+194300211005             SELECT  SUBSTR(Specimen_Plan_No, 1, 7)
+194400211005               INTO :lc_SpecimenPlanNo
+194500211005               FROM  MFARESPTP
+194600211005              WHERE  Account_Type_Code = :lc_AccountTypeCode
+194700211005                AND  Resp_Type_Code    = :lncc_I
+194800211005              FETCH FIRST ROW ONLY
+194900211005           END-EXEC.
+195000211005
+195100211005           MOVE SQLSTATE TO lc_sqlStates
+195200211005           EVALUATE TRUE
+195300211005             WHEN lncc_sqlSuccessful
+195400211005               CONTINUE
+195500211005
+195600211005             WHEN lncc_sqlEnd
+195700211005               CONTINUE
+195800211005
+195900211005             WHEN OTHER
+196000211005               SET lncc_Err_19 TO TRUE
+196100211005               MOVE lncc_ErrorReadingMFARESPTP TO lc_sqlErrShortDESCR
+196200211005               PERFORM  SQL_Fail_Process
+196300211005           END-EVALUATE.
+196400211005
+196500211005      * ---------------------------------
+196600211005       Get_Rel_Type_Xref.
+196700211005      * ---------------------------------
+196800211005           INITIALIZE lc_RelTypeXref.
+196900211005           IF lc_BenRelType = SPACES
+197000211005              CONTINUE
+197100211005           ELSE
+197200211005             EXEC SQL
+197300211005               SELECT  BEN_RELATION_TYPE_XREF_RDSP
+197400211005                 INTO :lc_RelTypeXref
+197500211005                 FROM  MFABRELTP
+197600211005                WHERE  BEN_RELATION_TYPE_CODE  = :lc_BenRelType
+197700211005                FETCH FIRST ROW ONLY
+197800211005             END-EXEC
+197900211005
+198000211005             MOVE SQLSTATE TO lc_sqlStates
+198100211005             EVALUATE TRUE
+198200211005               WHEN lncc_sqlSuccessful
+198300211005                 CONTINUE
+198400211005
+198500211005               WHEN lncc_sqlEnd
+198600211005                 INITIALIZE lc_RelTypeXref
+198700211005
+198800211005               WHEN OTHER
+198900211005                 SET lncc_Err_20 TO TRUE
+199000211005                 MOVE lncc_ErrorReadingMFABRELTP TO lc_sqlErrShortDESCR
+199100211005                 PERFORM  SQL_Fail_Process
+199200211005              END-EVALUATE
+199300211005           END-IF.
+199400211005
+199500211005      * ---------------------------------
+199600211005       Get_Address.
+199700211005      * ---------------------------------
+199800211005           IF li_AddrNo = ZEROS
+199900211005              MOVE li_HldAddrNo to li_AddrNo
+200000211005           END-IF.
+200100211005
+200200211005           INITIALIZE MFAADDP.
+200300211005           EXEC SQL
+200400211005             SELECT *
+200500211005               INTO :MFAADDP
+200600211005               FROM  MFAADDP
+200700211005              WHERE  ADDR_NO  = :li_AddrNo
+200800211005           END-EXEC.
+200900211005
+201000211005           MOVE SQLSTATE TO lc_sqlStates.
+201100211005           EVALUATE TRUE
+201200211005             WHEN lncc_sqlSuccessful
+201300211005                CONTINUE
+201400211005
+201500211005             WHEN lncc_sqlEnd
+201600211005                INITIALIZE MFAADDP
+201700211005
+201800211005             WHEN OTHER
+201900211005                SET lncc_Err_21 TO TRUE
+202000211005                MOVE lncc_ErrorReadingMFAADDP TO lc_sqlErrShortDESCR
+202100211005                PERFORM  SQL_Fail_Process
+202200211005           END-EVALUATE.
+202300211005
+202400211005      * ---------------------------------
+202500211005       Format_Address.
+202600211005      * ---------------------------------
+202700211005           INITIALIZE lc_Address.
+202800211005           MOVE  SPACES                    TO  lc_AddrTmp1.
+202900211005           MOVE  SPACES                    TO  lc_AddrTmp2.
+203000211005           MOVE  STREET-NO OF MFAADDP      TO  lc_AddrTmp1.
+203100211005
+203200211005           IF  lc_AddrTmp1 =  SPACES
+203300211005               MOVE STREET-NAME OF MFAADDP  TO  lc_AddrTmp1
+203400211005             ELSE
+203500211005               STRING lc_AddrTmp1             DELIMITED BY  "  ",
+203600211005                      " "                     DELIMITED BY  SIZE,
+203700211005                      STREET-NAME OF MFAADDP  DELIMITED BY  "  "
+203800211005                 INTO lc_AddrTmp2
+203900211005               MOVE lc_AddrTmp2        TO  lc_AddrTmp1
+204000211005           END-IF.
+204100211005
+204200211005           IF  lc_AddrTmp1 =  SPACES
+204300211005               MOVE STREET-TYPE-CODE OF MFAADDP  TO  lc_AddrTmp1
+204400211005             ELSE
+204500211005               STRING lc_AddrTmp1                  DELIMITED BY  "  ",
+204600211005                      " "                          DELIMITED BY  SIZE,
+204700211005                      STREET-TYPE-CODE OF MFAADDP  DELIMITED BY  "  "
+204800211005                 INTO lc_AddrTmp2
+204900211005               MOVE lc_AddrTmp2        TO  lc_AddrTmp1
+205000211005           END-IF.
+205100211005
+205200211005           IF  lc_AddrTmp1 =  SPACES
+205300211005               MOVE STREET-DIRCT-CODE  OF MFAADDP  TO  lc_AddrTmp1
+205400211005             ELSE
+205500211005               STRING lc_AddrTmp1                  DELIMITED BY  "  ",
+205600211005                      " "                          DELIMITED BY  SIZE,
+205700211005                      STREET-DIRCT-CODE OF MFAADDP DELIMITED BY  "  "
+205800211005                 INTO lc_AddrTmp2
+205900211005               MOVE lc_AddrTmp2        TO  lc_AddrTmp1
+206000211005           END-IF.
+206100211005
+206200211005           MOVE  lc_AddrTmp1               TO  lc_AddressLine1.
+206300211005
+206400211005           IF  lc_AddressLine1     = SPACES
+206500211005            MOVE MISC-FIRST-ADDR-LINE  OF MFAADDP TO lc_AddressLine1
+206600211005            MOVE MISC-SECOND-ADDR-LINE OF MFAADDP TO lc_AddressLine2
+206700211005           ELSE
+206800211005            MOVE  MISC-FIRST-ADDR-LINE OF MFAADDP TO lc_AddressLine2
+206900211005           END-IF.
+207000211005
+207100211005           MOVE  CITY OF MFAADDP           TO  lc_City.
+207200211005
+207300211005           MOVE COUNTRY-CODE OF MFAADDP    TO  lc_Country.
+207400211005
+207500211005           EVALUATE lc_Country
+207600211005             WHEN lncc_CAN
+207700211005               MOVE  lncc_001  TO  lc_CountryCode
+207800211005               MOVE  POSTAL-CODE   OF MFAADDP   TO  lc_PostalCode
+207900211005               MOVE  PROVINCE-CODE OF MFAADDP   TO  lc_Province
+208000211005               IF lc_AddrTmp1 NOT =  SPACES
+208100211005                  MOVE  MISC-SECOND-ADDR-LINE OF MFAADDP
+208200211005                                              TO  lc_AddressLine3
+208300211005               END-IF
+208400211005             WHEN lncc_USA
+208500211005               MOVE  lncc_002  TO  lc_CountryCode
+208600211005             WHEN OTHER
+208700211005               MOVE  lncc_999  TO  lc_CountryCode
+208800211005               MOVE lc_Country TO COUNTRY-CODE OF COUNTRY-REC
+208900211005               READ COUNTRY
+209000211005                 INVALID KEY
+209100211005                   MOVE  SPACES   TO  lc_AddressLine3
+209200211005                 NOT INVALID KEY
+209300211005                   MOVE COUNTRY-NAME OF COUNTRY-REC TO lc_AddressLine3
+209400211005               END-READ
+209500211005           END-EVALUATE.
+209600211005
+209700211005           EVALUATE lc_Language
+209800211005             WHEN lncc_E
+209900211005               MOVE  lncc_1  TO  lc_LanguageCode
+210000211005             WHEN lncc_F
+210100211005               MOVE  lncc_2  TO  lc_LanguageCode
+210200211005             WHEN OTHER
+210300211005               MOVE  lncc_1  TO  lc_LanguageCode
+210400211005           END-EVALUATE.
+210500211005
+210600211005           EVALUATE lc_Sex
+210700211005             WHEN lncc_F
+210800211005               MOVE  lncc_1      TO  lc_SexCode
+210900211005             WHEN lncc_M
+211000211005               MOVE  lncc_2      TO  lc_SexCode
+211100211005             WHEN OTHER
+211200211005               MOVE  lncc_Space  TO  lc_SexCode
+211300211005           END-EVALUATE.
+211400211005
+211500211005      * ---------------------------------
+211600211005       Get_Business_Number.
+211700211005      * ---------------------------------
+211800211005           INITIALIZE lc_BusNumCCRA.
+211900211005
+212000211005           EXEC SQL
+212100211005             SELECT  BUSINESS_NUMBER_CCRA
+212200211005               INTO :lc_BusNumCCRA
+212300211005               FROM  MFAIVRBNP
+212400211005              WHERE  INVESTOR_NO = :li_InvestorNo
+212500211005           END-EXEC.
+212600211005
+212700211005           MOVE SQLSTATE TO lc_sqlStates.
+212800211005           EVALUATE TRUE
+212900211005             WHEN lncc_sqlSuccessful
+213000211005                IF lc_BusNumCCRA NOT = SPACES
+213100211005                   MOVE  lc_BusNumCCRA  TO  lc_HldSinBusNo
+213200211005                   MOVE SPACES          TO  lc_HldFirstName
+213300211005                                            lc_HldBirthdate
+213400211005                                            lc_HldSex
+213500211005                   MOVE ZEROS           TO  li_HldBirthdate
+213600211005                END-IF
+213700211005
+213800211005             WHEN lncc_sqlEnd
+213900211005                CONTINUE
+214000211005
+214100211005             WHEN OTHER
+214200211005                SET lncc_Err_22 TO TRUE
+214300211005                MOVE lncc_ErrorReadingMFAIVRBNP TO lc_sqlErrShortDESCR
+214400211005                PERFORM  SQL_Fail_Process
+214500211005           END-EVALUATE.
+214600211005
+214700211005      * ---------------------------------
+214800211005       Write_Header_Record.
+214900211005      * ---------------------------------
+215000211005           INITIALIZE 001-Record.
+215100211005           MOVE  lncc_001         TO  001-RecType.
+215200211005           MOVE  lncc_CDSP        TO  001-PgmId.
+215300211005           MOVE  pc_VendorBN      TO  001-VendorBN.
+215400211005           MOVE  pi_ProcessDate   TO  001-FileDate.
+215500211005           MOVE  pi_FileSeq       TO  001-FileSeq.
+215600211005           MOVE  pc_DataVersion   TO  001-DataVersion.
+215700211005
+215800211005           WRITE HRDC-CDSP-REC   FROM  001-Record.
+21590021100569511      ADD 1  TO pi_RecordCount.
+216000211005
+216100211005      * RFS 69511 - begins.
+216200211005      * ---------------------------------
+216300211005       Delete_Old_101_Records.
+216400211005      * ---------------------------------
+216500211005           EXEC SQL
+216600211005             DELETE
+216700211005               FROM  MFAHRDDBP
+216800211005              WHERE  ACCOUNT_NO  = :li_AccountNo
+216900211005           END-EXEC.
+217000211005
+217100211005           MOVE SQLSTATE TO lc_sqlStates.
+217200211005           EVALUATE TRUE
+217300211005             WHEN lncc_sqlSuccessful
+217400211005                CONTINUE
+217500211005
+217600211005             WHEN lncc_sqlEnd
+217700211005                CONTINUE
+217800211005
+217900211005             WHEN OTHER
+218000211005                SET lncc_Err_30 TO TRUE
+218100211005                MOVE lncc_ErrorDeletingMFAHRDDBP TO lc_sqlErrShortDESCR
+218200211005                PERFORM  SQL_Fail_Process
+218300211005           END-EVALUATE.
+218400211005
+218500211005           EXEC SQL
+218600211005             DELETE
+218700211005               FROM  MFAHRDDHP
+218800211005              WHERE  ACCOUNT_NO  = :li_AccountNo
+218900211005           END-EXEC.
+219000211005
+219100211005           MOVE SQLSTATE TO lc_sqlStates.
+219200211005           EVALUATE TRUE
+219300211005             WHEN lncc_sqlSuccessful
+219400211005                CONTINUE
+219500211005
+219600211005             WHEN lncc_sqlEnd
+219700211005                CONTINUE
+219800211005
+219900211005             WHEN OTHER
+220000211005                SET lncc_Err_31 TO TRUE
+220100211005                MOVE lncc_ErrorDeletingMFAHRDDHP TO lc_sqlErrShortDESCR
+220200211005                PERFORM  SQL_Fail_Process
+220300211005           END-EVALUATE.
+220400211005
+220500211005      * RFS 69511 - ends.
+220600211005
+220700211005      * ---------------------------------
+220800211005       Update_Approval_Status.
+220900211005      * ---------------------------------
+221000211005           IF lc_ApprovalStatus = lncc_A
+221100211005             CONTINUE
+221200211005           ELSE
+221300211005             EXEC SQL
+221400211005               UPDATE  MFAACCDSP
+221500211005                  SET  RDSP_APPROVAL_STATUS = :lncc_P
+221600211005                WHERE  ACCOUNT_NO           = :li_AccountNo
+221700211005             END-EXEC
+221800211005
+221900211005             MOVE SQLSTATE TO lc_sqlStates
+222000211005             EVALUATE TRUE
+222100211005               WHEN lncc_sqlSuccessful
+222200211005                 CONTINUE
+222300211005
+222400211005               WHEN lncc_sqlEnd
+222500211005                SET lncc_Err_23 TO TRUE
+222600211005                MOVE lncc_ErrorUpdatingMFAACCDSP TO lc_sqlErrShortDESCR
+222700211005                PERFORM  SQL_Fail_Process
+222800211005
+222900211005               WHEN OTHER
+223000211005                SET lncc_Err_24 TO TRUE
+223100211005                MOVE lncc_ErrorUpdatingMFAACCDSP TO lc_sqlErrShortDESCR
+223200211005                PERFORM  SQL_Fail_Process
+223300211005             END-EVALUATE
+223400211005            END-IF.
+223500211005
+223600211005      * ---------------------------------
+223700211005       Create_Cursor.
+223800211005      * ---------------------------------
+223900211005           EXEC SQL
+224000211005            DECLARE C1 CURSOR FOR
+224100211005             SELECT Accdsp.Account_No,
+224200211005                    CHAR(Accdsp.Account_No),
+224300211005                    Accdsp.Plan_Setup_Date,
+224400211005                    Accdsp.RDSP_Approval_Status,
+22450021100580658               Accdsp.RDSP_Approval_Status_Orig,
+224600211005                    Accntp.Account_Type_Code,
+224700211005                    Accntp.Investor_No,
+224800211005      *              RFS73349 - Begins - Add IFNULL
+224900211005      *             Accbnp.Beneficiary_Seq_No,
+225000211005                    IFNULL(Accbnp.Beneficiary_Seq_No,:Lncn_000),
+225100211005      *             Accbnp.Social_Insurance_No,
+225200211005                    IFNULL(Accbnp.Social_Insurance_No,:Lnci_000000000),
+225300211005      *             CHAR(DIGITS(Accbnp.Social_Insurance_No)),
+225400211005                    CHAR(DIGITS(IFNULL(
+225500211005                    Accbnp.Social_Insurance_No,:Lnci_000000000))),
+225600211005      *             Accbnp.First_Name,
+225700211005                    IFNULL(Accbnp.First_Name,:Lncc_20spaces),
+225800211005      *             Accbnp.Last_Name,
+225900211005                    IFNULL(Accbnp.Last_Name,:Lncc_20Spaces),
+226000211005      *             Accbnp.Sex,
+226100211005                    IFNULL(Accbnp.Sex,:Lncc_Space),
+226200211005      *             Accbnp.Language_Code,
+226300211005                    IFNULL(Accbnp.Language_Code,:Lncc_Space),
+226400211005      *             Accbnp.Addr_No,
+226500211005                    IFNULL(Accbnp.Addr_No,:Lncn_000000000),
+226600211005      *             Accbnp.Date_of_Birth,
+226700211005                    IFNULL(Accbnp.Date_of_Birth,:Lncn_000000000),
+226800211005      *             char(Accbnp.Date_of_Birth),
+226900211005                    CHAR(IFNULL(Accbnp.Date_of_Birth,:Lncn_000000000)),
+227000211005      *             Accbnp.Relationship_Type
+227100211005                    IFNULL(Accbnp.Relationship_Type,:Lncc_Space),
+227200211005      *              RFS73349 - Begins - Add Closure fields
+227300211005                    Accdsp.Closure_Reason_Code,
+227400211005                    ZONED(Accdsp.Closure_Reason_Date,8,0),
+227500211005                    Accdsp.Closure_Status,
+227600211005                    Zoned(Accdsp.Closure_Date,8,0),
+227700211005R74620              Accdsp.Other_Contract_ID,
+227800211005R74620              CHAR(Accdsp.Other_Specimen_ID)
+227900211005
+228000211005      *** RFS80658 - Changed the join to read 'Inner' instead of ',' ****
+22810021100580658          FROM MFAACCDSP Accdsp
+228200211005  |                 INNER JOIN MFAACCNTP Accntp ON
+228300211005  |                  Accntp.Account_No = Accdsp.Account_No
+228400211005  |                 INNER JOIN MFAACCTYP Acctyp  ON
+22850021100580658                Accntp.Account_Type_Code = Acctyp.Account_Type_Code
+228600211005
+228700211005      *             RFS73394 - Begins - Make ACCBNP an outer join
+228800211005                    LEFT OUTER JOIN
+228900211005                    Mfaaccbnp Accbnp
+229000211005                 ON Accbnp.Account_No         = Accdsp.Account_No
+229100211005                AND Accbnp.Beneficiary_Status = :lncc_A
+229200211005      *             RFS73394 - Ends
+229300211005
+229400211005                    EXCEPTION JOIN Mfaaccatp Accatp
+229500211005                      ON Accdsp.Account_No = Accatp.Account_No
+229600211005                     AND Accatp.Account_Attribute_Code = :lncc_NHRDC
+229700211005
+229800211005      *       RFS73394 - Begins - Create two sets of qualifcations
+229900211005      *       WHERE Accdsp.RDSP_Approval_Status NOT IN
+230000211005              WHERE (Accdsp.RDSP_Approval_Status NOT IN
+230100211005      *          RFS73394 - Ends
+23020021100580658 ****Chg**    (:lncc_P,:lncc_N,:lncc_C,:lncc_D)
+23030021100580658              (:lncc_P,:lncc_N,:lncc_C,:lncc_D,:lncc_W)
+230400211005                AND Accdsp.Plan_Setup_Date   <= :li_Date
+230500211005      *          RFS73394 - Begins - Make ACCBNP an outer join
+230600211005      *         AND Accbnp.Account_No         = Accdsp.Account_No
+230700211005      *         AND Accbnp.Beneficiary_Status = :lncc_A
+230800211005      *          RFS73394 - Ends
+230900211005                AND Accntp.Account_No        = Accdsp.Account_No
+231000211005                AND Accntp.Account_Type_Code = Acctyp.Account_Type_Code
+231100211005                AND Acctyp.Account_Type_Rule = :lncc_0
+231200211005      *          RFS73394 - Begins - Retrieve for close requests
+231300211005      *         RFS73394.13 - Begins - Separate closure and normal process
+231400211005                AND Accdsp.Closure_Date     = :Lnci_0
+231500211005      *         RFS73394.13 - Ends
+231600211005                )
+231700211005             OR (
+231800211005                    Accdsp.Plan_Setup_Date   <= :li_Date
+231900211005                AND Accdsp.Closure_Date     <> :Lnci_0
+232000211005124268          AND Accdsp.Closure_Date     <= :li_Date
+232100211005                AND Accdsp.Closure_Status  IN(:Lncc_U,:Lncc_R)
+232200211005                AND Accntp.Account_No        = Accdsp.Account_No
+232300211005                AND Accntp.Account_Type_Code = Acctyp.Account_Type_Code
+232400211005                AND Acctyp.Account_Type_Rule = :lncc_0
+232500211005                )
+232600211005      *          RFS73394 - Ends
+232700211005               ORDER BY Accdsp.Account_No
+232800211005               FOR FETCH ONLY
+232900211005               OPTIMIZE FOR ALL ROWS
+233000211005           END-EXEC.
+233100211005
+233200211005           EXEC SQL
+233300211005             OPEN C1
+233400211005           END-EXEC.
+233500211005
+233600211005           MOVE SQLSTATE TO lc_sqlStates.
+233700211005           IF NOT lncc_sqlSuccessful
+233800211005              SET lncc_Err_25 TO TRUE
+233900211005              MOVE lncc_ErrorOpeningCursor TO lc_sqlErrShortDESCR
+234000211005              PERFORM  SQL_Fail_Process
+234100211005           END-IF.
+234200211005
+234300211005      * ---------------------------------
+234400211005       Read_Investor_Tenant.
+234500211005      * ---------------------------------
+234600211005           READ Investor-Tenant  NEXT RECORD
+234700211005             AT END
+234800211005                SET lb_EndOfIVRTEPTrue TO TRUE
+234900211005           END-READ.
+235000211005
+235100211005      * ---------------------------------
+235200211005       Fetch_Cursor.
+235300211005      * ---------------------------------
+235400211005           INITIALIZE lc_FetchC1Rec.
+235500211005      *    RFS 73394 - Begins - Initialize rejection detail
+235600211005           INITIALIZE lc_RejectionRec.
+235700211005      *    RFS 73394 - Ends
+235800211005
+235900211005           EXEC SQL
+236000211005             FETCH NEXT FROM C1
+236100211005              INTO :lc_FetchC1Rec
+236200211005           END-EXEC.
+236300211005
+236400211005           MOVE SQLSTATE TO lc_sqlStates.
+236500211005           EVALUATE TRUE
+236600211005             WHEN lncc_sqlSuccessful
+236700211005               CONTINUE
+236800211005             WHEN lncc_sqlEnd
+236900211005                  SET lb_EndOfCursorTrue TO TRUE
+237000211005             WHEN OTHER
+237100211005                  SET lncc_Err_26 TO TRUE
+237200211005                  MOVE lncc_ErrorFetchingCursor TO lc_sqlErrShortDESCR
+237300211005                  PERFORM  SQL_Fail_Process
+237400211005           END-EVALUATE.
+237500211005
+237600211005      * ---------------------------------
+237700211005       End_of_Program.
+237800211005      * ---------------------------------
+237900211005           CLOSE    INVESTOR-TENANT
+238000211005                    HOLDER-CHANGES
+238100211005                    COUNTRY
+238200211005                    HRDC-CDSP-INTERFACE.
+238300211005      *RFS1018984-Starts.
+238400211005      *     PERFORM  Close_Cursor.
+238500211005           IF pc_RptMode NOT = lncc_S
+238600211005            PERFORM  Close_Cursor
+238700211005           END-IF
+238800211005      *RFS1018984-Ends.
+238900211005
+239000211005           GOBACK.
+239100211005
+239200211005      * ---------------------------------
+239300211005       Close_Cursor.
+239400211005      * ---------------------------------
+239500211005           EXEC SQL
+239600211005             CLOSE C1
+239700211005           END-EXEC.
+239800211005
+239900211005           MOVE SQLSTATE TO lc_sqlStates.
+240000211005           IF NOT lncc_sqlSuccessful
+240100211005              SET lncc_Err_27 TO TRUE
+240200211005              MOVE lncc_ErrorClosingCursor TO lc_sqlErrShortDESCR
+240300211005              PERFORM  SQL_Fail_Process
+240400211005           END-IF.
+240500211005
+240600211005      * RFS 99071 - Start
+240700211005      * ---------------------------------
+240800211005       Close_HRDPCP_Cursor.
+240900211005      * ---------------------------------
+241000211005           EXEC SQL
+241100211005             CLOSE lcu_PCPCursor
+241200211005           END-EXEC.
+241300211005
+241400211005           MOVE SQLSTATE TO lc_sqlStates.
+241500211005           IF NOT lncc_sqlSuccessful
+241600211005              SET lncc_Err_44 TO TRUE
+241700211005              MOVE lncc_ErrClosingHRDPCPCursor TO lc_sqlErrShortDESCR
+241800211005              PERFORM  SQL_Fail_Process
+241900211005           END-IF.
+242000211005      * RFS 99071 - End
+242100211005
+242200211005      * RFS73394 Begins - New routines
+242300211005      * ---------------------------------
+242400211005       Get_Province_Code.
+242500211005      * ---------------------------------
+242600211005
+242700211005           INITIALIZE Lc_ProvinceCode.
+242800211005
+242900211005           EXEC SQL
+243000211005             SELECT Province_Code
+243100211005
+243200211005               INTO :Lc_ProvinceCode
+243300211005               FROM  Mfahrrqcp Hrrqcp
+243400211005
+243500211005              WHERE Hrrqcp.Request_Type_Code = :Lncc_CDSB
+243600211005           END-EXEC.
+243700211005
+243800211005           MOVE SQLSTATE TO lc_sqlStates.
+243900211005           EVALUATE TRUE
+244000211005             WHEN lncc_sqlSuccessful
+244100211005                CONTINUE
+244200211005
+244300211005             WHEN OTHER
+244400211005                SET lncc_Err_39 TO TRUE
+244500211005                MOVE lncc_ErrorGettingProvCode TO lc_sqlErrShortDESCR
+244600211005                PERFORM  SQL_Fail_Process
+244700211005           END-EVALUATE.
+244800211005
+244900211005      * ---------------------------------
+245000211005       Write_Rejection_Record.
+245100211005      * ---------------------------------
+245200211005
+245300211005           EXEC SQL
+245400211005             INSERT INTO WKDSPREJP
+245500211005               VALUES (:lc_RejectionRec)
+245600211005
+245700211005           END-EXEC.
+245800211005
+245900211005           MOVE SQLSTATE TO lc_sqlStates
+246000211005           EVALUATE TRUE
+246100211005             WHEN lncc_sqlSuccessful
+246200211005               CONTINUE
+246300211005
+246400211005             WHEN OTHER
+246500211005               SET lncc_Err_32 TO TRUE
+246600211005               MOVE lncc_ErrorUpdatingWKDSPREJP TO lc_sqlErrShortDESCR
+246700211005               PERFORM  SQL_Fail_Process
+246800211005           END-EVALUATE.
+246900211005
+247000211005      * ---------------------------------
+247100211005       Reject_101.
+247200211005      * ---------------------------------
+247300211005           INITIALIZE lc_RejectionRec.
+247400211005           MOVE lncc_101
+247500211005             TO lc_RejRecType.
+247600211005           MOVE li_AccountNo
+247700211005             TO li_RejAccountNo.
+247800211005           MOVE li_PlanSetupDate
+247900211005             TO li_RejPlanSetupDate.
+248000211005
+248100211005      * ---------------------------------
+248200211005       Reject_102.
+248300211005      * ---------------------------------
+248400211005           INITIALIZE lc_RejectionRec.
+248500211005           MOVE lncc_102
+248600211005             TO lc_RejRecType.
+248700211005           MOVE li_AccountNo
+248800211005             TO li_RejAccountNo.
+248900211005           MOVE li_PlanSetupDate
+249000211005             TO li_RejPlanSetupDate.
+249100211005
+249200211005      * ---------------------------------
+249300211005       Reject_201.
+249400211005      * ---------------------------------
+249500211005           INITIALIZE lc_RejectionRec.
+249600211005           MOVE lncc_201
+249700211005             TO lc_RejRecType.
+249800211005           MOVE li_AccountNo
+249900211005             TO li_RejAccountNo.
+250000211005           MOVE li_PlanSetupDate
+250100211005             TO li_RejPlanSetupDate.
+250200211005
+250300211005      * RFS 99071 - Start
+250400211005      * ---------------------------------
+250500211005       Reject_202.
+250600211005      * ---------------------------------
+250700211005           INITIALIZE lc_RejectionRec.
+250800211005           MOVE lncc_202
+250900211005             TO lc_RejRecType.
+251000211005
+251100211005      * RFS 99071.2 - begins.
+251200211005      *    MOVE li_AccountNo
+251300211005      *      TO li_RejAccountNo.
+251400211005      *    MOVE li_PlanSetupDate
+251500211005      *      TO li_RejPlanSetupDate.
+251600211005           MOVE li_PCP-AccountNo
+251700211005             TO li_RejAccountNo.
+251800211005           MOVE li_PCP-PlanSetupDate
+251900211005             TO li_RejPlanSetupDate.
+252000211005      * RFS 99071.2 - ends.
+252100211005
+252200211005      * RFS 99071 - End
+252300211005
+252400211005      * ---------------------------------
+252500211005       Validate_Beneficiary.
+252600211005      * ---------------------------------
+252700211005           IF Li_BenSeqNo = ZEROS
+252800211005              PERFORM Reject_101
+252900211005              MOVE Lncc_02          TO lc_RejTransType
+253000211005              MOVE Lncc_R002        TO lc_RejErrorCode
+253100211005              MOVE SPACES           TO lc_RejFieldValue
+253200211005              MOVE Lncc_Beneficiary TO lc_RejFieldDesc
+253300211005              PERFORM Write_Rejection_Record
+253400211005           END-IF.
+253500211005
+253600211005      * ---------------------------------
+253700211005       Validate_201_02_Changes.
+253800211005      * ---------------------------------
+253900211005           INITIALIZE Li_ValidateDate.
+254000211005           MOVE Date-Of-Birth OF MFAHRDDBP
+254100211005             TO Li_ValidateDate.
+254200211005           IF li_BenBirthDate(lnci_1:Lnci_4) NOT =
+254300211005              Li_ValidateDate(lnci_1:Lnci_4)
+254400211005              PERFORM Reject_201
+254500211005              MOVE Lncc_02             TO lc_RejTransType
+254600211005              MOVE Lncc_8251           TO lc_RejErrorCode
+254700211005              MOVE Lc_BenBirthDate     TO lc_RejFieldValue
+254800211005              MOVE Lncc_BeneficiaryDOB TO lc_RejFieldDesc
+254900211005              PERFORM Write_Rejection_Record
+255000211005           ELSE
+255100211005              PERFORM  Format_and_Write_201_02
+255200211005           END-IF.
+255300211005
+255400211005      * ---------------------------------
+255500211005       Reject_201_23.
+255600211005      * ---------------------------------
+255700211005           PERFORM Reject_201.
+255800211005           MOVE Lncc_23             TO lc_RejTransType.
+255900211005           MOVE Lncc_8249           TO lc_RejErrorCode
+256000211005           MOVE Li_CheckSIN         TO lc_RejFieldValue
+256100211005           MOVE Lncc_HolderSIN_BN   TO lc_RejFieldDesc
+256200211005           PERFORM Write_Rejection_Record.
+256300211005
+256400211005      * ---------------------------------
+256500211005       Validate_201_23.
+256600211005      * ---------------------------------
+256700211005
+256800211005           PERFORM Check_for_Other_Holders.
+256900211005
+257000211005      * ---------------------------------
+257100211005       Check_for_Other_Holders.
+257200211005      * ---------------------------------
+257300211005           INITIALIZE li_LastHolderCnt.
+257400211005
+257500211005           EXEC SQL
+257600211005             SELECT
+257700211005                    SUM(
+257800211005            CASE WHEN Ivrp.Social_Insurance_No IS NOT NULL THEN :Lnci_1
+257900211005                 ELSE :Lnci_0 END +
+258000211005            CASE WHEN Tep.Social_Insurance_No IS NOT NULL THEN :Lnci_1
+258100211005                 ELSE :Lnci_0 END
+258200211005                        )
+258300211005               INTO :li_LastHolderCnt
+258400211005               FROM  MFAACCNTP Accntp
+258500211005                     LEFT JOIN
+258600211005                     MFAIVRP Ivrp
+258700211005                  ON Accntp.Investor_No       =  Ivrp.Investor_No
+258800211005                 AND Ivrp.Social_Insurance_No <> :Li_CheckSIN
+258900211005                     LEFT JOIN
+259000211005                     MFAIVRTEP Tep
+259100211005                  ON Accntp.Investor_No      =  Tep.Investor_No
+259200211005                 AND Tep.Social_Insurance_No <> :Li_CheckSIN
+259300211005
+259400211005               WHERE
+259500211005                     Accntp.Account_No     = :li_AccountNo
+259600211005              FETCH  FIRST ROW ONLY
+259700211005           END-EXEC
+259800211005
+259900211005           IF li_LastHolderCnt > Lnci_0
+260000211005              PERFORM Format_and_Write_201_23
+260100211005           ELSE
+260200211005              PERFORM Reject_201_23
+260300211005           END-IF.
+260400211005
+260500211005      * ---------------------------------
+260600211005       Validate_PCG.
+260700211005      * ---------------------------------
+260800211005
+260900211005           IF lc_ACPCGP_SIN = SPACES AND
+261000211005              lc_ACPCGP_BusinessNo = SPACES
+261100211005              PERFORM Reject_101
+261200211005              MOVE Lncc_01             TO lc_RejTransType
+261300211005              MOVE Lncc_R003           TO lc_RejErrorCode
+261400211005              MOVE SPACES              TO lc_RejFieldValue
+261500211005              MOVE Lncc_PCG            TO lc_RejFieldDesc
+261600211005              PERFORM Write_Rejection_Record
+261700211005           END-IF.
+261800211005
+261900211005      * ---------------------------------
+262000211005       Validate_Contract_Registration.
+262100211005      * ---------------------------------
+262200211005
+262300211005           MOVE Li_PlanSetupDate TO Ld_CCYYMMDD.
+262400211005
+262500211005           MOVE FUNCTION ADD-DURATION (Ld_CCYYMMDD
+26260021100580658 ***Chg***                   DAYS Lnci_60)
+26270021100580658                             DAYS li_LimNbRegisDays)
+262800211005                                    TO Li_RegistrationDate.
+262900211005
+263000211005           IF Li_RegistrationDate < pi_ProcessDate
+263100211005R81396*80658* AND lc_ApprovalStatus NOT = lncc_W
+26320021100580658         AND lc_ApprovalStatus NOT = lncc_R
+26330021100580658         AND lc_ApprovalStatusOrig NOT = lncc_W
+263400211005              PERFORM Reject_101
+263500211005              MOVE Lncc_01               TO lc_RejTransType
+263600211005              MOVE Lncc_8232             TO lc_RejErrorCode
+263700211005              MOVE Li_PlanSetupDate      TO lc_RejFieldValue
+263800211005              MOVE Lncc_ContractSignDate TO lc_RejFieldDesc
+263900211005              PERFORM Write_Rejection_Record
+264000211005           END-IF.
+264100211005
+264200211005           IF Li_PlanSetupDate < Li_BenBirthDate
+264300211005              PERFORM Reject_101
+264400211005              MOVE Lncc_01               TO lc_RejTransType
+264500211005              MOVE Lncc_8203             TO lc_RejErrorCode
+264600211005              MOVE Li_PlanSetupDate      TO lc_RejFieldValue
+264700211005              MOVE Lncc_ContractSignDate TO lc_RejFieldDesc
+264800211005              PERFORM Write_Rejection_Record
+264900211005           END-IF.
+265000211005
+265100211005           IF Li_PlanSetupDate < Lnci_20081201
+265200211005              PERFORM Reject_101
+265300211005              MOVE Lncc_01               TO lc_RejTransType
+265400211005              MOVE Lncc_8200             TO lc_RejErrorCode
+265500211005              MOVE Li_PlanSetupDate      TO lc_RejFieldValue
+265600211005              MOVE Lncc_ContractSignDate TO lc_RejFieldDesc
+265700211005              PERFORM Write_Rejection_Record
+265800211005           END-IF.
+265900211005
+266000211005      * ---------------------------------
+266100211005       Validate_Closure.
+266200211005      * ---------------------------------
+266300211005
+266400211005           IF lc_ApprovalStatus NOT = Lncc_A AND
+266500211005              lc_ApprovalStatus NOT = Lncc_D AND
+266600211005              lc_ApprovalStatus NOT = Lncc_W
+266700211005                 PERFORM Reject_102
+266800211005                 MOVE Lncc_10             TO lc_RejTransType
+266900211005                 MOVE Lncc_8246           TO lc_RejErrorCode
+267000211005                 MOVE Lc_ApprovalStatus   TO lc_RejFieldValue
+267100211005                 MOVE Lncc_ContractStatus TO lc_RejFieldDesc
+267200211005                 PERFORM Write_Rejection_Record
+267300211005           ELSE
+267400211005              PERFORM Validate_Unit_Balance
+267500211005              PERFORM Validate_Unprocessed_Count
+267600211005              IF Li_AccountUnitBalance = ZERO AND
+267700211005                 Li_UnprocessedCount = ZERO
+267800211005      *Rfs74620 - Begins
+267900211005                 IF lc_CloseRsnCode = "03"
+268000211005                    PERFORM Check_Transfer_Approval
+268100211005                    IF li_UnapprovedTransfer_Cnt = 0
+268200211005                       PERFORM Closure_Detail
+268300211005                    END-IF
+268400211005                 ELSE
+268500211005                    PERFORM Closure_Detail
+268600211005                 END-IF
+268700211005      *Rfs74620 - ends
+268800211005              ELSE
+268900211005                 IF Li_AccountUnitBalance NOT = ZERO
+269000211005                    PERFORM Reject_102
+269100211005                    MOVE Lncc_10             TO lc_RejTransType
+269200211005                    MOVE Lncc_R004           TO lc_RejErrorCode
+269300211005                    MOVE Lncc_GTZero         TO lc_RejFieldValue
+269400211005                    MOVE Lncc_UnitBalance    TO lc_RejFieldDesc
+269500211005                    PERFORM Write_Rejection_Record
+269600211005                 END-IF
+269700211005              END-IF
+269800211005           END-IF.
+269900211005
+270000211005      * ---------------------------------
+270100211005       Closure_Detail.
+270200211005      * ---------------------------------
+270300211005R74620*    PERFORM Format_And_Write_201_10.
+270400211005R74620     PERFORM Format_And_Write_102_10.
+270500211005           ADD   1  TO  pi_VendorTransId.
+270600211005
+270700211005      *    Account file is not part of Report Mode
+270800211005           IF pc_RptMode NOT = lncc_R
+270900211005              PERFORM Set_Stop_Activity
+271000211005           END-IF.
+271100211005
+271200211005      *    Bond request file / Account-RDSP file
+271300211005      *    to QTEMP is part of Report Mode
+271400211005           PERFORM Set_Closure_Status
+271500211005
+271600211005           PERFORM Check_Last_Bond_Request.
+271700211005
+271800211005           IF Lc_LastRequestFlag = Lncc_R AND
+271900211005def10        (Lc_LastRequestStatus = Lncc_A OR
+272000211005def10         Lc_LastRequestStatus = Lncc_P)
+272100211005              PERFORM Write_Stop_For_Closure
+272200211005           END-IF.
+272300211005
+272400211005      * ---------------------------------
+272500211005       Validate_Unit_Balance.
+272600211005      * ---------------------------------
+272700211005
+272800211005      *    In this case, a zero value would cause continuation
+272900211005      *    Set the unit balance to an arbitrary number
+273000211005           MOVE Lnci_1 TO li_AccountUnitBalance.
+273100211005
+273200211005           EXEC SQL
+273300211005             SELECT  SUM(IFNULL(Accivp.Curr_unit_bal,0))
+273400211005
+273500211005               INTO :li_AccountUnitBalance
+273600211005               FROM  MFAACCDSP Accdsp
+273700211005                     LEFT JOIN
+273800211005                     MFAACCIVP Accivp
+273900211005                  ON Accdsp.Account_No = Accivp.Account_No
+274000211005
+274100211005              WHERE Accdsp.Account_No  = :li_AccountNo
+274200211005           END-EXEC.
+274300211005
+274400211005           MOVE SQLSTATE TO lc_sqlStates.
+274500211005           EVALUATE TRUE
+274600211005             WHEN lncc_sqlSuccessful
+274700211005                CONTINUE
+274800211005
+274900211005             WHEN OTHER
+275000211005                SET lncc_Err_33 TO TRUE
+275100211005                MOVE lncc_ErrorGettingUnitBal TO lc_sqlErrShortDESCR
+275200211005                PERFORM  SQL_Fail_Process
+275300211005           END-EVALUATE.
+275400211005
+275500211005      * ---------------------------------
+275600211005       Validate_Unprocessed_Count.
+275700211005      * ---------------------------------
+275800211005      *    In this case, a zero value would cause continuation
+275900211005      *    Set the unit balance to an arbitrary number
+276000211005           MOVE Lnci_1 TO Li_UnprocessedCount.
+276100211005
+276200211005           EXEC SQL
+276300211005             SELECT  COUNT(*)
+276400211005
+276500211005               INTO :Li_UnprocessedCount
+276600211005      *Rfs74620 Begins
+276700211005      *        FROM  Mfatrnhdp Trnhdp
+276800211005      *              RFS 73394.9 Begins - exclude 2 & 3 rules
+276900211005      *             ,Mfatrnp Trnp
+277000211005      *             ,Mfaaccntp Accntp
+277100211005      *             ,Mfacntrrp Cntrrp
+277200211005      *              RFS 73394.9 Ends
+277300211005
+277400211005               FROM  Mfatrnhdp Trnhdp
+277500211005               INNER JOIN Mfatrnp Trnp
+277600211005                  ON Trnhdp.Placement_Date = Trnp.Placement_Date
+277700211005                     AND Trnhdp.Trans_No   = Trnp.Trans_No
+277800211005               INNER JOIN Mfaaccntp Accntp
+277900211005                  ON Trnp.Account_No       = Accntp.Account_No
+278000211005               INNER JOIN Mfacntrrp Cntrrp
+278100211005                  ON Accntp.Account_Type_Code
+278200211005                                     = Cntrrp.Account_Type_Code
+278300211005                     AND Trnp.Contr_Redem_Code
+278400211005                                     = Cntrrp.Contr_Redem_Code
+278500211005      *Rfs74620 Ends
+278600211005              WHERE Trnhdp.Account_No  = :li_AccountNo
+278700211005      *         RFS 73394.9 Begins - exclude 2 & 3 rules
+278800211005      *Rfs74620 Begins
+278900211005      *         AND Trnhdp.Placement_Date = Trnp.Placement_Date
+279000211005      *         AND Trnhdp.Trans_No       = Trnp.Trans_No
+279100211005      *         AND Trnp.Account_No       = Accntp.Account_No
+279200211005      *         AND Accntp.Account_Type_Code = Cntrrp.Account_Type_Code
+279300211005      *         AND Trnp.Contr_Redem_Code    = Cntrrp.Contr_Redem_Code
+279400211005      *Rfs74620 Ends
+279500211005                AND Cntrrp.Contr_Redem_Code_Rule
+279600211005112336*             NOT IN(:Lncc2,:Lncc_3)
+279700211005112336              NOT IN(:Lncc2,:Lncc_3,:Lncc_16)
+279800211005      *              RFS 73394.9 Ends
+279900211005                AND Trnhdp.Rdsp_Approval_Status
+280000211005                 IN(:Lncc_P, :Lncc_R, :Lncc_Space)
+280100211005           END-EXEC.
+280200211005
+280300211005           MOVE SQLSTATE TO lc_sqlStates.
+280400211005           EVALUATE TRUE
+280500211005             WHEN lncc_sqlSuccessful
+280600211005                CONTINUE
+280700211005
+280800211005             WHEN OTHER
+280900211005                SET lncc_Err_34 TO TRUE
+281000211005                MOVE lncc_ErrorUnprocessedCnt TO lc_sqlErrShortDESCR
+281100211005                PERFORM  SQL_Fail_Process
+281200211005           END-EVALUATE.
+281300211005
+281400211005      * RFS99071 - Start
+281500211005      * ---------------------------------
+281600211005       Validate_Consent_Info.
+281700211005      * ---------------------------------
+281800211005      * RFS99071.2 - begins.
+281900211005           MOVE lc_PCP-AccountTypeCode  TO
+282000211005                lc_AccountTypeCode.
+282100211005           IF lc_AccountTypeCode NOT = lc_SaveAccountTypeCode
+282200211005              PERFORM  Get_Specimen_No
+282300211005              MOVE lc_AccountTypeCode  TO  lc_SaveAccountTypeCode
+282400211005           END-IF.
+282500211005      * RFS99071.2 - ends.
+282600211005
+282700211005           IF (lc_PCP-HRDCTransType = lncc_01 )
+282800211005      * RFS 99071.2 - begins.
+282900211005      *      IF (li_PCP-ConsentDate   < li_PlanSetupDate)
+283000211005             IF (li_PCP-ConsentDate   < li_PCP-PlanSetupDate)
+283100211005      * RFS 99071.2 - ends.
+283200211005               PERFORM Reject_202
+283300211005               MOVE lncc_01                    TO lc_RejTransType
+283400211005               MOVE lncc_8206                  TO lc_RejErrorCode
+283500211005               MOVE li_PCP-ConsentDate         TO lc_RejFieldValue
+283600211005               MOVE lncc_AddOrRevokeConsent    TO lc_RejFieldDesc
+283700211005               PERFORM Write_Rejection_Record
+283800211005             ELSE
+283900211005               PERFORM Format_and_Write_202_01
+284000211005             END-IF
+284100211005           END-IF.
+284200211005           IF (lc_PCP-HRDCTransType     = lncc_02 )
+284300211005      * RFS 99071.2 - begins.
+284400211005      *      IF (li_PCP-RevokeConsentDate < li_PlanSetupDate)
+284500211005             IF (li_PCP-RevokeConsentDate < li_PCP-PlanSetupDate)
+284600211005      * RFS 99071.2 - ends.
+284700211005               PERFORM Reject_202
+284800211005               MOVE lncc_02                   TO lc_RejTransType
+284900211005               MOVE lncc_8206                 TO lc_RejErrorCode
+285000211005               MOVE li_PCP-RevokeConsentDate  TO lc_RejFieldValue
+285100211005               MOVE lncc_AddOrRevokeConsent   TO lc_RejFieldDesc
+285200211005               PERFORM Write_Rejection_Record
+285300211005             ELSE
+285400211005               PERFORM Format_and_Write_202_02
+285500211005             END-IF
+285600211005           END-IF.
+285700211005
+285800211005      * ---------------------------------
+285900211005       Format_and_Write_202_01.
+286000211005      * ---------------------------------
+286100211005           INITIALIZE 202-01-Record.
+286200211005
+286300211005           STRING pi_ProcessDate pi_VendorTransId DELIMITED BY SIZE
+286400211005             INTO lc_VendorTransID.
+286500211005
+286600211005           MOVE lncc_202              TO  202-01-RecType.
+286700211005           MOVE lncc_01               TO  202-01-TransType.
+286800211005           MOVE pc_IssuerBN           TO  202-01-IssuerBN.
+286900211005           MOVE lc_VendorTransID      TO  202-01-IssuerTransId.
+287000211005           MOVE lc_SpecimenPlanNo     TO  202-01-SpecimenId.
+287100211005
+287200211005      * RFS 99071.2 - begins.
+287300211005      *    MOVE lc_AccountNo          TO  202-01-ContractId.
+287400211005      *    MOVE lc_BenSIN             TO  202-01-BenSin.
+287500211005           MOVE lc_PCP-AccountNo      TO  202-01-ContractId.
+287600211005           MOVE lc_PCP-BenSin         TO  202-01-BenSin.
+287700211005      * RFS 99071.2 - ends.
+287800211005
+287900211005           MOVE li_PCP-ConsentDate    TO  202-01-ConsentDate.
+288000211005           IF lc_PCP-ConsentType = lncc_P
+288100211005              MOVE li_PCP-SocialInsuranceNo
+288200211005                                      TO  202-01-ConsentSINorBN
+288300211005           ELSE IF lc_PCP-ConsentType = lncc_A
+288400211005              MOVE lc_PCP-BusinessNumber
+288500211005                                      TO  202-01-ConsentSINorBN
+288600211005           END-IF.
+288700211005           IF lc_PCP-ConsentType = lncc_P
+288800211005              MOVE lc_PCP-FirstName
+288900211005                                      TO  202-01-ConsentGivenName
+289000211005           ELSE
+289100211005              MOVE SPACES
+289200211005                                      TO  202-01-ConsentGivenName
+289300211005           END-IF.
+289400211005           IF lc_PCP-ConsentType = lncc_P
+289500211005              MOVE lc_PCP-LastName
+289600211005                                      TO  202-01-ConSurNameorAgency
+289700211005           ELSE IF lc_PCP-ConsentType = lncc_A
+289800211005              MOVE lc_PCP-BusinessName
+289900211005                                      TO  202-01-ConSurNameorAgency
+290000211005           END-IF.
+290100211005           IF lc_PCP-ConsentType = lncc_P
+290200211005              MOVE lnc_1              TO  202-01-ConsentType
+290300211005           ELSE IF lc_PCP-ConsentType = lncc_A
+290400211005              MOVE lnccc_2            TO  202-01-ConsentType
+290500211005           END-IF.
+290600211005
+290700211005           WRITE    HRDC-CDSP-REC  FROM   202-01-Record.
+290800211005           ADD lncc_1   TO pi_RecordCount.
+290900211005
+291000211005           PERFORM  Update_MFAHRDPCP_Record.
+291100211005           ADD lncc_1   TO  pi_VendorTransId.
+291200211005
+291300211005      * ---------------------------------
+291400211005       Format_and_Write_202_02.
+291500211005      * ---------------------------------
+291600211005           INITIALIZE 202-02-Record.
+291700211005
+291800211005           STRING pi_ProcessDate pi_VendorTransId DELIMITED BY SIZE
+291900211005             INTO lc_VendorTransID.
+292000211005
+292100211005           MOVE lncc_202              TO  202-02-RecType.
+292200211005           MOVE lncc_02               TO  202-02-TransType.
+292300211005           MOVE pc_IssuerBN           TO  202-02-IssuerBN.
+292400211005           MOVE lc_VendorTransID      TO  202-02-IssuerTransId.
+292500211005           MOVE lc_SpecimenPlanNo     TO  202-02-SpecimenId.
+292600211005
+292700211005      * RFS 99071.2 - begins.
+292800211005      *    MOVE lc_AccountNo          TO  202-02-ContractId.
+292900211005      *    MOVE lc_BenSIN             TO  202-02-BenSin.
+293000211005      * RFS 99071.3 - Start
+293100211005      *    MOVE lc_PCP-AccountNo      TO  202-01-ContractId.
+293200211005      *    MOVE lc_PCP-BenSin         TO  202-01-BenSin.
+293300211005           MOVE lc_PCP-AccountNo      TO  202-02-ContractId.
+293400211005           MOVE lc_PCP-BenSin         TO  202-02-BenSin.
+293500211005      * RFS 99071.3 - End
+293600211005      * RFS 99071.2 - ends.
+293700211005
+293800211005           MOVE li_PCP-RevokeConsentDate
+293900211005                                      TO  202-02-RevokeConsentDate.
+294000211005           IF lc_PCP-ConsentType = lncc_P
+294100211005              MOVE li_PCP-SocialInsuranceNo
+294200211005                                      TO  202-02-ConsentSINorBN
+294300211005           ELSE IF lc_PCP-ConsentType = lncc_A
+294400211005              MOVE lc_PCP-BusinessNumber
+294500211005                                      TO  202-02-ConsentSINorBN
+294600211005           END-IF.
+294700211005
+294800211005           WRITE    HRDC-CDSP-REC  FROM   202-02-Record.
+294900211005           ADD lncc_1   TO pi_RecordCount.
+295000211005
+295100211005           PERFORM  Update_MFAHRDPCP_Record.
+295200211005           ADD lncc_1   TO  pi_VendorTransId.
+295300211005
+295400211005      * ---------------------------------
+295500211005       Update_MFAHRDPCP_Record.
+295600211005      * ---------------------------------
+295700211005           EXEC SQL
+295800211005             UPDATE MFAHRDPCP HRDPCP
+295900211005                SET HRDPCP.VENDOR_TRANSACTION_ID = :lc_VendorTransID,
+296000211005                    HRDPCP.HRDC_FILE_DATE        = :pi_ProcessDate,
+296100211005      * RFS 99071.2 - begins.
+296200211005                  HRDPCP.LAST_NAME             = :lc_PCP-LastName,
+296300211005                  HRDPCP.FIRST_NAME            = :lc_PCP-FirstName,
+296400211005               HRDPCP.SOCIAL_INSURANCE_NO   = :li_PCP-SocialInsuranceNo,
+296500211005                  HRDPCP.BUSINESS_NAME         = :lc_PCP-BusinessName,
+296600211005                  HRDPCP.BUSINESS_NUMBER       = :lc_PCP-BusinessNumber,
+296700211005                  HRDPCP.CONSENT_TYPE          = :lc_PCP-ConsentType,
+296800211005      * RFS 99071.2 -ends.
+296900211005                    HRDPCP.HRDC_STATUS           = :lncc_P
+297000211005              WHERE
+297100211005                    HRDPCP.ACCOUNT_NO            = :li_PCP-AccountNo
+297200211005                AND HRDPCP.PCG_SEQ_NO            = :li_PCP-PCGSeqNo
+297300211005                AND HRDPCP.CONSENT_SEQUENCE_NO   =
+297400211005                                               :li_PCP-ConsentSequenceNo
+297500211005                AND HRDPCP.HRDC_TRANS_TYPE       = :lc_PCP-HRDCTransType
+297600211005           END-EXEC.
+297700211005
+297800211005           MOVE SQLSTATE TO lc_sqlStates.
+297900211005           IF NOT lncc_sqlSuccessful
+298000211005              SET lncc_Err_43 TO TRUE
+298100211005              MOVE lncc_ErrupdateMFAHRDPCP  TO lc_sqlErrShortDESCR
+298200211005              PERFORM  SQL_Fail_Process
+298300211005           END-IF.
+298400211005
+298500211005      * RFS99071 - End
+298600211005
+298700211005      * ---------------------------------
+298800211005R74620*Format_and_Write_201_10.
+298900211005R74620 Format_and_Write_102_10.
+299000211005      * ---------------------------------
+299100211005           INITIALIZE 102-10-Record.
+299200211005
+299300211005           STRING pi_ProcessDate pi_VendorTransId DELIMITED BY SIZE
+299400211005             INTO lc_VendorTransID.
+299500211005
+299600211005      *RFS1115220 - Starts
+299700211005           If pc_RptMode NOT = lncc_R
+299800211005              PERFORM  Insert_RDSP_FMV_102-10
+299900211005           END-IF.
+300000211005      *RFS1115220 - Ends
+300100211005
+300200211005           MOVE lncc_102              TO 102-10-RecType.
+300300211005           MOVE lncc_10               TO 102-10-TransType
+300400211005           MOVE pc_IssuerBN           TO 102-10-IssuerBN.
+300500211005           MOVE lc_VendorTransID      TO 102-10-IssuerTransId.
+300600211005           MOVE lc_SpecimenPlanNo     TO 102-10-SpecimenId.
+300700211005           MOVE SPACES                TO 102-10-Filler1.
+300800211005           MOVE lc_AccountNo          TO 102-10-ContractId.
+300900211005
+301000211005           MOVE lc_CloseRsnCode       TO 102-10-ClosureReason.
+301100211005           MOVE li_CloseRsnDate       TO 102-10-ClosRsnDate.
+301200211005           MOVE li_CloseDate          TO 102-10-ClosureDate.
+301300211005           MOVE SPACES                TO 102-10-Filler2.
+301400211005
+301500211005           WRITE    HRDC-CDSP-REC  FROM   102-10-Record.
+301600211005           ADD 1  TO pi_RecordCount.
+301700211005
+301800211005      *RFS1115220 - Starts
+301900211005      * ---------------------------------
+302000211005       Insert_RDSP_FMV_102-10.
+302100211005      * ---------------------------------
+302200211005      *RFS1121283 - Starts.
+302300211005           INITIALIZE ln_AccountMv
+302400211005                      li_fmtdtein
+302500211005                      li_fmtdteout
+302600211005                      li_HRDCfiledate.
+302700211005      *RFS1121283 - Ends.
+302800211005           Move  lnci_9               TO ln_AccountMv.
+302900211005      *RFS1121283 - Starts.
+303000211005      * To Calculate 1day minus HRDC File date to Identify 102-10 records
+303100211005           MOVE li_Date               TO li_fmtdtein
+303200211005           MOVE FUNCTION SUBTRACT-DURATION
+303300211005                         (li_fmtdtein DAYS lnc_One)
+303400211005                                      TO li_fmtdteout
+303500211005           MOVE li_fmtdteout    TO  li_HRDCfiledate
+303600211005      *RFS1121283 - Ends.
+303700211005
+303800211005           EXEC SQL
+303900211005              INSERT INTO MFARDSFMVP
+304000211005                                   (VENDOR_TRANSACTION_ID
+304100211005                                   ,ACCOUNT_NO
+304200211005                                   ,HRDC_FILE_DATE
+304300211005                                   ,MARKET_VALUE_FILED
+304400211005                                   ,RDSP_APPROVAL_STATUS)
+304500211005                            VALUES (:lc_VendorTransID
+304600211005                                   ,:lc_AccountNo
+304700211005      *RFS1121283 - Starts.
+304800211005      *                            ,:li_Date
+304900211005                                   ,:li_HRDCfiledate
+305000211005      *RFS1121283 - Ends.
+305100211005                                   ,:ln_AccountMv
+305200211005                                   ,:lncc_P)
+305300211005           END-EXEC.
+305400211005
+305500211005           MOVE SQLSTATE TO lc_sqlStates
+305600211005           EVALUATE TRUE
+305700211005               WHEN lncc_sqlSuccessful
+305800211005                    CONTINUE
+305900211005               WHEN OTHER
+306000211005                    SET lncc_Err_47 TO TRUE
+306100211005                    MOVE lncc_ErrorInsertMFARDSFMVP
+306200211005                             TO lc_sqlErrShortDESCR
+306300211005                    PERFORM SQL_Fail_Process
+306400211005           END-EVALUATE.
+306500211005      *RFS1115220 - Ends
+306600211005
+306700211005      * ---------------------------------
+306800211005       Set_Stop_Activity.
+306900211005      * ---------------------------------
+307000211005
+307100211005           EXEC SQL
+307200211005             UPDATE Mfaaccntp Accntp
+307300211005                SET Stop_Activity = :Lncc_Y
+307400211005
+307500211005              WHERE Accntp.Account_No  = :li_AccountNo
+307600211005           END-EXEC.
+307700211005
+307800211005           MOVE SQLSTATE TO lc_sqlStates.
+307900211005           EVALUATE TRUE
+308000211005             WHEN lncc_sqlSuccessful
+308100211005                CONTINUE
+308200211005
+308300211005             WHEN OTHER
+308400211005                SET lncc_Err_35 TO TRUE
+308500211005                MOVE lncc_ErrorSetStop        TO lc_sqlErrShortDESCR
+308600211005                PERFORM  SQL_Fail_Process
+308700211005           END-EVALUATE.
+308800211005
+308900211005      * ---------------------------------
+309000211005       Set_Closure_Status.
+309100211005      * ---------------------------------
+309200211005
+309300211005           EXEC SQL
+309400211005             UPDATE Mfaaccdsp Accdsp
+309500211005                SET Closure_Status = :Lncc_P
+309600211005
+309700211005              WHERE Accdsp.Account_No  = :li_AccountNo
+309800211005           END-EXEC.
+309900211005
+310000211005           MOVE SQLSTATE TO lc_sqlStates.
+310100211005           EVALUATE TRUE
+310200211005             WHEN lncc_sqlSuccessful
+310300211005                CONTINUE
+310400211005
+310500211005             WHEN OTHER
+310600211005                SET lncc_Err_36 TO TRUE
+310700211005                MOVE lncc_ErrorCloseStatus    TO lc_sqlErrShortDESCR
+310800211005                PERFORM  SQL_Fail_Process
+310900211005           END-EVALUATE.
+311000211005
+311100211005      * ---------------------------------
+311200211005       Check_Last_Bond_Request.
+311300211005      * ---------------------------------
+311400211005           INITIALIZE Lc_LastBondRequest.
+311500211005
+311600211005           EXEC SQL
+311700211005             SELECT  MAX(
+311800211005                     DIGITS(
+311900211005      *      RFS 73394.12 - Begins - Add an IFNULL
+312000211005      *              ZONED(Acbhrp.Request_Date,8,0)
+312100211005                     ZONED(IFNULL(Acbhrp.Request_Date,:Lnci_0),8,0)
+312200211005      *      RFS 73394.12 - Ends
+312300211005                            )||
+312400211005                     Acbhrp.Request_Flag ||
+312500211005                     Acbhrp.Approval_Status||
+312600211005                     DIGITS(
+312700211005      *      RFS 73394.12 - Begins - Add an IFNULL
+312800211005      *              ZONED(Acbhrp.Request_Seq_no,3,0)
+312900211005                     ZONED(IFNULL(Acbhrp.Request_Seq_no,:Lnci_0),3,0)
+313000211005      *      RFS 73394.12 - Ends
+313100211005                            )
+313200211005                         )
+313300211005               INTO :Lc_LastBondRequest
+313400211005      *      RFS 73394.12 - Begins - Add an Indicator
+313500211005                    :Lb_Indicator
+313600211005      *      RFS 73394.12 - Ends
+313700211005               FROM  Mfaacbhrp Acbhrp
+313800211005
+313900211005              WHERE Acbhrp.Account_No  = :li_AccountNo
+314000211005      *       RFS141190 - Begins - Limit to CDSB records
+314100211005                AND Acbhrp.Request_Type_code = :lncc_CDSB
+314200211005      *       RFS141190 - Ends
+314300211005           END-EXEC.
+314400211005
+314500211005           MOVE SQLSTATE TO lc_sqlStates.
+314600211005           EVALUATE TRUE
+314700211005             WHEN lncc_sqlSuccessful
+314800211005                MOVE Lc_LastBondRequest
+314900211005                  TO Lc_LBRParsed
+315000211005
+315100211005             WHEN lncc_sqlEnd
+315200211005                INITIALIZE Lc_LastBondRequest
+315300211005                           Lc_LBRParsed
+315400211005
+315500211005             WHEN OTHER
+315600211005                SET lncc_Err_37 TO TRUE
+315700211005                MOVE lncc_ErrorLastBondRequest TO lc_sqlErrShortDESCR
+315800211005                PERFORM  SQL_Fail_Process
+315900211005           END-EVALUATE.
+316000211005
+316100211005      * ---------------------------------
+316200211005       Write_Stop_For_Closure.
+316300211005      * ---------------------------------
+316400211005
+316500211005           Add Lnci_1 TO Li_LastRequestSeqNo.
+316600211005
+316700211005           EXEC SQL
+316800211005             INSERT INTO MFAACBHRP
+316900211005               (Account_No,
+317000211005                Beneficiary_Seq_No,
+317100211005                Request_Type_Code,
+317200211005                Request_Seq_no,
+317300211005                Request_Date,
+317400211005                Province_Code,
+317500211005                Approval_Status,
+317600211005                Vendor_Transaction_Id,
+317700211005                Request_Flag,
+317800211005                Pcg_Seq_No,
+317900211005                Account_Type_Rule
+318000211005                )
+318100211005             VALUES(:Li_AccountNo,
+318200211005                    :Lncn_1,
+318300211005                    :Lncc_CDSB,
+318400211005                    :Li_LastRequestSeqNo,
+318500211005                    :Li_Date,
+318600211005                    :Lc_ProvinceCode,
+318700211005                    :Lncc_U,
+318800211005                    STRIP(DIGITS(:Li_AccountNo),L,"0")||:Lncc_1
+318900211005                    ||:Lncc_CDSB||STRIP(:Li_LastRequestSeqNo,L,"0"),
+319000211005                    :Lncc_S,
+319100211005                    :Lnci_01,
+319200211005                    :Lncc_0
+319300211005                    )
+319400211005
+319500211005           END-EXEC.
+319600211005
+319700211005           MOVE SQLSTATE TO lc_sqlStates.
+319800211005           EVALUATE TRUE
+319900211005             WHEN lncc_sqlSuccessful
+320000211005                CONTINUE
+320100211005
+320200211005             WHEN OTHER
+320300211005                SET lncc_Err_38 TO TRUE
+320400211005                MOVE lncc_ErrorInsertMfaacbhrp TO lc_sqlErrShortDESCR
+320500211005                PERFORM  SQL_Fail_Process
+320600211005           END-EVALUATE.
+320700211005
+320800211005      * ---------------------------------
+320900211005       Validate_Tenant.
+321000211005      * ---------------------------------
+321100211005
+321200211005           INITIALIZE Li_TenantCount.
+321300211005
+321400211005           EXEC SQL
+321500211005             SELECT
+321600211005                    SUM(
+321700211005                        CASE WHEN Ivrtyp.Recipient_Type = :Lnccc_2
+321800211005                              AND Ivrtep.Investor_no IS NULL
+321900211005                             THEN :Lnci_0
+322000211005                             ELSE :Lnci_1 END
+322100211005                         )
+322200211005
+322300211005               INTO :Li_TenantCount
+322400211005      *Rfs74620 Begins
+322500211005      *        FROM  Mfaaccntp Accntp, Mfaivrp Ivrp, Mfaivrtyp Ivrtyp
+322600211005               FROM Mfaaccntp Accntp
+322700211005               INNER JOIN MFAIVRP IVRP
+322800211005                  ON Accntp.Investor_No = Ivrp.Investor_No
+322900211005               INNER JOIN MFAIVRTYP IVRTYP
+323000211005                  ON Ivrp.Investor_Type_Code
+323100211005                             = Ivrtyp.Investor_Type_Code
+323200211005      *Rfs74620 Ends
+323300211005                     LEFT JOIN
+323400211005                     MFAIVRTEP Ivrtep
+323500211005                  on Ivrp.Investor_no = Ivrtep.Investor_no
+323600211005
+323700211005              WHERE Accntp.Account_No  = :li_AccountNo
+323800211005R74620*         and Accntp.Investor_No = Ivrp.Investor_No
+323900211005R74620*         and Ivrp.Investor_Type_Code = Ivrtyp.Investor_Type_Code
+324000211005           END-EXEC.
+324100211005
+324200211005           MOVE SQLSTATE TO lc_sqlStates.
+324300211005           EVALUATE TRUE
+324400211005             WHEN lncc_sqlSuccessful
+324500211005                CONTINUE
+324600211005
+324700211005             WHEN lncc_sqlEnd
+324800211005                INITIALIZE Li_TenantCount
+324900211005
+325000211005             WHEN OTHER
+325100211005                SET lncc_Err_40 TO TRUE
+325200211005                MOVE lncc_ErrorCountingTenants TO lc_sqlErrShortDESCR
+325300211005                PERFORM  SQL_Fail_Process
+325400211005           END-EVALUATE.
+325500211005
+325600211005           IF Li_TenantCount = ZEROS
+325700211005              PERFORM Reject_101
+325800211005              MOVE Lncc_03         TO lc_RejTransType
+325900211005              MOVE Lncc_R001       TO lc_RejErrorCode
+326000211005              MOVE SPACES          TO lc_RejFieldValue
+326100211005              MOVE Lncc_HolderInfo TO lc_RejFieldDesc
+326200211005              PERFORM Write_Rejection_Record
+326300211005           END-IF.
+326400211005
+326500211005      * RFS73394 Ends
+326600211005
+326700211005      * Rfs74620 Begins
+326800211005      * ---------------------------------
+326900211005       Check_Transfer_Approval.
+327000211005      * ---------------------------------
+327100211005
+327200211005           EXEC SQL
+327300211005             SELECT  COUNT(*) INTO :li_UnapprovedTransfer_Cnt
+327400211005              FROM MFATSFDAP TSFDAP
+327500211005              JOIN MFAADTNP ADTNP ON
+327600211005                 Tsfdap.Account_No = Adtnp.Account_No
+327700211005                 AND Tsfdap.Transfer_Seq_No = Adtnp.Transfer_Seq_No
+327800211005              WHERE
+327900211005                 Tsfdap.Account_No  = :li_AccountNo
+328000211005                 AND Tsfdap.RDSP_Approval_Status <> "A"
+328100211005                 AND Adtnp.Transfer_Status <> "R"
+328200211005162616           AND Adtnp.Transfer_Contr_Or_Redem = :Lncc_R
+328300211005           END-EXEC.
+328400211005      * Rfs74620 Ends
+328500211005
+328600211005      * RFS115188 - Start
+328700211005       AddrLineChanges.
+328800211005           EVALUATE lc_CountryCode
+328900211005
+329000211005              WHEN lncc_002
+329100211005      * Address Line 3
+329200211005                  MOVE  SPACES   TO  lc_TempAddrline1
+329300211005                  MOVE  PROVINCE-CODE OF MFAADDP TO lc_ProvCode
+329400211005                  EXEC SQL
+329500211005                     SELECT PROVINCE_CODE_DESCR
+329600211005                            INTO :lc_ProvCodeDesc
+329700211005                     FROM MFAPRVDCP
+329800211005                     WHERE PROVINCE_CODE = :lc_ProvCode
+329900211005                  END-EXEC
+330000211005
+330100211005                  MOVE SQLSTATE TO lc_sqlStates
+330200211005                  EVALUATE TRUE
+330300211005                    WHEN lncc_sqlSuccessful
+330400211005                       CONTINUE
+330500211005                    WHEN lncc_sqlEnd
+330600211005                       INITIALIZE lc_ProvCodeDesc
+330700211005                    WHEN OTHER
+330800211005                       SET lncc_Err_45 TO TRUE
+330900211005                       MOVE lncc_ErrorGettingProvinceDesc
+331000211005                            TO lc_sqlErrShortDESCR
+331100211005                       PERFORM  SQL_Fail_Process
+331200211005                  END-EVALUATE
+331300211005
+331400211005                  MOVE  lc_ProvCodeDesc            TO  lc_TempAddrline1
+331500211005                  IF  lc_TempAddrline1 =  SPACES
+331600211005                      MOVE POSTAL-CODE OF MFAADDP  TO  lc_TempAddrline1
+331700211005                  ELSE
+331800211005                      STRING lc_TempAddrline1        DELIMITED BY "  ",
+331900211005                             " "                     DELIMITED BY SIZE,
+332000211005                             POSTAL-CODE OF MFAADDP  DELIMITED BY  "  "
+332100211005                      INTO lc_TempAddrline2
+332200211005                      MOVE lc_TempAddrline2   TO  lc_TempAddrline1
+332300211005                  END-IF
+332400211005
+332500211005                  MOVE     lc_TempAddrline1   TO  lc_AddressLine3
+332600211005
+332700211005              WHEN lncc_999
+332800211005      * Address Line 3
+332900211005                  MOVE  SPACES   TO  lc_TempAddrline1
+333000211005                  MOVE  PROVINCE-CODE OF MFAADDP   TO lc_TempAddrline1
+333100211005                  IF  lc_TempAddrline1 =  SPACES
+333200211005                      MOVE  POSTAL-CODE OF MFAADDP TO lc_TempAddrline1
+333300211005                  ELSE
+333400211005                      STRING lc_TempAddrline1        DELIMITED BY "  ",
+333500211005                             " "                     DELIMITED BY SIZE,
+333600211005                             POSTAL-CODE OF MFAADDP  DELIMITED BY  "  "
+333700211005                      INTO lc_TempAddrline2
+333800211005                      MOVE lc_TempAddrline2        TO lc_TempAddrline1
+333900211005                  END-IF
+334000211005
+334100211005                  MOVE  COUNTRY-CODE OF MFAADDP  TO lc_Country
+334200211005                  EXEC SQL
+334300211005                     SELECT COUNTRY_NAME
+334400211005                            INTO :lc_CountryDesc
+334500211005                     FROM MFACOUP
+334600211005                     WHERE COUNTRY_CODE = :lc_Country
+334700211005                  END-EXEC
+334800211005
+334900211005                  MOVE SQLSTATE TO lc_sqlStates
+335000211005                  EVALUATE TRUE
+335100211005                    WHEN lncc_sqlSuccessful
+335200211005                       CONTINUE
+335300211005                    WHEN lncc_sqlEnd
+335400211005                       INITIALIZE lc_CountryDesc
+335500211005                    WHEN OTHER
+335600211005                       SET lncc_Err_46 TO TRUE
+335700211005                       MOVE lncc_ErrorGettingCountryDesc
+335800211005                            TO lc_sqlErrShortDESCR
+335900211005                       PERFORM  SQL_Fail_Process
+336000211005                  END-EVALUATE
+336100211005
+336200211005                  IF lc_TempAddrline1 = SPACES
+336300211005                      MOVE lc_CountryDesc          TO lc_TempAddrline1
+336400211005                    ELSE
+336500211005                      STRING lc_TempAddrline1        DELIMITED BY  "  ",
+336600211005                             " "                     DELIMITED BY  SIZE,
+336700211005                      lc_CountryDesc                 DELIMITED BY  "  "
+336800211005                      INTO lc_TempAddrline2
+336900211005                      MOVE lc_TempAddrline2   TO  lc_TempAddrline1
+337000211005                  END-IF
+337100211005
+337200211005                  MOVE     lc_TempAddrline1   TO  lc_AddressLine3
+337300211005
+337400211005      * RFS115188 - End
+337500211005      * ---------------------------------
+337600211005       SQL_Fail_Process.
+337700211005      * ---------------------------------
+337800211005           PERFORM  Dsp-Error.
+337900211005           PERFORM  Force-Msgw.
+338000211005
+338100211005      * DSP-ERROR and FORCE-MSGW Routines
+338200211005           COPY CPYSQLRTN.

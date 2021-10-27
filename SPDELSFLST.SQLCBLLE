@@ -1,0 +1,482 @@
+000100180612       IDENTIFICATION DIVISION.
+000200180411       PROGRAM-ID.    SPDELSFLST.
+000300151012       AUTHOR.        Thilaga K.
+000400130711       INSTALLATION.  L & T Infotech.
+000500170616       DATE-WRITTEN.  October 2015.
+000600180612       DATE-COMPILED.
+000700130711      *******************************************************************
+000800151012      *  This procedure will retrieve Total commissions for the       *
+000900211005      *  provided Dealer code and time period.                        *
+001000130711      *                                                               *
+001100130711      *****************************************************************
+001200170605      *    C H A N G E   H I S T O R Y
+001300130711      *****************************************************************
+001400130711      ******************************************************************
+001500130711      * PROGRAMMER  *DATE OF CHANGE* DESCRIPTION OF CHANGE             *
+001600130711      ******************************************************************
+001700151012      * Thilaga K   * 2015/10/12 * RFS146036 Program Created.          *
+001800160212      * Thilaga K   * 2016/02/04 * RFS155812 - DELSFLST search function*
+001900160212      *             *            * not working as expected             *
+002000160212      * Thilaga K   * 2016/02/04 * RFS155616 - Payment ID and Payment  *
+002100160212      *             *            * settlement date not coming as same  *
+002200160212      *             *            * LS file.                            *
+002300160304      * Emmanuel Yala*2015/03/03 * RFS156107 - Fix date range issue    *
+002400160429      * Thilaga K   * 2016/04/26 * RFS158856 - Fixed the sorting issue *
+002500160429      *             *            * DELSFLST Screen.                    *
+002600160513      * Emmanuel Yala*2015/05/13 * RFS158774 - Recompile for WKASFFINP *
+002700160708      * Swathi J    * 2016/06/28 * RFS160878 - DELSFLST screen         *
+002800160708      *             *            * summarized at Account level         *
+002900160708      *             *            * -total commission is not the same   *
+003000170616      * Lavanya V   *2016/05/29  * RFS167890 - Adjustment Records not  *
+003100170616      *             *            * Displayed on Search screen properly *
+003200170703      * Marita S    * 2017/06/23 * RFS168106 - ADD PARAMETER           *
+003300170703      *             *            *        COMM-CALLING-MODE            *
+003301200704      * Mayilsamy D * 2020/07/04 * RFS186092 - Recompile               *
+003400151012      ******************************************************************
+003500130711       ENVIRONMENT DIVISION.
+003600130711       CONFIGURATION SECTION.
+003700130711       SOURCE-COMPUTER. IBM-AS400.
+003800130711       OBJECT-COMPUTER. IBM-AS400.
+003900151015       SPECIAL-NAMES.
+004000151027           LINKAGE TYPE IS PROCEDURE FOR "ACSFEEFD"
+004100151027           LINKAGE TYPE IS PROCEDURE FOR "LSRECPGM24"
+004200151106           DATA-AREA IS WS-DATA-MFAPRCDTP
+004300151015           DATA-AREA IS WS-DTAARA-MFACMPCDP.
+004400130711      /
+004500130711       INPUT-OUTPUT SECTION.
+004600130711       FILE-CONTROL.
+004700130711
+004800130711       DATA DIVISION.
+004900130711       FILE SECTION.
+005000130711      * ---------------------------------
+005100130711       WORKING-STORAGE SECTION.
+005200130711      * ---------------------------------
+005300130711      * Replace "SQLSTD" with the name of Current Program
+005400130711          COPY CPYSQLFLD
+005500151120            REPLACING == "CURRENT_PROGRAM" == BY == "SPDELSFLST" ==.
+005600130711      *
+005700130711           EXEC SQL
+005800130711             INCLUDE SQLCA
+005900130711           END-EXEC.
+006000130711      *
+006100130711
+006200130711      * Error Codes, Uniquely Identify where the error happened
+006300140827       01 WS-ERR-CODE                PIC X(02) VALUE SPACES.
+006400140827          88 WS-ERR-OK                         VALUE SPACES.
+006500140827          88 WS-ERR-10                         VALUE "10".
+006600130711
+006700130711      * Work fileds
+006800140812       01  lc_WorkFields.
+006900140818         03  lc_ExternalCondition    PIC X(03).
+007000151015         03  lc_DealerCode           PIC  X(4).
+007100151015         03  lc_FromDate             PIC  X(8).
+007200151015         03  ln_FromDate   REDEFINES lc_FromDate
+007300151015                                     PIC S9(08).
+007400151015         03  lc_ToDate               PIC  X(8).
+007500151015         03  ln_ToDate     REDEFINES lc_ToDate
+007600151015                                     PIC S9(08).
+007700151015         03  lc_Currency             PIC  X(3).
+007800160708160878   03  lc_Curr_Indicator       PIC  X(2) VALUE SPACES.
+007900151015         03  lc_AccountNo            PIC  X(9).
+008000151015         03  ln_AccountNo  REDEFINES lc_AccountNo
+008100151015                                     PIC S9(09).
+008200151026         03 li_Ovrdbf_length         PIC  9(10)V9(05) COMP-3 VALUE 70.
+008300151015         03 li_Dltovr_length         PIC  9(10)V9(05) COMP-3 VALUE 32.
+008400160212155812   03 li_clrpfm_length         PIC  9(10)V9(05) COMP-3 VALUE 28.
+008500151015         03 lc_MFACMPCDP.
+008600151015            05 lc-MgmtCompany_code   PIC X(3).
+008700151015            05 lc_MgmtCompany_name   PIC X(40).
+008800151019
+008900151019         03 COMM-DLRNOM-CODE         PIC X(5).
+009000151019         03 COMM-SELECT-CODE         PIC X(1).
+009100160304156107   03 COMM-STR-DATE            PIC S9(8).
+009200151019         03 COMM-END-DATE            PIC S9(8).
+009300151019         03 COMM-ACCOUNT-NO          PIC S9(9).
+009400170703168106   03 COMM-CALLING-MODE        PIC X(1).
+009500151019         03 pc_DlrOrNomCode          PIC X(05).
+009600151019         03 pc_DlrRepCode            PIC X(06).
+009700151019         03 pc_Adhoc                 PIC X(01).
+009800151019         03 pc_MgmtCode              PIC X(03).
+009900151019         03 pc_StrDate               PIC X(8).
+010000151019         03 pc_EndDate               PIC X(8).
+010100151019         03 pc_AsAtDate              PIC X(8).
+010200151019         03 pc_Frequency             PIC X(02).
+010300151019         03 pc_SelectCode            PIC X(01).
+010400151019         03 pc_AccountNo             PIC X(09).
+010500151019
+010600151019         01  lc_Constants.
+010700151019            03 lncc_D                PIC X(1) VALUE "D".
+010800170616167890      03 lncc_S                PIC X(1) VALUE "S".
+010900151019            03 lncc_N                PIC X(1) VALUE "N".
+011000160212155812      03 lncc_Y                PIC X(1) VALUE "Y".
+011100160708160878      03 lncc_CAD              PIC X(3) VALUE "CAD".
+011200160708160878      03 lncc_USD              PIC X(3) VALUE "USD".
+011300151019
+011400151015         01 lc_MFAPRCDTP.
+011500151019            03 ln_processDate                 PIC 9(08).
+011600151019            03 FILLER                         PIC X(161).
+011700151015
+011800160212155616   01 lc_MFAESGSFCM.
+011900160212155616      05 FILLER                 PIC X(10).
+012000160212155616      05 li_SRVF_EndDate        PIC 9(08).
+012100160212155616      05 FILLER                 PIC X(32).
+012200160212
+012300151019         01  lc_Flags.
+012400151019            03  lb_Parameter            PIC X.
+012500151019               88  lb_ParameterYes                VALUE "Y".
+012600151019               88  lb_ParameterNo                 VALUE "N".
+012700130711
+012800151019         01  lc_ErrDesc.
+012900151019            03  lnc_01                  PIC X(02) VALUE "01".
+013000140813
+013100130711      * Static fields
+013200140819       01  lc_StaticFields.
+013300140827         03  lnc_E                   PIC X(01) VALUE "E".
+013400140827         03  lnc_CAD                 PIC X(03) VALUE "CAD".
+013500151026         03  lc_Ovrdbf_WKASFFINP      PIC  X(70) VALUE
+013600151106            "OVRDBF FILE(WKASFFINP) TOFILE(QTEMP/WKASFFINP) OVRSCOPE(*JO
+013700151106      -     "B)".
+013800151027         03 lc_Dltovr_WKASFFINP      PIC  X(32) VALUE
+013900151123                         "DLTOVR FILE(WKASFFINP) LVL(*JOB)".
+014000151123         03  lc_Ovrdbf_WRKLSRECP      PIC  X(70) VALUE
+014100151123            "OVRDBF FILE(WRKLSRECP) TOFILE(QTEMP/WRKLSRECP) OVRSCOPE(*JO
+014200151123      -     "B)".
+014300151123         03 lc_Dltovr_WRKLSRECP      PIC  X(32) VALUE
+014400151123                         "DLTOVR FILE(WRKLSRECP) LVL(*JOB)".
+014500160212      *RFS155812 Start.
+014600160212         03 lc_clrpfm_WRKLSRECP      PIC  X(28) VALUE
+014700160212                         "CLRPFM FILE(QTEMP/WRKLSRECP)".
+014800160212         03 lc_clrpfm_WKASFFINP      PIC  X(28) VALUE
+014900160212                         "CLRPFM FILE(QTEMP/WKASFFINP)".
+015000160212      *RFS155812 End.
+015100151015
+015200130711       LINKAGE SECTION.
+015300151015       01  pc_DealerCode             PIC  X(4).
+015400151015       01  pn_FromDate               PIC  X(8).
+015500151015       01  pn_ToDate                 PIC  X(8).
+015600151015       01  pc_Currency               PIC  X(3).
+015700151015       01  pn_AccountNo              PIC  X(9).
+015800130711
+015900130711       PROCEDURE DIVISION USING
+016000151015                                 pc_DealerCode,
+016100151015                                 pn_FromDate,
+016200151015                                 pn_ToDate,
+016300151015                                 pc_Currency,
+016400151015                                 pn_AccountNo.
+016500130711
+016600130711       MAINLINE.
+016700130711
+016800130711           EXEC SQL
+016900130711                WHENEVER SQLERROR CONTINUE
+017000130711           END-EXEC.
+017100130711           EXEC SQL
+017200130711                WHENEVER NOT FOUND CONTINUE
+017300130711           END-EXEC.
+017400130711
+017500130711           PERFORM InitialLogic.
+017600140811           PERFORM DetailProcessing.
+017700151120           PERFORM EndOfProgram.
+017800130711      /
+017900130711
+018000130711      * ---------------------------------
+018100130711       InitialLogic.
+018200140811      * ---------------------------------
+018300130711
+018400151015           INITIALIZE lc_DealerCode,
+018500151015                      lc_FromDate,
+018600151015                      lc_ToDate,
+018700151015                      lc_Currency,
+018800151015                      lc_AccountNo.
+018900151015
+019000151015           MOVE pc_DealerCode   TO lc_DealerCode.
+019100151015           MOVE pn_FromDate     TO lc_FromDate.
+019200151015           MOVE pn_ToDate       TO lc_ToDate.
+019300151015           MOVE pc_Currency     TO lc_Currency.
+019400151015           MOVE pn_AccountNo    TO lc_AccountNo.
+019500160708      *RFS160878 - Start
+019600160708           IF pc_Currency  = lncc_CAD
+019700160708              MOVE '00' TO lc_Curr_Indicator
+019800160708           ELSE
+019900160708              IF pc_Currency  = lncc_USD
+020000160708                  MOVE '01' TO lc_Curr_Indicator
+020100160708              END-IF
+020200160708           END-IF.
+020300160708      *RFS160878 - End
+020400151015
+020500151019           INITIALIZE lc_MFACMPCDP.
+020600151015
+020700151015           ACCEPT lc_MFACMPCDP FROM WS-DTAARA-MFACMPCDP
+020800151015                               FOR "MFACMPCDP".
+020900151015
+021000151106           ACCEPT lc_Mfaprcdtp FROM WS-DATA-MFAPRCDTP
+021100151106                               FOR "MFAPRCDTP".
+021200151123
+021300151123           EXEC SQL
+021400151123             DROP TABLE QTEMP/WKASFFINP
+021500151123           END-EXEC.
+021600150724
+021700130711           EXEC SQL
+021800151015             CREATE TABLE QTEMP/WKASFFINP  LIKE WKASFFINP
+021900130711           END-EXEC.
+022000151015
+022100160212155812     EXEC SQL
+022200160212155812       DELETE FROM  QTEMP/WRKLSRECP
+022300160212155812     END-EXEC.
+022400160212
+022500151015           CALL "QCMDEXC" USING lc_Ovrdbf_WKASFFINP
+022600151015                                li_Ovrdbf_length.
+022700151123
+022800151123           EXEC SQL
+022900151123             DROP TABLE QTEMP/WRKLSRECP
+023000151123           END-EXEC.
+023100151123
+023200151123           EXEC SQL
+023300151123             CREATE TABLE QTEMP/WRKLSRECP  LIKE WRKLSRECP
+023400151123           END-EXEC.
+023500151123
+023600160212155812     EXEC SQL
+023700160212155812       DELETE FROM  QTEMP/WRKLSRECP
+023800160212155812     END-EXEC.
+023900160212
+024000151123           CALL "QCMDEXC" USING lc_Ovrdbf_WRKLSRECP
+024100151123                                li_Ovrdbf_length.
+024200151123
+024300140811      * ---------------------------------
+024400151015       DetailProcessing.
+024500140811      * ---------------------------------
+024600151015           MOVE lc_DealerCode  TO  COMM-DLRNOM-CODE.
+024700170616167890*    MOVE lncc_D         TO  COMM-SELECT-CODE.
+024800170616167890     MOVE lncc_S         TO  COMM-SELECT-CODE.
+024900160304156107     MOVE ln_FromDate    TO  COMM-STR-DATE.
+025000151015           MOVE ln_ToDate      TO  COMM-END-DATE.
+025100151015           MOVE ln_AccountNo   TO  COMM-ACCOUNT-NO.
+025200170703168106     MOVE lncc_S         TO  COMM-CALLING-MODE.
+025300151015
+025400151015           CALL "ACSFEEFD"  USING   COMM-DLRNOM-CODE
+025500151015                                    COMM-SELECT-CODE
+025600160304156107                              COMM-STR-DATE
+025700151015                                    COMM-END-DATE
+025800170703                                    COMM-ACCOUNT-NO
+025900170703168106                              COMM-CALLING-MODE.
+026000151015
+026100151015           MOVE lc_DealerCode  TO   pc_DlrOrNomCode.
+026200151015           MOVE SPACES         TO   pc_DlrRepCode.
+026300160212155812*    MOVE lncc_N         TO   pc_Adhoc.
+026400160212155812     MOVE lncc_Y         TO   pc_Adhoc.
+026500151015           MOVE lc-MgmtCompany_code TO pc_MgmtCode.
+026600151015           MOVE ln_ToDate      TO   pc_EndDate.
+026700151015           MOVE ln_FromDate    TO   pc_StrDate.
+026800170616           MOVE lncc_D         TO   pc_SelectCode.
+026900151015           MOVE ln_AccountNo   TO   pc_AccountNo.
+027000151015           MOVE ln_processDate TO   pc_AsAtDate.
+027100151015           MOVE SPACES         TO   pc_Frequency.
+027200151015           CALL "LSRECPGM24" USING pc_DlrOrNomCode,
+027300151015                                   pc_DlrRepCode,
+027400151015                                   pc_Adhoc,
+027500151015                                   pc_MgmtCode,
+027600151015                                   pc_StrDate,
+027700151015                                   pc_EndDate,
+027800151015                                   pc_AsAtDate,
+027900151015                                   pc_Frequency,
+028000151015                                   pc_SelectCode,
+028100151015                                   pc_AccountNo.
+028200151015
+028300151106           PERFORM Create-Result-Set.
+028400140812
+028500151120
+028600151120      * ---------------------------------
+028700151120       Create-Result-Set.
+028800151120      * ---------------------------------
+028900151120           IF ln_AccountNo = 0
+029000151120              PERFORM DECLARE-AccList
+029100151120           ELSE
+029200151120              PERFORM DECLARE-AccListA
+029300151120           END-IF.
+029400160212155616     PERFORM Prepare-Result-Set.
+029500151120
+029600151120      * ---------------------------------
+029700151120       DECLARE-AccList.
+029800151120      * ---------------------------------
+029900160212      *RFS155616 Start Removed Alias from declare
+030000151120           EXEC SQL
+030100151120             DECLARE AccList CURSOR FOR SELECT
+030200160212                   FUND_ACCOUNT_NO,
+030300151120                   CASE WHEN INCOME_TYPE  <>  "S"
+030400151120                    THEN "M"
+030500160212                    ELSE INCOME_TYPE END,
+030600160212                   DEALER_REP_CODE,
+030700160212                   COMMISSION_TYPE,
+030800160212155616*            PAY_SETTLEMENT_DATE     As PaySetlID,
+030900160212155616*            CSS_PAYMENT_IDENTIFIER  as PaymentId,
+031000160708      *RFS160878 Begins
+031100160708155616*            MAX(PAY_SETTLEMENT_DATE)   ,
+031200160708155616*            MAX(CSS_PAYMENT_IDENTIFIER) ,
+031300160708160878            PAY_SETTLEMENT_DATE,
+031400160708160878             CSS_PAYMENT_IDENTIFIER,
+031500160708      *RFS160878 Ends
+031600151120                   TOTAL_COMM_PAYABLE
+031700151120               FROM WRKLSRECP
+031800151120               WHERE RECORD_ID_IND = "3"
+031900160708      *RFS160878 Begins- removing the Group by
+032000160708160878     AND CURRENCY_INDICATOR  = :lc_Curr_Indicator
+032100160708155616*        GROUP BY  FUND_ACCOUNT_NO,INCOME_TYPE,DEALER_REP_CODE,
+032200160708155616*                 COMMISSION_TYPE,TOTAL_COMM_PAYABLE
+032300160708      *RFS160878 Ends
+032400160429158856         ORDER BY FUND_ACCOUNT_NO,DEALER_REP_CODE,
+032500160429158856                  COMMISSION_TYPE
+032600151120
+032700160212      *RFS155616 End Removed Alias from declare
+032800151120           END-EXEC.
+032900160212155616     EXEC SQL
+033000160212155616       CLOSE AccList
+033100160212155616     END-EXEC.
+033200151120
+033300151120           EXEC SQL
+033400151120             OPEN AccList
+033500151120           END-EXEC.
+033600151120
+033700151120           MOVE SQLSTATE TO lc_sqlStates.
+033800151120           EVALUATE TRUE
+033900151120             WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+034000151120                  CONTINUE
+034100151120             WHEN OTHER
+034200151120                  STRING "Open Cursor Failed " DELIMITED BY SIZE
+034300151120                         SQLSTATE              DELIMITED BY SIZE
+034400151120                    INTO lc_sqlErrShortDESCR
+034500151120                  PERFORM Dsp-Error
+034600151120           END-EVALUATE.
+034700160212      *RFS155616 Start
+034800160212      *    EXEC SQL
+034900160212      *      SET RESULT SETS CURSOR AccList
+035000160212      *    END-EXEC.
+035100160212      *    MOVE SQLSTATE TO lc_sqlStates.
+035200160212      *    EVALUATE TRUE
+035300160212      *      WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+035400160212      *           CONTINUE
+035500160212      *      WHEN OTHER
+035600160212      *           STRING "ResultSet Failed " DELIMITED BY SIZE
+035700160212      *                  SQLSTATE            DELIMITED BY SIZE
+035800160212      *             INTO lc_sqlErrShortDESCR
+035900160212      *           PERFORM Dsp-Error
+036000160212      *    END-EVALUATE.
+036100151120      /
+036200160212      *RFS155616 End.
+036300151120
+036400151120      * ---------------------------------
+036500151120       DECLARE-AccListA.
+036600151120      * ---------------------------------
+036700160212      *RFS155616 Start Removed Alias from declare
+036800151120           EXEC SQL
+036900151120             DECLARE AccListA CURSOR FOR SELECT
+037000160212                   FUND_ACCOUNT_NO ,
+037100151120                   CASE WHEN INCOME_TYPE  <>  "S"
+037200151120                    THEN "M"
+037300160212                    ELSE INCOME_TYPE END,
+037400160212                   DEALER_REP_CODE,
+037500160212                   COMMISSION_TYPE,
+037600160212155616*            PAY_SETTLEMENT_DATE     As PaySetlID,
+037700160212155616*            CSS_PAYMENT_IDENTIFIER   as PaymentId,
+037800160708      *RFS160878 Begins
+037900160708155616*        MAX(PAY_SETTLEMENT_DATE),
+038000160708155616*        MAX(CSS_PAYMENT_IDENTIFIER),
+038100160708160878             PAY_SETTLEMENT_DATE,
+038200160708160878             CSS_PAYMENT_IDENTIFIER,
+038300160708      *RFS160878 Ends
+038400151120                   TOTAL_COMM_PAYABLE
+038500151120               FROM WRKLSRECP
+038600151120               WHERE RECORD_ID_IND = "3"
+038700160708160878         AND CURRENCY_INDICATOR  = :lc_Curr_Indicator
+038800151120               AND  FUND_ACCOUNT_NO   = :ln_AccountNo
+038900160708      *RFS160878 Begins
+039000160708155616*        GROUP BY FUND_ACCOUNT_NO,INCOME_TYPE, DEALER_REP_CODE,
+039100160708155616*        COMMISSION_TYPE, TOTAL_COMM_PAYABLE
+039200160708      *RFS160878 Ends
+039300160429158856         ORDER BY FUND_ACCOUNT_NO,DEALER_REP_CODE,
+039400160429158856                  COMMISSION_TYPE
+039500151120           END-EXEC.
+039600160212      *RFS155616 End Removed Alias from declare
+039700151120
+039800160212155616     EXEC SQL
+039900160212155616       CLOSE AccListA
+040000160212155616     END-EXEC.
+040100160212
+040200151120           EXEC SQL
+040300151120             OPEN AccListA
+040400151120           END-EXEC.
+040500151120
+040600151120           MOVE SQLSTATE TO lc_sqlStates.
+040700151120           EVALUATE TRUE
+040800151120             WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+040900151120                  CONTINUE
+041000151120             WHEN OTHER
+041100151120                  STRING "Open Cursor Failed " DELIMITED BY SIZE
+041200151120                         SQLSTATE              DELIMITED BY SIZE
+041300151120                    INTO lc_sqlErrShortDESCR
+041400151120                  PERFORM Dsp-Error
+041500151120           END-EVALUATE.
+041600160212      *RFS155616 Start.
+041700160212      *    EXEC SQL
+041800160212      *      SET RESULT SETS CURSOR AccListA
+041900160212      *    END-EXEC.
+042000151120
+042100160212      *    MOVE SQLSTATE TO lc_sqlStates.
+042200160212      *    EVALUATE TRUE
+042300160212      *      WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+042400160212      *           CONTINUE
+042500160212      *      WHEN OTHER
+042600160212      *           STRING "ResultSet Failed " DELIMITED BY SIZE
+042700160212      *                  SQLSTATE            DELIMITED BY SIZE
+042800160212      *             INTO lc_sqlErrShortDESCR
+042900160212      *           PERFORM Dsp-Error
+043000160212      *    END-EVALUATE.
+043100160212      *RFS155616 End.
+043200151120      /
+043300160212      *RFS155616 Start.
+043400160212      * ---------------------------------
+043500160212       Prepare-Result-Set.
+043600160212      * ---------------------------------
+043700160212           IF ln_AccountNo = 0
+043800160212              EXEC SQL
+043900160212                SET RESULT SETS CURSOR AccList
+044000160212              END-EXEC
+044100160212              MOVE SQLSTATE TO lc_sqlStates
+044200160212              EVALUATE TRUE
+044300160212              WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+044400160212                 CONTINUE
+044500160212              WHEN OTHER
+044600160212                 STRING "ResultSet Failed " DELIMITED BY SIZE
+044700160212                      SQLSTATE            DELIMITED BY SIZE
+044800160212                 INTO lc_sqlErrShortDESCR
+044900160212                 PERFORM Dsp-Error
+045000160212              END-EVALUATE
+045100160212           ELSE
+045200160212              EXEC SQL
+045300160212               SET RESULT SETS CURSOR AccListA
+045400160212              END-EXEC
+045500160212
+045600160212              MOVE SQLSTATE TO lc_sqlStates
+045700160212              EVALUATE TRUE
+045800160212              WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+045900160212                   CONTINUE
+046000160212              WHEN OTHER
+046100160212                  STRING "ResultSet Failed " DELIMITED BY SIZE
+046200160212                         SQLSTATE            DELIMITED BY SIZE
+046300160212                    INTO lc_sqlErrShortDESCR
+046400160212                  PERFORM Dsp-Error
+046500160212               END-EVALUATE
+046600160212           END-IF.
+046700160212      *RFS155616 End.
+046800130711
+046900151120      * ---------------------------------
+047000151120       EndOfProgram.
+047100151120      * ---------------------------------
+047200151120           CALL "QCMDEXC" USING lc_Dltovr_WKASFFINP
+047300151120                                li_Dltovr_length.
+047400151123           CALL "QCMDEXC" USING lc_Dltovr_WRKLSRECP
+047500151123                                li_Dltovr_length.
+047600151120           GOBACK.
+047700130711      * ---------------------------------
+047800130711      * DSP-ERROR and FORCE-MSGW Routines
+047900130711      * ---------------------------------
+048000130711          COPY CPYSQLRTN.
+048100130711      *

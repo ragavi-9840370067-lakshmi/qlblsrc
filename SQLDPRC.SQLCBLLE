@@ -1,0 +1,3237 @@
+000100190620       IDENTIFICATION DIVISION.
+000200201228       PROGRAM-ID.    LDPRC.
+000300190620       AUTHOR.        FSTI.
+000400190620       INSTALLATION.  LTI-FSTI.
+000500190620       DATE-WRITTEN.  JAN 2019.
+000600190620       DATE-COMPILED. JAN 2019.
+000700190620      ******************************************************************
+000800190620      * PROGRAMMER * DATE OF CHANGE * DESCRIPTION OF CHANGE            *
+000900190620      ******************************************************************
+001000190710      * Richard M  * 2019/01/17     * RFS180781 - Created the Program  *
+001100190620      * B Vergara  * 2019/06/06     * RFS1015927 - Fix rounding issues *
+001200190620      * BALU B     * 2019/06/18     * RFS184089 - Fix to update  *LDA  *
+001300190620      *            *                *             on position 205-210  *
+001400210128      *            *                *             to spaces            *
+001500190710      * MUTHUKUMAR * 2019/07/05     * RFS1016795 - Select Record type  *
+001600190710      *            *                * PRI only in DJT custom code. Add *
+001700190710      *            *                * the appropriate error handling   *
+001800191226      *            *                * Tag#: 016795                     *
+001900191226      * Arthy K    * 2019/12/26     * RFS1018052 - Added process to    *
+002000191226      *            *                * list out investments missing     *
+002100191226      *            *                * Distribution-Declaration setup to*
+002200191226      *            *                * which Distribution rates exist in*
+002300200303      *            *                * uploaded price file              *
+002400200303      * Suresh P   * 2020/03/03     * RFS#1081347 - Fix Rounding Issues*
+002500200310      *            *                * for Distribution rate values     *
+002501201007      *Mayilsamy D * 2020/09/24     * RFS185121 - Replaced the hardcoded
+002502201007      *            *                * company code for DJT and NWT.
+002503211006      *Mayilsamy D * 2021/10/06     * RFS186903- Modified to populate  *
+002504211006      *            *                * the Confirm as ‘Y’               *
+002600191226      ********************************Price file ***********************
+002700190620       ENVIRONMENT DIVISION.
+002800190620       CONFIGURATION SECTION.
+002900190620       SOURCE-COMPUTER. IBM-AS400.
+003000190620       OBJECT-COMPUTER. IBM-AS400.
+003100190620       SPECIAL-NAMES.   LOCAL-DATA IS WS-LOCAL
+003200190620                        DATA-AREA  IS WS-DTAARA-MFAPRCDTP
+003300190620                        DATA-AREA  IS WS-DTAARA-MFACMPCDP.
+003400190620
+003500190620       INPUT-OUTPUT SECTION.
+003600190620       FILE-CONTROL.
+003700190620
+003800190620       DATA DIVISION.
+003900190620       FILE SECTION.
+004000190620
+004100190620       WORKING-STORAGE SECTION.
+004200190620           COPY CPYSQLFLD
+004300190620               REPLACING == "CURRENT_PROGRAM" == BY == "SQLDPRC" ==.
+004400190620
+004500190620           EXEC SQL
+004600190620             INCLUDE SQLCA
+004700190620           END-EXEC.
+004800190620       01  WS-ERR-CODE                     PIC X(02) VALUE SPACES.
+004900190620           88 WS-ERR-OK                              VALUE SPACES.
+005000190620           88 WS-ERR-10                              VALUE "10".
+005100190620           88 WS-ERR-11                              VALUE "11".
+005200190620           88 WS-ERR-12                              VALUE "12".
+005300190620           88 WS-ERR-13                              VALUE "13".
+005400190620           88 WS-ERR-14                              VALUE "14".
+005500190620           88 WS-ERR-15                              VALUE "15".
+005600190620           88 WS-ERR-16                              VALUE "16".
+005700190620           88 WS-ERR-17                              VALUE "17".
+005800190620           88 WS-ERR-18                              VALUE "18".
+005900190620           88 WS-ERR-19                              VALUE "19".
+006000190620           88 WS-ERR-20                              VALUE "20".
+006100190620           88 WS-ERR-21                              VALUE "21".
+006200190620           88 WS-ERR-22                              VALUE "22".
+006300190620           88 WS-ERR-23                              VALUE "23".
+006400190620           88 WS-ERR-24                              VALUE "24".
+006500190620           88 WS-ERR-25                              VALUE "25".
+006600190620           88 WS-ERR-26                              VALUE "26".
+006700190620           88 WS-ERR-27                              VALUE "27".
+006800190620           88 WS-ERR-28                              VALUE "28".
+006900190620           88 WS-ERR-29                              VALUE "29".
+007000190620           88 WS-ERR-30                              VALUE "30".
+007100190620           88 WS-ERR-31                              VALUE "31".
+007200190620           88 WS-ERR-32                              VALUE "32".
+007300190620           88 WS-ERR-33                              VALUE "33".
+007400190620           88 WS-ERR-34                              VALUE "34".
+007500190620           88 WS-ERR-35                              VALUE "35".
+007600190620           88 WS-ERR-36                              VALUE "36".
+007700190620           88 WS-ERR-37                              VALUE "37".
+007800190620           88 WS-ERR-38                              VALUE "38".
+007900190620           88 WS-ERR-39                              VALUE "39".
+008000190620           88 WS-ERR-40                              VALUE "40".
+008100190620           88 WS-ERR-41                              VALUE "41".
+008200190620           88 WS-ERR-42                              VALUE "42".
+008300190620           88 WS-ERR-43                              VALUE "43".
+008400190620           88 WS-ERR-44                              VALUE "44".
+008500190620           88 WS-ERR-45                              VALUE "45".
+008600190620           88 WS-ERR-46                              VALUE "46".
+008700191226      * RFS1018052 - Begin
+008800191226           88 WS-ERR-47                              VALUE "47".
+008900191226      * RFS1018052 - End
+009000190620
+009100190710016795*01 lc_Error_Desc.
+009200190710016795 01 lc_Error_Desc                        PIC X(80).
+009300190710016795 01 lc_Error_Desc_N.
+009400190620           03 lc_ErrCodeDesc10                 PIC X(80)
+009500190620                  VALUE "Declare Cursor Error - Cur Load Prices".
+009600190620           03 lc_ErrCodeDesc11                 PIC X(80)
+009700190620                  VALUE "Cursor not opened - Cur Load Prices".
+009800190620           03 lc_ErrCodeDesc12                 PIC X(80)
+009900190620                  VALUE "Cursor not fetch - Cur Load Prices".
+010000190620           03 lc_ErrCodeDesc13                 PIC X(80)
+010100190620                  VALUE "Update Error - Inv Unit Price".
+010200190620           03 lc_ErrCodeDesc14                 PIC X(80)
+010300190620                  VALUE "Insert Error - Inv Unit Price".
+010400190620           03 lc_ErrCodeDesc15                 PIC X(80)
+010500190620                  VALUE "Update Error - Int Accrual Rate".
+010600190620           03 lc_ErrCodeDesc16                 PIC X(80)
+010700190620                  VALUE "Update Error - Inv Unit Price Post Distr".
+010800190620           03 lc_ErrCodeDesc17                 PIC X(80)
+010900190620                  VALUE "Insert Error - Inv Unit Price Post Distr".
+011000190620           03 lc_ErrCodeDesc18                 PIC X(80)
+011100190710016795*           VALUE "Update Error - Dist Decla Rates".
+011200190710                  VALUE "Funds missing the DISTRIBUTION-DECLARATION".
+011300190620           03 lc_ErrCodeDesc19                 PIC X(80)
+011400190620                  VALUE "Update Error - Exch Rates Table".
+011500190620           03 lc_ErrCodeDesc20                 PIC X(80)
+011600190620                  VALUE "Insert Error - Exch Rates Table".
+011700190620           03 lc_ErrCodeDesc21                 PIC X(80)
+011800190620                  VALUE "Update Error - Inv Unit Price SWP".
+011900190620           03 lc_ErrCodeDesc22                 PIC X(80)
+012000190620                  VALUE "Insert Error - Inv Unit Price SWP".
+012100190620           03 lc_ErrCodeDesc23                 PIC X(80)
+012200190620                  VALUE "Update Error - Inv Unit Price PRX DJT".
+012300190620           03 lc_ErrCodeDesc24                 PIC X(80)
+012400190620                  VALUE "Insert Error - Inv Unit Price PRX DJT".
+012500190620           03 lc_ErrCodeDesc25                 PIC X(80)
+012600190620                  VALUE "Declare Cursor Error - PCA Cur Ind Prices".
+012700190620           03 lc_ErrCodeDesc26                 PIC X(80)
+012800190620                  VALUE "Cursor not opened - PCA Cur Ind Prices".
+012900190620           03 lc_ErrCodeDesc27                 PIC X(80)
+013000190620                  VALUE "Cursor not fetch - PCA Cur Ind Prices".
+013100190620           03 lc_ErrCodeDesc28                 PIC X(80)
+013200190620                  VALUE "Update Error - PCA Inv Unit Price".
+013300190620           03 lc_ErrCodeDesc29                 PIC X(80)
+013400190620                  VALUE "Insert Error - PCA Inv Unit Price".
+013500190620           03 lc_ErrCodeDesc30                 PIC X(80)
+013600190620                  VALUE "Update Error - PCA Int Accrual Rate".
+013700190620           03 lc_ErrCodeDesc31                 PIC X(80)
+013800190620                  VALUE "Update Error - PCA Inv Unit Post Distr".
+013900190620           03 lc_ErrCodeDesc32                 PIC X(80)
+014000190620                  VALUE "Insert Error - PCA Inv Unit Post Distr".
+014100190620           03 lc_ErrCodeDesc33                 PIC X(80)
+014200190710016795*           VALUE "Update Error - PCA Dist Decla Rates".
+014300190710016795        VALUE "PCA: Funds missing the DISTRIBUTION-DECLARATION".
+014400190620           03 lc_ErrCodeDesc34                 PIC X(80)
+014500190620                  VALUE "Update Error - PCA Exch Rates Table".
+014600190620           03 lc_ErrCodeDesc35                 PIC X(80)
+014700190620                  VALUE "Insert Error - PCA Exch Rates Table".
+014800190620           03 lc_ErrCodeDesc36                 PIC X(80)
+014900190620                  VALUE "Declare Cursor Error - PCA Cur Grp Prices".
+015000190620           03 lc_ErrCodeDesc37                 PIC X(80)
+015100190620                  VALUE "Cursor not opened - PCA Cur Grp Prices".
+015200190620           03 lc_ErrCodeDesc38                 PIC X(80)
+015300190620                  VALUE "Cursor not fetch - PCA Cur Grp Prices".
+015400190620           03 lc_ErrCodeDesc39                 PIC X(80)
+015500190620                  VALUE "Update Error - PCA Inv Unit Price".
+015600190620           03 lc_ErrCodeDesc40                 PIC X(80)
+015700190620                  VALUE "Insert Error - PCA Inv Unit Price".
+015800190620           03 lc_ErrCodeDesc41                 PIC X(80)
+015900190620                  VALUE "Update Error - PCA Int Accrual Rate".
+016000190620           03 lc_ErrCodeDesc42                 PIC X(80)
+016100190620                  VALUE "Update Error - PCA Inv Unit Post Distr".
+016200190620           03 lc_ErrCodeDesc43                 PIC X(80)
+016300190620                  VALUE "Insert Error - PCA Inv Unit Post Distr".
+016400190620           03 lc_ErrCodeDesc44                 PIC X(80)
+016500190710016795*           VALUE "Update Error - PCA Dist Decla Rates".
+016600190710016795        VALUE "PCA: Funds missing the DISTRIBUTION-DECLARATION".
+016700190620           03 lc_ErrCodeDesc45                 PIC X(80)
+016800190620                  VALUE "Update Error - PCA Exch Rates Table".
+016900190620           03 lc_ErrCodeDesc46                 PIC X(80)
+017000190620                  VALUE "Insert Error - PCA Exch Rates Table".
+017100191226      * RFS1018052 - Begin
+017200191226           03 lc_ErrCodeDesc47                 PIC X(80)
+017300191226                  VALUE "Cursor not fetch - CCU_DRVP".
+017400191226      * RFS1018052 - End
+017500190620       01  lc_LDA                                  PIC X(1024).
+017501201007      *RFS185121 - Starts
+017502201007       01  lc-DJTNWTEditCde              PIC X(06) VALUE "DJTNWT".
+017503201007       01  lc-EditCdeDJTNWT              PIC X(1)  VALUE SPACES.
+017504201007      *RFS185121 - Ends
+017505211006      *RFS186903 - Starts
+017506211006       01  lc_ScreenEditsDISCON.
+017507211006           05 lc_DISCON_ScreenCode       PIC X(8) VALUE "INGDST".
+017508211006           05 lc_DISCON_EditCode         PIC X(6) VALUE "DISCON".
+017509211006           05 lc_DISCON_LevelCode        PIC X(1) VALUE "E".
+017510211006       01  lc_Confirm                    PIC X(1) VALUE " ".
+017511211006      *RFS186903 - Ends
+017512201007
+017700190620       01  lc_MFACMPCDP.
+017800190620           05  MFACMPCDP-COMPANY-CODE              PIC X(3).
+017900190620           05  MFACMPCDP-FILLER-40                 PIC X(40).
+018000190620
+018100190620       COPY PRCDTWS.
+018200190620
+018300190620       01  D-CURRENCY                              PIC X(3).
+018400190620       01  T-TRADE-DATE                            PIC S9(8).
+018500190620       01  GT-CREATION-DATE                        PIC X(8).
+018600190620       01  GT-CREATION-DATE1                       PIC X(8).
+018700190620       01  GT-CREATION-DATE2                       PIC X(8).
+018800190620       01  GT-LOGONID                              PIC X(10).
+018900190620       01  D-EXCHANGE-RATE-TYPE                    PIC X(1).
+019000190620       01  T-PRICE-DIFF                            PIC S9(9)v9(4).
+019100190620       01  T-PRICE-VAR                             PIC S9(9)v9(4).
+019200190620       01  T-LST-UNTPRC                            PIC S9(12).
+019300190620       01  T-PRC-VAR                               PIC S9(12).
+019400190620       01  T-PRICE-DISTR-RATE-ACCRUAL              PIC S9(12).
+019500190620       01  D-ERROR-CODE-1                          PIC S9(01).
+019600190620       01  D-ERROR-CODE-2                          PIC S9(01).
+019700190620       01  D-ERROR-CODE-3                          PIC S9(01).
+019800190620       01  D-ERROR-CODE-4                          PIC S9(01).
+019900190620       01  D-ERROR-CODE-5                          PIC S9(01).
+020000190620       01  D-ERROR-CODE-6                          PIC S9(01).
+020100190620       01  D-ERROR-CODE-7                          PIC S9(01).
+020200190620       01  D-ERROR-CODE-8                          PIC S9(01).
+020300190620       01  D-ERROR-CODE-9                          PIC S9(01).
+020400190620       01  D-ERROR-CODE-10                         PIC S9(01).
+020500190620       01  D-ERROR-CODE-11                         PIC S9(01).
+020600190620       01  D-ERROR-CODE-12                         PIC S9(01).
+020700190620       01  D-ERROR-CODE                            PIC S9(01).
+020800190620       01  MFAINVLPP-UNIT-PRICE                    PIC S9(5)v9(4).
+020900190620       01  MFAINVGRP-PRICING-VARIANCE              PIC S9(3)v9(2).
+021000190620       01  MFACURP-EXCHANGE-VARIANCE               PIC S9(3)v9(2).
+021100190620       01  MFAINVP-INVESTMENT-CODE                 PIC X(5).
+021200190620       01  MFAINVP-CURRENCY                        PIC X(3).
+021300190620       01  MFAINVGRP-FIXED-PRICE                   PIC S9(5)v9(4).
+021400190620       01  MFAINVUPP-CREATION-DATE                 PIC S9(9).
+021500190620       01  D-SRT-FLDS                              PIC X(10).
+021600190620       01  T-GRP-CNTR                              PIC S9(3).
+021700190620       01  T-GRP-CNTR2                             PIC S9(3).
+021800190620       01  MFAINVGRP-INV-GROUP-CODE                PIC X(5).
+021900190620       01  T-PRICE-EXISTS                          PIC X(1).
+022000190620       01  LDAP1                                   PIC X(200).
+022100190620       01  PNAME                                   PIC X(10).
+022200190620       01  LDAP2                                   PIC X(814).
+022300190620
+022400190620       01 lc_ScreenEditsAllowed. COPY DD-ALL-FORMATS of MFAEDTSCP.
+022500190620       01 lc_SeaEditLog                            PIC X(1) VALUE "N".
+022600190620       01 lc_SeaReturnCode                         PIC X(2) VALUE "00".
+022700190620
+022800190620       01 ct_FetchCur_LoadPrices.
+022900190620          05 lcu_CurrCode                         PIC X(3).
+023000190620          05 lcu_CurrInd                          PIC X(2).
+023100190620          05 lcu_ExchRate_Type                    PIC X(1).
+023200190620          05 lcu_Plus_Minus_Ind                   PIC X(1).
+023300190620          05 liu_Price_distr_accrual              PIC S9(12).
+023400190620          05 liu_Unit_price                       PIC S9(9)v9(4).
+023500190620          05 liu_Distr_Rate                       PIC S9(9)v9(6).
+023600190620          05 liu_Interest_Rate                    PIC S9(11)v9(9).
+023700190620          05 liu_Exch_Rate                        PIC S9(9)v9(7).
+023800190620          05 lcu_Record_type_Trans                PIC X(3).
+023900190620          05 lcu_Mgmt_Spec                        PIC X(3).
+024000190620          05 liu_Price_Distr_RecordDate           PIC S9(8).
+024100190620          05 liu_Distr_PaymentDate                PIC S9(8).
+024200190620          05 liu_Last_Unitprc                     PIC S9(9)v9(4).
+024300190620          05 liu_Pricing_Var                      PIC S9(5)v9(2).
+024400190620          05 lcu_InvCode                          PIC X(5).
+024500190620          05 lcu_InvGrpCode                       PIC X(5).
+024600190620          05 lcu_BIGPRC_AuthInd                   PIC X(1).
+024700190620          05 lcu_RecordID                         PIC X(6).
+024800190620          05 lcu_Price_StatInd                    PIC X(1).
+024900190620          05 lcu_Mgmt_CompCde                     PIC X(3).
+025000190620          05 lcu_Ind_FundCde                      PIC X(5).
+025100190620          05 liu_Price_Distr_RateAccrual          PIC S9(12)v9(8).
+025200190620          05 liu_PriceDistr_PaymentDate           PIC S9(8).
+025300190620
+025400190620
+025500190620
+025600190620       01 lc_Variables.
+025700190620          03 lc_EndOfFetch                        PIC X(1) VALUE " ".
+025800190620             88 lncc_EndOfFetchYes                VALUE "Y".
+025900190620             88 lncc_EndOfFetchNo                 VALUE "N".
+026000190620          03 lncc_N                               PIC X(1) VALUE "N".
+026100190620          03 lc_Local_DataArea1.
+026200190620             05 lc_PRC_LibName                    PIC X(10).
+026300190620             05 lc_Filler1_LDA1                   PIC X(20).
+026400190620             05 lc_PRC_FilName                    PIC X(10).
+026500190620             05 lc_Filler2_LDA1                   PIC X(2).
+026600190620             05 lc_PRC_MbrName                    PIC X(10).
+026700190620             05 lc_Filler3_LDA1                   PIC X(2).
+026800190620             05 lc_PRC_LogID                      PIC X(10).
+026900190620             05 lc_Filler1_LDA1                   PIC X(960).
+027000190620          03 lc_Local_DataArea2.
+027100190620             05 lc_Filler1_LDA2                   PIC X(211).
+027200190620             05 lc_PriceDate                      PIC X(8).
+027300190620             05 lc_Filler2_LDA2                   PIC X(805).
+027400190620          03 lc_Local_DataArea3.
+027500190620             05 lc_Filler1_LDA3                   PIC X(200).
+027600190620             05 lc_LDPRC_LDA3                     PIC X(6).
+027700190620             05 lc_Filler2_LDA3                   PIC X(4).
+027800190620             05 lc_PriceExist                     PIC X(1).
+027900190620             05 lc_Filler3_LDA3                   PIC X(813).
+028000190620          03 lc_SysDate.
+028100190620             05 li_SysDateCC                      PIC 99.
+028200190620             05 lc_SysDateYMD.
+028300190620                07 li_SysDateYY                   PIC 99.
+028400190620                07 li_SysDateMM                   PIC 99.
+028500190620                07 li_SysDateDD                   PIC 99.
+028600190620          03 li_SysDate REDEFINES lc_SysDate      PIC S9(8).
+028700190620          03 lc_SysDateX REDEFINES lc_SysDate     PIC X(8).
+028800190620          03 li_AsAtDate                          PIC S9(8).
+028900190620          03 li_LstPrcDte                         PIC S9(8).
+029000190620          03 lc_ScreenEditsSUPSGN.
+029100190620             05 lc_SUPSGN_ScreenCode            PIC X(8) VALUE "LDPRC".
+029200190620             05 lc_SUPSGN_EditCode              PIC X(6) VALUE "SUPSGN".
+029300190620             05 lc_SUPSGN_LevelCode             PIC X(1) VALUE "N".
+029400190620          03 lc_SUPSGN_Edit                     PIC X(1) VALUE " ".
+029500190620          03 lc_Report_EXC                      PIC X(1) VALUE " ".
+029600190620          03 li_ExchRateVar                     PIC S9(5)v9(2).
+029700190620          03 li_Prev_ExchRate                   PIC S9(9)v9(7).
+029800190620          03 li_Exch_Var                        PIC S9(9)v9(7).
+029900190620          03 li_Exch_Diff                       PIC S9(9)v9(7).
+030000190620          03 li_Error_Code1                     PIC S9(2).
+030100190620          03 li_Error_Code2                     PIC S9(2).
+030200190620          03 li_Error_Code3                     PIC S9(2).
+030300190620          03 li_Error_Code4                     PIC S9(2).
+030400190620          03 li_Error_Code5                     PIC S9(2).
+030500190620          03 li_Error_Code6                     PIC S9(2).
+030600190620          03 li_Error_Code7                     PIC S9(2).
+030700190620          03 li_Error_Code8                     PIC S9(2).
+030800190620          03 li_Error_Code9                     PIC S9(2).
+030900190620          03 li_Error_Code10                    PIC S9(2).
+031000190620          03 li_Error_Code11                    PIC S9(2).
+031100190620          03 li_Error_Code12                    PIC S9(2).
+031200190620          03 li_Error_Code                      PIC S9(2).
+031300190620          03 li_RecordType_PRI_Count            PIC S9(17).
+031400190620          03 li_RecordType_PRX_Count            PIC S9(17).
+031500190620          03 li_RecordType_ACC_Count            PIC S9(17).
+031600190620          03 li_RecordType_INC_Count            PIC S9(17).
+031700190620          03 li_RecordType_CAP_Count            PIC S9(17).
+031800190620          03 li_RecordType_PRI_Summ             PIC S9(11)v9(4).
+031900190620          03 li_RecordType_PRX_Summ             PIC S9(11)v9(4).
+032000190620          03 li_RecordType_ACC_Summ             PIC S9(11)v9(9).
+032100190620          03 li_RecordType_INC_Summ             PIC S9(11)v9(6).
+032200190620          03 li_RecordType_CAP_Summ             PIC S9(11)v9(6).
+032300190620          03 li_TotRecordCount                  PIC S9(17).
+032400190620          03 lc_Keying_Stat                     PIC X(1).
+032500190620          03 li_PriceExist                      PIC S9(9).
+032600190620          03 lc_CurrencyExist                   PIC X(1) VALUE " ".
+032700190620            88 lncc_CurrencyExistYes             VALUE "Y".
+032800190620            88 lncc_CurrencyExistNo             VALUE "N".
+032900190620
+033000191226      * RFS1018052 - Begin
+033100191226       01  DISDCP-SETUP-MISS-RECS.
+033200191226          02 LTB_MISSING_DISDCP_SETUP   OCCURS 100 TIMES
+033300191226                              INDEXED BY DISDCPIDX.
+033400191226             05 LC_INVESTMENT-CODE                PIC  X(05).
+033500191226             05 LI_FUND_CODE                      PIC  X(05).
+033600191226             05 LI_RECORD_DATE                    PIC S9(08).
+033700191226             05 LI_PAYMENT_DATE                   PIC S9(08).
+033800191226      * RFS1018052 - End
+033900191226
+034000190620       PROCEDURE DIVISION.
+034100190620
+034200190620       MAINLINE.
+034300190620           PERFORM INITIAL-LOGIC.
+034400190620           PERFORM DETAIL-PROCESSING.
+034500190620           PERFORM END-PROGRAM.
+034600190620
+034700190620       INITIAL-LOGIC.
+034800190620
+034801201007      * RFS185121 - Starts
+034802201007      * Check for Edit Code DJTNWT
+034803201007           EXEC SQL
+034804201007            SET :lc-EditCdeDJTNWT = FXGTDJTNWT(:lc-DJTNWTEditCde)
+034805201007           END-EXEC.
+034806201007      *RFS185121 - Ends
+034900190620           ACCEPT lc_LDA FROM WS-LOCAL.
+035000190620           ACCEPT lc_Local_DataArea1 FROM WS-LOCAL.
+035100190620           ACCEPT lc_MFACMPCDP FROM
+035200190620                 WS-DTAARA-MFACMPCDP
+035300190620                               FOR "MFACMPCDP".
+035400190620           ACCEPT PROCESS-DATE-DATA-AREA FROM WS-DTAARA-MFAPRCDTP
+035500190620                                         FOR "MFAPRCDTP".
+035600190620
+035700190620           MOVE PDDA-AS-AT-DATE TO li_AsAtDate.
+035800190620           MOVE PDDA-LAST-PROCESS-DATE TO li_LstPrcDte.
+035900190620
+036000190620           CALL "GETDAT" USING lc_SysDate.
+036100190620
+036200190620           EXEC SQL
+036300190620            DROP TABLE LDPRCSF1
+036400190620           END-EXEC.
+036500190620
+036600190620           EXEC SQL
+036700190620           CREATE TABLE LDPRCSF1
+036800190620           (
+036900190620              RECORD_ID                    CHAR (6),
+037000190620              RECORD_TYPE_TRANS            CHAR (3),
+037100190620              PRICE_STATUS_INDICATOR       CHAR (1),
+037200190620              MANAGEMENT_COMPANY_CODE      CHAR (3),
+037300190620              INDUSTRY_FUND_CODE           CHAR (5),
+037400190620              PRICE_DISTR_RECORD_DATE      NUMERIC (8),
+037500190620              PRICE_DISTR_RATE_ACCRUAL     DECIMAL (12,8),
+037600190620              PLUS_MINUS_INDICATOR         CHAR (1),
+037700190620              DISTR_PAYMENT_DATE           NUMERIC (8),
+037800190620              CURRENCY_INDICATOR           CHAR (2),
+037900190620              MGMT_COMPANY_SPECIFIC        CHAR (3),
+038000190620              FILLER_9                     CHAR (9),
+038100190620              ERROR_CODE_1                 NUMERIC (2),
+038200190620              ERROR_CODE_2                 NUMERIC (2),
+038300190620              ERROR_CODE_3                 NUMERIC (2),
+038400190620              ERROR_CODE_4                 NUMERIC (2),
+038500190620              ERROR_CODE_5                 NUMERIC (2),
+038600190620              ERROR_CODE_6                 NUMERIC (2),
+038700190620              ERROR_CODE_7                 NUMERIC (2),
+038800190620              ERROR_CODE_8                 NUMERIC (2),
+038900190620              ERROR_CODE_9                 NUMERIC (2),
+039000190620              ERROR_CODE_10                NUMERIC (2),
+039100190620              ERROR_CODE_11                NUMERIC (2),
+039200190620              ERROR_CODE_12                NUMERIC (2)
+039300190620           )
+039400190620           END-EXEC.
+039500190620
+039600190620           EXEC SQL
+039700190620            DROP TABLE LDPRCSF2
+039800190620           END-EXEC.
+039900190620
+040000190620           EXEC SQL
+040100190620           CREATE TABLE LDPRCSF2
+040200190620           (
+040300190620              RECORD_COUNT                 NUMERIC (17)
+040400190620           )
+040500190620           END-EXEC.
+040600190620
+040700190620           EXEC SQL
+040800190620            DROP TABLE LDPRCSF3
+040900190620           END-EXEC.
+041000190620
+041100190620           EXEC SQL
+041200190620           CREATE TABLE LDPRCSF3
+041300190620           (
+041400190620             GT_CREATION_DATE              CHAR (8),
+041500190620             RECORD_TYPE_PRI_COUNT         NUMERIC (17),
+041600190620             RECORD_TYPE_PRX_COUNT         NUMERIC (17),
+041700190620             RECORD_TYPE_ACC_COUNT         NUMERIC (17),
+041800190620             RECORD_TYPE_INC_COUNT         NUMERIC (17),
+041900190620             RECORD_TYPE_CAP_COUNT         NUMERIC (17),
+042000190620             RECORD_TYPE_PRI_SUM           DECIMAL (15, 4),
+042100190620             RECORD_TYPE_PRX_SUM           DECIMAL (15, 4),
+042200190620             RECORD_TYPE_ACC_SUM           DECIMAL (15, 9),
+042300190620             RECORD_TYPE_INC_SUM           DECIMAL (15, 6),
+042400190620             RECORD_TYPE_CAP_SUM           DECIMAL (15, 6)
+042500190620           )
+042600190620           END-EXEC.
+042700190620
+042800190620           PERFORM GET-SCREEN-EDIT-CODES.
+042900190620           PERFORM CHECK-FOR-BASECURR.
+043000190620           PERFORM Load-Date-Into-LDA.
+043100190620           PERFORM Get-Date-from-DTL.
+043200190620
+043300190620       DETAIL-PROCESSING.
+043400190620
+043500190620           INITIALIZE li_RecordType_PRI_Count
+043600190620                      li_RecordType_PRX_Count
+043700190620                      li_RecordType_ACC_Count
+043800190620                      li_RecordType_INC_Count
+043900190620                      li_RecordType_CAP_Count
+044000190620                      li_RecordType_PRI_Summ
+044100190620                      li_RecordType_PRX_Summ
+044200190620                      li_RecordType_ACC_Summ
+044300190620                      li_RecordType_INC_Summ
+044400190620                      li_RecordType_CAP_Summ
+044500190620                      li_TotRecordCount.
+044600190620
+044700190620            SET lncc_CurrencyExistNo TO TRUE.
+044800190620
+044900190620           IF MFACMPCDP-COMPANY-CODE IS NOT EQUAL TO "PCA"
+045000190620               PERFORM Load-Unitrax-Price-Files
+045100190620               PERFORM INSERT-FINAL-LDPRCSF2-3
+045200190620           END-IF.
+045300190620           PERFORM Load-Sweep-Fund.
+045301201007      *RFS185121 - Starts
+045400201007      *    IF MFACMPCDP-COMPANY-CODE = "DJT" OR
+045500201007      *       MFACMPCDP-COMPANY-CODE = "NWT" OR
+045600201007      *       MFACMPCDP-COMPANY-CODE = "MAE"
+045601201007           IF lc-EditCdeDJTNWT = "Y"
+045602201007      *RFS185121 - Ends
+045700190620              PERFORM DJT-LOAD-PRX
+045800190620           END-IF.
+045900190620           IF MFACMPCDP-COMPANY-CODE = "PCA"
+046000190620               PERFORM PCA-LOAD-PRICE-IND-LVL
+046100190620      *        PERFORM INSERT-FINAL-LDPRCSF2-3
+046200190620           END-IF.
+046300190620           IF MFACMPCDP-COMPANY-CODE = "PCA"
+046400190620               PERFORM PCA-LOAD-PRICE-GROUP-LVL
+046500190620               PERFORM INSERT-FINAL-LDPRCSF2-3
+046600190620           END-IF.
+046700190620           PERFORM Check-Todays-Prices.
+046800190620           PERFORM RUN-COMPLETE-NORMAL.
+046900190620
+047000190620
+047100190620       Load-Date-Into-LDA.
+047200190620
+047300190620           EXEC SQL
+047400190620           SELECT
+047500190620
+047600190620               PRC.PRICE_DISTR_RECORD_DATE,
+047700190620               CHAR(PRC.PRICE_DISTR_RECORD_DATE)
+047800190620
+047900190620           INTO
+048000190620             :T-TRADE-DATE,
+048100190620             :GT-CREATION-DATE
+048200190620           FROM MFAPRCDRVP PRC
+048300190620           FETCH FIRST ROW ONLY
+048400190620           END-EXEC.
+048500190620
+048600190620           ACCEPT lc_Local_DataArea2 FROM WS-LOCAL.
+048700190620           MOVE GT-CREATION-DATE TO lc_PriceDate.
+048800190620           DISPLAY lc_Local_DataArea2 UPON WS-LOCAL.
+048900190620
+049000190620
+049100190620       Get-Date-from-DTL.
+049200190620
+049300190620           EXEC SQL
+049400190620           SELECT
+049500190620               CHAR(PRC2.PRICE_DISTR_RECORD_DATE)
+049600190620           INTO
+049700190620              :GT-CREATION-DATE1
+049800190620           FROM MFAPRCDRVP PRC2
+049900190620           WHERE PRC2.RECORD_TYPE_TRANS = "PRI"
+050000190620           FETCH FIRST ROW ONLY
+050100190620           END-EXEC.
+050200190620
+050300190620           EXEC SQL
+050400190620           SELECT
+050500190620               CHAR(PRC2.PRICE_DISTR_RECORD_DATE)
+050600190620           INTO
+050700190620              :GT-CREATION-DATE2
+050800190620           FROM MFAPRCDRVP PRC2
+050900190620           WHERE PRC2.RECORD_TYPE_TRANS = "PRX"
+051000190620           FETCH FIRST ROW ONLY
+051100190620           END-EXEC.
+051200190620
+051300190620
+051400190620           IF GT-CREATION-DATE2 IS NOT EQUAL TO " "
+051500190620            MOVE GT-CREATION-DATE2 TO GT-CREATION-DATE
+051600190620           ELSE
+051700190620           IF GT-CREATION-DATE1 IS NOT EQUAL TO " "
+051800190620            MOVE GT-CREATION-DATE1 TO GT-CREATION-DATE
+051900190620           ELSE
+052000190620            MOVE lc_SysDateX TO GT-CREATION-DATE
+052100190620           END-IF
+052200190620           END-IF.
+052300190620
+052400190620
+052500190620       CHECK-FOR-BASECURR.
+052600190620
+052700190620           INITIALIZE lc_Report_EXC
+052800190620                      li_ExchRateVar.
+052900190620
+053000190620           EXEC SQL
+053100190620           SELECT
+053200190620               "Y",
+053300190620               CUR.EXCHANGE_VARIANCE
+053400190620           INTO
+053500190620            :lc_Report_EXC,
+053600190620            :li_ExchRateVar
+053700190620           FROM MFACURP cur
+053800190620             WHERE CUR.CURRENCY_STATUS = "A" AND
+053900190620                   CUR.BASE_CURRENCY = "N"
+054000190620           END-EXEC.
+054100190620
+054200190620
+054300190620       GET-SCREEN-EDIT-CODES.
+054400190620
+054500190620           INITIALIZE lc_ScreenEditsAllowed.
+054600190620
+054700190620           MOVE lc_SUPSGN_ScreenCode TO
+054800190620                SCREEN-CODE OF lc_ScreenEditsAllowed.
+054900190620           MOVE lc_SUPSGN_EditCode TO
+055000190620                EDIT-CODE OF lc_ScreenEditsAllowed.
+055100190620           MOVE lc_SUPSGN_LevelCode TO
+055200190620                LEVEL-CODE OF lc_ScreenEditsAllowed.
+055300190620
+055400190620           CALL "FXSCEDTALW" USING lc_ScreenEditsAllowed
+055500190620                                   lc_SeaEditLog
+055600190620                                   lc_SeaReturnCode.
+055700190620
+055800190620           IF lc_SeaReturnCode = "99"
+055900190620            MOVE "N" TO lc_SUPSGN_Edit
+056000190620           ELSE
+056100190620            MOVE "Y" TO lc_SUPSGN_Edit
+056200190620           END-IF.
+056300211006      *RFS186903 - Starts
+056301211006           INITIALIZE lc_ScreenEditsAllowed.
+056302211006
+056303211006           MOVE lc_DISCON_ScreenCode TO
+056304211006                SCREEN-CODE OF lc_ScreenEditsAllowed.
+056305211006           MOVE lc_DISCON_EditCode TO
+056306211006                EDIT-CODE OF lc_ScreenEditsAllowed.
+056307211006           MOVE lc_DISCON_LevelCode TO
+056308211006                LEVEL-CODE OF lc_ScreenEditsAllowed.
+056309211006
+056310211006           CALL "FXSCEDTALW" USING lc_ScreenEditsAllowed
+056311211006                                   lc_SeaEditLog
+056312211006                                   lc_SeaReturnCode.
+056313211006
+056314211006           IF lc_SeaReturnCode = "99"
+056315211006            MOVE "N" TO lc_Confirm
+056316211006           ELSE
+056317211006            MOVE "Y" TO lc_Confirm
+056318211006           END-IF.
+056321211006      *RFS186903 - Ends
+056400190620       Load-Unitrax-Price-Files.
+056500190620
+056600190620           EXEC SQL
+056700190620           DECLARE CUR_Load_Unitrax_Price_Files CURSOR FOR
+056800190620           SELECT
+056900190620               CASE WHEN PRCDVP.CURRENCY_INDICATOR IN ("  " , "00")
+057000190620               THEN "CAD"
+057100190620               ELSE "USD" END AS CURR_CODE,
+057200190620               PRCDVP.CURRENCY_INDICATOR,
+057300190620               CASE WHEN PRCDVP.MGMT_COMPANY_SPECIFIC = "BUY"
+057400190620               THEN "B"
+057500190620               WHEN PRCDVP.MGMT_COMPANY_SPECIFIC = "SEL"
+057600190620               THEN "S"
+057700190620               ELSE "N" END AS EXCH_RATE_TYPE,
+057800190620               PRCDVP.PLUS_MINUS_INDICATOR,
+057900200303               CASE WHEN PRCDVP.PLUS_MINUS_INDICATOR <> "-"
+058000200303               THEN (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1)
+058100200303               ELSE (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * -1) END
+058200200303                  AS PRICE_DISTR_ACCRUAL,
+058300190620               CASE WHEN PRCDVP.PLUS_MINUS_INDICATOR <> "-"
+058400190620      * RFS 1015927 - begin
+058500190620      *        THEN PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1
+058600190620               THEN DECIMAL(ROUND(
+058700190620                   (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1), 4), 11,4)
+058800190620               ELSE
+058900190620      *        PRCDVP.PRICE_DISTR_RATE_ACCRUAL * -1 END
+059000190620               DECIMAL(ROUND(
+059100190620                   (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * -1), 4), 11,4)
+059200190620                  END
+059300190620      * RFS 1015927 - end
+059400190620                 AS UNIT_PRICE,
+059500200303      * RFS#1081347 - Starts
+059600200303               CASE WHEN PRCDVP.PLUS_MINUS_INDICATOR <> "-"
+059700200303081347*        THEN PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1
+059800200303081347         THEN DECIMAL(ROUND(
+059900200303081347              (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1), 6), 9, 6)
+060000200303081347         ELSE
+060100200303081347*         PRCDVP.PRICE_DISTR_RATE_ACCRUAL * -1 END
+060200200303081347              DECIMAL(ROUND(
+060300200303081347              (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * -1), 6), 9, 6)
+060400200303081347*           AS DISTR_RATE,
+060500200303081347         END AS DISTR_RATE,
+060600200303      * RFS#1081347 - End
+060700190620               CASE WHEN PRCDVP.PLUS_MINUS_INDICATOR <> "-"
+060800190620               THEN (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1)
+060900190620               ELSE
+061000190620                (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * -1) END
+061100190620                  AS INTEREST_RATE,
+061200190620               CASE WHEN PRCDVP.RECORD_TYPE_TRANS = "EXC"
+061300190620               THEN PRCDVP.PRICE_DISTR_RATE_ACCRUAL
+061400190620               ELSE 0 END AS EXCH_RATE,
+061500190620               PRCDVP.RECORD_TYPE_TRANS,
+061600190620               PRCDVP.MGMT_COMPANY_SPECIFIC,
+061700190620               PRCDVP.PRICE_DISTR_RECORD_DATE,
+061800190620               PRCDVP.DISTR_PAYMENT_DATE,
+061900190620               COALESCE(INVLPP.UNIT_PRICE, 0),
+062000190620               COALESCE(INVGRP.PRICING_VARIANCE, 0),
+062100190620               COALESCE(INV.INVESTMENT_CODE, " "),
+062200190620               COALESCE(INVGRP.INVESTMENT_GROUP_CODE, " "),
+062300190620               CASE WHEN AUTSTP.AUTHORIZATION_CODE = "BIGPRC"
+062400190620               THEN "Y" ELSE "N" END AS BIGPRC_AUTH,
+062500190620               PRCDVP.RECORD_ID,
+062600190620               PRCDVP.PRICE_STATUS_INDICATOR,
+062700190620               PRCDVP.MANAGEMENT_COMPANY_CODE,
+062800190620               PRCDVP.INDUSTRY_FUND_CODE,
+062900190620               PRCDVP.PRICE_DISTR_RATE_ACCRUAL,
+063000190620               PRCDVP.DISTR_PAYMENT_DATE
+063100190620
+063200190620           FROM MFAPRCDRVP PRCDVP
+063300190620           LEFT OUTER JOIN MFAINVP INV ON
+063400190620                INV.INDUSTRY_FUND_CODE =
+063500190620                PRCDVP.INDUSTRY_FUND_CODE
+063600190620           LEFT OUTER JOIN MFAINVGRP INVGRP ON
+063700190620                INVGRP.INVESTMENT_GROUP_CODE =
+063800190620                INV.INVESTMENT_GROUP_CODE
+063900190620           LEFT OUTER JOIN MFAINVLPP INVLPP ON
+064000190620                INVLPP.TRADE_DATE = :li_AsAtDate     AND
+064100190620                INVLPP.INVESTMENT_CODE = INV.INVESTMENT_CODE
+064200190620           LEFT OUTER JOIN MFAAUTSTP AUTSTP ON
+064300190620                AUTSTP.USER = :lc_PRC_LogID AND
+064400190620                AUTSTP.AUTHORIZATION_CODE = "BIGPRC"
+064500190620           ORDER BY PRCDVP.RECORD_TYPE_TRANS DESC
+064600190620           END-EXEC.
+064700190620
+064800190620           MOVE SQLSTATE to lc_SQLSTATES.
+064900190620
+065000190620           EVALUATE TRUE
+065100190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+065200190620                lncc_SQLWarning
+065300190620               CONTINUE
+065400190620           WHEN OTHER
+065500190620           SET WS-ERR-10 TO TRUE
+065600190620           MOVE lc_ErrCodeDesc10 TO lc_Error_Desc
+065700190710016795                              WS-SQL-ERR-SHORT-DESCR
+065800190620           PERFORM DSP-ERROR
+065900190620           END-EVALUATE.
+066000190620
+066100190620
+066200190620           EXEC SQL
+066300190620              OPEN CUR_Load_Unitrax_Price_Files
+066400190620           END-EXEC.
+066500190620
+066600190620           MOVE SQLSTATE to lc_SQLSTATES.
+066700190620
+066800190620           EVALUATE TRUE
+066900190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+067000190620                lncc_SQLWarning
+067100190620               CONTINUE
+067200190620           WHEN OTHER
+067300190620           SET WS-ERR-11 TO TRUE
+067400190620           MOVE lc_ErrCodeDesc11 TO lc_Error_Desc
+067500190710016795                              WS-SQL-ERR-SHORT-DESCR
+067600190620           PERFORM DSP-ERROR
+067700190620           END-EVALUATE.
+067800190620
+067900190620           SET lncc_EndOfFetchNo TO TRUE.
+068000190620           PERFORM Fetch-Unitrax-Price-Files
+068100190620                       UNTIL lncc_EndOfFetchYes.
+068200190620
+068300190620       FETCH-Unitrax-Price-Files.
+068400190620
+068500190620           EXEC SQL
+068600190620           FETCH CUR_Load_Unitrax_Price_Files
+068700190620             INTO :ct_FetchCur_LoadPrices
+068800190620           END-EXEC.
+068900190620
+069000190620           MOVE SQLSTATE to lc_SQLSTATES.
+069100190620
+069200190620           EVALUATE TRUE
+069300190620           WHEN lncc_SqlSuccessful OR
+069400190620                lncc_SQLWarning
+069500190620                PERFORM PROCESS-Fetch-Recs
+069600190620           WHEN lncc_SqlEnd
+069700190620            SET lncc_EndOfFetchYes TO TRUE
+069800190620           WHEN OTHER
+069900190620           SET WS-ERR-12 TO TRUE
+070000190620           MOVE lc_ErrCodeDesc12 TO lc_Error_Desc
+070100190710016795                              WS-SQL-ERR-SHORT-DESCR
+070200190620           PERFORM DSP-ERROR
+070300190620           END-EVALUATE.
+070400190620
+070500190620
+070600190620       PROCESS-Fetch-Recs.
+070700190620           IF lcu_InvCode IS EQUAL TO SPACES AND
+070800190620              lcu_Record_Type_Trans IS NOT EQUAL TO "EXC"
+070900190620            MOVE 1 TO li_ERROR_CODE1
+071000190620           ELSE
+071100190620            MOVE 0 TO li_ERROR_CODE1
+071200190620           END-IF.
+071300190620
+071400190620           IF liu_Price_Distr_RecordDate IS EQUAL TO ZEROES
+071500190620            MOVE 1 TO li_ERROR_CODE2
+071600190620           ELSE
+071700190620            MOVE 0 TO li_ERROR_CODE2
+071800190620           END-IF.
+071900190620
+072000190620
+072100190620           IF LIU_PRICE_DISTR_RATEACCRUAL IS EQUAL to ZEROES
+072200190620            MOVE 1 TO li_ERROR_CODE3
+072300190620           ELSE
+072400190620            MOVE 0 TO li_ERROR_CODE3
+072500190620           END-IF.
+072600190620
+072700190620           IF (lcu_Record_Type_Trans IS EQUAL TO "DIS" OR
+072800190620               lcu_Record_Type_Trans IS EQUAL TO "INC" OR
+072900190620               lcu_Record_Type_Trans IS EQUAL TO "CAP") AND
+073000190620               liu_Distr_PaymentDate IS EQUAL TO ZEROES
+073100190620            MOVE 1 TO li_ERROR_CODE4
+073200190620           ELSE
+073300190620            MOVE 0 TO li_ERROR_CODE4
+073400190620           END-IF.
+073500190620
+073600190620           IF lcu_Plus_Minus_Ind IS NOT EQUAL "-" AND "+"
+073700190620            MOVE 1 TO li_ERROR_CODE5
+073800190620           ELSE
+073900190620            MOVE 0 TO li_ERROR_CODE5
+074000190620           END-IF.
+074100190620
+074200190620
+074300190620           IF lcu_CurrInd IS NOT EQUAL TO " " AND "00" AND "01"
+074400190620            MOVE 1 TO li_ERROR_CODE6
+074500190620           ELSE
+074600190620            MOVE 0 TO li_ERROR_CODE6
+074700190620           END-IF.
+074800190620
+074900190620           IF lcu_Record_type_Trans IS EQUAL TO "DIS" AND
+075000190620              (lcu_Mgmt_Spec IS NOT EQUAL TO "INC" AND "CPG")
+075100190620            MOVE 1 TO li_ERROR_CODE7
+075200190620           ELSE
+075300190620            MOVE 0 TO li_ERROR_CODE7
+075400190620           END-IF.
+075500190620
+075600190620           IF lcu_Record_type_Trans IS EQUAL TO "EXC" AND
+075700190620              (lcu_Mgmt_Spec IS NOT EQUAL TO "BUY" AND "SEL" AND "N"
+075800190620                        AND " ")
+075900190620            MOVE 1 TO li_ERROR_CODE8
+076000190620           ELSE
+076100190620            MOVE 0 TO li_ERROR_CODE8
+076200190620           END-IF.
+076300190620
+076400190620           COMPUTE T-PRICE-DIFF =
+076500190620              (liu_Unit_price - liu_Last_Unitprc).
+076600190620
+076700190620           IF T-PRICE-DIFF < 0
+076800190620              COMPUTE T-PRICE-DIFF = T-PRICE-DIFF * -1
+076900190620           END-IF.
+077000190620
+077100190620           COMPUTE T-PRICE-VAR ROUNDED =
+077200190620                 (liu_Last_UnitPrc *
+077300190620               (liu_Pricing_Var / 100)).
+077400190620
+077500190620           IF (lcu_Record_type_Trans IS EQUAL TO "PRX" OR "PRI") AND
+077600190620               liu_Last_Unitprc > 0 AND
+077700190620              T-Price-Diff > T-PRICE-VAR
+077800190620            MOVE 1 TO li_ERROR_CODE9
+077900190620           ELSE
+078000190620            MOVE 0 TO li_ERROR_CODE9
+078100190620           END-IF.
+078200190620
+078300190620           INITIALIZE li_Prev_ExchRate.
+078400190620
+078500190620           EXEC SQL
+078600190620             SELECT EXR.Exchange_Rate
+078700190620             INTO
+078800190620               :li_Prev_ExchRate
+078900190620             FROM MFAEXRHMP EXR
+079000190620             WHERE EXR.TRADE_DATE = :li_LstPrcDte AND
+079100190620                   EXR.CURRENCY = :lcu_CurrCode AND
+079200190620                   EXR.EXCHANGE_RATE_TYPE = :lcu_ExchRate_Type
+079300190620           END-EXEC.
+079400190620
+079500190620           COMPUTE li_Exch_Diff =
+079600190620               (liu_Exch_Rate - li_Prev_ExchRate).
+079700190620
+079800190620           IF li_Exch_Diff < 0
+079900190620              COMPUTE li_Exch_Diff = li_Exch_Diff * -1
+080000190620           END-IF.
+080100190620
+080200190620           COMPUTE li_Exch_Var ROUNDED =
+080300190620              (li_Prev_ExchRate * (li_ExchRateVar / 100)).
+080400190620
+080500190620           EXEC SQL
+080600190620            select "Y"
+080700190620            into :lc_CurrencyExist
+080800190620           FROM MFACURP CUR
+080900190620            WHERE CUR.CURRENCY = :lcu_CurrCode
+081000190620           END-EXEC.
+081100190620
+081200190620           IF lcu_Record_Type_trans = "EXC" AND
+081300190620              li_Prev_ExchRate IS NOT EQUAL TO 0 AND
+081400190620              li_Exch_Diff > li_Exch_Var AND
+081500190620              lncc_CurrencyExistNo
+081600190620            MOVE 1 TO li_ERROR_CODE10
+081700190620           ELSE
+081800190620            MOVE 0 TO li_ERROR_CODE10
+081900190620           END-IF.
+082000190620
+082100190620
+082200190620           IF lcu_Record_type_trans = "EXC" AND
+082300190620              lncc_CurrencyExistNo AND
+082400190620              lc_Report_EXC IS EQUAL TO "Y"
+082500190620            MOVE 1 TO li_ERROR_CODE11
+082600190620           ELSE
+082700190620            MOVE 0 TO li_ERROR_CODE11
+082800190620           END-IF.
+082900190620
+083000190620           MOVE 0 TO li_ERROR_CODE12.
+083100190620           COMPUTE li_Error_Code = li_ERROR_CODE1 +
+083200190620              li_ERROR_CODE2 + li_ERROR_CODE3 + li_ERROR_CODE4 +
+083300190620              li_ERROR_CODE5 + li_ERROR_CODE6 + li_ERROR_CODE7 +
+083400190620              li_ERROR_CODE8 + li_ERROR_CODE9 + li_ERROR_CODE10 +
+083500190620              li_ERROR_CODE11 + li_ERROR_CODE12.
+083600190620
+083700190620
+083800190620      *    COMPUTE T-UNIT-PRICE =
+083900190620      *        ROUND(T-PRICE-DISTR-RATE-ACCRUAL / 10000) .
+084000190620      *    COMPUTE T-DISTR-RATE =
+084100190620      *        ROUND(T-PRICE-DISTR-RATE-ACCRUAL / 100) .
+084200190620      *    COMPUTE T-INTEREST-RATE =
+084300190620      *        ROUND(T-PRICE-DISTR-RATE-ACCRUAL * 10) .
+084400190620
+084500190620           Compute li_TotRecordCount = li_TotRecordCount + 1.
+084600190620
+084700190620
+084800190620      ** Subfile:LDPRCSF1 processing goes here
+084900190620      ** Control information: IF D-ERROR-CODE <> 0
+085000190620
+085100190620           IF li_Error_Code IS NOT EQUAL ZEROES
+085200190620
+085300190620           EXEC SQL
+085400190620           INSERT INTO LDPRCSF1
+085500190620
+085600190620           VALUES
+085700190620           (
+085800190620           :lcu_RecordID,
+085900190620           :lcu_Record_Type_Trans,
+086000190620           :lcu_Price_StatInd,
+086100190620           :lcu_Mgmt_CompCde,
+086200190620           :lcu_Ind_FundCde,
+086300190620           :liu_Price_Distr_RecordDate,
+086400190620           :liu_Price_Distr_RateAccrual,
+086500190620           :lcu_Plus_Minus_Ind,
+086600190620           :liu_Distr_PaymentDate,
+086700190620           :lcu_CurrInd,
+086800190620           :lcu_Mgmt_Spec,
+086900190620           " ",
+087000190620           :li_ERROR_CODE1,
+087100190620           :li_ERROR_CODE2,
+087200190620           :li_ERROR_CODE3,
+087300190620           :li_ERROR_CODE4,
+087400190620           :li_ERROR_CODE5,
+087500190620           :li_ERROR_CODE6,
+087600190620           :li_ERROR_CODE7,
+087700190620           :li_ERROR_CODE8,
+087800190620           :li_ERROR_CODE9,
+087900190620           :li_ERROR_CODE10,
+088000190620           :li_ERROR_CODE11,
+088100190620           :li_ERROR_CODE12)
+088200190620           END-EXEC
+088300190620
+088400190620           END-IF.
+088500190620
+088600190620           IF lcu_Record_Type_Trans IS EQUAL TO "PRI" AND
+088700190620              (li_ERROR_CODE IS EQUAL TO 0 OR
+088800190620               (li_ERROR_CODE IS EQUAL TO 1 AND
+088900190620                li_ERROR_CODE9 IS EQUAL TO 1 AND
+089000190620                lcu_BIGPRC_AuthInd IS EQUAL TO "Y"))
+089100190620
+089200190620            COMPUTE li_RecordType_PRI_Count=li_RecordType_PRI_Count
+089300190620                    + 1
+089400190620            COMPUTE li_RecordType_PRI_SUMM = li_RecordType_PRI_Summ
+089500190620                    +  liu_Unit_price
+089600190620           END-IF.
+089700190620
+089800190620           IF lcu_Record_Type_Trans IS EQUAL TO "PRX" AND
+089900190620              (li_ERROR_CODE IS EQUAL TO 0 OR
+090000190620               (li_ERROR_CODE IS EQUAL TO 1 AND
+090100190620                li_ERROR_CODE9 IS EQUAL TO 1 AND
+090200190620                lcu_BIGPRC_AuthInd IS EQUAL TO "Y"))
+090300190620
+090400190620            COMPUTE li_RecordType_PRX_Count =li_RecordType_PRX_Count
+090500190620                    + 1
+090600190620            COMPUTE li_RecordType_PRX_SUMM = li_RecordType_PRX_Summ
+090700190620                    +  liu_Unit_price
+090800190620           END-IF.
+090900190620
+091000190620           IF lcu_Record_Type_Trans IS EQUAL TO "ACC"
+091100190620            COMPUTE li_RecordType_ACC_Count=li_RecordType_ACC_Count
+091200190620                    + 1
+091300190620            COMPUTE li_RecordType_ACC_SUMM = li_RecordType_ACC_Summ
+091400190620                    +  liu_Interest_Rate
+091500190620           END-IF.
+091600190620
+091700190620           IF lcu_Record_Type_Trans IS EQUAL TO "INC"
+091800190620            COMPUTE li_RecordType_INC_Count =li_RecordType_INC_Count
+091900190620                    + 1
+092000190620            COMPUTE li_RecordType_INC_SUMM = li_RecordType_INC_Summ
+092100190620                    +  liu_Distr_Rate
+092200190620           END-IF.
+092300190620
+092400190620           IF lcu_Record_Type_Trans IS EQUAL TO "CAP"
+092500190620            COMPUTE li_RecordType_CAP_Count =li_RecordType_CAP_Count
+092600190620                    + 1
+092700190620            COMPUTE li_RecordType_CAP_SUMM = li_RecordType_CAP_Summ
+092800190620                    +  liu_Distr_Rate
+092900190620           END-IF.
+093000190620
+093100190620           IF lc_SUPSGN_Edit IS EQUAL TO "Y"
+093200190620            MOVE "Y" TO lc_Keying_Stat
+093300190620           ELSE
+093400190620            MOVE "N" TO lc_Keying_Stat
+093500190620           END-IF.
+093600190620
+093700190620           IF (li_Error_Code = 0 OR
+093800190620              (li_Error_Code = 1 AND li_Error_Code9 = 1 AND
+093900190620               lcu_BIGPRC_AuthInd = "Y")) AND
+094000190620              lcu_Record_type_Trans = "PRI"
+094100190620
+094200190620           EXEC SQL
+094300190620           UPDATE MFAINVUPP SET
+094400190620           (
+094500190620           CURRENCY,
+094600190620           UNIT_PRICE,
+094700190620           UNITS,
+094800190620           CREATED_BY,
+094900190620           CREATION_DATE,
+095000190620           LAST_UPDATE_DATE,
+095100190620           LAST_UPDATED_BY,
+095200190620           KEYING_STATUS
+095300190620           ) =
+095400190620           (
+095500190620            :lcu_CurrCode,
+095600190620            :liu_Unit_price,
+095700190620            0,
+095800190620            "LDPRC",
+095900190620            :li_SysDate,
+096000190620            :li_SysDate,
+096100190620            "LDPRC",
+096200190620            :lc_Keying_Stat)
+096300190620           WHERE INVESTMENT_CODE = :lcu_InvCode AND
+096400190620                 TRADE_DATE = :liu_Price_Distr_REcordDate AND
+096500190620                 DISTRIBUTION_FLAG = " "
+096600190620
+096700190620           END-EXEC
+096800190620
+096900190620           MOVE SQLSTATE to lc_SQLSTATES
+097000190620
+097100190620           EVALUATE TRUE
+097200190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+097300190620                lncc_SQLWarning
+097400190620               CONTINUE
+097500190620           WHEN OTHER
+097600190620           SET WS-ERR-13 TO TRUE
+097700190620           MOVE lc_ErrCodeDesc13 TO lc_Error_Desc
+097800190710016795                              WS-SQL-ERR-SHORT-DESCR
+097900190620           PERFORM DSP-ERROR
+098000190620           END-EVALUATE
+098100190620
+098200190620
+098300190620           EXEC SQL
+098400190620           INSERT INTO MFAINVUPP VALUES
+098500190620           (
+098600190620           :lcu_InvCode,
+098700190620           :lcu_CurrCode,
+098800190620           :liu_Price_Distr_RecordDate,
+098900190620            " ",
+099000190620           :liu_Unit_price,
+099100190620           0,
+099200190620           0,
+099300190620           "LDPRC",
+099400190620           :li_SysDate,
+099500190620           :li_SysDate,
+099600190620           "LDPRC",
+099700190620           :lc_Keying_Stat
+099800190620           )
+099900190620           END-EXEC
+100000190620
+100100190620           MOVE SQLSTATE to lc_SQLSTATES
+100200190620
+100300190620           EVALUATE TRUE
+100400190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+100500190620                lncc_SQLWarning OR lncc_SQLDuplicate
+100600190620               CONTINUE
+100700190620           WHEN OTHER
+100800190620           SET WS-ERR-14 TO TRUE
+100900190620           MOVE lc_ErrCodeDesc14 TO lc_Error_Desc
+101000190710016795                              WS-SQL-ERR-SHORT-DESCR
+101100190620           PERFORM DSP-ERROR
+101200190620           END-EVALUATE
+101300190620
+101400190620           END-IF.
+101500190620
+101600190620           IF li_Error_Code = 0 AND
+101700190620              lcu_Record_type_Trans = "ACC"
+101800190620           EXEC SQL
+101900190620           UPDATE MFAINVUPP SET
+102000190620           (
+102100190620           INTEREST_RATE
+102200190620           ) =
+102300190620           (
+102400190620            :liu_Interest_Rate
+102500190620           )
+102600190620           WHERE INVESTMENT_CODE = :lcu_InvCode AND
+102700190620                 TRADE_DATE = :liu_Price_Distr_RecordDate AND
+102800190620                 DISTRIBUTION_FLAG = " "
+102900190620           END-EXEC
+103000190620
+103100190620           MOVE SQLSTATE to lc_SQLSTATES
+103200190620
+103300190620           EVALUATE TRUE
+103400190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+103500190620                lncc_SQLWarning
+103600190620               CONTINUE
+103700190620           WHEN OTHER
+103800190620           SET WS-ERR-15 TO TRUE
+103900190620           MOVE lc_ErrCodeDesc15 TO lc_Error_Desc
+104000190710016795                              WS-SQL-ERR-SHORT-DESCR
+104100190620           PERFORM DSP-ERROR
+104200190620           END-EVALUATE
+104300190620
+104400190620           END-IF.
+104500190620
+104600190620           IF (li_Error_Code = 0 OR
+104700190620              (li_Error_Code = 1 AND li_Error_Code9 = 1 AND
+104800190620              lcu_BIGPRC_AuthInd = "Y")) AND
+104900190620              lcu_Record_type_Trans = "PRX"
+105000190620
+105100190620           EXEC SQL
+105200190620           UPDATE MFAINVUPP SET
+105300190620           (
+105400190620           CURRENCY,
+105500190620           UNIT_PRICE,
+105600190620           UNITS,
+105700190620           INTEREST_RATE,
+105800190620           CREATED_BY,
+105900190620           CREATION_DATE,
+106000190620           LAST_UPDATE_DATE,
+106100190620           LAST_UPDATED_BY,
+106200190620           KEYING_STATUS
+106300190620           )  =
+106400190620           (
+106500190620           :lcu_CurrCode,
+106600190620           :liu_Unit_price,
+106700190620           0,
+106800190620           0,
+106900190620           "LDPRC",
+107000190620           :li_sysdate,
+107100190620           :li_sysDate,
+107200190620           "LDPRC",
+107300190620           :lc_Keying_stat)
+107400190620      *    FROM MFAINVUPP INVUPP
+107500190620           WHERE INVESTMENT_CODE = :lcu_InvCode AND
+107600190620                 TRADE_DATE = :liu_Price_Distr_RecordDate AND
+107700190620                 DISTRIBUTION_FLAG = "Y"
+107800190620           END-EXEC
+107900190620
+108000190620
+108100190620           MOVE SQLSTATE to lc_SQLSTATES
+108200190620
+108300190620           EVALUATE TRUE
+108400190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+108500190620                lncc_SQLWarning
+108600190620               CONTINUE
+108700190620           WHEN OTHER
+108800190620           SET WS-ERR-16 TO TRUE
+108900190620           MOVE lc_ErrCodeDesc16 TO lc_Error_Desc
+109000190710016795                              WS-SQL-ERR-SHORT-DESCR
+109100190620           PERFORM DSP-ERROR
+109200190620           END-EVALUATE
+109300190620
+109400190620
+109500190620           EXEC SQL
+109600190620           INSERT INTO MFAINVUPP VALUES
+109700190620           (
+109800190620           :lcu_InvCode,
+109900190620           :lcu_CurrCode,
+110000190620           :liu_Price_Distr_RecordDate,
+110100190620            "Y",
+110200190620           :liu_Unit_price,
+110300190620           0,
+110400190620           0,
+110500190620           "LDPRC",
+110600190620           :li_SysDate,
+110700190620           :li_SysDate,
+110800190620           "LDPRC",
+110900190620           :lc_Keying_Stat
+111000190620           )
+111100190620           END-EXEC
+111200190620
+111300190620           MOVE SQLSTATE to lc_SQLSTATES
+111400190620
+111500190620           EVALUATE TRUE
+111600190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+111700190620                lncc_SQLWarning OR lncc_SQLDuplicate
+111800190620               CONTINUE
+111900190620           WHEN OTHER
+112000190620           SET WS-ERR-17 TO TRUE
+112100190620           MOVE lc_ErrCodeDesc17 TO lc_Error_Desc
+112200190710016795                              WS-SQL-ERR-SHORT-DESCR
+112300190620           PERFORM DSP-ERROR
+112400190620           END-EVALUATE
+112500190620
+112600190620           END-IF.
+112700190620
+112800190620           IF li_Error_Code = 0 AND
+112900190620             (lcu_Record_type_trans IS EQUAL TO "DIS" OR
+113000190620                 "INC" OR "CAP")
+113100190620
+113200190620
+113300190620           IF ((lcu_Record_Type_Trans IS EQUAL TO "DIS" AND
+113400190620                  lcu_Mgmt_Spec IS EQUAL TO "CPG") OR
+113500190620                  lcu_Record_Type_Trans IS EQUAL TO "CAP")
+113600190620           EXEC SQL
+113700190620           UPDATE MFADISDCP SET
+113800190620           (
+113900190620           CAPITAL_GAIN_DISTR_RATE,
+114000190620           CURRENCY,
+114100190620           CONFIRM,
+114200190620           EXPECTED_DISTRIBUTION_AMOUNT,
+114300190620           KEYING_STATUS,
+114400190620           DAF_RATE
+114500190620           ) =
+114600190620            (
+114700190620            :liu_Distr_Rate,
+114800190620            :lcu_CurrCode,
+114801211006      *RFS186903 - Starts
+114900211006      *     "N",
+114901211006            :lc_Confirm,
+114902211006      *RFS186903 - Ends
+115000190620            0,
+115100190620            "N",
+115200190620            0
+115300190620            )
+115400190620           WHERE INVESTMENT_CODE = :lcu_InvCode AND
+115500190620                 DATE_OF_RECORD = :liu_Price_Distr_RecordDate
+115600190620                  AND
+115700190620                 DISTR_PAYMENT_DATE = :liu_Distr_PaymentDate
+115800190620                 AND
+115900190620                 ((:lcu_Record_Type_Trans = "DIS" AND
+116000190620                  :lcu_Mgmt_Spec = "CPG") OR
+116100190620                  :lcu_Record_Type_Trans = "CAP")
+116200190620           END-EXEC
+116300190620
+116400190620           MOVE SQLSTATE to lc_SQLSTATES
+116500190620
+116600190620           EVALUATE TRUE
+116700190620           WHEN lncc_SqlSuccessful OR
+116800190620                lncc_SQLWarning
+116900190620               CONTINUE
+117000190620           WHEN OTHER
+117100190620           SET WS-ERR-18 TO TRUE
+117200190620           MOVE lc_ErrCodeDesc18 TO lc_Error_Desc
+117300190710016795                              WS-SQL-ERR-SHORT-DESCR
+117400190620           PERFORM DSP-ERROR
+117500191226      * RFS1018052 - Begin
+117600191226           PERFORM GET-DISDCP-ERR
+117700191226      * RFS1018052 - End
+117800190620           PERFORM FORCE-MSGW
+117900190620           END-EVALUATE
+118000190620
+118100190620           END-IF
+118200190620
+118300190620           IF ((lcu_Record_Type_Trans IS EQUAL TO "DIS" AND
+118400190620                lcu_Mgmt_Spec IS EQUAL TO "INC") OR
+118500190620                  lcu_Record_Type_Trans IS EQUAL TO "INC")
+118600190620
+118700190620           EXEC SQL
+118800190620           UPDATE MFADISDCP SET
+118900190620           (
+119000190620           INCOME_DISTR_RATE,
+119100190620           CURRENCY,
+119200190620           CONFIRM,
+119300190620           EXPECTED_DISTRIBUTION_AMOUNT,
+119400190620           KEYING_STATUS,
+119500190620           DAF_RATE
+119600190620           ) =
+119700190620            (
+119800190620            :liu_Distr_Rate,
+119900190620            :lcu_CurrCode,
+119901211006      *RFS186903 - Starts
+120000211006      *     "N",
+120001211006            :lc_Confirm,
+120002211006      *RFS186903 - Ends
+120100190620            0,
+120200190620            "N",
+120300190620            0
+120400190620            )
+120500190620           WHERE INVESTMENT_CODE = :lcu_InvCode AND
+120600190620                 DATE_OF_RECORD = :liu_Price_Distr_RecordDate
+120700190620                  AND
+120800190620                 DISTR_PAYMENT_DATE = :liu_Distr_PaymentDate
+120900190620                 AND
+121000190620                 ((:lcu_Record_Type_Trans = "DIS" AND
+121100190620                  :lcu_Mgmt_Spec = "INC") OR
+121200190620                  :lcu_Record_Type_Trans = "INC")
+121300190620           END-EXEC
+121400190620
+121500190620           MOVE SQLSTATE to lc_SQLSTATES
+121600190620
+121700190620           EVALUATE TRUE
+121800190620           WHEN lncc_SqlSuccessful OR
+121900190620                lncc_SQLWarning
+122000190620               CONTINUE
+122100190620           WHEN OTHER
+122200190620           SET WS-ERR-18 TO TRUE
+122300190620           MOVE lc_ErrCodeDesc18 TO lc_Error_Desc
+122400190710016795                              WS-SQL-ERR-SHORT-DESCR
+122500190620           PERFORM DSP-ERROR
+122600191226      * RFS1018052 - Begin
+122700191226           PERFORM GET-DISDCP-ERR
+122800191226      * RFS1018052 - End
+122900190620           PERFORM FORCE-MSGW
+123000190620           END-EVALUATE
+123100190620
+123200190620           END-IF
+123300190620
+123400190620           END-IF.
+123500190620
+123600190620           IF li_Error_Code = 0 AND
+123700190620              lcu_Record_Type_Trans IS EQUAL TO "EXC"
+123800190620
+123900190620           EXEC SQL
+124000190620           UPDATE MFAEXRHMP SET
+124100190620           (
+124200190620           EXCHANGE_RATE,
+124300190620           CREATED_BY,
+124400190620           CREATION_DATE,
+124500190620           LAST_UPDATE_DATE,
+124600190620           LAST_UPDATED_BY,
+124700190620           KEYING_STATUS
+124800190620           ) =
+124900190620           (
+125000190620           :liu_Exch_Rate,
+125100190620           "LDPRC",
+125200190620           :li_SysDate,
+125300190620           :li_SysDate,
+125400190620           "LDPRC",
+125500190620           "N"
+125600190620           )
+125700190620           WHERE CURRENCY = :lcu_CurrCode AND
+125800190620                 TRADE_DATE = :liu_Price_Distr_RecordDate AND
+125900190620                 EXCHANGE_RATE_TYPE = :lcu_ExchRate_Type
+126000190620           END-EXEC
+126100190620
+126200190620           MOVE SQLSTATE to lc_SQLSTATES
+126300190620
+126400190620           EVALUATE TRUE
+126500190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+126600190620                lncc_SQLWarning
+126700190620               CONTINUE
+126800190620           WHEN OTHER
+126900190620           SET WS-ERR-19 TO TRUE
+127000190620           MOVE lc_ErrCodeDesc19 TO lc_Error_Desc
+127100190710016795                              WS-SQL-ERR-SHORT-DESCR
+127200190620           PERFORM DSP-ERROR
+127300190620           END-EVALUATE
+127400190620
+127500190620           EXEC SQL
+127600190620           INSERT INTO MFAEXRHMP VALUES
+127700190620           (
+127800190620            :liu_Price_Distr_RecordDate,
+127900190620            :lcu_CurrCode,
+128000190620            :lcu_ExchRate_Type,
+128100190620            :liu_Exch_Rate,
+128200190620            "LDPRC",
+128300190620            :li_SysDate,
+128400190620            :li_SysDate,
+128500190620            "LDPRC",
+128600190620            "N"
+128700190620           )
+128800190620           END-EXEC
+128900190620
+129000190620           MOVE SQLSTATE to lc_SQLSTATES
+129100190620
+129200190620           EVALUATE TRUE
+129300190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+129400190620                lncc_SQLWarning OR lncc_SQLDuplicate
+129500190620               CONTINUE
+129600190620           WHEN OTHER
+129700190620           SET WS-ERR-20 TO TRUE
+129800190620           MOVE lc_ErrCodeDesc20 TO lc_Error_Desc
+129900190710016795                              WS-SQL-ERR-SHORT-DESCR
+130000190620           PERFORM DSP-ERROR
+130100190620           END-EVALUATE
+130200190620
+130300190620           END-IF.
+130400190620
+130500191227      * RFS1018052 - Begin
+130600191226       GET-DISDCP-ERR.
+130700191226           INITIALIZE DISDCP-SETUP-MISS-RECS.
+130800191227
+130900191226           EXEC SQL
+131000191226           DECLARE CCU_DRVP CURSOR FOR
+131100191226             SELECT MFAINVP.INVESTMENT_CODE,
+131200191226                    MFAINVP.INDUSTRY_FUND_CODE,
+131300191226                    MFAPRCDRVP.PRICE_DISTR_RECORD_DATE,
+131400191226                    MFAPRCDRVP.DISTR_PAYMENT_DATE
+131500191226             FROM MFAPRCDRVP
+131600191226             INNER JOIN MFAINVP ON
+131700191226                 MFAINVP.INDUSTRY_FUND_CODE =
+131800191226                                  MFAPRCDRVP.INDUSTRY_FUND_CODE
+131900191226             EXCEPTION JOIN MFADISDCP ON
+132000191226                 MFADISDCP.INVESTMENT_CODE = MFAINVP.INVESTMENT_CODE
+132100191226             AND MFADISDCP.DATE_OF_RECORD =
+132200191226                                  MFAPRCDRVP.PRICE_DISTR_RECORD_DATE
+132300191226             AND MFADISDCP.DISTR_PAYMENT_DATE =
+132400191226                                  MFAPRCDRVP.DISTR_PAYMENT_DATE
+132500191227             WHERE RECORD_TYPE_TRANS IN ("CAP", "INC")
+132600191227                OR (RECORD_TYPE_TRANS = "DIS" AND
+132700191227                    MGMT_COMPANY_SPECIFIC IN ("CPG", "INC"))
+132800191227           END-EXEC.
+132900191226
+133000191226           EXEC SQL
+133100191226             OPEN CCU_DRVP
+133200191227           END-EXEC.
+133300191226
+133400191226           SET lncc_EndOfFetchNo TO TRUE.
+133500191226
+133600191226           EXEC SQL
+133700191226             FETCH NEXT FROM CCU_DRVP FOR 100 ROWS
+133800191226             INTO :LTB_MISSING_DISDCP_SETUP
+133900191227           END-EXEC.
+134000191226
+134100191226           MOVE SQLSTATE to lc_SQLSTATES
+134200191226
+134300191226           EVALUATE TRUE
+134400191227
+134500191226           WHEN lncc_SqlSuccessful OR lncc_SQLWarning
+134600191226            DISPLAY "Inv. Code " "Fund Code " "Rec. Date " "Pymt. Date."
+134700191226            SET DISDCPIDX TO 1
+134800191226            PERFORM VARYING DISDCPIDX FROM 1 BY 1 UNTIL
+134900191226             LC_INVESTMENT-CODE(DISDCPIDX) = SPACES OR
+135000191226                                 DISDCPIDX = 100
+135100191226             DISPLAY LC_INVESTMENT-CODE(DISDCPIDX) "     "
+135200191226                      LI_FUND_CODE(DISDCPIDX)       "     "
+135300191226                      LI_RECORD_DATE(DISDCPIDX)     "  "
+135400191226                      LI_PAYMENT_DATE(DISDCPIDX)    "."
+135500191226            END-PERFORM
+135600191226
+135700191226           WHEN lncc_SqlEnd
+135800191226            SET lncc_EndOfFetchYes TO TRUE
+135900191227
+136000191226           WHEN OTHER
+136100191226           SET WS-ERR-47 TO TRUE
+136200191226           MOVE lc_ErrCodeDesc47 TO lc_Error_Desc
+136300191226                                    WS-SQL-ERR-SHORT-DESCR
+136400191226           PERFORM DSP-ERROR
+136500191226           END-EVALUATE.
+136600191226
+136700191226           EXEC SQL
+136800191226             CLOSE CCU_DRVP
+136900191226           END-EXEC.
+137000191226
+137100191226      * RFS1018052 - End
+137200191226
+137300190620       Insert-Final-LDPRCSF2-3.
+137400190620
+137500190620      ** Subfile:LDPRCSF2 processing goes here
+137600190620      ** Control information: AT FINAL
+137700190620
+137800190620           EXEC SQL
+137900190620           INSERT INTO LDPRCSF2
+138000190620           (
+138100190620            Record_Count
+138200190620           )
+138300190620           select (:li_TotRecordcount) from
+138400190620              sysibm/sysdummy1
+138500190620           END-EXEC.
+138600190620
+138700190620
+138800190620      ** Subfile:LDPRCSF3 processing goes here
+138900190620      ** Control information: AT FINAL
+139000190620
+139100190620           EXEC SQL
+139200190620           INSERT INTO LDPRCSF3
+139300190620           (
+139400190620            GT_CREATION_DATE,
+139500190620            RECORD_TYPE_PRI_COUNT,
+139600190620            RECORD_TYPE_PRX_COUNT,
+139700190620            RECORD_TYPE_ACC_COUNT,
+139800190620            RECORD_TYPE_INC_COUNT,
+139900190620            RECORD_TYPE_CAP_COUNT,
+140000190620            RECORD_TYPE_PRI_SUM,
+140100190620            RECORD_TYPE_PRX_SUM,
+140200190620            RECORD_TYPE_ACC_SUM,
+140300190620            RECORD_TYPE_INC_SUM,
+140400190620            RECORD_TYPE_CAP_SUM
+140500190620            )
+140600190620            (SELECT
+140700190620            :lc_PriceDate,
+140800190620            :li_RecordType_PRI_Count,
+140900190620            :li_RecordType_PRX_Count,
+141000190620            :li_RecordType_ACC_Count,
+141100190620            :li_RecordType_INC_Count,
+141200190620            :li_RecordType_CAP_Count,
+141300190620            :li_RecordType_PRI_Summ,
+141400190620            :li_RecordType_PRX_Summ,
+141500190620            :li_RecordType_ACC_Summ,
+141600190620            :li_RecordType_INC_Summ,
+141700190620            :li_RecordType_CAP_Summ
+141800190620
+141900190620              FROM sysibm/sysdummy1)
+142000190620           END-EXEC.
+142100190620
+142200190620       Load-Sweep-Fund.
+142300190620
+142400190620           EXEC SQL
+142500190620           UPDATE MFAINVUPP SET
+142600190620            (CURRENCY, UNIT_PRICE) =
+142700190620            (SELECT INV1.CURRENCY, GRP1.FIXED_PRICE
+142800190620             FROM MFAINVP INV1
+142900190620            INNER JOIN MFAINVGRP GRP1 ON
+143000190620             GRP1.INVESTMENT_GROUP_CODE =
+143100190620             INV1.INVESTMENT_GROUP_CODE
+143200190620            WHERE
+143300190620              INV1.INVESTMENT_STATUS_CODE = "A" and
+143400190620              INV1.PRODUCT_TYPE_CODE = "SWP"),
+143500190620            UNITS = 0,
+143600190620            INTEREST_RATE = 0,
+143700190620            CREATED_BY = "LDPRC",
+143800190620            CREATION_DATE = :li_SysDate,
+143900190620            LAST_UPDATE_DATE = :li_SysDate,
+144000190620           LAST_UPDATED_BY = "LDPRC",
+144100190620           KEYING_STATUS = :lc_Keying_stat
+144200190620           WHERE TRADE_DATE = :T-TRADE-DATE AND
+144300190620                 DISTRIBUTION_FLAG = " " AND
+144400190620                 INVESTMENT_CODE IN
+144500190620                  (SELECT INV.INVESTMENT_CODE
+144600190620                   FROM MFAINVP INV
+144700190620                   INNER JOIN MFAINVGRP GRP ON
+144800190620                    GRP.INVESTMENT_GROUP_CODE =
+144900190620                    INV.INVESTMENT_GROUP_CODE
+145000190620                    WHERE INV.PRODUCT_TYPE_CODE = "SWP" AND
+145100190620                       INV.INVESTMENT_STATUS_CODE = "A")
+145200190620           END-EXEC.
+145300190620
+145400190620           MOVE SQLSTATE to lc_SQLSTATES.
+145500190620
+145600190620           EVALUATE TRUE
+145700190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+145800190620                lncc_SQLWarning
+145900190620               CONTINUE
+146000190620           WHEN OTHER
+146100190620           SET WS-ERR-21 TO TRUE
+146200190620           MOVE lc_ErrCodeDesc21 TO lc_Error_Desc
+146300190710016795                              WS-SQL-ERR-SHORT-DESCR
+146400190620           PERFORM DSP-ERROR
+146500190620           END-EVALUATE.
+146600190620
+146700190620           EXEC SQL
+146800190620           INSERT INTO MFAINVUPP
+146900190620           (
+147000190620            INVESTMENT_CODE,
+147100190620            CURRENCY,
+147200190620            TRADE_DATE,
+147300190620            DISTRIBUTION_FLAG,
+147400190620            UNIT_PRICE,
+147500190620            UNITS,
+147600190620            INTEREST_RATE,
+147700190620            CREATED_BY,
+147800190620            CREATION_DATE,
+147900190620            LAST_UPDATE_DATE,
+148000190620            LAST_UPDATED_BY,
+148100190620            KEYING_STATUS
+148200190620            )
+148300190620           SELECT
+148400190620            INVP.INVESTMENT_CODE,
+148500190620            INVP.CURRENCY,
+148600190620            :T-TRADE-DATE,
+148700190620            " ",
+148800190620            INVGRP.FIXED_PRICE,
+148900190620            0,
+149000190620            0,
+149100190620            "LDPRC",
+149200190620            :li_SysDate,
+149300190620            :li_SysDate,
+149400190620            "LDPRC",
+149500190620            :lc_Keying_Stat
+149600190620           FROM MFAINVP INVP
+149700190620           INNER JOIN MFAINVGRP INVGRP ON
+149800190620             INVGRP.INVESTMENT_GROUP_CODE =
+149900190620             INVP.INVESTMENT_GROUP_CODE
+150000190620           WHERE INVP.PRODUCT_TYPE_CODE = "SWP" AND
+150100190620                 INVP.INVESTMENT_STATUS_CODE = "A"
+150200190620           END-EXEC
+150300190620
+150400190620           MOVE SQLSTATE to lc_SQLSTATES.
+150500190620
+150600190620           EVALUATE TRUE
+150700190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+150800190620                lncc_SQLWarning OR lncc_SQLDuplicate
+150900190620               CONTINUE
+151000190620           WHEN OTHER
+151100190620           SET WS-ERR-22 TO TRUE
+151200190620           MOVE lc_ErrCodeDesc22 TO lc_Error_Desc
+151300190710016795                              WS-SQL-ERR-SHORT-DESCR
+151400190620           PERFORM DSP-ERROR
+151500190620           END-EVALUATE.
+151600190620
+151700190620       DJT-LOAD-PRX.
+151800190620
+151900190620      ** Load the DJT price file for specific clients: DJT, MAE or NWT
+152000190620
+152100190620           EXEC SQL
+152200190620           UPDATE MFAINVUPP INVUPP SET
+152300190620             (CURRENCY, UNIT_PRICE) =
+152400190620    		      (SELECT INV1.CURRENCY,
+152500190620    		       CASE WHEN PRC1.PLUS_MINUS_INDICATOR <> "-" THEN
+152600190620      * RFS 1015927 - begin
+152700190620      *      (PRC1.PRICE_DISTR_RATE_ACCRUAL * 1), 4) ,11,4)
+152800190620              (DECIMAL(ROUND(
+152900190620              (PRC1.PRICE_DISTR_RATE_ACCRUAL * 1), 4),11,4))
+153000190620      *       ELSE (PRC1.PRICE_DISTR_RATE_ACCRUAL * -1) END
+153100190620               ELSE (DECIMAL(ROUND(
+153200190620                 (PRC1.PRICE_DISTR_RATE_ACCRUAL * -1), 4),11,4))
+153300190620             END
+153400190620      * RFS 1015927 - end
+153500190620               FROM MFAPRCDRVP PRC1
+153600190620               INNER JOIN MFAINVP INV1 ON
+153700190620                INV1.INDUSTRY_FUND_CODE = PRC1.INDUSTRY_FUND_CODE
+153800190711016795*        INNER JOIN MFAINVUPP INVUP1 ON
+153900190711016795*         INVUP1.INVESTMENT_CODE = INV1.INVESTMENT_CODE AND
+154000190711016795*         INVUP1.TRADE_DATE = PRC1.PRICE_DISTR_RECORD_DATE AND
+154100190711016795*         INVUP1.DISTRIBUTION_FLAG = "Y"
+154200190620               INNER JOIN MFADISDCP DCP ON
+154300190620		         DCP.INVESTMENT_CODE = INV1.INVESTMENT_CODE AND
+154400190620		         DCP.DISTR_PAYMENT_DATE = PRC1.PRICE_DISTR_RECORD_DATE AND
+154500190711016795*         DCP.DATE_OF_RECORD <> DCP.DISTR_PAYMENT_DATE),
+154600190711016795          DCP.DATE_OF_RECORD <> DCP.DISTR_PAYMENT_DATE
+154700190711016795     WHERE
+154800190711016795      PRC1.RECORD_TYPE_TRANS = "PRI" AND
+154900190711016795      INVUPP.INVESTMENT_CODE = INV1.INVESTMENT_CODE AND
+155000190711016795      INVUPP.TRADE_DATE = PRC1.PRICE_DISTR_RECORD_DATE AND
+155100190711016795      INVUPP.DISTRIBUTION_FLAG = "Y"),
+155200190620             LAST_UPDATE_DATE = :li_SysDate,
+155300190620             LAST_UPDATED_BY = "LDPRC",
+155400190620             KEYING_STATUS = :lc_Keying_Stat
+155500190620           WHERE EXISTS (SELECT 1
+155600190620            FROM MFAPRCDRVP PRCDVP1
+155700190620            INNER JOIN MFAINVP INV2 ON
+155800190620             INV2.INDUSTRY_FUND_CODE =
+155900190620             PRCDVP1.INDUSTRY_FUND_CODE
+156000190620            INNER JOIN MFADISDCP DCP2 ON
+156100190620             DCP2.INVESTMENT_CODE =
+156200190620             INV2.INVESTMENT_CODE AND
+156300190620             DCP2.DISTR_PAYMENT_DATE =
+156400190620             PRCDVP1.PRICE_DISTR_RECORD_DATE AND
+156500190620             DCP2.DATE_OF_RECORD <>
+156600190620             DCP2.DISTR_PAYMENT_DATE
+156700190620            WHERE
+156800190620             PRCDVP1.record_type_trans= "PRI" AND
+156900190620             INVUPP.INVESTMENT_CODE = INV2.INVESTMENT_CODE AND
+157000190620             INVUPP.TRADE_DATE = PRCDVP1.PRICE_DISTR_RECORD_DATE AND
+157100190620             INVUPP.DISTRIBUTION_FLAG = "Y")
+157200190620           END-EXEC.
+157300190620
+157400190620           MOVE SQLSTATE to lc_SQLSTATES.
+157500190620
+157600190620           EVALUATE TRUE
+157700190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+157800190620                lncc_SQLWarning
+157900190620               CONTINUE
+158000190620           WHEN OTHER
+158100190620           SET WS-ERR-23 TO TRUE
+158200190620           MOVE lc_ErrCodeDesc23 TO lc_Error_Desc
+158300190710016795                              WS-SQL-ERR-SHORT-DESCR
+158400190620           PERFORM DSP-ERROR
+158500190620           END-EVALUATE.
+158600190620
+158700190620           EXEC SQL
+158800190620           INSERT INTO MFAINVUPP
+158900190620           (SELECT
+159000190620           INVP1.INVESTMENT_CODE,
+159100190620           INVP1.CURRENCY,
+159200190620           PRCDVP1.PRICE_DISTR_RECORD_DATE,
+159300190620           "Y",
+159400190620           CASE WHEN PRCDVP1.PLUS_MINUS_INDICATOR <> "-" THEN
+159500190712      * RFS 1016795 - Start *
+159600190712      *      (PRCDVP1.PRICE_DISTR_RATE_ACCRUAL * 1)
+159700190712             (DECIMAL(ROUND(
+159800190712             (PRCDVP1.PRICE_DISTR_RATE_ACCRUAL * 1), 4),11,4))
+159900190712      *      ELSE (PRCDVP1.PRICE_DISTR_RATE_ACCRUAL * -1)
+160000190712             ELSE (DECIMAL(ROUND(
+160100190712                  (PRCDVP1.PRICE_DISTR_RATE_ACCRUAL * 1), 4),11,4))
+160200190712      * RFS 1016795 - End   *
+160300190620             END,
+160400190620            0,
+160500190620            0,
+160600190620            "LDPRC",
+160700190620            :li_SysDate,
+160800190620            :li_SysDate,
+160900190620            "LDPRC",
+161000190620            "N"
+161100190620
+161200190620           FROM MFAPRCDRVP PRCDVP1
+161300190620           INNER JOIN MFAINVP INVP1 ON INVP1.INDUSTRY_FUND_CODE =
+161400190620             PRCDVP1.INDUSTRY_FUND_CODE
+161500190620           INNER JOIN MFADISDCP DISDCP ON
+161600190620             DISDCP.DISTR_PAYMENT_DATE =
+161700190620             PRCDVP1.PRICE_DISTR_RECORD_DATE AND
+161800190620             DISDCP.INVESTMENT_CODE = INVP1.INVESTMENT_CODE AND
+161900190620             DISDCP.DATE_OF_RECORD <>
+162000190620             DISDCP.DISTR_PAYMENT_DATE
+162100190620           EXCEPTION JOIN MFAINVUPP INVUPP ON
+162200190620             INVUPP.TRADE_DATE = PRCDVP1.PRICE_DISTR_RECORD_DATE AND
+162300190620             INVUPP.INVESTMENT_CODE = INVP1.INVESTMENT_CODE AND
+162400190620             INVUPP.DISTRIBUTION_FLAG = "Y"
+162500190711016795     WHERE PRCDVP1.RECORD_TYPE_TRANS= "PRI"
+162600190620           )
+162700190620           END-EXEC.
+162800190620
+162900190620           MOVE SQLSTATE to lc_SQLSTATES.
+163000190620
+163100190620           EVALUATE TRUE
+163200190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+163300190620                lncc_SQLWarning OR lncc_SQLDuplicate
+163400190620               CONTINUE
+163500190620           WHEN OTHER
+163600190620           SET WS-ERR-24 TO TRUE
+163700190620           MOVE lc_ErrCodeDesc24 TO lc_Error_Desc
+163800190710016795                              WS-SQL-ERR-SHORT-DESCR
+163900190620           PERFORM DSP-ERROR
+164000190620           END-EVALUATE.
+164100190620
+164200190620
+164300190620       PCA-LOAD-PRICE-IND-LVL.
+164400190620
+164500190620           EXEC SQL
+164600190620           DECLARE CUR_PCA_LOAD_PRICE_IND_LVL CURSOR FOR
+164700190620           SELECT
+164800190620               CASE WHEN PRCDVP.CURRENCY_INDICATOR IN (" ", "00")
+164900190620               THEN "CAD"
+165000190620               ELSE "USD" END AS CURR_CODE,
+165100190620               PRCDVP.CURRENCY_INDICATOR,
+165200190620               CASE WHEN PRCDVP.MGMT_COMPANY_SPECIFIC = "BUY"
+165300190620               THEN "B"
+165400190620               WHEN PRCDVP.MGMT_COMPANY_SPECIFIC = "SEL"
+165500190620               THEN "S"
+165600190620               ELSE "N" END AS EXCH_RATE_TYPE,
+165700190620               PRCDVP.PLUS_MINUS_INDICATOR,
+165800190620               CASE WHEN PRCDVP.PLUS_MINUS_INDICATOR <> "-"
+165900190620               THEN (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1)
+166000190620               ELSE (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * -1) END
+166100190620                  AS PRICE_DISTR_ACCRUAL,
+166200190620      * RFS 1015927 - begin
+166300190620               CASE WHEN PRCDVP.PLUS_MINUS_INDICATOR <> "-"
+166400190620      *        THEN (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1)
+166500190620               THEN (DECIMAL(ROUND(
+166600190620               (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1) ,4) ,11, 4))
+166700190620               ELSE
+166800190620      *          (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * -1) END
+166900190620               (DECIMAL(ROUND(
+167000190620                 (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1), 4), 11,4))
+167100190620                END
+167200190620                 AS UNIT_PRICE,
+167300190620      * RFS 1015927 - end
+167400200303      * RFS#1081347 - Start
+167500200303081347         CASE WHEN PRCDVP.PLUS_MINUS_INDICATOR <> "-"
+167600200303081347*        THEN (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1)
+167700200303081347         THEN DECIMAL(ROUND(
+167800200303081347              (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1), 6), 9, 6)
+167900200303081347         ELSE
+168000200303081347*         (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * -1) END
+168100200303081347              DECIMAL(ROUND(
+168200200303081347              (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * -1), 6), 9, 6)
+168300200303081347*           AS DISTR_RATE,
+168400200303081347         END AS DISTR_RATE,
+168500200303      * RFS#1081347 - End
+168600190620               CASE WHEN PRCDVP.PLUS_MINUS_INDICATOR <> "-"
+168700190620               THEN (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1)
+168800190620               ELSE
+168900190620                (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * -1) END
+169000190620                  AS INTEREST_RATE,
+169100190620               CASE WHEN PRCDVP.RECORD_TYPE_TRANS = "EXC"
+169200190620               THEN PRCDVP.PRICE_DISTR_RATE_ACCRUAL
+169300190620               ELSE 0 END AS EXCH_RATE,
+169400190620               PRCDVP.RECORD_TYPE_TRANS,
+169500190620               PRCDVP.MGMT_COMPANY_SPECIFIC,
+169600190620               PRCDVP.PRICE_DISTR_RECORD_DATE,
+169700190620               PRCDVP.DISTR_PAYMENT_DATE,
+169800190620               COALESCE(INVLPP.UNIT_PRICE, 0),
+169900190620               COALESCE(INVGRP.PRICING_VARIANCE, 0),
+170000190620               COALESCE(INV.INVESTMENT_CODE, " "),
+170100190620               COALESCE(INVGRP.INVESTMENT_GROUP_CODE, " "),
+170200190620               CASE WHEN AUTSTP.AUTHORIZATION_CODE = "BIGPRC"
+170300190620               THEN "Y" ELSE "N" END AS BIGPRC_AUTH,
+170400190620               PRCDVP.RECORD_ID,
+170500190620               PRCDVP.PRICE_STATUS_INDICATOR,
+170600190620               PRCDVP.MANAGEMENT_COMPANY_CODE,
+170700190620               PRCDVP.INDUSTRY_FUND_CODE,
+170800190620               PRCDVP.PRICE_DISTR_RATE_ACCRUAL,
+170900190620               PRCDVP.DISTR_PAYMENT_DATE
+171000190620
+171100190620           FROM MFAPRCDRVP PRCDVP
+171200190620           LEFT OUTER JOIN MFAINVP INV ON
+171300190620                INV.INDUSTRY_FUND_CODE =
+171400190620                PRCDVP.INDUSTRY_FUND_CODE
+171500190620           LEFT OUTER JOIN MFAINVGRP INVGRP ON
+171600190620                INVGRP.INVESTMENT_GROUP_CODE =
+171700190620                INV.INVESTMENT_GROUP_CODE
+171800190620           LEFT OUTER JOIN MFAINVLPP INVLPP ON
+171900190620                INVLPP.TRADE_DATE = :li_AsAtDate     AND
+172000190620                INVLPP.INVESTMENT_CODE = INV.INVESTMENT_CODE
+172100190620           LEFT OUTER JOIN MFAAUTSTP AUTSTP ON
+172200190620                AUTSTP.USER = :lc_PRC_LogID AND
+172300190620                AUTSTP.AUTHORIZATION_CODE = "BIGPRC"
+172400190620           WHERE INVGRP.PRICE_LEVEL = "I"   OR
+172500190620                 PRCDVP.RECORD_TYPE_TRANS = "EXC"
+172600190620           END-EXEC.
+172700190620
+172800190620           MOVE SQLSTATE to lc_SQLSTATES.
+172900190620
+173000190620           EVALUATE TRUE
+173100190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+173200190620                lncc_SQLWarning
+173300190620               CONTINUE
+173400190620           WHEN OTHER
+173500190620           SET WS-ERR-25 TO TRUE
+173600190620           MOVE lc_ErrCodeDesc25 TO lc_Error_Desc
+173700190710016795                              WS-SQL-ERR-SHORT-DESCR
+173800190620           PERFORM DSP-ERROR
+173900190620           END-EVALUATE.
+174000190620
+174100190620           EXEC SQL
+174200190620              OPEN CUR_PCA_LOAD_PRICE_IND_LVL
+174300190620           END-EXEC.
+174400190620
+174500190620           MOVE SQLSTATE to lc_SQLSTATES.
+174600190620
+174700190620           EVALUATE TRUE
+174800190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+174900190620                lncc_SQLWarning
+175000190620               CONTINUE
+175100190620           WHEN OTHER
+175200190620           SET WS-ERR-26 TO TRUE
+175300190620           MOVE lc_ErrCodeDesc26 TO lc_Error_Desc
+175400190710016795                              WS-SQL-ERR-SHORT-DESCR
+175500190620           PERFORM DSP-ERROR
+175600190620           END-EVALUATE.
+175700190620
+175800190620           SET lncc_EndOfFetchNo TO TRUE.
+175900190620           PERFORM Fetch-Cur-PCA-Load-Ind-Price
+176000190620                        UNTIL lncc_EndOfFetchYes.
+176100190620
+176200190620       FETCH-Cur-PCA-Load-Ind-Price.
+176300190620
+176400190620           EXEC SQL
+176500190620           FETCH CUR_PCA_LOAD_PRICE_IND_LVL
+176600190620             INTO :ct_FetchCur_LoadPrices
+176700190620           END-EXEC.
+176800190620
+176900190620           MOVE SQLSTATE to lc_SQLSTATES.
+177000190620
+177100190620           EVALUATE TRUE
+177200190620           WHEN lncc_SqlSuccessful OR
+177300190620                lncc_SQLWarning
+177400190620               PERFORM PROCESS-Fetch-Recs-PCA-Ind
+177500190620           WHEN lncc_SqlEnd
+177600190620            SET lncc_EndOfFetchYes TO TRUE
+177700190620           WHEN OTHER
+177800190620           SET WS-ERR-27 TO TRUE
+177900190620           MOVE lc_ErrCodeDesc27 TO lc_Error_Desc
+178000190710016795                              WS-SQL-ERR-SHORT-DESCR
+178100190620           PERFORM DSP-ERROR
+178200190620           END-EVALUATE.
+178300190620
+178400190620
+178500190620       PROCESS-Fetch-Recs-PCA-Ind.
+178600190620           IF lcu_InvCode IS EQUAL TO SPACES AND
+178700190620              lcu_Record_Type_Trans IS NOT EQUAL TO "EXC"
+178800190620            MOVE 1 TO li_ERROR_CODE1
+178900190620           ELSE
+179000190620            MOVE 0 TO li_ERROR_CODE1
+179100190620           END-IF.
+179200190620
+179300190620           IF liu_Price_Distr_RecordDate IS EQUAL TO ZEROES
+179400190620            MOVE 1 TO li_ERROR_CODE2
+179500190620           ELSE
+179600190620            MOVE 0 TO li_ERROR_CODE2
+179700190620           END-IF.
+179800190620
+179900190620
+180000190620           IF LIU_PRICE_DISTR_RATEACCRUAL IS EQUAL to ZEROES
+180100190620            MOVE 1 TO li_ERROR_CODE3
+180200190620           ELSE
+180300190620            MOVE 0 TO li_ERROR_CODE3
+180400190620           END-IF.
+180500190620
+180600190620           IF (lcu_Record_Type_Trans IS EQUAL TO "DIS" OR
+180700190620               lcu_Record_Type_Trans IS EQUAL TO "INC" OR
+180800190620               lcu_Record_Type_Trans IS EQUAL TO "CAP") AND
+180900190620               liu_Distr_PaymentDate IS EQUAL TO ZEROES
+181000190620            MOVE 1 TO li_ERROR_CODE4
+181100190620           ELSE
+181200190620            MOVE 0 TO li_ERROR_CODE4
+181300190620           END-IF.
+181400190620
+181500190620           IF lcu_Plus_Minus_Ind IS NOT EQUAL "-" AND "+"
+181600190620            MOVE 1 TO li_ERROR_CODE5
+181700190620           ELSE
+181800190620            MOVE 0 TO li_ERROR_CODE5
+181900190620           END-IF.
+182000190620
+182100190620
+182200190620           IF lcu_CurrInd IS NOT EQUAL TO " " AND "00" AND "01"
+182300190620            MOVE 1 TO li_ERROR_CODE6
+182400190620           ELSE
+182500190620            MOVE 0 TO li_ERROR_CODE6
+182600190620           END-IF.
+182700190620
+182800190620           IF lcu_Record_type_Trans IS EQUAL TO "DIS" AND
+182900190620              (lcu_Mgmt_Spec IS NOT EQUAL TO "INC" AND "CPG")
+183000190620            MOVE 1 TO li_ERROR_CODE7
+183100190620           ELSE
+183200190620            MOVE 0 TO li_ERROR_CODE7
+183300190620           END-IF.
+183400190620
+183500190620           IF lcu_Record_type_Trans IS EQUAL TO "EXC" AND
+183600190620              (lcu_Mgmt_Spec IS NOT EQUAL TO "BUY" AND "SEL" AND "N"
+183700190620                        AND " ")
+183800190620            MOVE 1 TO li_ERROR_CODE8
+183900190620           ELSE
+184000190620            MOVE 0 TO li_ERROR_CODE8
+184100190620           END-IF.
+184200190620
+184300190620           COMPUTE T-PRICE-DIFF =
+184400190620               (liu_Unit_price - liu_Last_Unitprc).
+184500190620
+184600190620           IF T-PRICE-DIFF < 0
+184700190620              COMPUTE T-PRICE-DIFF = T-PRICE-DIFF * -1
+184800190620           END-IF.
+184900190620
+185000190620           COMPUTE T-PRICE-VAR ROUNDED =
+185100190620               (liu_Last_Unitprc *
+185200190620               (liu_Pricing_Var / 100)).
+185300190620
+185400190620           IF (lcu_Record_type_Trans IS EQUAL TO "PRX" OR "PRI") AND
+185500190620              liu_Last_UnitPrc > 0 AND
+185600190620              T-Price-Diff > T-PRICE-VAR
+185700190620            MOVE 1 TO li_ERROR_CODE9
+185800190620           ELSE
+185900190620            MOVE 0 TO li_ERROR_CODE9
+186000190620           END-IF.
+186100190620
+186200190620           INITIALIZE li_Prev_ExchRate.
+186300190620
+186400190620           EXEC SQL
+186500190620             SELECT EXR.Exchange_Rate
+186600190620             INTO
+186700190620               :li_Prev_ExchRate
+186800190620             FROM MFAEXRHMP EXR
+186900190620             WHERE EXR.TRADE_DATE = :li_LstPrcDte  AND
+187000190620                   EXR.CURRENCY = :lcu_CurrCode AND
+187100190620                   EXR.EXCHANGE_RATE_TYPE = :lcu_ExchRate_Type
+187200190620           END-EXEC.
+187300190620
+187400190620           COMPUTE li_Exch_Diff =
+187500190620               (liu_Exch_Rate - li_Prev_ExchRate).
+187600190620
+187700190620           IF li_Exch_Diff < 0
+187800190620              COMPUTE li_Exch_Diff = li_Exch_Diff * -1
+187900190620           END-IF.
+188000190620
+188100190620           COMPUTE li_Exch_Var ROUNDED =
+188200190620              (li_Prev_ExchRate * (li_ExchRateVar / 100)).
+188300190620
+188400190620           EXEC SQL
+188500190620           SELECT "Y"
+188600190620           INTO :lc_CurrencyExist
+188700190620           FROM MFACURP CUR
+188800190620           WHERE CUR.CURRENCY = :lcu_CurrCode
+188900190620           END-EXEC.
+189000190620
+189100190620           IF lcu_Record_Type_trans = "EXC" AND
+189200190620              li_Prev_ExchRate IS NOT EQUAL TO 0 AND
+189300190620              li_Exch_Diff > li_Exch_Var AND
+189400190620              lncc_CurrencyExistNo
+189500190620            MOVE 1 TO li_ERROR_CODE10
+189600190620           ELSE
+189700190620            MOVE 0 TO li_ERROR_CODE10
+189800190620           END-IF.
+189900190620
+190000190620           IF lcu_Record_type_trans = "EXC" AND
+190100190620              lncc_CurrencyExistNo AND
+190200190620              lc_Report_EXC IS EQUAL TO "Y"
+190300190620            MOVE 1 TO li_ERROR_CODE11
+190400190620           ELSE
+190500190620            MOVE 0 TO li_ERROR_CODE11
+190600190620           END-IF.
+190700190620
+190800190620           MOVE 0 TO li_ERROR_CODE12.
+190900190620           COMPUTE li_Error_Code = li_ERROR_CODE1 +
+191000190620              li_ERROR_CODE2 + li_ERROR_CODE3 + li_ERROR_CODE4 +
+191100190620              li_ERROR_CODE5 + li_ERROR_CODE6 + li_ERROR_CODE7 +
+191200190620              li_ERROR_CODE8 + li_ERROR_CODE9 + li_ERROR_CODE10 +
+191300190620              li_ERROR_CODE11 + li_ERROR_CODE12.
+191400190620
+191500190620
+191600190620      *    COMPUTE T-UNIT-PRICE =
+191700190620      *        ROUND(T-PRICE-DISTR-RATE-ACCRUAL / 10000) .
+191800190620      *    COMPUTE T-DISTR-RATE =
+191900190620      *        ROUND(T-PRICE-DISTR-RATE-ACCRUAL / 100) .
+192000190620      *    COMPUTE T-INTEREST-RATE =
+192100190620      *        ROUND(T-PRICE-DISTR-RATE-ACCRUAL * 10) .
+192200190620
+192300190620           Compute li_TotRecordCount = li_TotRecordCount + 1.
+192400190620
+192500190620      ** Subfile:LDPRCSF1 processing goes here
+192600190620      ** Control information: IF D-ERROR-CODE <> 0
+192700190620
+192800190620           IF li_Error_Code IS NOT EQUAL ZEROES
+192900190620
+193000190620           EXEC SQL
+193100190620           INSERT INTO LDPRCSF1
+193200190620
+193300190620           VALUES
+193400190620           (
+193500190620           :lcu_RecordID,
+193600190620           :lcu_Record_Type_Trans,
+193700190620           :lcu_Price_StatInd,
+193800190620           :lcu_Mgmt_CompCde,
+193900190620           :lcu_Ind_FundCde,
+194000190620           :liu_Price_Distr_RecordDate,
+194100190620           :liu_Price_Distr_RateAccrual,
+194200190620           :lcu_Plus_Minus_Ind,
+194300190620           :liu_Distr_PaymentDate,
+194400190620           :lcu_CurrInd,
+194500190620           :lcu_Mgmt_Spec,
+194600190620           " ",
+194700190620           :li_ERROR_CODE1,
+194800190620           :li_ERROR_CODE2,
+194900190620           :li_ERROR_CODE3,
+195000190620           :li_ERROR_CODE4,
+195100190620           :li_ERROR_CODE5,
+195200190620           :li_ERROR_CODE6,
+195300190620           :li_ERROR_CODE7,
+195400190620           :li_ERROR_CODE8,
+195500190620           :li_ERROR_CODE9,
+195600190620           :li_ERROR_CODE10,
+195700190620           :li_ERROR_CODE11,
+195800190620           :li_ERROR_CODE12)
+195900190620           END-EXEC
+196000190620
+196100190620           END-IF.
+196200190620
+196300190620
+196400190620           IF lcu_Record_Type_Trans IS EQUAL TO "PRI" AND
+196500190620              (li_ERROR_CODE IS EQUAL TO 0 OR
+196600190620               (li_ERROR_CODE IS EQUAL TO 1 AND
+196700190620                li_ERROR_CODE9 IS EQUAL TO 1 AND
+196800190620                lcu_BIGPRC_AuthInd IS EQUAL TO "Y"))
+196900190620
+197000190620            COMPUTE li_RecordType_PRI_Count=li_RecordType_PRI_Count
+197100190620                    + 1
+197200190620            COMPUTE li_RecordType_PRI_SUMM = li_RecordType_PRI_Summ
+197300190620                    +  liu_Unit_price
+197400190620           END-IF.
+197500190620
+197600190620
+197700190620           IF lcu_Record_Type_Trans IS EQUAL TO "PRX" AND
+197800190620              (li_ERROR_CODE IS EQUAL TO 0 OR
+197900190620               (li_ERROR_CODE IS EQUAL TO 1 AND
+198000190620                li_ERROR_CODE9 IS EQUAL TO 1 AND
+198100190620                lcu_BIGPRC_AuthInd IS EQUAL TO "Y"))
+198200190620
+198300190620            COMPUTE li_RecordType_PRX_Count =li_RecordType_PRX_Count
+198400190620                    + 1
+198500190620            COMPUTE li_RecordType_PRX_SUMM = li_RecordType_PRX_Summ
+198600190620                    +  liu_Unit_price
+198700190620           END-IF.
+198800190620
+198900190620           IF lcu_Record_Type_Trans IS EQUAL TO "ACC"
+199000190620            COMPUTE li_RecordType_ACC_Count=li_RecordType_ACC_Count
+199100190620                    + 1
+199200190620            COMPUTE li_RecordType_ACC_SUMM = li_RecordType_ACC_Summ
+199300190620                    +  liu_Interest_Rate
+199400190620           END-IF.
+199500190620
+199600190620           IF lcu_Record_Type_Trans IS EQUAL TO "INC"
+199700190620            COMPUTE li_RecordType_INC_Count =li_RecordType_INC_Count
+199800190620                    + 1
+199900190620            COMPUTE li_RecordType_INC_SUMM = li_RecordType_INC_Summ
+200000190620                    +  liu_Distr_Rate
+200100190620           END-IF.
+200200190620
+200300190620           IF lcu_Record_Type_Trans IS EQUAL TO "CAP"
+200400190620            COMPUTE li_RecordType_CAP_Count =li_RecordType_CAP_Count
+200500190620                    + 1
+200600190620            COMPUTE li_RecordType_CAP_SUMM = li_RecordType_CAP_Summ
+200700190620                    +  liu_Distr_Rate
+200800190620           END-IF.
+200900190620
+201000190620           IF lc_SUPSGN_Edit IS EQUAL TO "Y"
+201100190620            MOVE "Y" TO lc_Keying_Stat
+201200190620           ELSE
+201300190620            MOVE "N" TO lc_Keying_Stat
+201400190620           END-IF.
+201500190620
+201600190620           IF li_Error_Code = 0 AND
+201700190620              lcu_Record_type_Trans = "PRI"
+201800190620
+201900190620           EXEC SQL
+202000190620           UPDATE MFAINVUPP SET
+202100190620           (
+202200190620           CURRENCY,
+202300190620           UNIT_PRICE,
+202400190620           UNITS,
+202500190620           CREATED_BY,
+202600190620           CREATION_DATE,
+202700190620           LAST_UPDATE_DATE,
+202800190620           LAST_UPDATED_BY,
+202900190620           KEYING_STATUS
+203000190620           ) =
+203100190620           (
+203200190620            :lcu_CurrCode,
+203300190620            :liu_Unit_price,
+203400190620            0,
+203500190620            "LDPRC",
+203600190620            :li_SysDate,
+203700190620            :li_SysDate,
+203800190620            "LDPRC",
+203900190620            :lc_Keying_Stat
+204000190620           )
+204100190620           WHERE INVESTMENT_CODE = :lcu_InvCode AND
+204200190620                 TRADE_DATE = :liu_Price_Distr_REcordDate AND
+204300190620                 DISTRIBUTION_FLAG = " "
+204400190620
+204500190620           END-EXEC
+204600190620
+204700190620           MOVE SQLSTATE to lc_SQLSTATES
+204800190620
+204900190620           EVALUATE TRUE
+205000190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+205100190620                lncc_SQLWarning
+205200190620               CONTINUE
+205300190620           WHEN OTHER
+205400190620           SET WS-ERR-28 TO TRUE
+205500190620           MOVE lc_ErrCodeDesc28 TO lc_Error_Desc
+205600190710016795                              WS-SQL-ERR-SHORT-DESCR
+205700190620           PERFORM DSP-ERROR
+205800190620           END-EVALUATE
+205900190620
+206000190620
+206100190620           EXEC SQL
+206200190620           INSERT INTO MFAINVUPP VALUES
+206300190620           (
+206400190620           :lcu_InvCode,
+206500190620           :lcu_CurrCode,
+206600190620           :liu_Price_Distr_RecordDate,
+206700190620            " ",
+206800190620           :liu_Unit_price,
+206900190620           0,
+207000190620           0,
+207100190620           "LDPRC",
+207200190620           :li_SysDate,
+207300190620           :li_SysDate,
+207400190620           "LDPRC",
+207500190620           :lc_Keying_Stat
+207600190620           )
+207700190620           END-EXEC
+207800190620
+207900190620           MOVE SQLSTATE to lc_SQLSTATES
+208000190620
+208100190620           EVALUATE TRUE
+208200190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+208300190620                lncc_SQLWarning OR lncc_SQLDuplicate
+208400190620               CONTINUE
+208500190620           WHEN OTHER
+208600190620           SET WS-ERR-29 TO TRUE
+208700190620           MOVE lc_ErrCodeDesc29 TO lc_Error_Desc
+208800190710016795                              WS-SQL-ERR-SHORT-DESCR
+208900190620           PERFORM DSP-ERROR
+209000190620           END-EVALUATE
+209100190620
+209200190620           END-IF.
+209300190620
+209400190620           IF li_Error_Code = 0 AND
+209500190620              lcu_Record_type_Trans = "ACC"
+209600190620           EXEC SQL
+209700190620           UPDATE MFAINVUPP SET
+209800190620           (
+209900190620           INTEREST_RATE
+210000190620           ) =
+210100190620           (
+210200190620            :liu_Interest_Rate
+210300190620           )
+210400190620           WHERE INVESTMENT_CODE = :lcu_InvCode AND
+210500190620                 TRADE_DATE = :liu_Price_Distr_RecordDate AND
+210600190620                 DISTRIBUTION_FLAG = " "
+210700190620           END-EXEC
+210800190620
+210900190620           MOVE SQLSTATE to lc_SQLSTATES
+211000190620
+211100190620           EVALUATE TRUE
+211200190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+211300190620                lncc_SQLWarning
+211400190620               CONTINUE
+211500190620           WHEN OTHER
+211600190620           SET WS-ERR-30 TO TRUE
+211700190620           MOVE lc_ErrCodeDesc30 TO lc_Error_Desc
+211800190710016795                              WS-SQL-ERR-SHORT-DESCR
+211900190620           PERFORM DSP-ERROR
+212000190620           END-EVALUATE
+212100190620
+212200190620           END-IF.
+212300190620
+212400190620           IF (li_Error_Code = 0 OR
+212500190620              (li_Error_Code = 1 AND li_Error_Code9 = 1 AND
+212600190620              lcu_BIGPRC_AuthInd = "Y")) AND
+212700190620              lcu_Record_type_Trans = "PRX"
+212800190620
+212900190620           EXEC SQL
+213000190620           UPDATE MFAINVUPP SET
+213100190620           (
+213200190620           CURRENCY,
+213300190620           UNIT_PRICE,
+213400190620           UNITS,
+213500190620           CREATED_BY,
+213600190620           CREATION_DATE,
+213700190620           LAST_UPDATE_DATE,
+213800190620           LAST_UPDATED_BY,
+213900190620           KEYING_STATUS
+214000190620           ) =
+214100190620           (
+214200190620           :lcu_CurrCode,
+214300190620           :liu_Unit_price,
+214400190620           0,
+214500190620           "LDPRC",
+214600190620           :li_sysdate,
+214700190620           :li_sysDate,
+214800190620           "LDPRC",
+214900190620           :lc_Keying_stat
+215000190620           )
+215100190620           WHERE INVESTMENT_CODE = :lcu_InvCode AND
+215200190620                 TRADE_DATE = :liu_Price_Distr_RecordDate AND
+215300190620                 DISTRIBUTION_FLAG = "Y"
+215400190620           END-EXEC
+215500190620
+215600190620
+215700190620           MOVE SQLSTATE to lc_SQLSTATES
+215800190620
+215900190620           EVALUATE TRUE
+216000190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+216100190620                lncc_SQLWarning
+216200190620               CONTINUE
+216300190620           WHEN OTHER
+216400190620           SET WS-ERR-31 TO TRUE
+216500190620           MOVE lc_ErrCodeDesc31 TO lc_Error_Desc
+216600190710016795                              WS-SQL-ERR-SHORT-DESCR
+216700190620           PERFORM DSP-ERROR
+216800190620           END-EVALUATE
+216900190620
+217000190620
+217100190620           EXEC SQL
+217200190620           INSERT INTO MFAINVUPP VALUES
+217300190620           (
+217400190620           :lcu_InvCode,
+217500190620           :lcu_CurrCode,
+217600190620           :liu_Price_Distr_RecordDate,
+217700190620            "Y",
+217800190620           :liu_Unit_price,
+217900190620           0,
+218000190620           0,
+218100190620           "LDPRC",
+218200190620           :li_SysDate,
+218300190620           :li_SysDate,
+218400190620           "LDPRC",
+218500190620           :lc_Keying_Stat
+218600190620           )
+218700190620           END-EXEC
+218800190620
+218900190620           MOVE SQLSTATE to lc_SQLSTATES
+219000190620
+219100190620           EVALUATE TRUE
+219200190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+219300190620                lncc_SQLWarning OR lncc_SQLDuplicate
+219400190620               CONTINUE
+219500190620           WHEN OTHER
+219600190620           SET WS-ERR-32 TO TRUE
+219700190620           MOVE lc_ErrCodeDesc32 TO lc_Error_Desc
+219800190710016795                              WS-SQL-ERR-SHORT-DESCR
+219900190620           PERFORM DSP-ERROR
+220000190620           END-EVALUATE
+220100190620
+220200190620           END-IF.
+220300190620
+220400190620           IF li_Error_Code = 0 AND
+220500190620             (lcu_Record_type_trans IS EQUAL TO "DIS" OR
+220600190620                 "INC" OR "CAP")
+220700190620
+220800190620           IF ((lcu_Record_Type_Trans IS EQUAL TO "DIS" AND
+220900190620                  lcu_Mgmt_Spec IS EQUAL TO "CPG") OR
+221000190620                  lcu_Record_Type_Trans IS EQUAL TO "CAP")
+221100190620
+221200190620           EXEC SQL
+221300190620           UPDATE MFADISDCP SET
+221400190620           (
+221500190620           CAPITAL_GAIN_DISTR_RATE,
+221600190620           CURRENCY,
+221700190620           CONFIRM,
+221800190620           EXPECTED_DISTRIBUTION_AMOUNT,
+221900190620           KEYING_STATUS,
+222000190620           DAF_RATE
+222100190620           ) =
+222200190620            (
+222300190620            :liu_Distr_Rate,
+222400190620            :lcu_CurrCode,
+222401211006      *RFS186903 - Starts
+222500211006      *     "N",
+222501211006            :lc_Confirm,
+222502211006      *RFS186903 - Ends
+222600190620            0,
+222700190620            "N",
+222800190620            0
+222900190620            )
+223000190620           WHERE INVESTMENT_CODE = :lcu_InvCode AND
+223100190620                 DATE_OF_RECORD = :liu_Price_Distr_RecordDate
+223200190620                  AND
+223300190620                 DISTR_PAYMENT_DATE = :liu_Distr_PaymentDate
+223400190620                 AND
+223500190620                 ((:lcu_Record_Type_Trans = "DIS" AND
+223600190620                  :lcu_Mgmt_Spec = "CPG") OR
+223700190620                  :lcu_Record_Type_Trans = "CAP")
+223800190620           END-EXEC
+223900190620
+224000190620           MOVE SQLSTATE to lc_SQLSTATES
+224100190620
+224200190620           EVALUATE TRUE
+224300190620           WHEN lncc_SqlSuccessful OR
+224400190620                lncc_SQLWarning
+224500190620               CONTINUE
+224600190620           WHEN OTHER
+224700190620           SET WS-ERR-33 TO TRUE
+224800190620           MOVE lc_ErrCodeDesc33 TO lc_Error_Desc
+224900190710016795                              WS-SQL-ERR-SHORT-DESCR
+225000190620           PERFORM DSP-ERROR
+225100190620           PERFORM FORCE-MSGW
+225200190620           END-EVALUATE
+225300190620
+225400190620           END-IF
+225500190620
+225600190620            IF ((lcu_Record_Type_Trans IS EQUAL TO "DIS" AND
+225700190620                  lcu_Mgmt_Spec IS EQUAL TO "INC") OR
+225800190620                  lcu_Record_Type_Trans IS EQUAL TO "INC")
+225900190620           EXEC SQL
+226000190620           UPDATE MFADISDCP SET
+226100190620           (
+226200190620           INCOME_DISTR_RATE,
+226300190620           CURRENCY,
+226400190620           CONFIRM,
+226500190620           EXPECTED_DISTRIBUTION_AMOUNT,
+226600190620           KEYING_STATUS,
+226700190620           DAF_RATE
+226800190620           ) =
+226900190620           (
+227000190620           :liu_Distr_Rate,
+227100190620           :lcu_CurrCode,
+227101211006      *RFS186903 - Starts
+227200211006      *    "N",
+227201211006           :lc_Confirm,
+227202211006      *RFS186903 - Ends
+227300190620           0,
+227400190620           "N",
+227500190620           0
+227600190620           )
+227700190620           WHERE INVESTMENT_CODE = :lcu_InvCode AND
+227800190620                 DATE_OF_RECORD = :liu_Price_Distr_RecordDate
+227900190620                  AND
+228000190620                 DISTR_PAYMENT_DATE = :liu_Distr_PaymentDate
+228100190620                  AND
+228200190620                 ((:lcu_Record_Type_Trans = "DIS" AND
+228300190620                  :lcu_Mgmt_Spec = "INC") OR
+228400190620                  :lcu_Record_Type_Trans = "INC")
+228500190620           END-EXEC
+228600190620
+228700190620           MOVE SQLSTATE to lc_SQLSTATES
+228800190620
+228900190620           EVALUATE TRUE
+229000190620           WHEN lncc_SqlSuccessful OR
+229100190620                lncc_SQLWarning
+229200190620               CONTINUE
+229300190620           WHEN OTHER
+229400190620           SET WS-ERR-33 TO TRUE
+229500190620           MOVE lc_ErrCodeDesc33 TO lc_Error_Desc
+229600190710016795                              WS-SQL-ERR-SHORT-DESCR
+229700190620           PERFORM DSP-ERROR
+229800190620           PERFORM FORCE-MSGW
+229900190620           END-EVALUATE
+230000190620
+230100190620           END-IF
+230200190620
+230300190620           END-IF.
+230400190620
+230500190620           IF li_Error_Code IS EQUAL TO 0 AND
+230600190620              lcu_Record_Type_Trans IS EQUAL TO "EXC"
+230700190620
+230800190620
+230900190620           EXEC SQL
+231000190620           UPDATE MFAEXRHMP SET
+231100190620           (
+231200190620           EXCHANGE_RATE,
+231300190620           CREATED_BY,
+231400190620           CREATION_DATE,
+231500190620           LAST_UPDATE_DATE,
+231600190620           LAST_UPDATED_BY,
+231700190620           KEYING_STATUS
+231800190620           ) =
+231900190620           (
+232000190620           :liu_Exch_Rate,
+232100190620           "LDPRC",
+232200190620           :li_SysDate,
+232300190620           :li_SysDate,
+232400190620           "LDPRC",
+232500190620           "N"
+232600190620           )
+232700190620           where CURRENCY = :lcu_CurrCode AND
+232800190620                 TRADE_DATE = :liu_Price_Distr_RecordDate AND
+232900190620                 EXCHANGE_RATE_TYPE = :lcu_ExchRate_Type
+233000190620           END-EXEC
+233100190620
+233200190620           MOVE SQLSTATE to lc_SQLSTATES
+233300190620
+233400190620           EVALUATE TRUE
+233500190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+233600190620                lncc_SQLWarning
+233700190620               CONTINUE
+233800190620           WHEN OTHER
+233900190620           SET WS-ERR-34 TO TRUE
+234000190620           MOVE lc_ErrCodeDesc34 TO lc_Error_Desc
+234100190710016795                              WS-SQL-ERR-SHORT-DESCR
+234200190620           PERFORM DSP-ERROR
+234300190620           END-EVALUATE
+234400190620
+234500190620           EXEC SQL
+234600190620           INSERT INTO MFAEXRHMP VALUES
+234700190620           (
+234800190620            :liu_Price_Distr_RecordDate,
+234900190620            :lcu_CurrCode,
+235000190620            :lcu_ExchRate_Type,
+235100190620            :liu_Exch_Rate,
+235200190620            "LDPRC",
+235300190620            :li_SysDate,
+235400190620            :li_SysDate,
+235500190620            "LDPRC",
+235600190620            "N"
+235700190620           )
+235800190620           END-EXEC
+235900190620
+236000190620           MOVE SQLSTATE to lc_SQLSTATES
+236100190620
+236200190620           EVALUATE TRUE
+236300190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+236400190620                lncc_SQLWarning OR lncc_SQLDuplicate
+236500190620               CONTINUE
+236600190620           WHEN OTHER
+236700190620           SET WS-ERR-35 TO TRUE
+236800190620           MOVE lc_ErrCodeDesc35 TO lc_Error_Desc
+236900190710016795                              WS-SQL-ERR-SHORT-DESCR
+237000190620           PERFORM DSP-ERROR
+237100190620           END-EVALUATE
+237200190620
+237300190620           END-IF.
+237400190620
+237500190620       PCA-LOAD-PRICE-GROUP-LVL.
+237600190620
+237700190620           EXEC SQL
+237800190620           DECLARE CUR_PCA_LOAD_PRICE_GROUP_LVL CURSOR FOR
+237900190620           SELECT
+238000190620               CASE WHEN PRCDVP.CURRENCY_INDICATOR IN (" ", "00")
+238100190620               THEN "CAD"
+238200190620               ELSE "USD" END AS CURR_CODE,
+238300190620               PRCDVP.CURRENCY_INDICATOR,
+238400190620               CASE WHEN PRCDVP.MGMT_COMPANY_SPECIFIC = "BUY"
+238500190620               THEN "B"
+238600190620               WHEN PRCDVP.MGMT_COMPANY_SPECIFIC = "SEL"
+238700190620               THEN "S"
+238800190620               ELSE "N" END AS EXCH_RATE_TYPE,
+238900190620               PRCDVP.PLUS_MINUS_INDICATOR,
+239000190620               CASE WHEN PRCDVP.PLUS_MINUS_INDICATOR <> "-"
+239100190620               THEN (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1)
+239200190620               ELSE (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * -1) END
+239300190620                  AS PRICE_DISTR_ACCRUAL,
+239400190620               CASE WHEN PRCDVP.PLUS_MINUS_INDICATOR <> "-"
+239500190620      * RFS 1015927 - begin
+239600190620      *        THEN (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1)
+239700190620               THEN DECIMAL(ROUND(
+239800190620                (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1), 4), 11,4)
+239900190620               ELSE
+240000190620      *             (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * -1) END
+240100190620               DECIMAL(ROUND(
+240200190620                 (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1), 4), 11,4)
+240300190620                END
+240400190620      * RFS 1015927 - end
+240500190620                 AS UNIT_PRICE,
+240600200303      * RFS#1081347 - Start
+240700200303081347         CASE WHEN PRCDVP.PLUS_MINUS_INDICATOR <> "-"
+240800200303081347*        THEN (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1)
+240900200303081347         THEN DECIMAL(ROUND(
+241000200303081347              (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1), 6), 9, 6)
+241100200303081347         ELSE
+241200200303081347*             (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * -1) END
+241300200303081347              DECIMAL(ROUND(
+241400200303081347              (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * -1), 6), 9, 6)
+241500200303081347*           AS DISTR_RATE,
+241600200303081347         END AS DISTR_RATE,
+241700200303      * RFS#1081347 - Start
+241800190620               CASE WHEN PRCDVP.PLUS_MINUS_INDICATOR <> "-"
+241900190620               THEN (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * 1)
+242000190620               ELSE
+242100190620                    (PRCDVP.PRICE_DISTR_RATE_ACCRUAL * -1) END
+242200190620                  AS INTEREST_RATE,
+242300190620               CASE WHEN PRCDVP.RECORD_TYPE_TRANS = "EXC"
+242400190620               THEN PRCDVP.PRICE_DISTR_RATE_ACCRUAL
+242500190620               ELSE 0 END AS EXCH_RATE,
+242600190620               PRCDVP.RECORD_TYPE_TRANS,
+242700190620               PRCDVP.MGMT_COMPANY_SPECIFIC,
+242800190620               PRCDVP.PRICE_DISTR_RECORD_DATE,
+242900190620               PRCDVP.DISTR_PAYMENT_DATE,
+243000190620               COALESCE(INVLPP.UNIT_PRICE, 0),
+243100190620               COALESCE(INVGRP.PRICING_VARIANCE, 0),
+243200190620               INV2.INVESTMENT_CODE,
+243300190620               INVGRP.INVESTMENT_GROUP_CODE,
+243400190620               CASE WHEN AUTSTP.AUTHORIZATION_CODE = "BIGPRC"
+243500190620               THEN "Y" ELSE "N" END AS BIGPRC_AUTH,
+243600190620               PRCDVP.RECORD_ID,
+243700190620               PRCDVP.PRICE_STATUS_INDICATOR,
+243800190620               PRCDVP.MANAGEMENT_COMPANY_CODE,
+243900190620               PRCDVP.INDUSTRY_FUND_CODE,
+244000190620               PRCDVP.PRICE_DISTR_RATE_ACCRUAL,
+244100190620               PRCDVP.DISTR_PAYMENT_DATE
+244200190620
+244300190620           FROM MFAPRCDRVP PRCDVP
+244400190620           INNER JOIN MFAINVP INV ON
+244500190620                INV.INDUSTRY_FUND_CODE =
+244600190620                PRCDVP.INDUSTRY_FUND_CODE
+244700190620           INNER JOIN MFAINVGRP INVGRP ON
+244800190620                INVGRP.INVESTMENT_GROUP_CODE =
+244900190620                INV.INVESTMENT_GROUP_CODE
+245000190620           INNER JOIN MFAINVP INV2 ON
+245100190620                INV2.INVESTMENT_GROUP_CODE =
+245200190620                INVGRP.INVESTMENT_GROUP_CODE
+245300190620           LEFT OUTER JOIN MFAINVLPP INVLPP ON
+245400190620                INVLPP.TRADE_DATE = :li_AsAtDate     AND
+245500190620                INVLPP.INVESTMENT_CODE = INV.INVESTMENT_CODE
+245600190620           LEFT OUTER JOIN MFAAUTSTP AUTSTP ON
+245700190620                AUTSTP.USER = :lc_PRC_LogID AND
+245800190620                AUTSTP.AUTHORIZATION_CODE = "BIGPRC"
+245900190620           WHERE INVGRP.PRICE_LEVEL = "G"
+246000190620           ORDER BY INV2.INVESTMENT_GROUP_CODE,
+246100190620              INV2.INDUSTRY_FUND_CODE
+246200190620           END-EXEC.
+246300190620
+246400190620           MOVE SQLSTATE to lc_SQLSTATES.
+246500190620
+246600190620           EVALUATE TRUE
+246700190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+246800190620                lncc_SQLWarning
+246900190620               CONTINUE
+247000190620           WHEN OTHER
+247100190620           SET WS-ERR-36 TO TRUE
+247200190620           MOVE lc_ErrCodeDesc36 TO lc_Error_Desc
+247300190710016795                              WS-SQL-ERR-SHORT-DESCR
+247400190620           PERFORM DSP-ERROR
+247500190620           END-EVALUATE.
+247600190620
+247700190620
+247800190620           EXEC SQL
+247900190620              OPEN CUR_PCA_LOAD_PRICE_GROUP_LVL
+248000190620           END-EXEC.
+248100190620
+248200190620           EVALUATE TRUE
+248300190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+248400190620                lncc_SQLWarning
+248500190620               CONTINUE
+248600190620           WHEN OTHER
+248700190620           SET WS-ERR-37 TO TRUE
+248800190620           MOVE lc_ErrCodeDesc37 TO lc_Error_Desc
+248900190710016795                              WS-SQL-ERR-SHORT-DESCR
+249000190620           PERFORM DSP-ERROR
+249100190620           END-EVALUATE.
+249200190620
+249300190620           SET lncc_EndOfFetchNo TO TRUE.
+249400190620           PERFORM Fetch-Cur-PCA-Load-Grp-Price
+249500190620                       UNTIL lncc_EndOfFetchYes.
+249600190620
+249700190620       FETCH-Cur-PCA-Load-Grp-Price.
+249800190620
+249900190620           EXEC SQL
+250000190620           FETCH CUR_PCA_LOAD_PRICE_GROUP_LVL
+250100190620             INTO :ct_FetchCur_LoadPrices
+250200190620           END-EXEC.
+250300190620
+250400190620           MOVE SQLSTATE to lc_SQLSTATES.
+250500190620
+250600190620           EVALUATE TRUE
+250700190620           WHEN lncc_SqlSuccessful OR
+250800190620                lncc_SQLWarning
+250900190620               PERFORM PROCESS-Fetch-Recs-PCA-Grp
+251000190620           WHEN lncc_SqlEnd
+251100190620            SET lncc_EndOfFetchYes TO TRUE
+251200190620           WHEN OTHER
+251300190620           SET WS-ERR-38 TO TRUE
+251400190620           MOVE lc_ErrCodeDesc38 TO lc_Error_Desc
+251500190710016795                              WS-SQL-ERR-SHORT-DESCR
+251600190620           PERFORM DSP-ERROR
+251700190620           END-EVALUATE.
+251800190620
+251900190620       PROCESS-Fetch-Recs-PCA-Grp.
+252000190620           IF lcu_InvCode IS EQUAL TO SPACES AND
+252100190620              lcu_Record_Type_Trans IS NOT EQUAL TO "EXC"
+252200190620            MOVE 1 TO li_ERROR_CODE1
+252300190620           ELSE
+252400190620            MOVE 0 TO li_ERROR_CODE1
+252500190620           END-IF.
+252600190620
+252700190620           IF liu_Price_Distr_RecordDate IS EQUAL TO ZEROES
+252800190620            MOVE 1 TO li_ERROR_CODE2
+252900190620           ELSE
+253000190620            MOVE 0 TO li_ERROR_CODE2
+253100190620           END-IF.
+253200190620
+253300190620           IF LIU_PRICE_DISTR_RATEACCRUAL IS EQUAL to ZEROES
+253400190620            MOVE 1 TO li_ERROR_CODE3
+253500190620           ELSE
+253600190620            MOVE 0 TO li_ERROR_CODE3
+253700190620           END-IF.
+253800190620
+253900190620           IF (lcu_Record_Type_Trans IS EQUAL TO "DIS" OR
+254000190620               lcu_Record_Type_Trans IS EQUAL TO "INC" OR
+254100190620               lcu_Record_Type_Trans IS EQUAL TO "CAP") AND
+254200190620               liu_Distr_PaymentDate IS EQUAL TO ZEROES
+254300190620            MOVE 1 TO li_ERROR_CODE4
+254400190620           ELSE
+254500190620            MOVE 0 TO li_ERROR_CODE4
+254600190620           END-IF.
+254700190620
+254800190620           IF lcu_Plus_Minus_Ind IS NOT EQUAL "-" AND "+"
+254900190620            MOVE 1 TO li_ERROR_CODE5
+255000190620           ELSE
+255100190620            MOVE 0 TO li_ERROR_CODE5
+255200190620           END-IF.
+255300190620
+255400190620           IF lcu_CurrInd IS NOT EQUAL TO " " AND "00" AND "01"
+255500190620            MOVE 1 TO li_ERROR_CODE6
+255600190620           ELSE
+255700190620            MOVE 0 TO li_ERROR_CODE6
+255800190620           END-IF.
+255900190620
+256000190620           IF lcu_Record_type_Trans IS EQUAL TO "DIS" AND
+256100190620              (lcu_Mgmt_Spec IS NOT EQUAL TO "INC" AND "CPG")
+256200190620            MOVE 1 TO li_ERROR_CODE7
+256300190620           ELSE
+256400190620            MOVE 0 TO li_ERROR_CODE7
+256500190620           END-IF.
+256600190620
+256700190620           IF lcu_Record_type_Trans IS EQUAL TO "EXC" AND
+256800190620              (lcu_Mgmt_Spec IS NOT EQUAL TO "BUY" AND "SEL" AND "N"
+256900190620                        AND " ")
+257000190620            MOVE 1 TO li_ERROR_CODE8
+257100190620           ELSE
+257200190620            MOVE 0 TO li_ERROR_CODE8
+257300190620           END-IF.
+257400190620
+257500190620           COMPUTE T-PRICE-DIFF =
+257600190620               (liu_Unit_price - liu_Last_Unitprc).
+257700190620
+257800190620           IF T-PRICE-DIFF < 0
+257900190620              COMPUTE T-PRICE-DIFF = T-PRICE-DIFF * -1
+258000190620           END-IF.
+258100190620
+258200190620           COMPUTE T-PRICE-VAR ROUNDED =
+258300190620                (liu_Last_UnitPrc *
+258400190620              (liu_Pricing_Var / 100)).
+258500190620
+258600190620           IF (lcu_Record_type_Trans IS EQUAL TO "PRX" OR "PRI") AND
+258700190620              liu_Last_Unitprc > 0 AND
+258800190620              T-Price-Diff > T-PRICE-VAR
+258900190620            MOVE 1 TO li_ERROR_CODE9
+259000190620           ELSE
+259100190620            MOVE 0 TO li_ERROR_CODE9
+259200190620           END-IF.
+259300190620
+259400190620           INITIALIZE li_Prev_ExchRate.
+259500190620
+259600190620           EXEC SQL
+259700190620             SELECT EXR.Exchange_Rate
+259800190620             INTO
+259900190620               :li_Prev_ExchRate
+260000190620             FROM MFAEXRHMP EXR
+260100190620             WHERE EXR.TRADE_DATE = :li_LstPrcDte  AND
+260200190620                   EXR.CURRENCY = :lcu_CurrCode AND
+260300190620                   EXR.EXCHANGE_RATE_TYPE = :lcu_ExchRate_Type
+260400190620           END-EXEC.
+260500190620
+260600190620           COMPUTE li_Exch_Diff =
+260700190620               (liu_Exch_Rate - li_Prev_ExchRate).
+260800190620
+260900190620           IF li_Exch_Diff < 0
+261000190620              COMPUTE li_Exch_Diff = li_Exch_Diff * -1
+261100190620           END-IF.
+261200190620
+261300190620           COMPUTE li_Exch_Var ROUNDED =
+261400190620               (li_Prev_ExchRate * (li_ExchRateVar / 100)).
+261500190620
+261600190620           EXEC SQL
+261700190620            select "Y"
+261800190620            into :lc_CurrencyExist
+261900190620           FROM MFACURP CUR
+262000190620            WHERE CUR.CURRENCY = :lcu_CurrCode
+262100190620           END-EXEC.
+262200190620
+262300190620           IF lcu_Record_Type_trans = "EXC" AND
+262400190620              li_Prev_ExchRate IS NOT EQUAL TO 0 AND
+262500190620              li_Exch_Diff > li_Exch_Var AND
+262600190620              lncc_CurrencyExistNo
+262700190620            MOVE 1 TO li_ERROR_CODE10
+262800190620           ELSE
+262900190620            MOVE 0 TO li_ERROR_CODE10
+263000190620           END-IF.
+263100190620
+263200190620           IF lcu_Record_type_trans = "EXC" AND
+263300190620              lncc_CurrencyExistNo AND
+263400190620              lc_Report_EXC IS EQUAL TO "Y"
+263500190620            MOVE 1 TO li_ERROR_CODE11
+263600190620           ELSE
+263700190620            MOVE 0 TO li_ERROR_CODE11
+263800190620           END-IF.
+263900190620
+264000190620           INITIALIZE T-GRP-CNTR.
+264100190620
+264200190620           EXEC SQL
+264300190620            SELECT COUNT(*)
+264400190620            INTO
+264500190620             :T-GRP-CNTR
+264600190620            FROM MFAINVP INV3
+264700190620            WHERE INV3.INVESTMENT_CODE = :lcu_InvCode
+264800190620             AND INV3.INVESTMENT_GROUP_CODE = :lcu_InvGrpCode
+264900190620           END-EXEC.
+265000190620
+265100190620           IF T-GRP-CNTR > 1 AND
+265200190620             (lcu_Record_Type_Trans IS EQUAL TO "PRI" OR "PRX")
+265300190620            MOVE 1 TO li_ERROR_CODE12
+265400190620           ELSE
+265500190620            MOVE 0 TO li_ERROR_CODE12
+265600190620           END-IF.
+265700190620
+265800190620           COMPUTE li_Error_Code = li_ERROR_CODE1 +
+265900190620              li_ERROR_CODE2 + li_ERROR_CODE3 + li_ERROR_CODE4 +
+266000190620              li_ERROR_CODE5 + li_ERROR_CODE6 + li_ERROR_CODE7 +
+266100190620              li_ERROR_CODE8 + li_ERROR_CODE9 + li_ERROR_CODE10 +
+266200190620              li_ERROR_CODE11 + li_ERROR_CODE12 .
+266300190620
+266400190620      *    COMPUTE T-UNIT-PRICE =
+266500190620      *        ROUND(T-PRICE-DISTR-RATE-ACCRUAL / 10000) .
+266600190620      *    COMPUTE T-DISTR-RATE =
+266700190620      *        ROUND(T-PRICE-DISTR-RATE-ACCRUAL / 100) .
+266800190620      *    COMPUTE T-INTEREST-RATE =
+266900190620      *        ROUND(T-PRICE-DISTR-RATE-ACCRUAL * 10) .
+267000190620
+267100190620           Compute li_TotRecordCount = li_TotRecordCount + 1.
+267200190620
+267300190620      *     MOVE 0 TO D-ERROR-CODE-12.
+267400190620      *     COMPUTE D-ERROR-CODE = D-ERROR-CODE-1 +
+267500190620      *         D-ERROR-CODE-2 + D-ERROR-CODE-3 + D-ERROR-CODE-4 +
+267600190620      *         D-ERROR-CODE-5 + D-ERROR-CODE-6 + D-ERROR-CODE-7 +
+267700190620      *         D-ERROR-CODE-8 + D-ERROR-CODE-9 + D-ERROR-CODE-10 +
+267800190620      *         D-ERROR-CODE-11 + D-ERROR-CODE-12 .
+267900190620
+268000190620      ** Subfile:LDPRCSF1 processing goes here
+268100190620      ** Control information: IF D-ERROR-CODE <> 0
+268200190620
+268300190620           IF li_Error_Code IS NOT EQUAL ZEROES
+268400190620
+268500190620           EXEC SQL
+268600190620           INSERT INTO LDPRCSF1
+268700190620
+268800190620           VALUES
+268900190620           (
+269000190620           :lcu_RecordID,
+269100190620           :lcu_Record_Type_Trans,
+269200190620           :lcu_Price_StatInd,
+269300190620           :lcu_Mgmt_CompCde,
+269400190620           :lcu_Ind_FundCde,
+269500190620           :liu_Price_Distr_RecordDate,
+269600190620           :liu_Price_Distr_RateAccrual,
+269700190620           :lcu_Plus_Minus_Ind,
+269800190620           :liu_Distr_PaymentDate,
+269900190620           :lcu_CurrInd,
+270000190620           :lcu_Mgmt_Spec,
+270100190620           " ",
+270200190620           :li_ERROR_CODE1,
+270300190620           :li_ERROR_CODE2,
+270400190620           :li_ERROR_CODE3,
+270500190620           :li_ERROR_CODE4,
+270600190620           :li_ERROR_CODE5,
+270700190620           :li_ERROR_CODE6,
+270800190620           :li_ERROR_CODE7,
+270900190620           :li_ERROR_CODE8,
+271000190620           :li_ERROR_CODE9,
+271100190620           :li_ERROR_CODE10,
+271200190620           :li_ERROR_CODE11,
+271300190620           :li_ERROR_CODE12)
+271400190620           END-EXEC
+271500190620
+271600190620           END-IF.
+271700190620
+271800190620
+271900190620           IF lcu_Record_Type_Trans IS EQUAL TO "PRI" AND
+272000190620              (li_ERROR_CODE IS EQUAL TO 0 OR
+272100190620               (li_ERROR_CODE IS EQUAL TO 1 AND
+272200190620                li_ERROR_CODE9 IS EQUAL TO 1 AND
+272300190620                lcu_BIGPRC_AuthInd IS EQUAL TO "Y"))
+272400190620
+272500190620            COMPUTE li_RecordType_PRI_Count=li_RecordType_PRI_Count
+272600190620                    + 1
+272700190620            COMPUTE li_RecordType_PRI_SUMM = li_RecordType_PRI_Summ
+272800190620                    +  liu_Unit_price
+272900190620           END-IF.
+273000190620
+273100190620
+273200190620           IF lcu_Record_Type_Trans IS EQUAL TO "PRX" AND
+273300190620              (li_ERROR_CODE IS EQUAL TO 0 OR
+273400190620               (li_ERROR_CODE IS EQUAL TO 1 AND
+273500190620                li_ERROR_CODE9 IS EQUAL TO 1 AND
+273600190620                lcu_BIGPRC_AuthInd IS EQUAL TO "Y"))
+273700190620
+273800190620            COMPUTE li_RecordType_PRX_Count =li_RecordType_PRX_Count
+273900190620                    + 1
+274000190620            COMPUTE li_RecordType_PRX_SUMM = li_RecordType_PRX_Summ
+274100190620                    +  liu_Unit_price
+274200190620           END-IF.
+274300190620
+274400190620           IF lcu_Record_Type_Trans IS EQUAL TO "ACC"
+274500190620            COMPUTE li_RecordType_ACC_Count=li_RecordType_ACC_Count
+274600190620                    + 1
+274700190620            COMPUTE li_RecordType_ACC_SUMM = li_RecordType_ACC_Summ
+274800190620                    +  liu_Interest_Rate
+274900190620           END-IF.
+275000190620
+275100190620           IF lcu_Record_Type_Trans IS EQUAL TO "INC"
+275200190620            COMPUTE li_RecordType_INC_Count =li_RecordType_INC_Count
+275300190620                    + 1
+275400190620            COMPUTE li_RecordType_INC_SUMM = li_RecordType_INC_Summ
+275500190620                    +  liu_Distr_Rate
+275600190620           END-IF.
+275700190620
+275800190620           IF lcu_Record_Type_Trans IS EQUAL TO "CAP"
+275900190620            COMPUTE li_RecordType_CAP_Count =li_RecordType_CAP_Count
+276000190620                    + 1
+276100190620            COMPUTE li_RecordType_CAP_SUMM = li_RecordType_CAP_Summ
+276200190620                    +  liu_Distr_Rate
+276300190620           END-IF.
+276400190620
+276500190620           IF lc_SUPSGN_Edit IS EQUAL TO "Y"
+276600190620            MOVE "Y" TO lc_Keying_Stat
+276700190620           ELSE
+276800190620            MOVE "N" TO lc_Keying_Stat
+276900190620           END-IF.
+277000190620
+277100190620           IF li_Error_Code = 0 AND
+277200190620              lcu_Record_type_Trans = "PRI"
+277300190620
+277400190620           EXEC SQL
+277500190620           UPDATE MFAINVUPP SET
+277600190620           (
+277700190620           CURRENCY,
+277800190620           UNIT_PRICE,
+277900190620           UNITS,
+278000190620           CREATED_BY,
+278100190620           CREATION_DATE,
+278200190620           LAST_UPDATE_DATE,
+278300190620           LAST_UPDATED_BY,
+278400190620           KEYING_STATUS
+278500190620           ) =
+278600190620           (
+278700190620            :lcu_CurrCode,
+278800190620            :liu_Unit_price,
+278900190620            0,
+279000190620            "LDPRC",
+279100190620            :li_SysDate,
+279200190620            :li_SysDate,
+279300190620            "LDPRC",
+279400190620            :lc_Keying_Stat
+279500190620           )
+279600190620           WHERE INVESTMENT_CODE = :lcu_InvCode AND
+279700190620                 TRADE_DATE = :liu_Price_Distr_REcordDate AND
+279800190620                 DISTRIBUTION_FLAG = " "
+279900190620
+280000190620           END-EXEC
+280100190620
+280200190620           MOVE SQLSTATE to lc_SQLSTATES
+280300190620
+280400190620           EVALUATE TRUE
+280500190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+280600190620                lncc_SQLWarning
+280700190620               CONTINUE
+280800190620           WHEN OTHER
+280900190620           SET WS-ERR-39 TO TRUE
+281000190620           MOVE lc_ErrCodeDesc39 TO lc_Error_Desc
+281100190710016795                              WS-SQL-ERR-SHORT-DESCR
+281200190620           PERFORM DSP-ERROR
+281300190620           END-EVALUATE
+281400190620
+281500190620
+281600190620           EXEC SQL
+281700190620           INSERT INTO MFAINVUPP VALUES
+281800190620           (
+281900190620           :lcu_InvCode,
+282000190620           :lcu_CurrCode,
+282100190620           :liu_Price_Distr_RecordDate,
+282200190620            " ",
+282300190620           :liu_Unit_price,
+282400190620           0,
+282500190620           0,
+282600190620           "LDPRC",
+282700190620           :li_SysDate,
+282800190620           :li_SysDate,
+282900190620           "LDPRC",
+283000190620           :lc_Keying_Stat
+283100190620           )
+283200190620           END-EXEC
+283300190620
+283400190620           MOVE SQLSTATE to lc_SQLSTATES
+283500190620
+283600190620           EVALUATE TRUE
+283700190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+283800190620                lncc_SQLWarning OR lncc_SQLDuplicate
+283900190620               CONTINUE
+284000190620           WHEN OTHER
+284100190620           SET WS-ERR-40 TO TRUE
+284200190620           MOVE lc_ErrCodeDesc40 TO lc_Error_Desc
+284300190710016795                              WS-SQL-ERR-SHORT-DESCR
+284400190620           PERFORM DSP-ERROR
+284500190620           END-EVALUATE
+284600190620
+284700190620           END-IF.
+284800190620
+284900190620           IF li_Error_Code = 0 AND
+285000190620              lcu_Record_type_Trans = "ACC"
+285100190620           EXEC SQL
+285200190620           UPDATE MFAINVUPP SET
+285300190620           (
+285400190620           INTEREST_RATE
+285500190620           ) =
+285600190620           (
+285700190620            :liu_Interest_Rate
+285800190620           )
+285900190620           WHERE INVESTMENT_CODE = :lcu_InvCode AND
+286000190620                 TRADE_DATE = :liu_Price_Distr_RecordDate AND
+286100190620                 DISTRIBUTION_FLAG = " "
+286200190620           END-EXEC
+286300190620
+286400190620           MOVE SQLSTATE to lc_SQLSTATES
+286500190620
+286600190620           EVALUATE TRUE
+286700190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+286800190620                lncc_SQLWarning
+286900190620               CONTINUE
+287000190620           WHEN OTHER
+287100190620           SET WS-ERR-41 TO TRUE
+287200190620           MOVE lc_ErrCodeDesc41 TO lc_Error_Desc
+287300190710016795                              WS-SQL-ERR-SHORT-DESCR
+287400190620           PERFORM DSP-ERROR
+287500190620           END-EVALUATE
+287600190620
+287700190620           END-IF.
+287800190620
+287900190620           IF (li_Error_Code = 0 OR
+288000190620              (li_Error_Code = 1 AND li_Error_Code9 = 1 AND
+288100190620              lcu_BIGPRC_AuthInd = "Y")) AND
+288200190620              lcu_Record_type_Trans = "PRX"
+288300190620
+288400190620           EXEC SQL
+288500190620           UPDATE MFAINVUPP SET
+288600190620           (
+288700190620           CURRENCY,
+288800190620           UNIT_PRICE,
+288900190620           UNITS,
+289000190620           CREATED_BY,
+289100190620           CREATION_DATE,
+289200190620           LAST_UPDATE_DATE,
+289300190620           LAST_UPDATED_BY,
+289400190620           KEYING_STATUS
+289500190620           ) =
+289600190620           (
+289700190620           :lcu_CurrCode,
+289800190620           :liu_Unit_price,
+289900190620           0,
+290000190620           "LDPRC",
+290100190620           :li_sysdate,
+290200190620           :li_sysDate,
+290300190620           "LDPRC",
+290400190620           :lc_Keying_stat
+290500190620           )
+290600190620           WHERE INVESTMENT_CODE = :lcu_InvCode AND
+290700190620                 TRADE_DATE = :liu_Price_Distr_RecordDate AND
+290800190620                 DISTRIBUTION_FLAG = "Y"
+290900190620           END-EXEC
+291000190620
+291100190620
+291200190620           MOVE SQLSTATE to lc_SQLSTATES
+291300190620
+291400190620           EVALUATE TRUE
+291500190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+291600190620                lncc_SQLWarning
+291700190620               CONTINUE
+291800190620           WHEN OTHER
+291900190620           SET WS-ERR-42 TO TRUE
+292000190620           MOVE lc_ErrCodeDesc42 TO lc_Error_Desc
+292100190710016795                              WS-SQL-ERR-SHORT-DESCR
+292200190620           PERFORM DSP-ERROR
+292300190620           END-EVALUATE
+292400190620
+292500190620
+292600190620           EXEC SQL
+292700190620           INSERT INTO MFAINVUPP VALUES
+292800190620           (
+292900190620           :lcu_InvCode,
+293000190620           :lcu_CurrCode,
+293100190620           :liu_Price_Distr_RecordDate,
+293200190620            "Y",
+293300190620           :liu_Unit_price,
+293400190620           0,
+293500190620           0,
+293600190620           "LDPRC",
+293700190620           :li_SysDate,
+293800190620           :li_SysDate,
+293900190620           "LDPRC",
+294000190620           :lc_Keying_Stat
+294100190620           )
+294200190620           END-EXEC
+294300190620
+294400190620           MOVE SQLSTATE to lc_SQLSTATES
+294500190620
+294600190620           EVALUATE TRUE
+294700190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+294800190620                lncc_SQLWarning OR lncc_SQLDuplicate
+294900190620               CONTINUE
+295000190620           WHEN OTHER
+295100190620           SET WS-ERR-43 TO TRUE
+295200190620           MOVE lc_ErrCodeDesc43 TO lc_Error_Desc
+295300190710016795                              WS-SQL-ERR-SHORT-DESCR
+295400190620           PERFORM DSP-ERROR
+295500190620           END-EVALUATE
+295600190620
+295700190620           END-IF.
+295800190620
+295900190620           IF li_Error_Code = 0 AND
+296000190620             (lcu_Record_type_trans IS EQUAL TO "DIS" OR
+296100190620                 "INC" OR "CAP")
+296200190620
+296300190620           IF ((lcu_Record_Type_Trans IS EQUAL TO "DIS" AND
+296400190620                  lcu_Mgmt_Spec IS EQUAL TO "CPG") OR
+296500190620                  lcu_Record_Type_Trans IS EQUAL TO "CAP")
+296600190620
+296700190620           EXEC SQL
+296800190620           UPDATE MFADISDCP SET
+296900190620           (
+297000190620           CAPITAL_GAIN_DISTR_RATE,
+297100190620           CURRENCY,
+297200190620           CONFIRM,
+297300190620           EXPECTED_DISTRIBUTION_AMOUNT,
+297400190620           KEYING_STATUS,
+297500190620           DAF_RATE
+297600190620           ) =
+297700190620           (
+297800190620           :liu_Distr_Rate,
+297900190620           :lcu_CurrCode,
+297901211006      *RFS186903 - Starts
+298000211006      *    "N",
+298001211006           :lc_Confirm,
+298002211006      *RFS186903 - Ends
+298100190620           0,
+298200190620           "N",
+298300190620           0
+298400190620           )
+298500190620           WHERE INVESTMENT_CODE = :lcu_InvCode AND
+298600190620                 DATE_OF_RECORD = :liu_Price_Distr_RecordDate
+298700190620                  AND
+298800190620                 DISTR_PAYMENT_DATE = :liu_Distr_PaymentDate
+298900190620                  AND
+299000190620                  ((:lcu_Record_Type_Trans = "DIS" AND
+299100190620                  :lcu_Mgmt_Spec = "CPG") OR
+299200190620                  :lcu_Record_Type_Trans = "CAP")
+299300190620           END-EXEC
+299400190620
+299500190620           MOVE SQLSTATE to lc_SQLSTATES
+299600190620
+299700190620           EVALUATE TRUE
+299800190620           WHEN lncc_SqlSuccessful OR
+299900190620                lncc_SQLWarning
+300000190620               CONTINUE
+300100190620           WHEN OTHER
+300200190620           SET WS-ERR-44 TO TRUE
+300300190620           MOVE lc_ErrCodeDesc44 TO lc_Error_Desc
+300400190710016795                              WS-SQL-ERR-SHORT-DESCR
+300500190620           PERFORM DSP-ERROR
+300600190620           PERFORM FORCE-MSGW
+300700190620           END-EVALUATE
+300800190620
+300900190620           END-IF
+301000190620
+301100190620           IF ((lcu_Record_Type_Trans IS EQUAL TO "DIS" AND
+301200190620                  lcu_Mgmt_Spec IS EQUAL TO "INC") OR
+301300190620                  lcu_Record_Type_Trans IS EQUAL TO "INC")
+301400190620
+301500190620           EXEC SQL
+301600190620           UPDATE MFADISDCP SET
+301700190620           (
+301800190620           INCOME_DISTR_RATE,
+301900190620           CURRENCY,
+302000190620           CONFIRM,
+302100190620           EXPECTED_DISTRIBUTION_AMOUNT,
+302200190620           KEYING_STATUS,
+302300190620           DAF_RATE
+302400190620           ) =
+302500190620           (
+302600190620           :liu_Distr_Rate,
+302700190620           :lcu_CurrCode,
+302701211006      *RFS186903 - Starts
+302800211006      *    "N",
+302801211006           :lc_Confirm,
+302802211006      *RFS186903 - Ends
+302900190620           0,
+303000190620           "N",
+303100190620           0
+303200190620           )
+303300190620           WHERE INVESTMENT_CODE = :lcu_InvCode AND
+303400190620                 DATE_OF_RECORD = :liu_Price_Distr_RecordDate
+303500190620                  AND
+303600190620                 DISTR_PAYMENT_DATE = :liu_Distr_PaymentDate
+303700190620                  AND
+303800190620                  ((:lcu_Record_Type_Trans = "DIS" AND
+303900190620                  :lcu_Mgmt_Spec = "INC") OR
+304000190620                  :lcu_Record_Type_Trans = "INC")
+304100190620           END-EXEC
+304200190620
+304300190620           MOVE SQLSTATE to lc_SQLSTATES
+304400190620
+304500190620           EVALUATE TRUE
+304600190620           WHEN lncc_SqlSuccessful OR
+304700190620                lncc_SQLWarning
+304800190620               CONTINUE
+304900190620           WHEN OTHER
+305000190620           SET WS-ERR-44 TO TRUE
+305100190620           MOVE lc_ErrCodeDesc44 TO lc_Error_Desc
+305200190710016795                              WS-SQL-ERR-SHORT-DESCR
+305300190620           PERFORM DSP-ERROR
+305400190620           PERFORM FORCE-MSGW
+305500190620           END-EVALUATE
+305600190620
+305700190620           END-IF
+305800190620
+305900190620           END-IF.
+306000190620
+306100190620           IF li_Error_Code IS EQUAL TO 0 AND
+306200190620              lcu_Record_Type_Trans IS EQUAL TO "EXC"
+306300190620
+306400190620
+306500190620           EXEC SQL
+306600190620           UPDATE MFAEXRHMP SET
+306700190620           (
+306800190620           EXCHANGE_RATE,
+306900190620           CREATED_BY,
+307000190620           CREATION_DATE,
+307100190620           LAST_UPDATE_DATE,
+307200190620           LAST_UPDATED_BY,
+307300190620           KEYING_STATUS
+307400190620           ) =
+307500190620           (
+307600190620           :liu_Exch_Rate,
+307700190620           "LDPRC",
+307800190620           :li_SysDate,
+307900190620           :li_SysDate,
+308000190620           "LDPRC",
+308100190620           "N"
+308200190620           )
+308300190620           where CURRENCY = :lcu_CurrCode AND
+308400190620                 TRADE_DATE = :liu_Price_Distr_RecordDate AND
+308500190620                 EXCHANGE_RATE_TYPE = :lcu_ExchRate_Type
+308600190620           END-EXEC
+308700190620
+308800190620           MOVE SQLSTATE to lc_SQLSTATES
+308900190620
+309000190620           EVALUATE TRUE
+309100190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+309200190620                lncc_SQLWarning
+309300190620               CONTINUE
+309400190620           WHEN OTHER
+309500190620           SET WS-ERR-45 TO TRUE
+309600190620           MOVE lc_ErrCodeDesc45 TO lc_Error_Desc
+309700190710016795                              WS-SQL-ERR-SHORT-DESCR
+309800190620           PERFORM DSP-ERROR
+309900190620           END-EVALUATE
+310000190620
+310100190620           EXEC SQL
+310200190620           INSERT INTO MFAEXRHMP VALUES
+310300190620           (
+310400190620            :liu_Price_Distr_RecordDate,
+310500190620            :lcu_CurrCode,
+310600190620            :lcu_ExchRate_Type,
+310700190620            :liu_Exch_Rate,
+310800190620            "LDPRC",
+310900190620            :li_SysDate,
+311000190620            :li_SysDate,
+311100190620            "LDPRC",
+311200190620            "N"
+311300190620           )
+311400190620           END-EXEC
+311500190620
+311600190620           MOVE SQLSTATE to lc_SQLSTATES
+311700190620
+311800190620           EVALUATE TRUE
+311900190620           WHEN lncc_SqlSuccessful OR lncc_SqlEnd OR
+312000190620                lncc_SQLWarning OR lncc_SQLDuplicate
+312100190620               CONTINUE
+312200190620           WHEN OTHER
+312300190620           SET WS-ERR-46 TO TRUE
+312400190620           MOVE lc_ErrCodeDesc46 TO lc_Error_Desc
+312500190710016795                              WS-SQL-ERR-SHORT-DESCR
+312600190620           PERFORM DSP-ERROR
+312700190620           END-EVALUATE
+312800190620
+312900190620           END-IF.
+313000190620
+313100190620       Check-Todays-Prices.
+313200190620
+313300190620           INITIALIZE li_PriceExist.
+313400190620
+313500190620           EXEC SQL
+313600190620           SELECT count(*)
+313700190620           INTO :li_PriceExist
+313800190620           FROM MFAINVUPP INVUPP4
+313900190620           WHERE INVUPP4.TRADE_DATE = :li_AsAtDate
+314000190620           END-EXEC.
+314100190620
+314200190620       RUN-COMPLETE-NORMAL.
+314300190620
+314400190620           ACCEPT lc_local_DataArea3 FROM WS-LOCAL.
+314500190620           MOVE "LDPRC " TO lc_LDPRC_LDA3.
+314600190620      *    RFS184089 begin
+314700190620           MOVE " "      TO lc_Filler2_LDA3.
+314800190620      *    RFS184089 end
+314900190620           IF li_PriceExist > 0
+315000190620           MOVE 'Y' TO lc_PriceExist
+315100190620           ELSE
+315200190620           MOVE 'N' TO lc_PriceExist
+315300190620           END-IF.
+315400190620
+315500190620           DISPLAY lc_Local_DataArea3 UPON WS-LOCAL.
+315600190620
+315700190620      ***ENSURE YOU ACT ON BELOW CONDITIONS ***
+315800190620
+315900190620       END-PROGRAM.
+316000190620
+316100190620           EXEC SQL
+316200190620              CLOSE CUR_Load_Unitrax_Price_Files
+316300190620           END-EXEC.
+316400190620
+316500190620           EXEC SQL
+316600190620              CLOSE CUR_PCA_LOAD_PRICE_IND_LVL
+316700190620           END-EXEC.
+316800190620
+316900190620           EXEC SQL
+317000190620              CLOSE CUR_PCA_LOAD_PRICE_GROUP_LVL
+317100190620           END-EXEC.
+317200190620
+317300190620           GOBACK.
+317400190620      *---------------------------
+317500190620           COPY "CPYSQLRTN".
+317600190620      *---------------------------

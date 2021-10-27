@@ -1,0 +1,1822 @@
+000100200812      * %ATTR DBGVIEW(*SOURCE) CLOSQLCSR(*ENDMOD)
+000200200812       IDENTIFICATION DIVISION.
+000300200812       PROGRAM-ID.    HHMFEAMSPY.
+000400200812       AUTHOR.        MuthukumarS.
+000500200812       INSTALLATION.  L&T FSTI.
+000600200812       DATE-WRITTEN.  June 2020.
+000700200812       DATE-COMPILED. June 2020.
+000800200812      *******************************************************************
+000900200812      * Description: Negotiated Fee generation process                  *
+001000200812      * This program                                                    *
+001100200812      *     1) Calculates Average AUM at the period end at              *
+001200200812      *        Household level, Account level and Investment level      *
+001300200812      *     2) Identify the Fund to be charged with Fee based on        *
+001400200812      *        Fee Charge parameter from RFMFEPRM screen                *
+001500200812      *     3) Calculate Account-Investment fee based on the AUM level  *
+001600200812      *        defined at ACCFEEO or DEEFEEO screen                     *
+001700200812      *     4) Create Fee records in Management Fee hierarchy header    *
+001800211007      *        and detail table                                         *
+001900200812      *******************************************************************
+002000200812      * PROGRAMMER  *DATE OF CHANGE* DESCRIPTION OF CHANGE              *
+002100200812      *******************************************************************
+002200200812      * MuthukumarS *  2020/06/09  * RFS185890 New program              *
+002300201001      * Mayilsamy D *  2020/10/01  * RFS#186646- Recompile for MFAHHMVLP*
+002400201007      * Aarthi M   *  2020/10/01  * RFS#1104468 - Include Acc-Inv's to  *
+002500201007      *            *              * Daily Market value table which are  *
+002600201007      *            *              * attached to the valid schedule      *
+002700201019      *            *              * Tag# 104468                         *
+002800210428      * MuthukumarS *  2021/04/06  * RFS1112514 - Duplicate payment xref*
+002900210324      *             *              * populated in MFAMFHHDP & MFAMFHDTP *
+003000210324      *             *              * is affecting Dealer payments       *
+003100210428      * MuthukumarS *  2021/04/28  * RFS1111935 - Multiple all unit     *
+003200210428      *             *              * redemptions placed for same Acc-Inv*
+003300210428      *             *              * the very same day generated wrong  *
+003400210428      *             *              * Fee amount and charged per fund    *
+003500210428      *             *              * Tag# 111935                        *
+003600210603      * MuthukumarS *  2021/05/20  * RFS1115274 - Multiple Fee txns got *
+003700210603      *             *              * generated when All standalone OR   *
+003800210603      *             *              * the entire Portfolio is fully      *
+003900210603      *             *              * redeemed Tag# 115274               *
+004000210604      * MuthukumarS *  2021/06/03  * RFS1114432 - Incorrect Tiered Fee  *
+004100210604      *             *              * calculation is incorrect due to    *
+004200210604      *             *              * the AUM used when Account is not   *
+004300210818      *             *              * fully redeemed Tag# 114432         *
+004301210828      * Mayilsamy D * 2021/08/28   * RFS187441 - Recompile for MFAMFHHDP*
+004302210828      *             *              * and MFAMFHDTP.                     *
+004400200812      *******************************************************************
+004500200812       ENVIRONMENT DIVISION.
+004600200812      * ----------------------
+004700200812       CONFIGURATION SECTION.
+004800200812      * ----------------------
+004900200812       SOURCE-COMPUTER. ISERIES.
+005000200812       OBJECT-COMPUTER. ISERIES.
+005100200812       SPECIAL-NAMES. LOCAL-DATA IS WS-DTAARA-LDA
+005200200812                      DATA-AREA  IS WS-DTAARA-MFAPRCDTP
+005300200812                      DATA-AREA  IS WS-DTAARA-MFAOBJECTS
+005400200812                      DATA-AREA  IS WS-DTAARA-MFAMGFEEP.
+005500200812
+005600200812      * ---------------------
+005700200812       INPUT-OUTPUT SECTION.
+005800200812      * ---------------------
+005900200812
+006000200812       DATA DIVISION.
+006100200812      * -------------
+006200200812       FILE SECTION.
+006300200812      * -------------
+006400200812
+006500200812      * ------------------------
+006600200812       WORKING-STORAGE SECTION.
+006700200812      * ------------------------
+006800200812
+006900200812           COPY CPYSQLFLD
+007000200812               REPLACING == "CURRENT_PROGRAM" == BY == "HHMFEAMSPY" ==.
+007100200812
+007200200812           EXEC SQL
+007300200812             INCLUDE SQLCA
+007400200812           END-EXEC.
+007500200812
+007600200812      * Data area information.
+007700200812       COPY CPMGFEEP.
+007800200812
+007900200812       01 lc_LDA                            PIC X(1024).
+008000200812       01 lc_MFAOBJECTS                     PIC X(10).
+008100200812       01 lc_MFAPRCDTP                      PIC X(169).
+008200200812
+008300200812       01 lcu_FetchCursor.
+008400200812          03 lcu_ACCOUNT_NO                 PIC S9(09).
+008500200812          03 lcu_INVESTMENT_CODE            PIC X(05).
+008600200812          03 lcu_FEE_TYPE_CODE              PIC X(05).
+008700200812          03 lcu_HOUSEHOLD_NAME             PIC X(35).
+008800201007104468*   03 lcu_PORTFOLIO_CODE             PIC X(04).
+008900201007104468    03 lcu_PORTFOLIO_CODE             PIC X(05).
+009000200812          03 lcu_MKTVAL                     PIC S9(13)V99.
+009100200812          03 lcu_START_DATE                 PIC S9(08).
+009200200812          03 lcu_END_DATE                   PIC S9(08).
+009300200812          03 lcu_DAYS_HELD                  PIC S9(03).
+009400200812          03 lcu_ACCINV_MKTVAL              PIC S9(13)V99.
+009500200812          03 lcu_ACC_MKTVAL                 PIC S9(13)V99.
+009600210604114432    03 lcu_PFO_MKTVAL                 PIC S9(13)V99.
+009700200812          03 lcu_HH_MKTVAL                  PIC S9(13)V99.
+009800200812          03 lcu_ALL_ACC_REDEM              PIC X(01).
+009900200812          03 lcu_ALL_PFO_REDEM              PIC X(01).
+010000210603115274    03 lcu_ALL_STA_REDEM              PIC X(01).
+010100200812          03 lcu_DEALER_CODE                PIC X(04).
+010200200812          03 lcu_DEALER_REP_CODE            PIC X(06).
+010300200812          03 lcu_CURRENCY                   PIC X(03).
+010400200812          03 lcu_INV_MFE_SCDCODE            PIC X(05).
+010500200812          03 lcu_INV_AMS_SCDCODE            PIC X(05).
+010600200812          03 lcu_INV_MFE_OVR                PIC X(01).
+010700200812          03 lcu_INV_AMS_OVR                PIC X(01).
+010800200812          03 lcu_ACCFEE_OVR                 PIC X(01).
+010900200812
+011000200812       01 CURR-CONTROL.
+011100200812          03 CURR-CONTROL1.
+011200200812             05 CUR_HOUSEHOLD_NAME          PIC X(35).
+011300201007104468*      05 CUR_PORTFOLIO_CODE          PIC X(04).
+011400201007104468       05 CUR_PORTFOLIO_CODE          PIC X(05).
+011500200812             05 CUR_ACCOUNT_NO              PIC S9(09).
+011600200812          03 CURR-CONTROL2.
+011700200812             05 CUR_ACCOUNT_NOA             PIC S9(09).
+011800200812             05 CUR_INVESTMENT_CODE         PIC X(05).
+011900200812
+012000200812       01 PREV-CONTROL.
+012100200812          03 PREV-CONTROL1.
+012200200812             05 PRV_HOUSEHOLD_NAME          PIC X(35).
+012300201007104468*      05 PRV_PORTFOLIO_CODE          PIC X(04).
+012400201007104468       05 PRV_PORTFOLIO_CODE          PIC X(05).
+012500200812             05 PRV_ACCOUNT_NO              PIC S9(09).
+012600200812          03 PREV-CONTROL2.
+012700200812             05 PRV_ACCOUNT_NOA             PIC S9(09).
+012800200812             05 PRV_INVESTMENT_CODE         PIC X(05).
+012900200812
+013000200812      * Error Codes, Uniquely Identify where the error happened
+013100200812       01  WS-ERR-CODE                      PIC X(02)     VALUE SPACES.
+013200200812           88 lncc_Err01                                  VALUE "01".
+013300200812           88 lncc_Err02                                  VALUE "02".
+013400200812           88 lncc_Err03                                  VALUE "03".
+013500200812           88 lncc_Err04                                  VALUE "04".
+013600200812           88 lncc_Err05                                  VALUE "05".
+013700200812           88 lncc_Err06                                  VALUE "06".
+013800200812           88 lncc_Err07                                  VALUE "07".
+013900200812           88 lncc_Err08                                  VALUE "08".
+014000200812           88 lncc_Err09                                  VALUE "09".
+014100200812           88 lncc_Err10                                  VALUE "10".
+014200200812           88 lncc_Err11                                  VALUE "11".
+014300200812           88 lncc_Err12                                  VALUE "12".
+014400200812           88 lncc_Err13                                  VALUE "13".
+014500200812           88 lncc_Err14                                  VALUE "14".
+014600200812           88 lncc_Err15                                  VALUE "15".
+014700200812           88 lncc_Err16                                  VALUE "16".
+014800200812           88 lncc_Err17                                  VALUE "17".
+014900200812           88 lncc_Err18                                  VALUE "18".
+015000210428111935     88 lncc_Err19                                  VALUE "19".
+015100210604114432     88 lncc_Err20                                  VALUE "20".
+015200210604114432     88 lncc_Err21                                  VALUE "21".
+015300200812
+015400200812       01  lc_sqlErrShortDESCR.
+015500200812           03 lncc_ErrorDeleteWRKHHFEEL     PIC X(80)     VALUE
+015600200812                  "Unable to delete the index WRKHHFEEL".
+015700200812           03 lncc_ErrorDeleteWRKHHFEEP     PIC X(80)     VALUE
+015800200812                  "Unable to delete the table WRKHHFEEP".
+015900200812           03 lncc_ErrorDeleteMFATRNV       PIC X(80)     VALUE
+016000200812                  "Unable to delete the view MFATRNV".
+016100200812           03 lncc_ErrorDeleteIAMSHP        PIC X(80)     VALUE
+016200200812                  "Unable to delete the view IAMSHP".
+016300200812           03 lncc_ErrorDeleteWRKALLSEL     PIC X(80)     VALUE
+016400200812                  "Unable to delete the view WRKALLSEL".
+016500200812           03 lncc_ErrorInsertWRKHHFEEP     PIC X(80)     VALUE
+016600200812                  "Error inserting records into WRKHHFEEP ".
+016700200812           03 lncc_ErrorUpdateWRKHHFEEP     PIC X(80)     VALUE
+016800200812                  "Error updating records into WRKHHFEEP".
+016900200812           03 lncc_ErrorInsertTMPHHFEEP     PIC X(80)     VALUE
+017000200812                  "Error inserting records into TMPHHFEEP ".
+017100200812           03 lncc_ErrorUpdateTMPHHFEEP     PIC X(80)     VALUE
+017200200812                  "Error updating records into TMPHHFEEP".
+017300200812           03 lncc_ErrorUpdateMFAHHMVLP     PIC X(80)     VALUE
+017400200812                  "Error updating records into MFAHHMVLP".
+017500200812           03 lncc_ErrorOpenCursor          PIC X(80)     VALUE
+017600200812                  "Error opening the cursor CUR_FeeProcess".
+017700200812           03 lncc_ErrorFetchCursor         PIC X(80)     VALUE
+017800200812                  "Error fetching the cursor CUR_FeeProcess".
+017900210428111935     03 lncc_ErrorDeleteLCLTRNPF      PIC X(80)     VALUE
+018000210428111935            "Unable to delete the table LCLTRNPF".
+018100200812
+018200200812       01 ln-DlrInv-Array-size              PIC S9(09).
+018300200812       01 ctb_DlrInv_Array.
+018400200812          05 ctb_DlrInvArray_Dtl   OCCURS 1 TO 500000
+018500200812                          DEPENDING ON ln-DlrInv-Array-size
+018600200812                          INDEXED BY DLRINVIDX, DLRINVIDY.
+018700200812           10 lc_DlrInvArray.
+018800200812            15 lc_DIA_DlrCode               PIC X(04).
+018900200812            15 lc_DIA_InvCode               PIC X(05).
+019000200812            15 lc_DIA_FeeType               PIC X(05).
+019100200812            15 lc_DIA_AumLevel              PIC X(01).
+019200200812            15 lc_DIA_AccOvr                PIC X(01).
+019300200812            15 lc_DIA_FeeScd                PIC X(05).
+019400200812
+019500200812       01 lc-Flags.
+019600200812          03 lc_DlrInv_Flag                 PIC X(01)     VALUE SPACES.
+019700200812            88 lc_DlrInv_Found                            VALUE "Y".
+019800200812            88 lc_DlrInv_Not_Found                        VALUE "N".
+019900200812
+020000200812      * Use to check the status of the cursor.
+020100200812       01 lc_FetchFlag                      PIC X(1)      VALUE "B".
+020200200812          88 lb_FetchBegin                                VALUE "B".
+020300200812          88 lb_FetchEnd                                  VALUE "E".
+020400200812       01 lc_CursorOpenFlag                 PIC X(1)      VALUE "N".
+020500200812          88 lb_CursorError                               VALUE "N".
+020600200812          88 lb_CursorOpen                                VALUE "Y".
+020700200812
+020800200812       01 WorkVariables.
+020900200812          03 lc_UserName                    PIC X(10)     VALUE SPACES.
+021000200812          03 lc_CreateView_Stmt             PIC X(1000)   VALUE SPACES.
+021100200812          03 lc_AumLevel                    PIC X(1)      VALUE SPACES.
+021200200812          03 lc_AccOvr                      PIC X(1)      VALUE SPACES.
+021300200812          03 lc_FeeScd                      PIC X(05)     VALUE SPACES.
+021400200812          03 lc_PayeeReference              PIC X(15)     VALUE SPACES.
+021500200812          03 lc_PayInvestment               PIC X(05)     VALUE SPACES.
+021600200812          03 lc_PayCurrency                 PIC X(03)     VALUE SPACES.
+021700200812          03 ln_SequenceNoC                 PIC X(07)     VALUE SPACES.
+021800200812          03 ln_YR_StrDate                  PIC X(08)     VALUE SPACES.
+021900200812          03 ln_YR_EndDate                  PIC X(08)     VALUE SPACES.
+022000200812          03 lc_MGFEEP_value.
+022100200812             05 lc_MGFEEP_FeeCharge         PIC X(01)     VALUE SPACES.
+022200200812             05 lc_MGFEEP_CalcMth           PIC X(01)     VALUE SPACES.
+022300200812          03 lc_FXGTACCSCD_OUTA             PIC X(13)     VALUE SPACES.
+022400200812          03 lc_FXGTDLRSCD_OUTA             PIC X(07)     VALUE SPACES.
+022500200812          03 lc_FXGTACCSCD_OUT REDEFINES lc_FXGTACCSCD_OUTA.
+022600200812             05 lc_FXGTACCSCD_AUMLVL        PIC X(01)     VALUE SPACES.
+022700200812             05 lc_FXGTACCSCD_FEERATE       PIC X(07)     VALUE SPACES.
+022800200812             05 lc_FXGTACCSCD_FEESCD        PIC X(05)     VALUE SPACES.
+022900200812          03 lc_FXGTDLRSCD_OUT REDEFINES lc_FXGTDLRSCD_OUTA.
+023000200812             05 lc_FXGTDLRSCD_AUMLVL        PIC X(01)     VALUE SPACES.
+023100200812             05 lc_FXGTDLRSCD_ACCOVR        PIC X(01)     VALUE SPACES.
+023200200812             05 lc_FXGTDLRSCD_FEESCD        PIC X(05)     VALUE SPACES.
+023300210421      * RFS 1112514 - Start
+023400210324          03 lc_Payment_xref                PIC X(15)     VALUE SPACES.
+023500210421      * RFS 1112514 - End
+023600210607114432    03 lc_Rate_Rule                   PIC X(01).
+023700200812      *
+023800200812          03 lc_FXGTACCSCD_FEERATEN         PIC S9(05)V99.
+023900200812          03 ln_ProcessDate                 PIC S9(8)        VALUE 0.
+024000200812          03 ln_Year_StrDate                PIC S9(8)        VALUE 0.
+024100200812          03 ln_PrvProcessDate              PIC S9(8)        VALUE 0.
+024200200812          03 li_NoOfDays                    PIC S9(3)        VALUE 0.
+024300200812          03 ln_PayAccount                  PIC S9(9)        VALUE 0.
+024400200812          03 ln_SequenceNo                  PIC S9(7)        VALUE 0.
+024500200812          03 ln_HH_MKTVAL                   PIC S9(13)V99    VALUE 0.
+024600200812          03 ln_MKTVAL_MAX                  PIC S9(13)V99    VALUE 0.
+024700200812          03 ln_MFE_FeeAmount               PIC S9(11)V99999 VALUE 0.
+024800200812          03 ln_MFE_TotFeeAmt               PIC S9(11)V99999 VALUE 0.
+024900200812          03 ln_AMS_FeeAmount               PIC S9(11)V99999 VALUE 0.
+025000200812          03 ln_AMS_TotFeeAmt               PIC S9(11)V99999 VALUE 0.
+025100200812          03 ln_FeeAmount                   PIC S9(11)V99999 VALUE 0.
+025200200812          03 ln_AMS_FeeAmt                  PIC S9(11)V99    VALUE 0.
+025300200812          03 ln_MFE_FeeAmt                  PIC S9(11)V99    VALUE 0.
+025400200812          03 ln_TotFeeAmt                   PIC S9(11)V99    VALUE 0.
+025500200812          03 ln_MidPeriodFee                PIC S9(11)V99    VALUE 0.
+025600200812
+025700200812      * Other Variables.
+025800200812       01 LT-LITERALS.
+025900200812          03 lnc_AUMLevel                   PIC X(01) VALUE SPACES.
+026000200812             88 lnc_AUMLevel_1                  VALUE "1".
+026100200812             88 lnc_AUMLevel_2                  VALUE "2".
+026200200812             88 lnc_AUMLevel_3                  VALUE "3".
+026300200812          03 lnc_AUM_Level                  PIC X(10) VALUE SPACES.
+026400200812             88 lnc_AUM_Level_HH                VALUE "HOUSEHOLD".
+026500200812             88 lnc_AUM_Level_ACC               VALUE "ACCOUNT".
+026600200812             88 lnc_AUM_Level_INV               VALUE "INVESTMENT".
+026700200812      *
+026800200812          03 lnc_FeeCharge_1                PIC X(01) VALUE "1".
+026900200812          03 lnc_FeeCharge_2                PIC X(01) VALUE "2".
+027000200812          03 lnc_ALLSEL                     PIC X(06) VALUE "ALLSEL".
+027100200812          03 lnc_PEREND                     PIC X(06) VALUE "PEREND".
+027200200812          03 lnc_MO                         PIC X(02) VALUE "MO".
+027300200812          03 lnc_QT                         PIC X(02) VALUE "QT".
+027400200812          03 lnc_Q7                         PIC X(02) VALUE "Q7".
+027500200812          03 lnc_SA                         PIC X(02) VALUE "SA".
+027600200812          03 lnc_AN                         PIC X(02) VALUE "AN".
+027700200812          03 lnc_N                          PIC X(01) VALUE "N".
+027800200812          03 lnc_Y                          PIC X(01) VALUE "Y".
+027900200812          03 lnc_AMS                        PIC X(03) VALUE "AMS".
+028000200812          03 lnc_MGT                        PIC X(03) VALUE "MGT".
+028100200812          03 lnc_ALL                        PIC X(03) VALUE "ALL".
+028200200812          03 lnc_MFEAMS_Value               PIC X(10) VALUE "MFEAMS".
+028300200812          03 lnc_DELFEEO                    PIC X(10) VALUE "DELFEEO".
+028400200812
+028500200812      * Copybook for Error Information program (FxErrInf).
+028600200812       COPY CPERRINF.
+028700200812
+028800200812       LINKAGE SECTION.
+028900200812       01 pc-CallingPgm                     PIC X(10).
+029000200812
+029100200812       PROCEDURE DIVISION USING pc-CallingPgm.
+029200200812
+029300200812      *--------------
+029400200812       MAIN-PROCESS.
+029500200812      *--------------
+029600200812
+029700200812           EXEC SQL
+029800200812              WHENEVER SQLERROR CONTINUE
+029900200812           END-EXEC.
+030000200812
+030100200812           PERFORM INITIAL-LOGIC.
+030200200812           PERFORM DETAIL-PROCESSING.
+030300200812           PERFORM END-PROGRAM.
+030400200812
+030500200812      *---------------
+030600200812       INITIAL-LOGIC.
+030700200812      *---------------
+030800200812
+030900200812           INITIALIZE MGFEEP-MGMT-FEE-PARM
+031000200812                      lc_MFAPRCDTP
+031100200812                      lc_LDA
+031200200812                      lc_MFAOBJECTS
+031300200812                      ln_SequenceNo.
+031400200812
+031500200812           ACCEPT MGFEEP-MGMT-FEE-PARM
+031600200812             FROM WS-DTAARA-MFAMGFEEP  FOR "MFAMGFEEP".
+031700200812           ACCEPT lc_MFAPRCDTP
+031800200812             FROM WS-DTAARA-MFAPRCDTP  FOR "MFAPRCDTP".
+031900200812           ACCEPT lc_MFAOBJECTS
+032000200812             FROM WS-DTAARA-MFAOBJECTS FOR "MFAOBJECTS".
+032100200812           ACCEPT lc_LDA
+032200200812             FROM WS-DTAARA-LDA.
+032300200812
+032400200812           CALL "GETUSRID" USING lc_UserName
+032500200812
+032600210421      * RFS 1112514 - Start
+032700210324           INITIALIZE lc_Payment_xref.
+032800210324           EXEC SQL
+032900210324              SELECT MAX(PAYMENT_XREF)
+033000210324                INTO :lc_Payment_xref
+033100210324                FROM MFAMFHHDP
+033200210324                WHERE
+033300210324                SUBSTR(PAYMENT_XREF, 1, 8) = SUBSTR(:lc_MFAPRCDTP, 1, 8)
+033400210324           END-EXEC.
+033500210324
+033600210324           IF lc_Payment_xref IS NUMERIC
+033700210324              MOVE lc_Payment_xref(9:7) TO ln_SequenceNo
+033800210324           END-IF.
+033900210421      * RFS 1112514 - End
+034000210324
+034100200812           MOVE lc_MFAPRCDTP(1:8)    TO ln_ProcessDate.
+034200200812           EXEC SQL
+034300200812              SET :ln_PrvProcessDate = CAST(
+034400200812              DATE(CHAR(SUBSTR(:lc_MFAPRCDTP,1,8)), "YYYYMMDD") - 1 DAY
+034500200812              AS NUMERIC(8, 0))
+034600200812           END-EXEC.
+034700200812
+034800200812           MOVE MGFEEP-FILLER-3(1:2) TO lc_MGFEEP_value.
+034900200812
+035000200812      * Initialize the Dealer-Investment array
+035100200812           SET DLRINVIDX DLRINVIDY TO 1.
+035200200812           SET DLRINVIDX DLRINVIDY DOWN BY 1.
+035300200812           MOVE  1    TO ln-DlrInv-Array-size.
+035400200812
+035500200812      * Get the No of days in the current year
+035600200812           EXEC SQL
+035700200812             SET (:ln_YR_StrDate, :ln_YR_EndDate) =
+035800200812                 ("01/01/" || SUBSTR(:ln_ProcessDate, 3, 2),
+035900200812                  "12/31/" || SUBSTR(:ln_ProcessDate, 3, 2))
+036000200812           END-EXEC.
+036100200812
+036200200812           EXEC SQL
+036300200812             SET :li_NoOfDays = DAYS(:ln_YR_EndDate) -
+036400200812                                DAYS(:ln_YR_StrDate) + 1
+036500200812           END-EXEC.
+036600200812
+036700200812      * Delete the previous year data retaining 1 year data
+036800200812           IF lc_MFAPRCDTP(13:1) = LNC_Y
+036900200812              EXEC SQL
+037000200812                 SET :ln_Year_StrDate = SUBSTR(:ln_ProcessDate, 1, 4) ||
+037100200812                                        "0101"
+037200200812              END-EXEC
+037300200812              EXEC SQL
+037400200812                 DELETE FROM MFAHHMVLP
+037500200812                  WHERE CREATION_DATE < :ln_Year_StrDate
+037600200812                    AND FEE_PROCESSED = :lnc_Y
+037700200812              END-EXEC
+037800200812           END-IF.
+037900200812
+038000200812      * Create required work files
+038100200812           PERFORM CREATE-WORK-FILES.
+038200200812           PERFORM GET-FRQ-DETAILS.
+038300200812           IF pc-CallingPgm = lnc_ALLSEL
+038400200812              PERFORM CREATE-ALLSELL-VIEW
+038500200812           END-IF.
+038600200812           PERFORM CALCULATE-PERIOD-MKTVAL.
+038700200812           PERFORM DECLARE-CURSOR.
+038800200812
+038900200812      *------------------
+039000200812       CREATE-WORK-FILES.
+039100200812      *------------------
+039200200812
+039300200812           EXEC SQL
+039400200812             DROP INDEX WRKHHFEEL
+039500200812           END-EXEC.
+039600200812
+039700200812           MOVE SQLSTATE TO lc_sqlStates.
+039800200812           IF lncc_sqlSuccessful OR lncc_sqlWarning OR
+039900200812              lncc_sqlTblNotExists
+040000200812              CONTINUE
+040100200812           ELSE
+040200200812              SET lncc_Err01   TO TRUE
+040300200812              MOVE lncc_ErrorDeleteWRKHHFEEL TO WS-SQL-ERR-SHORT-DESCR
+040400200812              PERFORM Dsp-Error
+040500200812              PERFORM Force-Msgw
+040600200812           END-IF.
+040700200812
+040800200812           EXEC SQL
+040900200812             DROP TABLE WRKHHFEEP
+041000200812           END-EXEC.
+041100200812
+041200200812           MOVE SQLSTATE TO lc_sqlStates.
+041300200812           IF lncc_sqlSuccessful OR lncc_sqlWarning OR
+041400200812              lncc_sqlTblNotExists
+041500200812              CONTINUE
+041600200812           ELSE
+041700200812              SET lncc_Err02   TO TRUE
+041800200812              MOVE lncc_ErrorDeleteWRKHHFEEP TO WS-SQL-ERR-SHORT-DESCR
+041900200812              PERFORM Dsp-Error
+042000200812              PERFORM Force-Msgw
+042100200812           END-IF.
+042200200812
+042300200812           EXEC SQL
+042400200812             CREATE TABLE WRKHHFEEP
+042500200812             (
+042600200812                ACCOUNT_NO      NUMERIC(9, 0) NOT NULL WITH DEFAULT
+042700200812               ,INVESTMENT_CODE CHAR(5)       NOT NULL WITH DEFAULT
+042800200812               ,FEE_TYPE_CODE   CHAR(5)       NOT NULL WITH DEFAULT
+042900200812               ,HOUSEHOLD_NAME  CHAR(35)      NOT NULL WITH DEFAULT
+043000201007104468*        ,PORTFOLIO_CODE  CHAR(4)       NOT NULL WITH DEFAULT
+043100201007104468         ,PORTFOLIO_CODE  CHAR(5)       NOT NULL WITH DEFAULT
+043200200812               ,MARKET_VALUE    DECIMAL(15,2) NOT NULL WITH DEFAULT
+043300200812               ,START_DATE      NUMERIC(8, 0) NOT NULL WITH DEFAULT
+043400200812               ,END_DATE        NUMERIC(8, 0) NOT NULL WITH DEFAULT
+043500200812               ,DAYS_HELD       DECIMAL(3, 0) NOT NULL WITH DEFAULT
+043600200812               ,ACCINV_MKTVAL   DECIMAL(15,2) NOT NULL WITH DEFAULT
+043700200812               ,ACC_MKTVAL      DECIMAL(15,2) NOT NULL WITH DEFAULT
+043800210604114432         ,PFO_MKTVAL      DECIMAL(15,2) NOT NULL WITH DEFAULT
+043900200812               ,HH_MKTVAL       DECIMAL(15,2) NOT NULL WITH DEFAULT
+044000200812               ,ALL_ACC_REDEM   CHAR(1)       NOT NULL WITH DEFAULT
+044100200812               ,ALL_PFO_REDEM   CHAR(1)       NOT NULL WITH DEFAULT
+044200210603115274         ,ALL_STA_REDEM   CHAR(1)       NOT NULL WITH DEFAULT
+044300200812             )
+044400200812           END-EXEC.
+044500200812
+044600200812           EXEC SQL
+044700200812             CREATE OR REPLACE TABLE QTEMP/WRKFRQCDP
+044800200812             (
+044900200812               FREQUENCY_CODE       CHAR(02)
+045000200812              ,START_DATE           NUMERIC(8,0)
+045100200812              ,END_DATE             NUMERIC(8,0)
+045200200812             ) ON REPLACE DELETE ROWS
+045300200812           END-EXEC.
+045400200812
+045500200812           EXEC SQL
+045600200812             CREATE OR REPLACE TABLE QTEMP/WRKAFEEOP
+045700200812             (
+045800200812               ACCOUNT_NO           NUMERIC(9,0)
+045900200812              ,FEE_TYPE_CODE        CHAR(05)
+046000200812              ,ACCFEE_OVR           CHAR(01)
+046100200812             ) ON REPLACE DELETE ROWS
+046200200812           END-EXEC.
+046300200812
+046400200812           EXEC SQL
+046500200812             DROP INDEX QTEMP/WRKAFEEOL
+046600200812           END-EXEC.
+046700200812
+046800200812           EXEC SQL
+046900200812             CREATE INDEX QTEMP/WRKAFEEOL
+047000200812             ON QTEMP/WRKAFEEOP
+047100200812             (ACCOUNT_NO, FEE_TYPE_CODE)
+047200200812           END-EXEC.
+047300200812
+047400200812           EXEC SQL
+047500200812             INSERT INTO QTEMP/WRKAFEEOP
+047600200812             SELECT DISTINCT ACCOUNT_NO, FEE_TYPE_CODE, :lnc_Y
+047700200812               FROM MFAAFEEOP
+047800200812              WHERE START_DATE <= :ln_ProcessDate
+047900200812                AND END_DATE >= :ln_ProcessDate
+048000200812                AND FEE_TYPE_CODE IN (:lnc_AMS, :lnc_MGT, :lnc_ALL)
+048100200812           END-EXEC.
+048200200812
+048300200812      *------------------
+048400200812       GET-FRQ-DETAILS.
+048500200812      *-----------------
+048600200812
+048700200812           IF pc-CallingPgm = lnc_PEREND
+048800200812
+048900200812           EXEC SQL
+049000200812           INSERT INTO QTEMP/WRKFRQCDP
+049100200812           SELECT A.FREQUENCY_CODE
+049200200812                 ,CAST(CASE WHEN A.FREQUENCY_CODE = :lnc_MO
+049300200812                            THEN SUBSTR(:lc_MFAPRCDTP,22,8)
+049400200812                            WHEN A.FREQUENCY_CODE = :lnc_QT
+049500200812                            THEN SUBSTR(:lc_MFAPRCDTP,30,8)
+049600200812                            WHEN A.FREQUENCY_CODE = :lnc_SA
+049700200812                            THEN SUBSTR(:lc_MFAPRCDTP,38,8)
+049800200812                            WHEN A.FREQUENCY_CODE = :lnc_AN
+049900200812                            THEN SUBSTR(:lc_MFAPRCDTP,46,8)
+050000200812                            WHEN A.FREQUENCY_CODE = :lnc_Q7
+050100200812                            THEN SUBSTR(:lc_MFAPRCDTP,122,8)
+050200200812                            ELSE 0
+050300200812                  END AS NUMERIC(8, 0)) STRDATE
+050400200812                 ,CAST(CASE WHEN A.FREQUENCY_CODE = :lnc_MO
+050500200812                            THEN SUBSTR(:lc_MFAPRCDTP,70,8)
+050600200812                            WHEN A.FREQUENCY_CODE = :lnc_QT
+050700200812                            THEN SUBSTR(:lc_MFAPRCDTP,78,8)
+050800200812                            WHEN A.FREQUENCY_CODE = :lnc_SA
+050900200812                            THEN SUBSTR(:lc_MFAPRCDTP,86,8)
+051000200812                            WHEN A.FREQUENCY_CODE = :lnc_AN
+051100200812                            THEN SUBSTR(:lc_MFAPRCDTP,94,8)
+051200200812                            WHEN A.FREQUENCY_CODE = :lnc_Q7
+051300200812                            THEN SUBSTR(:lc_MFAPRCDTP,130,8)
+051400200812                            ELSE 0
+051500200812                  END AS NUMERIC(8, 0)) ENDDATE
+051600200812           FROM MFAFRECDP A
+051700200812           INNER JOIN MFAFRQALP B ON
+051800200812               A.FREQUENCY_CODE = B.FREQUENCY_CODE
+051900200812           AND B.SCREEN_CODE = :lnc_DELFEEO
+052000200812           WHERE
+052100200812          ((SUBSTR(:lc_MFAPRCDTP, 10, 1) = :LNC_Y AND
+052200200812            A.FREQUENCY_CODE = :LNC_MO)                      OR
+052300200812           (SUBSTR(:lc_MFAPRCDTP, 11, 1) = :LNC_Y AND
+052400200812            A.FREQUENCY_CODE = :LNC_QT)                      OR
+052500200812           (SUBSTR(:lc_MFAPRCDTP, 12, 1) = :LNC_Y AND
+052600200812            A.FREQUENCY_CODE = :LNC_SA)                      OR
+052700200812           (SUBSTR(:lc_MFAPRCDTP, 13, 1) = :LNC_Y AND
+052800200812            A.FREQUENCY_CODE = :LNC_AN)                      OR
+052900200812           (SUBSTR(:lc_MFAPRCDTP,103, 1) = :LNC_Y AND
+053000200812            A.FREQUENCY_CODE = :LNC_Q7))
+053100200812           END-EXEC
+053200200812
+053300200812      * Update end date as the last day of Calendar month for
+053400200812      * period end
+053500200812           EXEC SQL
+053600200812            UPDATE QTEMP/WRKFRQCDP FRQCDP
+053700200812                 SET END_DATE =
+053800200812                 (SELECT BUSINESS_DAY
+053900200812                    FROM MFABUSDAP BUSDAP
+054000200812                   WHERE SUBSTR(BUSDAP.BUSINESS_DAY, 1, 6) =
+054100200812                         SUBSTR(FRQCDP.END_DATE, 1, 6)
+054200200812                   ORDER BY BUSDAP.BUSINESS_DAY DESC
+054300200812                   FETCH FIRST ROW ONLY)
+054400200812           END-EXEC
+054500200812
+054600200812           END-IF.
+054700200812
+054800200812           IF pc-CallingPgm = lnc_ALLSEL
+054900200812
+055000200812           EXEC SQL
+055100200812           INSERT INTO QTEMP/WRKFRQCDP
+055200200812           SELECT A.FREQUENCY_CODE
+055300200812                 ,CAST(CASE
+055400200812                            WHEN A.FREQUENCY_CODE = :lnc_MO AND
+055500200812                                 SUBSTR(:lc_MFAPRCDTP,10,1) <> :lnc_Y
+055600200812                            THEN DATE(CHAR(
+055700200812                            SUBSTR(:lc_MFAPRCDTP,22,8)), "YYYYMMDD") +
+055800200812                            1 MONTH
+055900200812
+056000200812                            WHEN A.FREQUENCY_CODE = :lnc_MO AND
+056100200812                                 SUBSTR(:lc_MFAPRCDTP,10,1) = :lnc_Y
+056200200812                            THEN DATE(CHAR(
+056300200812                            SUBSTR(:lc_MFAPRCDTP,22,8)), "YYYYMMDD")
+056400200812
+056500200812                            WHEN A.FREQUENCY_CODE = :lnc_QT AND
+056600200812                                 SUBSTR(:lc_MFAPRCDTP,11,1) <> :lnc_Y
+056700200812                            THEN DATE(CHAR(
+056800200812                            SUBSTR(:lc_MFAPRCDTP,30,8)), "YYYYMMDD") +
+056900200812                            3 MONTHS
+057000200812
+057100200812                            WHEN A.FREQUENCY_CODE = :lnc_QT AND
+057200200812                                 SUBSTR(:lc_MFAPRCDTP,11,1) = :lnc_Y
+057300200812                            THEN DATE(CHAR(
+057400200812                            SUBSTR(:lc_MFAPRCDTP,30,8)), "YYYYMMDD")
+057500200812
+057600200812                            WHEN A.FREQUENCY_CODE = :lnc_SA AND
+057700200812                                 SUBSTR(:lc_MFAPRCDTP,12,1) <> :lnc_Y
+057800200812                            THEN DATE(CHAR(
+057900200812                            SUBSTR(:lc_MFAPRCDTP,38,8)), "YYYYMMDD") +
+058000200812                            3 MONTHS
+058100200812
+058200200812                            WHEN A.FREQUENCY_CODE = :lnc_SA AND
+058300200812                                 SUBSTR(:lc_MFAPRCDTP,12,1) = :lnc_Y
+058400200812                            THEN DATE(CHAR(
+058500200812                            SUBSTR(:lc_MFAPRCDTP,38,8)), "YYYYMMDD")
+058600200812
+058700200812                            WHEN A.FREQUENCY_CODE = :lnc_AN AND
+058800200812                                 SUBSTR(:lc_MFAPRCDTP,13,1) <> :lnc_Y
+058900200812                            THEN DATE(CHAR(
+059000200812                            SUBSTR(:lc_MFAPRCDTP,46,8)), "YYYYMMDD") +
+059100200812                            3 MONTHS
+059200200812
+059300200812                            WHEN A.FREQUENCY_CODE = :lnc_AN AND
+059400200812                                 SUBSTR(:lc_MFAPRCDTP,13,1) = :lnc_Y
+059500200812                            THEN DATE(CHAR(
+059600200812                            SUBSTR(:lc_MFAPRCDTP,46,8)), "YYYYMMDD")
+059700200812
+059800200812                            WHEN A.FREQUENCY_CODE = :lnc_Q7 AND
+059900200812                                 SUBSTR(:lc_MFAPRCDTP,103,1) <> :lnc_Y
+060000200812                            THEN DATE(CHAR(
+060100200812                            SUBSTR(:lc_MFAPRCDTP,122,8)), "YYYYMMDD") +
+060200200812                            3 MONTHS
+060300200812
+060400200812                            WHEN A.FREQUENCY_CODE = :lnc_Q7 AND
+060500200812                                 SUBSTR(:lc_MFAPRCDTP,103,1) = :lnc_Y
+060600200812                            THEN DATE(CHAR(
+060700200812                            SUBSTR(:lc_MFAPRCDTP,122,8)), "YYYYMMDD")
+060800200812                  END AS NUMERIC(8,0)) STRDATE
+060900200812
+061000200812                 ,CAST(SUBSTR(:lc_MFAPRCDTP,1,8) AS NUMERIC(8, 0))
+061100200812                  ENDDATE
+061200200812           FROM MFAFRECDP A
+061300200812           INNER JOIN MFAFRQALP B ON
+061400200812               A.FREQUENCY_CODE = B.FREQUENCY_CODE
+061500200812           AND B.SCREEN_CODE = :lnc_DELFEEO
+061600200812           END-EXEC
+061700200812
+061800200812           END-IF.
+061900200812
+062000200812      * Update Start date as the First day of Calendar month for
+062100200812      * both period end and all units redemption
+062200200812           EXEC SQL
+062300200812              UPDATE QTEMP/WRKFRQCDP FRQCDP
+062400200812                 SET START_DATE =
+062500200812                 (SELECT BUSINESS_DAY
+062600200812                    FROM MFABUSDAP BUSDAP
+062700200812                   WHERE SUBSTR(BUSDAP.BUSINESS_DAY, 1, 6) =
+062800200812                         SUBSTR(FRQCDP.START_DATE, 1, 6)
+062900200812                   ORDER BY BUSDAP.BUSINESS_DAY ASC
+063000200812                   FETCH FIRST ROW ONLY)
+063100200812           END-EXEC.
+063200200812
+063300200812      *--------------------
+063400200812       CREATE-ALLSELL-VIEW.
+063500200812      *--------------------
+063600200812
+063700210428      * RFS 1111935 Start
+063800210428
+063900210428           EXEC SQL
+064000210428             DROP TABLE LCLTRNPF
+064100210428           END-EXEC.
+064200210428
+064300210428           MOVE SQLSTATE TO lc_sqlStates.
+064400210428           IF lncc_sqlSuccessful OR lncc_sqlWarning OR
+064500210428              lncc_sqlTblNotExists
+064600210428              CONTINUE
+064700210428           ELSE
+064800210428              SET lncc_Err19   TO TRUE
+064900210428              MOVE lncc_ErrorDeleteLCLTRNPF  TO WS-SQL-ERR-SHORT-DESCR
+065000210428              PERFORM Dsp-Error
+065100210428              PERFORM Force-Msgw
+065200210428           END-IF.
+065300210428
+065400210428           EXEC SQL
+065500210428           CREATE TABLE LCLTRNPF LIKE MFATRNP
+065600210428           END-EXEC.
+065700210428
+065800210428           EXEC SQL
+065900210428             INSERT INTO LCLTRNPF
+066000210428             WITH TMPTRNP AS (
+066100210428             SELECT TRNP.PLACEMENT_DATE, TRANS_NO,
+066200210428             ROW_NUMBER() OVER(PARTITION BY ACCOUNT_NO, INVESTMENT_CODE
+066300210428             ORDER BY ACCOUNT_NO, INVESTMENT_CODE, PLACEMENT_DATE,
+066400210428                      TRANS_NO) ACCINVCNT
+066500210428             FROM MFATRNP TRNP
+066600210428             WHERE TRNP.TRADE_DATE = :ln_ProcessDate
+066700210428             AND TRNP.TRANS_STATUS_CODE IN ("PND", "UNC", "VER")
+066800210428             AND TRNP.TRANS_TYPE_CODE IN ("SEL", "SWO", "TRO")
+066900210428             AND TRNP.SPLIT_OPTION_CODE = "A"
+067000210428             ORDER BY ACCOUNT_NO, INVESTMENT_CODE)
+067100210428             SELECT MFATRNP.*
+067200210428             FROM MFATRNP, TMPTRNP
+067300210428             WHERE MFATRNP.PLACEMENT_DATE = TMPTRNP.PLACEMENT_DATE
+067400210428               AND MFATRNP.TRANS_NO = TMPTRNP.TRANS_NO
+067500210428               AND ACCINVCNT = 1
+067600210428           END-EXEC.
+067700210428      * RFS 1111935 End
+067800210428
+067900200812      * Select All the pending all units redemption transactions to
+068000200812      * calculate the mid period fee
+068100200812           EXEC SQL
+068200200812             DROP VIEW MFATRNV
+068300200812           END-EXEC.
+068400200812
+068500200812           MOVE SQLSTATE TO lc_sqlStates.
+068600200812           IF lncc_sqlSuccessful OR lncc_sqlWarning OR
+068700200812              lncc_sqlTblNotExists
+068800200812              CONTINUE
+068900200812           ELSE
+069000200812              SET lncc_Err03   TO TRUE
+069100200812              MOVE lncc_ErrorDeleteMFATRNV   TO WS-SQL-ERR-SHORT-DESCR
+069200200812              PERFORM Dsp-Error
+069300200812              PERFORM Force-Msgw
+069400200812           END-IF.
+069500200812
+069600200812           STRING "CREATE VIEW "               DELIMITED BY SIZE
+069700200812                  lc_MFAOBJECTS                DELIMITED BY SPACE
+069800200812                  "/MFATRNV AS "               DELIMITED BY SIZE
+069900200812                  "SELECT TRNP.*, COUNT(1) "   DELIMITED BY SIZE
+070000200812                  "OVER (PARTITION BY ACCOUNT_NO) AS TRNCNT "
+070100200812                                               DELIMITED BY SIZE
+070200210428      * RFS 1111935 - Start
+070300210428      *           "FROM MFATRNP TRNP "         DELIMITED BY SIZE
+070400210428                  "FROM LCLTRNPF TRNP "        DELIMITED BY SIZE
+070500210428      * RFS 1111935 - End
+070600200812                  "WHERE TRNP.TRADE_DATE = "   DELIMITED BY SIZE
+070700200812                  ln_ProcessDate               DELIMITED BY " "
+070800200812                  " AND TRNP.TRANS_STATUS_CODE IN ("
+070900200812                                               DELIMITED BY SIZE
+071000200812                  """PND"", ""UNC"", ""VER"")" DELIMITED BY SIZE
+071100200812                  " AND TRNP.TRANS_TYPE_CODE IN ("
+071200200812                  """SEL"", ""SWO"", ""TRO"")" DELIMITED BY SIZE
+071300200812                  " AND TRNP.SPLIT_OPTION_CODE = ""A"""
+071400200812                                               DELIMITED BY SIZE
+071500200812             INTO lc_CreateView_Stmt
+071600200812           END-STRING.
+071700200812
+071800200812           EXEC SQL
+071900200812             EXECUTE IMMEDIATE :lc_CreateView_Stmt
+072000200812           END-EXEC.
+072100200812
+072200200812      * Get the portfolio details of the Accounts
+072300200812           EXEC SQL
+072400200812             DROP VIEW IAMSHP
+072500200812           END-EXEC.
+072600200812
+072700200812           MOVE SQLSTATE TO lc_sqlStates.
+072800200812           IF lncc_sqlSuccessful OR lncc_sqlWarning OR
+072900200812              lncc_sqlTblNotExists
+073000200812              CONTINUE
+073100200812           ELSE
+073200200812              SET lncc_Err04   TO TRUE
+073300200812              MOVE lncc_ErrorDeleteIAMSHP    TO WS-SQL-ERR-SHORT-DESCR
+073400200812              PERFORM Dsp-Error
+073500200812              PERFORM Force-Msgw
+073600200812           END-IF.
+073700200812
+073800200812           INITIALIZE lc_CreateView_Stmt.
+073900200812
+074000200812           STRING "CREATE VIEW "               DELIMITED BY SIZE
+074100200812                  lc_MFAOBJECTS                DELIMITED BY SPACE
+074200200812                  "/"                          DELIMITED BY SIZE
+074300200812                  "IAMSHP AS "                 DELIMITED BY SIZE
+074400200812                  "SELECT ACIAAP.ACCOUNT_NO, " DELIMITED BY SIZE
+074500200812                  "IAMSDP.INVESTMENT_CODE, "   DELIMITED BY SIZE
+074600201008104468            "IAMSDP.INVESTMENT_CODE2, "  DELIMITED BY SIZE
+074700200812                  "IAMSHP.AA_MODEL_CODE,"      DELIMITED BY SIZE
+074800200812                  "COUNT(1) OVER (PARTITION BY ACCOUNT_NO) AS PFOCNT "
+074900200812                                               DELIMITED BY SIZE
+075000200812                  "FROM MFAACIAAP ACIAAP, "    DELIMITED BY SIZE
+075100200812                  "LATERAL "                   DELIMITED BY SIZE
+075200200812                  "(SELECT * "                 DELIMITED BY SIZE
+075300200812                  "FROM MFAIAMSHP IAMSHP "     DELIMITED BY SIZE
+075400200812                  "WHERE IAMSHP.INVESTMENT_CODE2 = "
+075500200812                                               DELIMITED BY SIZE
+075600200812                  "ACIAAP.INVESTMENT_CODE "    DELIMITED BY SIZE
+075700200812                  " AND START_DATE <= "        DELIMITED BY SIZE
+075800200812                  ln_ProcessDate               DELIMITED BY " "
+075900200812                  " ORDER BY START_DATE DESC " DELIMITED BY SIZE
+076000200812                  "FETCH FIRST ROW ONLY) IAMSHP, "
+076100200812                                               DELIMITED BY SIZE
+076200200812                  "LATERAL "                   DELIMITED BY SIZE
+076300200812                  "(SELECT * "                 DELIMITED BY SIZE
+076400200812                  "FROM MFAIAMSDP IAMSDP "     DELIMITED BY SIZE
+076500200812                  "WHERE IAMSHP.INVESTMENT_CODE2 = "
+076600200812                                               DELIMITED BY SIZE
+076700200812                  "IAMSDP.INVESTMENT_CODE2 "   DELIMITED BY SIZE
+076800200812                  "AND IAMSHP.START_DATE = IAMSDP.START_DATE "
+076900200812                                               DELIMITED BY SIZE
+077000200812                  "AND IAMSHP.AA_MODEL_CODE = " DELIMITED BY SIZE
+077100200812                  "IAMSDP.AA_MODEL_CODE) IAMSDP "
+077200200812                                               DELIMITED BY SIZE
+077300201008      * RFS 1104468 - Start
+077400201008      *           "WHERE IAMSDP.PERCENT_ALLOCATION > 0 "
+077500201008      *                                        DELIMITED BY SIZE
+077600201008      *           "AND ACCOUNT_INV_STATUS = ""ACT"""
+077700201008                  "WHERE ACCOUNT_INV_STATUS = ""ACT"""
+077800201008      * RFS 1104468 - End
+077900200812                                               DELIMITED BY SIZE
+078000200812             INTO lc_CreateView_Stmt
+078100200812           END-STRING.
+078200200812
+078300200812           EXEC SQL
+078400200812             EXECUTE IMMEDIATE :lc_CreateView_Stmt
+078500200812           END-EXEC.
+078600200812
+078700200812           EXEC SQL
+078800200812             DROP TABLE WRKALLSEL
+078900200812           END-EXEC.
+079000200812
+079100200812           MOVE SQLSTATE TO lc_sqlStates.
+079200200812           IF lncc_sqlSuccessful OR lncc_sqlWarning OR
+079300200812              lncc_sqlTblNotExists
+079400200812              CONTINUE
+079500200812           ELSE
+079600200812              SET lncc_Err05   TO TRUE
+079700200812              MOVE lncc_ErrorDeleteWRKALLSEL TO WS-SQL-ERR-SHORT-DESCR
+079800200812              PERFORM Dsp-Error
+079900200812              PERFORM Force-Msgw
+080000200812           END-IF.
+080100200812
+080200200812      * Create a view which will contain Account-Investments that
+080300200812      * has all unit Switch transactions within the same portfolio
+080400200812
+080500200812           EXEC SQL
+080600200812             CREATE VIEW QTEMP/SAMEPFOSW AS
+080700200812             SELECT TRNV.ACCOUNT_NO, TRNV.INVESTMENT_CODE
+080800200812             FROM MFATRNV TRNV
+080900200812             INNER JOIN IAMSHP IAMSHPO ON
+081000200812                 IAMSHPO.ACCOUNT_NO = TRNV.ACCOUNT_NO
+081100200812             AND IAMSHPO.INVESTMENT_CODE = TRNV.INVESTMENT_CODE
+081200200814             INNER JOIN MFAACCNTP ACCNTPO ON
+081300200814                 ACCNTPO.ACCOUNT_NO = IAMSHPO.ACCOUNT_NO
+081400200812             INNER JOIN MFATRNTGP TRNTGP ON
+081500200812                 TRNTGP.PLACEMENT_DATE = TRNV.PLACEMENT_DATE
+081600200812             AND TRNTGP.TRANS_NO       = TRNV.TRANS_NO
+081700200812             INNER JOIN MFATRNP TRNP ON
+081800200812                 TRNTGP.PLACEMENT_DATE_2 = TRNP.PLACEMENT_DATE
+081900200812             AND TRNTGP.TRANS_NO_2       = TRNP.TRANS_NO
+082000200812             INNER JOIN IAMSHP IAMSHPI ON
+082100200812                 IAMSHPI.ACCOUNT_NO = TRNP.ACCOUNT_NO
+082200200812             AND IAMSHPI.INVESTMENT_CODE = TRNP.INVESTMENT_CODE
+082300200814             INNER JOIN MFAACCNTP ACCNTPI ON
+082400200814                 ACCNTPI.ACCOUNT_NO = IAMSHPI.ACCOUNT_NO
+082500200812             WHERE TRNV.TRANS_TYPE_CODE IN ("SWO", "TRO")
+082600200812               AND TRNP.TRANS_TYPE_CODE IN ("SWI", "TRI")
+082700201008      * RFS 1104468 - Start
+082800201008      *        AND IAMSHPO.AA_MODEL_CODE = IAMSHPI.AA_MODEL_CODE	
+082900201008      *        AND ACCNTPO.INVESTOR_NO = ACCNTPI.INVESTOR_NO
+083000201013               AND ACCNTPO.ACCOUNT_NO = ACCNTPI.ACCOUNT_NO
+083100201013               AND TRNV.INDUSTRY_FUND_CODE = TRNP.INDUSTRY_FUND_CODE
+083200201008      * RFS 1104468 - End
+083300200812           END-EXEC.
+083400200812
+083500200812      * Create the work file WRKALLSEL with the all unit redemption
+083600200812      * transaction details along with the entire Account/Portfolio is
+083700200812      * redeemed or not
+083800200812      * ACCIVPCNT > 0 = All funds within Account is fully redeemed
+083900200812      * IAMSHPCNT > 0 = All funds within Portfolio is fully redeemed
+084000200812           EXEC SQL
+084100200812           CREATE TABLE WRKALLSEL AS
+084200200812           (
+084300200812           SELECT TRNP.ACCOUNT_NO, TRNP.INVESTMENT_CODE,
+084400210603      * RFS 1115274 - Start
+084900210825                  COALESCE(ACCIVPCNT, 0) AS ACCIVPCNT,
+084901210825                  TRNCNT,
+085000210531                  COALESCE(PFOTOTCNT, 0) AS PFOTOTCNT,
+085001210825                  COALESCE(STATRNCNT, 0) AS STATRNCNT,
+085100210531      *           CAST(CASE WHEN COALESCE(ACCIVPCNT, 0) > 0
+085200210531                  CAST(CASE WHEN COALESCE(ACCIVPCNT, 0) = TRNCNT
+085300210603      * RFS 1115274 - End
+085400200812                            THEN "Y"
+085500200812                            ELSE "N"
+085600200812                       END AS CHAR(01)) AS ALLACCSEL,
+085700200812                  CAST(CASE WHEN COALESCE(IAMSHPCNT, 0) > 0
+085800200812                            THEN "Y"
+085900200812                            ELSE "N"
+086000200812                       END AS CHAR(01)) AS ALLPFOSEL
+086001210825      * RFS 1115274 - Start
+086002210825                 ,CAST(CASE WHEN COALESCE(ACCIVPCNT, 0) -
+086003210825                                 COALESCE(PFOTOTCNT, 0) =
+086004210825                                 COALESCE(STATRNCNT, 0)
+086005210825                            THEN "Y"
+086006210825                            ELSE "N"
+086007210825                       END AS CHAR(01)) AS ALLSTASEL
+086008210825      * RFS 1115274 - End
+086100200812           FROM MFATRNV TRNP
+086200210817      * RFS 1115274 - Start
+086300210531           LEFT OUTER JOIN
+086400210531                (SELECT IAMSHP.ACCOUNT_NO, MAX(PFOCNT) PFOTOTCNT
+086500210531                   FROM IAMSHP
+086600210531                 GROUP BY IAMSHP.ACCOUNT_NO) PFODTL ON
+086700210531                     PFODTL.ACCOUNT_NO = TRNP.ACCOUNT_NO
+086800210817           LEFT OUTER JOIN
+086900210817                (SELECT ACCIVP.ACCOUNT_NO, COUNT(1) STATRNCNT
+087000210817                 FROM MFAACCIVP ACCIVP
+087100210817                 INNER JOIN MFATRNV TRNP ON
+087200210817                     TRNP.ACCOUNT_NO = ACCIVP.ACCOUNT_NO
+087300210817                 AND TRNP.INVESTMENT_CODE = ACCIVP.INVESTMENT_CODE
+087400210817                 EXCEPTION JOIN IAMSHP ON
+087500210817                     IAMSHP.ACCOUNT_NO = ACCIVP.ACCOUNT_NO
+087600210817                 AND IAMSHP.INVESTMENT_CODE = ACCIVP.INVESTMENT_CODE
+087700210817                 WHERE CURR_UNIT_BAL > 0
+087800210817                 GROUP BY ACCIVP.ACCOUNT_NO) STACNT ON
+087900210817                     STACNT.ACCOUNT_NO = TRNP.ACCOUNT_NO
+088100210603      * RFS 1115274 - End
+088200200812           LEFT OUTER JOIN
+088300200812                (SELECT COUNT(1) ACCIVPCNT, ACCOUNT_NO
+088400200812                   FROM MFAACCIVP
+088500200812                  WHERE CURR_UNIT_BAL > 0
+088600200812                 GROUP BY ACCOUNT_NO) ACCIVP ON
+088700200812                     ACCIVP.ACCOUNT_NO = TRNP.ACCOUNT_NO
+088800210603115274*          AND ACCIVPCNT = TRNCNT
+088900200812           LEFT OUTER JOIN
+089000200812                (SELECT IAMSHP.ACCOUNT_NO, COUNT(1) IAMSHPCNT,
+089100200812                        MAX(PFOCNT) PFOCNT
+089200200812                   FROM IAMSHP
+089300200812                 INNER JOIN MFATRNV TRNP ON
+089400200812                     IAMSHP.ACCOUNT_NO = TRNP.ACCOUNT_NO
+089500200812                 AND IAMSHP.INVESTMENT_CODE = TRNP.INVESTMENT_CODE
+089600200812                 GROUP BY IAMSHP.ACCOUNT_NO) IAMSHP ON
+089700200812                     IAMSHP.ACCOUNT_NO = TRNP.ACCOUNT_NO
+089800200812                 AND IAMSHPCNT =  PFOCNT
+089900200812           ) WITH DATA
+090000200812           END-EXEC.
+090100200812
+090200200812      *-------------------------
+090300200812       CALCULATE-PERIOD-MKTVAL.
+090400200812      *-------------------------
+090500200812
+090600200812      * Calculate the Average AUM of Account-Investment, Account
+090700200812      * and Household
+090800200812           IF pc-CallingPgm = lnc_PEREND
+090900200812              PERFORM CALCULATE-PEREND-MKTVAL
+091000200812           END-IF.
+091100200812
+091200200812           IF pc-CallingPgm = lnc_ALLSEL
+091300200812              PERFORM CALCULATE-PEREND-ALLSEL
+091400200812           END-IF.
+091500200812
+091600200812      *-------------------------
+091700200812       CALCULATE-PEREND-MKTVAL.
+091800200812      *-------------------------
+091900200812
+092000200812      * Insert the Household and Portfolio details of the
+092100200812      * Acc-Inv's on the period end
+092200200812           EXEC SQL
+092300200812              INSERT INTO WRKHHFEEP
+092400200812              (
+092500200812               ACCOUNT_NO, INVESTMENT_CODE, FEE_TYPE_CODE,
+092600200812               HOUSEHOLD_NAME, PORTFOLIO_CODE, MARKET_VALUE,
+092700200812               START_DATE, END_DATE
+092800200812              )
+092900200812              SELECT HHMVLP.ACCOUNT_NO, HHMVLP.INVESTMENT_CODE,
+093000200812                     HHMVLP.FEE_TYPE_CODE, HHMVLP.HOUSEHOLD_NAME,
+093100200812                     HHMVLP.PORTFOLIO_CODE, HHMVLP.MARKET_VALUE,
+093200200812                     FRQCDP.START_DATE, FRQCDP.END_DATE
+093300200812              FROM MFAHHMVLP HHMVLP
+093400200812              INNER JOIN MFADEAMDP DEAMDP ON
+093500200812                  DEAMDP.DEALER_CODE = HHMVLP.DEALER_CODE
+093600200812              INNER JOIN QTEMP/WRKFRQCDP FRQCDP ON
+093700200812                  DEAMDP.FEE_FREQUENCY_CODE = FRQCDP.FREQUENCY_CODE,
+093800200812              LATERAL (SELECT A.ACCOUNT_NO, A.INVESTMENT_CODE,
+093900200812                              A.CREATION_DATE, A.FEE_TYPE_CODE
+094000200812                         FROM MFAHHMVLP A
+094100200812                        WHERE A.ACCOUNT_NO = HHMVLP.ACCOUNT_NO
+094200200812                          AND A.INVESTMENT_CODE = HHMVLP.INVESTMENT_CODE
+094300200812                          AND A.CREATION_DATE >= FRQCDP.START_DATE
+094400200812                          AND A.CREATION_DATE <= FRQCDP.END_DATE
+094500200812                          AND A.FEE_TYPE_CODE = HHMVLP.FEE_TYPE_CODE
+094600200812                          AND A.FEE_PROCESSED <> :lnc_Y
+094700200812                       ORDER BY CREATION_DATE DESC
+094800200812                       FETCH FIRST ROW ONLY) SELREC
+094900200812              WHERE HHMVLP.CREATION_DATE = SELREC.CREATION_DATE
+095000200812                AND HHMVLP.FEE_PROCESSED <> :lnc_Y
+095100200812           END-EXEC
+095200200812
+095300200812           MOVE SQLSTATE TO lc_sqlStates
+095400200812           IF lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+095500200812              CONTINUE
+095600200812           ELSE
+095700200812              SET lncc_Err06   TO TRUE
+095800200812              MOVE lncc_ErrorInsertWRKHHFEEP TO WS-SQL-ERR-SHORT-DESCR
+095900200812              PERFORM Dsp-Error
+096000200812              PERFORM Force-Msgw
+096100200812           END-IF.
+096200200812
+096300200812      * Calculate all Account Investments Average AUM for the period
+096400200812           EXEC SQL
+096500200812           UPDATE WRKHHFEEP HHFEEP
+096600200812             SET (ACCINV_MKTVAL, DAYS_HELD) =
+096700200812                 (SELECT ROUND(
+096800200812                         DECFLOAT(SUM(MARKET_VALUE)) / COUNT(1), 2),
+096900200812                         COUNT(1)
+097000200812                    FROM MFAHHMVLP HHMVLP
+097100200812                   WHERE HHFEEP.ACCOUNT_NO = HHMVLP.ACCOUNT_NO
+097200200812                     AND HHFEEP.INVESTMENT_CODE = HHMVLP.INVESTMENT_CODE
+097300200812                     AND HHFEEP.FEE_TYPE_CODE = HHMVLP.FEE_TYPE_CODE
+097400200812                     AND HHMVLP.CREATION_DATE >= HHFEEP.START_DATE
+097500200812                     AND HHMVLP.CREATION_DATE <= HHFEEP.END_DATE
+097600200812                     AND HHMVLP.FEE_PROCESSED <> :lnc_Y
+097700200812                  GROUP BY HHMVLP.ACCOUNT_NO, HHMVLP.INVESTMENT_CODE,
+097800200812                           HHMVLP.FEE_TYPE_CODE)
+097900200812           END-EXEC.
+098000200812
+098100200812           MOVE SQLSTATE TO lc_sqlStates.
+098200200812           IF lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+098300200812              CONTINUE
+098400200812           ELSE
+098500200812              SET lncc_Err07   TO TRUE
+098600200812              MOVE lncc_ErrorUpdateWRKHHFEEP TO WS-SQL-ERR-SHORT-DESCR
+098700200812              PERFORM Dsp-Error
+098800200812              PERFORM Force-Msgw
+098900200812           END-IF.
+099000200812
+099100200812      * Calculate all Account level Average AUM for the period
+099200200812           EXEC SQL
+099300200812             UPDATE WRKHHFEEP HHFEEP
+099400200812                SET ACC_MKTVAL = COALESCE(
+099500200812                   (SELECT SUM(ACCINV_MKTVAL)
+099600200812                      FROM WRKHHFEEP HHMVLP
+099700200812                    WHERE HHFEEP.ACCOUNT_NO = HHMVLP.ACCOUNT_NO
+099800200812                      AND HHFEEP.FEE_TYPE_CODE = HHMVLP.FEE_TYPE_CODE
+099900200812                      GROUP BY HHMVLP.ACCOUNT_NO), 0)
+100000200812           END-EXEC.
+100100200812
+100200200812           MOVE SQLSTATE TO lc_sqlStates.
+100300200812           IF lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+100400200812              CONTINUE
+100500200812           ELSE
+100600200812              SET lncc_Err08   TO TRUE
+100700200812              MOVE lncc_ErrorUpdateWRKHHFEEP TO WS-SQL-ERR-SHORT-DESCR
+100800200812              PERFORM Dsp-Error
+100900200812              PERFORM Force-Msgw
+101000200812           END-IF.
+101100200812
+101200210604      * RFS 1114432 - Start
+101300210604      * Calculate all Portfolio level Average AUM for the period
+101400210604           EXEC SQL
+101500210604             UPDATE WRKHHFEEP HHFEEP
+101600210604                SET PFO_MKTVAL = COALESCE(
+101700210604                   (SELECT SUM(ACCINV_MKTVAL)
+101800210604                      FROM WRKHHFEEP HHMVLP
+101900210604                    WHERE HHFEEP.ACCOUNT_NO = HHMVLP.ACCOUNT_NO
+102000210604                      AND HHFEEP.FEE_TYPE_CODE = HHMVLP.FEE_TYPE_CODE
+102100210604                      AND HHFEEP.PORTFOLIO_CODE <> " "
+102200210604                      GROUP BY HHMVLP.ACCOUNT_NO), 0)
+102300210604           END-EXEC.
+102400210604
+102500210604           MOVE SQLSTATE TO lc_sqlStates.
+102600210604           IF lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+102700210604              CONTINUE
+102800210604           ELSE
+102900210604              SET lncc_Err20   TO TRUE
+103000210604              MOVE lncc_ErrorUpdateWRKHHFEEP TO WS-SQL-ERR-SHORT-DESCR
+103100210604              PERFORM Dsp-Error
+103200210604              PERFORM Force-Msgw
+103300210604           END-IF.
+103400210607      * RFS 1114432 - End
+103500210604
+103600200812      * Calculate all Household level Average AUM for the period
+103700200812           EXEC SQL
+103800200812             UPDATE WRKHHFEEP HHFEEP
+103900200812                SET HH_MKTVAL = COALESCE(
+104000200812                   (SELECT SUM(ACCINV_MKTVAL)
+104100200812                      FROM WRKHHFEEP HHMVLP
+104200200812                    WHERE HHMVLP.HOUSEHOLD_NAME <> " "
+104300200812                      AND HHFEEP.HOUSEHOLD_NAME = HHMVLP.HOUSEHOLD_NAME
+104400200812                      AND HHFEEP.FEE_TYPE_CODE = HHMVLP.FEE_TYPE_CODE
+104500200812                      GROUP BY HHMVLP.HOUSEHOLD_NAME), 0)
+104600200812              WHERE HHFEEP.HOUSEHOLD_NAME <> " "
+104700200812           END-EXEC.
+104800200812
+104900200812           MOVE SQLSTATE TO lc_sqlStates.
+105000200812           IF lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+105100200812              CONTINUE
+105200200812           ELSE
+105300200812              SET lncc_Err09   TO TRUE
+105400200812              MOVE lncc_ErrorUpdateWRKHHFEEP TO WS-SQL-ERR-SHORT-DESCR
+105500200812              PERFORM Dsp-Error
+105600200812              PERFORM Force-Msgw
+105700200812           END-IF.
+105800200812
+105900200812      *-------------------------
+106000200812       CALCULATE-PEREND-ALLSEL.
+106100200812      *-------------------------
+106200200812
+106300200812           EXEC SQL
+106400200812             DROP TABLE QTEMP/TMPHHFEEP
+106500200812           END-EXEC.
+106600200812
+106700200812           EXEC SQL
+106800200812             CREATE TABLE QTEMP/TMPHHFEEP LIKE WRKHHFEEP
+106900200812           END-EXEC.
+107000200812
+107100200812      * Insert the Household and Portfolio details of the
+107200200812      * Acc-Inv's fully redeemed along with its MKT value
+107300200812      * on the day before full sell
+107400200812           EXEC SQL
+107500200812              INSERT INTO WRKHHFEEP
+107600200812              (
+107700200812               ACCOUNT_NO, INVESTMENT_CODE, FEE_TYPE_CODE,
+107800200812               HOUSEHOLD_NAME, PORTFOLIO_CODE, MARKET_VALUE,
+107900200812               START_DATE, END_DATE, ALL_ACC_REDEM, ALL_PFO_REDEM
+108000210603115274        ,ALL_STA_REDEM
+108100200812              )
+108200200812              SELECT HHMVLP.ACCOUNT_NO, HHMVLP.INVESTMENT_CODE,
+108300200812                     HHMVLP.FEE_TYPE_CODE, HHMVLP.HOUSEHOLD_NAME,
+108400200812                     HHMVLP.PORTFOLIO_CODE, HHMVLP.MARKET_VALUE,
+108500200812                     FRQCDP.START_DATE, :ln_PrvProcessDate,
+108600200812                     ALLACCSEL, ALLPFOSEL
+108700210603115274              ,ALLSTASEL
+108800200812              FROM MFAHHMVLP HHMVLP
+108900200812              INNER JOIN WRKALLSEL ALLSEL ON
+109000200812                  ALLSEL.ACCOUNT_NO = HHMVLP.ACCOUNT_NO
+109100200812              AND ALLSEL.INVESTMENT_CODE = HHMVLP.INVESTMENT_CODE
+109200200812              EXCEPTION JOIN SAMEPFOSW ON
+109300200812                  SAMEPFOSW.ACCOUNT_NO = HHMVLP.ACCOUNT_NO
+109400200812              AND SAMEPFOSW.INVESTMENT_CODE = HHMVLP.INVESTMENT_CODE
+109500200812              INNER JOIN MFADEAMDP DEAMDP ON
+109600200812                  DEAMDP.DEALER_CODE = HHMVLP.DEALER_CODE
+109700200812              INNER JOIN QTEMP/WRKFRQCDP FRQCDP ON
+109800200812                  DEAMDP.FEE_FREQUENCY_CODE = FRQCDP.FREQUENCY_CODE
+109900200812              AND HHMVLP.CREATION_DATE >= FRQCDP.START_DATE
+110000200812              AND HHMVLP.CREATION_DATE <= FRQCDP.END_DATE
+110100200812              WHERE HHMVLP.CREATION_DATE = :ln_PrvProcessDate
+110200200812                AND HHMVLP.FEE_PROCESSED <> :lnc_Y
+110300200812           END-EXEC
+110400200812
+110500200812           MOVE SQLSTATE TO lc_sqlStates.
+110600200812           IF lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+110700200812              CONTINUE
+110800200812           ELSE
+110900200812              SET lncc_Err13   TO TRUE
+111000200812              MOVE lncc_ErrorInsertWRKHHFEEP TO WS-SQL-ERR-SHORT-DESCR
+111100200812              PERFORM Dsp-Error
+111200200812              PERFORM Force-Msgw
+111300200812           END-IF.
+111400200812
+111500200812      * Insert the Household and Portfolio details of the other
+111600200812      * Acc-Inv's relating fully redeemed Acc-Inv's to enable
+111700200812      * the calculation at Account and Portfolio level
+111800200812           EXEC SQL
+111900200812              INSERT INTO QTEMP/TMPHHFEEP
+112000200812              (
+112100200812               ACCOUNT_NO, INVESTMENT_CODE, FEE_TYPE_CODE,
+112200200812               HOUSEHOLD_NAME, PORTFOLIO_CODE, MARKET_VALUE,
+112300200812               START_DATE, END_DATE
+112400200812              )
+112500200812              SELECT DISTINCT
+112600200812                     HHMVLP.ACCOUNT_NO, HHMVLP.INVESTMENT_CODE,
+112700200812                     HHMVLP.FEE_TYPE_CODE, HHMVLP.HOUSEHOLD_NAME,
+112800200812                     HHMVLP.PORTFOLIO_CODE, HHMVLP.MARKET_VALUE,
+112900200812                     FRQCDP.START_DATE, :ln_PrvProcessDate
+113000200812              FROM MFAHHMVLP HHMVLP
+113100200812              INNER JOIN WRKHHFEEP HHFEEP ON
+113200200812                ((HHFEEP.HOUSEHOLD_NAME = HHMVLP.HOUSEHOLD_NAME AND
+113300200812                  HHFEEP.HOUSEHOLD_NAME <> " ") OR
+113400200812                 (HHFEEP.ACCOUNT_NO = HHMVLP.ACCOUNT_NO  AND
+113500200812                  HHFEEP.HOUSEHOLD_NAME = " "))
+113600200812              AND HHMVLP.FEE_TYPE_CODE = HHFEEP.FEE_TYPE_CODE
+113700200812              INNER JOIN MFADEAMDP DEAMDP ON
+113800200812                  DEAMDP.DEALER_CODE = HHMVLP.DEALER_CODE
+113900200812              INNER JOIN QTEMP/WRKFRQCDP FRQCDP ON
+114000200812                  DEAMDP.FEE_FREQUENCY_CODE = FRQCDP.FREQUENCY_CODE
+114100200812              AND HHMVLP.CREATION_DATE >= FRQCDP.START_DATE
+114200200812              AND HHMVLP.CREATION_DATE <= FRQCDP.END_DATE
+114300200812              WHERE HHMVLP.CREATION_DATE = :ln_PrvProcessDate
+114400200812                AND HHMVLP.FEE_PROCESSED <> :lnc_Y
+114500200812           END-EXEC.
+114600200812
+114700200812           MOVE SQLSTATE TO lc_sqlStates.
+114800200812           IF lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+114900200812              CONTINUE
+115000200812           ELSE
+115100200812              SET lncc_Err14   TO TRUE
+115200200812              MOVE lncc_ErrorInsertTMPHHFEEP TO WS-SQL-ERR-SHORT-DESCR
+115300200812              PERFORM Dsp-Error
+115400200812              PERFORM Force-Msgw
+115500200812           END-IF.
+115600200812
+115700200812      * Calculate all Account Investments Average AUM for the period
+115800200812           EXEC SQL
+115900200812           UPDATE TMPHHFEEP HHFEEP
+116000200812             SET (ACCINV_MKTVAL, DAYS_HELD) =
+116100200812                 (SELECT ROUND(
+116200200812                         DECFLOAT(SUM(MARKET_VALUE)) / COUNT(1), 2),
+116300200812                         COUNT(1)
+116400200812                    FROM MFAHHMVLP HHMVLP
+116500200812                   WHERE HHFEEP.ACCOUNT_NO = HHMVLP.ACCOUNT_NO
+116600200812                     AND HHFEEP.INVESTMENT_CODE = HHMVLP.INVESTMENT_CODE
+116700200812                     AND HHFEEP.FEE_TYPE_CODE = HHMVLP.FEE_TYPE_CODE
+116800200812                     AND HHMVLP.CREATION_DATE >= HHFEEP.START_DATE
+116900200812                     AND HHMVLP.CREATION_DATE <= HHFEEP.END_DATE
+117000200812                     AND HHMVLP.FEE_PROCESSED <> :lnc_Y
+117100200812                  GROUP BY HHMVLP.ACCOUNT_NO, HHMVLP.INVESTMENT_CODE,
+117200200812                           HHMVLP.FEE_TYPE_CODE)
+117300200812           END-EXEC.
+117400200812
+117500200812           MOVE SQLSTATE TO lc_sqlStates
+117600200812           IF lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+117700200812              CONTINUE
+117800200812           ELSE
+117900200812              SET lncc_Err15   TO TRUE
+118000200812              MOVE lncc_ErrorUpdateTMPHHFEEP TO WS-SQL-ERR-SHORT-DESCR
+118100200812              PERFORM Dsp-Error
+118200200812              PERFORM Force-Msgw
+118300200812           END-IF
+118400200812
+118500200812      * Update work file with Acc-Inv level AUM for the Acc-Inv's
+118600200812      * that have all units redemption
+118700200812           EXEC SQL
+118800200812           UPDATE WRKHHFEEP HHFEEP
+118900200812             SET (ACCINV_MKTVAL, DAYS_HELD) =
+119000200812                 (SELECT ACCINV_MKTVAL, DAYS_HELD
+119100200812                    FROM TMPHHFEEP HHMVLP
+119200200812                   WHERE HHFEEP.ACCOUNT_NO = HHMVLP.ACCOUNT_NO
+119300200812                     AND HHFEEP.INVESTMENT_CODE = HHMVLP.INVESTMENT_CODE
+119400200812                     AND HHFEEP.FEE_TYPE_CODE = HHMVLP.FEE_TYPE_CODE)
+119500200812           END-EXEC.
+119600200812
+119700200812           MOVE SQLSTATE TO lc_sqlStates
+119800200812           IF lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+119900200812              CONTINUE
+120000200812           ELSE
+120100200812              SET lncc_Err16   TO TRUE
+120200200812              MOVE lncc_ErrorUpdateWRKHHFEEP TO WS-SQL-ERR-SHORT-DESCR
+120300200812              PERFORM Dsp-Error
+120400200812              PERFORM Force-Msgw
+120500200812           END-IF
+120600200812
+120700200812      * Update work file with Account level AUM for the Acc-Inv's
+120800200812      * that have all units redemption
+120900200812           EXEC SQL
+121000200812             UPDATE WRKHHFEEP HHFEEP
+121100200812                SET ACC_MKTVAL = COALESCE(
+121200200812                   (SELECT SUM(ACCINV_MKTVAL)
+121300200812                      FROM TMPHHFEEP HHMVLP
+121400200812                    WHERE HHFEEP.ACCOUNT_NO = HHMVLP.ACCOUNT_NO
+121500200812                      AND HHFEEP.FEE_TYPE_CODE = HHMVLP.FEE_TYPE_CODE
+121600200812                      AND HHMVLP.START_DATE >= HHFEEP.START_DATE
+121700200812                      AND HHMVLP.END_DATE <= HHFEEP.END_DATE
+121800200812                      GROUP BY HHMVLP.ACCOUNT_NO), 0)
+121900200812           END-EXEC
+122000200812
+122100200812           MOVE SQLSTATE TO lc_sqlStates
+122200200812           IF lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+122300200812              CONTINUE
+122400200812           ELSE
+122500200812              SET lncc_Err17   TO TRUE
+122600200812              MOVE lncc_ErrorUpdateWRKHHFEEP TO WS-SQL-ERR-SHORT-DESCR
+122700200812              PERFORM Dsp-Error
+122800200812              PERFORM Force-Msgw
+122900200812           END-IF
+123000200812
+123100210604      * RFS 1114432 - Start
+123200210604      * Update work file with Portfolio level AUM for the Acc-Inv's
+123300210604      * that have all units redemption
+123400210604           EXEC SQL
+123500210604             UPDATE WRKHHFEEP HHFEEP
+123600210604                SET PFO_MKTVAL = COALESCE(
+123700210604                   (SELECT SUM(ACCINV_MKTVAL)
+123800210604                      FROM TMPHHFEEP HHMVLP
+123900210604                    WHERE HHFEEP.ACCOUNT_NO = HHMVLP.ACCOUNT_NO
+124000210604                      AND HHFEEP.FEE_TYPE_CODE = HHMVLP.FEE_TYPE_CODE
+124100210604                      AND HHMVLP.START_DATE >= HHFEEP.START_DATE
+124200210604                      AND HHMVLP.END_DATE <= HHFEEP.END_DATE
+124300210604                      AND HHMVLP.PORTFOLIO_CODE <> " "
+124400210604                      GROUP BY HHMVLP.ACCOUNT_NO), 0)
+124500210604           END-EXEC
+124600210604
+124700210604           MOVE SQLSTATE TO lc_sqlStates
+124800210604           IF lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+124900210604              CONTINUE
+125000210604           ELSE
+125100210604              SET lncc_Err21   TO TRUE
+125200210604              MOVE lncc_ErrorUpdateWRKHHFEEP TO WS-SQL-ERR-SHORT-DESCR
+125300210604              PERFORM Dsp-Error
+125400210604              PERFORM Force-Msgw
+125500210604           END-IF
+125600210604      * RFS 1114432 - End
+125700210604
+125800200812      * Update work file with Household level AUM for the Acc-Inv's
+125900200812      * that have all units redemption
+126000200812           EXEC SQL
+126100200812             UPDATE WRKHHFEEP HHFEEP
+126200200812                SET HH_MKTVAL = COALESCE(
+126300200812                   (SELECT SUM(ACCINV_MKTVAL)
+126400200812                      FROM TMPHHFEEP HHMVLP
+126500200812                    WHERE HHMVLP.HOUSEHOLD_NAME <> " "
+126600200812                      AND HHFEEP.HOUSEHOLD_NAME = HHMVLP.HOUSEHOLD_NAME
+126700200812                      AND HHFEEP.FEE_TYPE_CODE = HHMVLP.FEE_TYPE_CODE
+126800200812                      AND HHMVLP.START_DATE >= HHFEEP.START_DATE
+126900200812                      AND HHMVLP.END_DATE <= HHFEEP.END_DATE
+127000200812                      GROUP BY HHMVLP.HOUSEHOLD_NAME), 0)
+127100200812              WHERE HHFEEP.HOUSEHOLD_NAME <> " "
+127200200812           END-EXEC
+127300200812
+127400200812           MOVE SQLSTATE TO lc_sqlStates
+127500200812           IF lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+127600200812              CONTINUE
+127700200812           ELSE
+127800200812              SET lncc_Err18   TO TRUE
+127900200812              MOVE lncc_ErrorUpdateWRKHHFEEP TO WS-SQL-ERR-SHORT-DESCR
+128000200812              PERFORM Dsp-Error
+128100200812              PERFORM Force-Msgw
+128200200812           END-IF.
+128300200812
+128400200812      *------------------
+128500200812       DETAIL-PROCESSING.
+128600200812      *------------------
+128700200812
+128800200812           IF lc_MGFEEP_FeeCharge = lnc_FeeCharge_2
+128900200812              PERFORM DETAIL-PROC-MTH2 until lb_FetchEnd
+129000200812           END-IF.
+129100200812
+129200200812           IF lc_MGFEEP_FeeCharge = lnc_FeeCharge_1 AND
+129300200812              pc-CallingPgm NOT = lnc_ALLSEL
+129400200812              PERFORM DETAIL-PROC-MTH1A until lb_FetchEnd
+129500200812           END-IF.
+129600200812
+129700200812           IF lc_MGFEEP_FeeCharge = lnc_FeeCharge_1 AND
+129800200812              pc-CallingPgm = lnc_ALLSEL
+129900200812              PERFORM DETAIL-PROC-MTH1B until lb_FetchEnd
+130000200812           END-IF.
+130100200812
+130200200812      *-----------------
+130300200812       DETAIL-PROC-MTH2.
+130400200812      *-----------------
+130500200812
+130600200812      * Irrespective of the calling mode, the fee to be charged per
+130700200812      * fund
+130800200812           IF CURR-CONTROL2 NOT = PREV-CONTROL2
+130900200812              PERFORM POPULATE-FEE
+131000200812           END-IF.
+131100200812
+131200200812           PERFORM CALCULATE-FEE.
+131300200812
+131400200812           PERFORM FETCH-CURSOR.
+131500200812
+131600200812      *------------------
+131700200812       DETAIL-PROC-MTH1A.
+131800200812      *------------------
+131900200812
+132000200812      * For period end calculation, the fee to be charged on the
+132100200812      * Highest market value fund
+132200200812           IF CURR-CONTROL1 NOT = PREV-CONTROL1
+132300200812              PERFORM POPULATE-FEE
+132400200812           END-IF.
+132500200812
+132600200812           PERFORM CALCULATE-FEE.
+132700200812
+132800200812           PERFORM FETCH-CURSOR.
+132900200812
+133000200812      *------------------
+133100200812       DETAIL-PROC-MTH1B.
+133200200812      *------------------
+133300200812
+133400200812      * For All units redemption, the fee to be charged per fund or
+133500200812      * Highest market value fund based on whether all funds within
+133600200812      * Account/Portfolio redeemed
+133700210603      * RFS 1115274 - Start
+133800210528      *    IF lcu_ALL_ACC_REDEM = lnc_Y AND
+133900210528           IF (lcu_ALL_ACC_REDEM = lnc_Y
+134000210528           OR (lcu_ALL_PFO_REDEM = lnc_Y AND
+134100210531               lcu_PORTFOLIO_CODE NOT = " ")
+134200210531           OR (lcu_ALL_ACC_REDEM  NOT = lnc_Y AND
+134300210531               lcu_ALL_PFO_REDEM  NOT = lnc_Y AND
+134400210531               lcu_PORTFOLIO_CODE = " " AND
+134500210531               lcu_ALL_STA_REDEM  = lnc_Y))
+134600210528           AND CURR-CONTROL1 NOT = PREV-CONTROL1
+134700200812                                 OR
+134800210601              lcu_ALL_ACC_REDEM       NOT = lnc_Y        AND
+134900210601              (lcu_ALL_PFO_REDEM      NOT = lnc_Y OR
+135000210601               (lcu_ALL_PFO_REDEM         = lnc_Y AND
+135100210601                lcu_PORTFOLIO_CODE        = " " ))       AND
+135200210601              lcu_ALL_STA_REDEM       NOT = lnc_Y        AND
+135300210603      * RFS 1115274 - End
+135400200812              CURR-CONTROL2 NOT = PREV-CONTROL2
+135500200812              PERFORM POPULATE-FEE
+135600200812           END-IF.
+135700200812
+135800200812           PERFORM CALCULATE-FEE.
+135900200812
+136000200812           PERFORM FETCH-CURSOR.
+136100200812
+136200200812      *-------------
+136300200812       POPULATE-FEE.
+136400200812      *-------------
+136500200812
+136600200812           COMPUTE ln_AMS_FeeAmt ROUNDED = ln_AMS_TotFeeAmt.
+136700200812           COMPUTE ln_MFE_FeeAmt ROUNDED = ln_MFE_TotFeeAmt.
+136800200812           COMPUTE ln_TotFeeAmt  ROUNDED = ln_AMS_FeeAmt +
+136900200812                                           ln_MFE_FeeAmt.
+137000200812           IF ln_AMS_TotFeeAmt > 0 OR ln_MFE_TotFeeAmt > 0
+137100200812              PERFORM INSERT-FEE-DATA
+137200200812           END-IF.
+137300200812
+137400200812           MOVE lcu_ACCOUNT_NO      TO ln_PayAccount.
+137500200812           MOVE lcu_INVESTMENT_CODE TO lc_PayInvestment.
+137600200812           MOVE lcu_CURRENCY        TO lc_PayCurrency.
+137700200812           MOVE CURR-CONTROL        TO PREV-CONTROL.
+137800200812           INITIALIZE ln_MFE_TotFeeAmt
+137900200812                      ln_AMS_TotFeeAmt
+138000200812                      ln_TotFeeAmt
+138100200812                      ln_MidPeriodFee
+138200200812                      ln_AMS_FeeAmt
+138300200812                      ln_MFE_FeeAmt.
+138400200812
+138500200812      *--------------
+138600200812       CALCULATE-FEE.
+138700200812      *--------------
+138800200812
+138900200812           INITIALIZE lc_FXGTDLRSCD_OUTA
+139000200812                      lc_FXGTACCSCD_OUTA
+139100200812                      lc_FXGTACCSCD_FEERATEN
+139200200812                      ln_HH_MKTVAL.
+139300200812
+139400200812           SET lc_DlrInv_Not_Found TO TRUE.
+139500200812
+139600200812      * Get the Investment fee Schedule code mapped at the dealer level
+139700200812      * Load into the array if its not present already.
+139800200812
+139900201015      * RFS 1104468 - Start
+140000201015      *    PERFORM GET-DLRINV-SCHEDULE.
+140100201015      * RFS 1104468 - Start
+140200200812
+140300200812           IF lc_DlrInv_Not_Found
+140400201008      * RFS 1104468 - Start
+140500201008              IF lcu_PORTFOLIO_CODE NOT = " "
+140600201008                 EXEC SQL
+140700201008                   SET :lc_FXGTDLRSCD_OUTA =
+140800201008                   FXGTDLRSCD(:lnc_MFEAMS_Value, :lcu_PORTFOLIO_CODE,
+140900201008                              :lcu_DEALER_CODE, :lcu_FEE_TYPE_CODE,
+141000201008                              :ln_ProcessDate)
+141100201008
+141200201008                 END-EXEC
+141300201008              END-IF
+141400201008
+141500201008              IF (lcu_PORTFOLIO_CODE NOT = " " AND
+141600201008                  lc_FXGTDLRSCD_FEESCD = " ") OR
+141700201008                  lcu_PORTFOLIO_CODE = " "
+141800201008      * RFS 1104468 - End
+141900200812              EXEC SQL
+142000200812                SET :lc_FXGTDLRSCD_OUTA =
+142100200812                    FXGTDLRSCD(:lnc_MFEAMS_Value, :lcu_INVESTMENT_CODE,
+142200200812                               :lcu_DEALER_CODE, :lcu_FEE_TYPE_CODE,
+142300200812                               :ln_ProcessDate)
+142400200812
+142500200812              END-EXEC
+142600201008      * RFS 1104468 - Start
+142700201008      *       PERFORM INSERT-DLRINV-ARRAY
+142800201008           END-IF
+142900201008      * RFS 1104468 - End
+143000200812           END-IF.
+143100200812
+143200200812      * If Dealer allows overrides and account has schedule/rate
+143300200812      * mapped, get the schedule information
+143400200812
+143500200812           IF lc_FXGTDLRSCD_ACCOVR = lnc_Y AND
+143600200812              lcu_ACCFEE_OVR = lnc_Y
+143700201008      * RFS 1104468 - Start
+143800201008              IF lcu_PORTFOLIO_CODE NOT = " "
+143900201008                 EXEC SQL
+144000201008                   SET :lc_FXGTACCSCD_OUTA =
+144100201008                   FXGTACCSCD(:lnc_MFEAMS_Value, :lcu_PORTFOLIO_CODE,
+144200201008                              :lcu_ACCOUNT_NO,  :lcu_FEE_TYPE_CODE,
+144300201008                              :ln_ProcessDate)
+144400201008
+144500201008                 END-EXEC
+144600201008              END-IF
+144700201008              IF (lcu_PORTFOLIO_CODE NOT = " " AND
+144800201014                  (lc_FXGTACCSCD_FEESCD  = " " AND
+144900201015                   (lc_FXGTACCSCD_FEERATE = "       " OR
+145000201015                    lc_FXGTACCSCD_FEERATE = "0000000")))  OR
+145100201008                  lcu_PORTFOLIO_CODE = " "
+145200201008      * RFS 1104468 - End
+145300200812              EXEC SQL
+145400200812                SET :lc_FXGTACCSCD_OUTA =
+145500200812                    FXGTACCSCD(:lnc_MFEAMS_Value, :lcu_INVESTMENT_CODE,
+145600200812                               :lcu_ACCOUNT_NO,  :lcu_FEE_TYPE_CODE,
+145700200812                               :ln_ProcessDate)
+145800200812
+145900200812              END-EXEC
+146000201008104468        END-IF
+146100200812
+146200200812      * If Account level override has Fee schedule attached, move the
+146300200812      * information for further processsing
+146400200812
+146500200812              IF lc_FXGTACCSCD_FEESCD NOT = SPACES
+146600200812                 MOVE lc_FXGTACCSCD_FEESCD TO lc_FXGTDLRSCD_FEESCD
+146700200812                 MOVE lc_FXGTACCSCD_AUMLVL TO lc_FXGTDLRSCD_AUMLVL
+146800200812              ELSE
+146900200812
+147000200812      * If Account level override has Fee rate, calculate the
+147100200812      * Fee amount here
+147200200812                IF lc_FXGTACCSCD_FEERATE NOT = "0000000" AND
+147300200812                   lc_FXGTACCSCD_FEERATE NOT = SPACES
+147400200812                   MOVE lc_FXGTACCSCD_FEESCD TO lc_FXGTDLRSCD_FEESCD
+147500200812                   MOVE lc_FXGTACCSCD_AUMLVL  TO lc_FXGTDLRSCD_AUMLVL
+147600200812                   MOVE lc_FXGTACCSCD_FEERATE TO lc_FXGTACCSCD_FEERATEN
+147700200812                   COMPUTE lc_FXGTACCSCD_FEERATEN =
+147800200812                           lc_FXGTACCSCD_FEERATEN / 100
+147900200812                   COMPUTE ln_FeeAmount = (lc_FXGTACCSCD_FEERATEN *
+148000200812                           lcu_ACCINV_MKTVAL * lcu_DAYS_HELD) /
+148100200812                           (li_NoOfDays * 100)
+148200200812                   IF lcu_FEE_TYPE_CODE = lnc_MGT
+148300200812                      COMPUTE ln_MFE_TotFeeAmt = ln_MFE_TotFeeAmt +
+148400200812                                                 ln_FeeAmount
+148500200812                   ELSE
+148600200812                      COMPUTE ln_AMS_TotFeeAmt = ln_AMS_TotFeeAmt +
+148700200812                                                 ln_FeeAmount
+148800200812                   END-IF
+148900200812                END-IF
+149000200812              END-IF
+149100200812           END-IF.
+149200200812
+149300200812      * Determine the appropriate AUM level to be used.
+149400200812      * If Dealer has HH AUM and Account is not linked with Household,
+149500200812      * Account level AUM to be used
+149600200812
+149700200812           MOVE lc_FXGTDLRSCD_AUMLVL     TO lnc_AUMLevel.
+149800200812
+149900200812           EVALUATE TRUE
+150000200812             WHEN lnc_AUMLevel_1
+150100200812                 IF lcu_HOUSEHOLD_NAME   = SPACES
+150200200812                    MOVE lcu_ACC_MKTVAL    TO ln_HH_MKTVAL
+150300200812                    SET lnc_AUM_Level_ACC   TO TRUE
+150400200812                 ELSE
+150500200812                    MOVE lcu_HH_MKTVAL     TO ln_HH_MKTVAL
+150600200812                    SET lnc_AUM_Level_HH    TO TRUE
+150700200812                 END-IF
+150800200812             WHEN lnc_AUMLevel_2
+150900200812                 MOVE lcu_ACC_MKTVAL    TO ln_HH_MKTVAL
+151000200812                 SET lnc_AUM_Level_ACC   TO TRUE
+151100200812             WHEN lnc_AUMLevel_3
+151200200812                 MOVE lcu_ACCINV_MKTVAL TO ln_HH_MKTVAL
+151300200812                 SET lnc_AUM_Level_INV   TO TRUE
+151400200812             WHEN OTHER
+151500200812                 MOVE lcu_ACCINV_MKTVAL TO ln_HH_MKTVAL
+151600200812                 SET lnc_AUM_Level_INV   TO TRUE
+151700200812           END-EVALUATE.
+151800200812
+151900200812           IF lc_FXGTDLRSCD_FEESCD NOT = SPACES
+152000200812
+152100210604      * RFS 1114432 - Start
+152200210604           INITIALIZE lc_Rate_Rule
+152300210604
+152400210604           EXEC SQL
+152500210604              SELECT RATE_RULE
+152600210604                INTO :lc_Rate_Rule
+152700210604                FROM MFAMRSCHP
+152800210604               WHERE MFE_SCHEDULE_CODE    = :lc_FXGTDLRSCD_FEESCD
+152900210604                 AND EFFECTIV_DATE       <= :ln_ProcessDate
+153000210604                 AND LOWER_LIMIT_AMT     <= :ln_HH_MKTVAL
+153100210604                 AND HOUSEHOLD_THRESHOLD >= :ln_HH_MKTVAL
+153200210604              ORDER BY EFFECTIV_DATE DESC
+153300210604              FETCH FIRST ROW ONLY
+153400210604           END-EXEC
+153500210604
+153600210607      * For tiered Fee calculation, when the Account is not fully
+153700210607      * redeemed, the AUM of fund should be used to calculate the
+153800210607      * Fee amount for each tier
+153900210604           IF lc_Rate_Rule = "2" AND lcu_ALL_ACC_REDEM NOT = "Y"
+154000210604              IF lcu_ALL_PFO_REDEM = "Y" AND
+154100210604                 lcu_PORTFOLIO_CODE NOT = " "
+154200210604                 MOVE lcu_PFO_MKTVAL    TO ln_HH_MKTVAL
+154300210826              ELSE
+154400210607                 MOVE lcu_ACCINV_MKTVAL TO ln_HH_MKTVAL
+154600210607              END-IF
+154700210604           END-IF
+154800210604      * RFS 1114432 - End
+154900210604
+155000200812             IF lcu_FEE_TYPE_CODE = lnc_MGT
+155100200812               INITIALIZE ln_MFE_FeeAmount
+155200200812               EXEC SQL
+155300200812                 CALL FXHHACFEE (:ln_ProcessDate, :lc_FXGTDLRSCD_FEESCD,
+155400200812                                 :lcu_ACCINV_MKTVAL, :ln_HH_MKTVAL,
+155500200812                                 :lcu_DAYS_HELD, :ln_MFE_FeeAmount)
+155600200812               END-EXEC
+155700200812               MOVE ln_MFE_FeeAmount  TO ln_FeeAmount
+155800200812               COMPUTE ln_MFE_TotFeeAmt = ln_MFE_TotFeeAmt +
+155900200812                                          ln_MFE_FeeAmount
+156000200812             END-IF
+156100200812
+156200200812             IF lcu_FEE_TYPE_CODE = lnc_AMS
+156300200812               INITIALIZE ln_AMS_FeeAmount
+156400200812               EXEC SQL
+156500200812                 CALL FXHHACFEE (:ln_ProcessDate, :lc_FXGTDLRSCD_FEESCD,
+156600200812                                 :lcu_ACCINV_MKTVAL, :ln_HH_MKTVAL,
+156700200812                                 :lcu_DAYS_HELD, :ln_AMS_FeeAmount)
+156800200812               END-EXEC
+156900200812               MOVE ln_AMS_FeeAmount  TO ln_FeeAmount
+157000200812               COMPUTE ln_AMS_TotFeeAmt = ln_AMS_TotFeeAmt +
+157100200812                                          ln_AMS_FeeAmount
+157200200812             END-IF
+157300200812
+157400200812           END-IF.
+157500200812
+157600200812      * Update processed flag of MFAHHMVLP to Y, if there is valid
+157700200812      * schedule or rate defined at Dealer or Account Level
+157800200812
+157900200812           IF lc_FXGTDLRSCD_FEESCD   NOT = SPACES OR
+158000200812              lc_FXGTACCSCD_FEERATEN NOT = 0
+158100200812
+158200200812             EXEC SQL
+158300200812               UPDATE MFAHHMVLP
+158400200812                  SET (FEE_PROCESSED, ACCINV_MKTVAL, ACC_MKTVAL,
+158500200812                       HH_MKTVAL, AUM_LEVEL_USED, PERCENT_AMT,
+158600200812                       MFE_AMS_SCHEDULE_CODE, FEE_AMOUNT) =
+158700200812                      (:lnc_Y, :lcu_ACCINV_MKTVAL, :lcu_ACC_MKTVAL,
+158800200812                       :lcu_HH_MKTVAL, :lnc_AUM_Level,
+158900200812                       :lc_FXGTACCSCD_FEERATEN,
+159000200812                       :lc_FXGTDLRSCD_FEESCD, :ln_FeeAmount)
+159100200812                WHERE ACCOUNT_NO      =  :lcu_ACCOUNT_NO
+159200200812                  AND INVESTMENT_CODE =  :lcu_INVESTMENT_CODE
+159300200812                  AND FEE_TYPE_CODE   =  :lcu_FEE_TYPE_CODE
+159400200812                  AND CREATION_DATE   >= :lcu_START_DATE
+159500200812                  AND CREATION_DATE   <= :lcu_END_DATE
+159600200812             END-EXEC
+159700200812
+159800200812             MOVE SQLSTATE TO lc_sqlStates
+159900200812             IF lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+160000200812                CONTINUE
+160100200812             ELSE
+160200200812                SET lncc_Err10   TO TRUE
+160300200812                MOVE lncc_ErrorUpdateMFAHHMVLP TO WS-SQL-ERR-SHORT-DESCR
+160400200812                PERFORM Dsp-Error
+160500200812                PERFORM Force-Msgw
+160600200812             END-IF
+160700200812
+160800200812           END-IF.
+160900200812
+161000200812      *--------------------
+161100200812       GET-DLRINV-SCHEDULE.
+161200200812      *--------------------
+161300200812
+161400200812      * Get Dealer-Investment schedule per fee type if its already
+161500200812      * loaded into the array
+161600200812
+161700200812           IF ln-DlrInv-Array-size > 1
+161800200812             SET DLRINVIDX TO 1
+161900200812             SET lc_DlrInv_Not_Found TO TRUE
+162000200812
+162100200812             SEARCH ctb_DlrInvArray_Dtl VARYING DLRINVIDX
+162200200812             AT END
+162300200812                CONTINUE
+162400200812             WHEN lc_DIA_DlrCode(DLRINVIDX) = lcu_DEALER_CODE
+162500200812              AND lc_DIA_InvCode(DLRINVIDX) = lcu_INVESTMENT_CODE
+162600200812              AND lc_DIA_FeeType(DLRINVIDX) = lcu_FEE_TYPE_CODE
+162700200812
+162800200812               MOVE lc_DIA_AumLevel(DLRINVIDX) TO lc_FXGTDLRSCD_AUMLVL
+162900200812               MOVE lc_DIA_AccOvr(DLRINVIDX)   TO lc_FXGTDLRSCD_ACCOVR
+163000200812               MOVE lc_DIA_FeeScd(DLRINVIDX)   TO lc_FXGTDLRSCD_FEESCD
+163100200812
+163200200812               SET lc_DlrInv_Found TO TRUE
+163300200812             END-SEARCH
+163400200812           END-IF.
+163500200812
+163600200812      *---------------------
+163700200812       INSERT-DLRINV-ARRAY.
+163800200812      *---------------------
+163900200812
+164000200812      * Insert into the Dealer-Investment for each Fee type
+164100200812      * if doesnt exist already
+164200200812           SET DLRINVIDX TO DLRINVIDY.
+164300200812           SET DLRINVIDX UP BY 1.
+164400200812
+164500200812           IF DLRINVIDX >= ln-DlrInv-Array-size
+164600200812              COMPUTE ln-DlrInv-Array-size = ln-DlrInv-Array-size + 1
+164700200812           END-IF.
+164800200812
+164900200812           MOVE lcu_DEALER_CODE      TO lc_DIA_DlrCode(DLRINVIDX).
+165000200812           MOVE lcu_INVESTMENT_CODE  TO lc_DIA_InvCode(DLRINVIDX).
+165100200812           MOVE lcu_FEE_TYPE_CODE    TO lc_DIA_FeeType(DLRINVIDX).
+165200200812           MOVE lc_FXGTDLRSCD_AUMLVL TO lc_DIA_AumLevel(DLRINVIDX).
+165300200812           MOVE lc_FXGTDLRSCD_ACCOVR TO lc_DIA_AccOvr(DLRINVIDX).
+165400200812           MOVE lc_FXGTDLRSCD_FEESCD TO lc_DIA_FeeScd(DLRINVIDX).
+165500200812
+165600200812           SET DLRINVIDY TO DLRINVIDX.
+165700200812           SET DLRINVIDX UP BY 1.
+165800200812
+165900200812           INITIALIZE lc_DlrInvArray(DLRINVIDX).
+166000200812
+166100200812      *----------------
+166200200812       DECLARE-CURSOR.
+166300200812      *----------------
+166400200812
+166500200812           EXEC SQL
+166600200812             DECLARE CUR_FeeProcess CURSOR FOR
+166700200812             SELECT HHFEEP.*, ACCNTP.DEALER_CODE,
+166800200812                    ACCNTP.DEALER_REP_CODE, INVP.CURRENCY,
+166900200812                    COALESCE(IMSCHP.MFE_SCHEDULE_CODE, " "),
+167000200812                    COALESCE(INASDP.MFE_SCHEDULE_CODE, " "),
+167100200812                    COALESCE(IMSCHP.ALLOW_CHANGES, " "),
+167200200812                    COALESCE(INASDP.ALLOW_CHANGES, " "),
+167300200812                    COALESCE(AFEEOP.ACCFEE_OVR, " ")
+167400200812             FROM WRKHHFEEP HHFEEP
+167500200812             INNER JOIN MFAINVP INVP ON
+167600200812                 HHFEEP.INVESTMENT_CODE = INVP.INVESTMENT_CODE
+167700200812             INNER JOIN MFAACCNTP ACCNTP ON
+167800200812                 HHFEEP.ACCOUNT_NO = ACCNTP.ACCOUNT_NO
+167900200812             LEFT OUTER JOIN QTEMP/WRKAFEEOP AFEEOP ON
+168000200812                 HHFEEP.ACCOUNT_NO = AFEEOP.ACCOUNT_NO
+168100200812             AND (HHFEEP.FEE_TYPE_CODE = AFEEOP.FEE_TYPE_CODE OR
+168200200812                  AFEEOP.FEE_TYPE_CODE = :lnc_ALL)
+168300200812             LEFT OUTER JOIN MFAIMSCHP IMSCHP ON
+168400200812                 IMSCHP.INVESTMENT_CODE = INVP.INVESTMENT_CODE
+168500200812             LEFT OUTER JOIN MFAINASDP INASDP ON
+168600200812                 INASDP.INVESTMENT_CODE = INVP.INVESTMENT_CODE
+168700200812             ORDER BY HOUSEHOLD_NAME, ACCOUNT_NO, PORTFOLIO_CODE,
+168800200812             MARKET_VALUE DESC
+168900200812           END-EXEC.
+169000200812
+169100200812           EXEC SQL
+169200200812             OPEN CUR_FeeProcess
+169300200812           END-EXEC.
+169400200812
+169500200812           MOVE SQLSTATE TO lc_sqlStates.
+169600200812           IF lncc_sqlSuccessful
+169700200812              Set lb_CursorOpen  TO True
+169800200812           ELSE
+169900200812              SET lncc_Err11   TO TRUE
+170000200812              MOVE lncc_ErrorOpenCursor      TO WS-SQL-ERR-SHORT-DESCR
+170100200812              PERFORM Dsp-Error
+170200200812              PERFORM Force-Msgw
+170300200812           END-IF.
+170400200812
+170500200812           SET lb_FetchBegin TO TRUE.
+170600200812           MOVE HIGH-VALUES  TO CURR-CONTROL
+170700200812                                PREV-CONTROL.
+170800200812           INITIALIZE ln_MKTVAL_MAX.
+170900200812
+171000200812           PERFORM FETCH-CURSOR.
+171100200812
+171200200812           IF CURR-CONTROL NOT = HIGH-VALUES AND
+171300200812              PREV-CONTROL     = HIGH-VALUES
+171400200812              MOVE CURR-CONTROL        TO PREV-CONTROL
+171500200812              MOVE lcu_ACCOUNT_NO      TO ln_PayAccount
+171600200812              MOVE lcu_INVESTMENT_CODE TO lc_PayInvestment
+171700200812              MOVE lcu_CURRENCY        TO lc_PayCurrency
+171800200812           END-IF.
+171900200812
+172000200812      *--------------
+172100200812       FETCH-CURSOR.
+172200200812      *--------------
+172300200812
+172400200812           EXEC SQL
+172500200812             FETCH NEXT FROM CUR_FeeProcess
+172600200812              INTO :lcu_FetchCursor
+172700200812           END-EXEC.
+172800200812
+172900200812           MOVE SQLSTATE TO lc_sqlStates.
+173000200812           EVALUATE TRUE
+173100200812             WHEN lncc_sqlSuccessful
+173200200812               MOVE lcu_HOUSEHOLD_NAME  TO CUR_HOUSEHOLD_NAME
+173300200812               MOVE lcu_ACCOUNT_NO      TO CUR_ACCOUNT_NO
+173400200812                                           CUR_ACCOUNT_NOA
+173500200812               MOVE lcu_PORTFOLIO_CODE  TO CUR_PORTFOLIO_CODE
+173600200812               MOVE lcu_Investment_Code TO CUR_INVESTMENT_CODE
+173700200812             WHEN lncc_sqlEnd
+173800200812               Set lb_FetchEnd TO True
+173900200812             WHEN OTHER
+174000200812               SET lncc_Err12   TO TRUE
+174100200812               MOVE lncc_ErrorFetchCursor     TO WS-SQL-ERR-SHORT-DESCR
+174200200812               PERFORM Dsp-Error
+174300200812               PERFORM Force-Msgw
+174400200812           END-EVALUATE.
+174500200812
+174600200812      *----------------
+174700200812       INSERT-FEE-DATA.
+174800200812      *----------------
+174900200812
+175000200812           ADD 1 TO ln_SequenceNo.
+175100200812           MOVE ln_SequenceNo    TO ln_SequenceNoC.
+175200200812
+175300200812           EXEC SQL
+175400200812             SET :lc_PayeeReference = :ln_ProcessDate ||
+175500200812                                      :ln_SequenceNoC
+175600200812           END-EXEC.
+175700200812
+175800200812           EXEC SQL
+175900200812             INSERT INTO MFAMFHHDP
+176000200812             (
+176100200812                PERIOD_TO_DATE,      PAYMENT_XREF, ACCOUNT_NO
+176200200812               ,INVESTMENT_CODE,     CURRENCY,     TOTAL_FEE_AMT
+176300200812               ,MID_PERIOD_FEE_PAID, FEES_PAYABLE, PAID
+176400200812               ,USER
+176500200812             )
+176600200812             VALUES
+176700200812             (
+176800200812                :ln_ProcessDate,   :lc_PayeeReference, :ln_PayAccount
+176900200812               ,:lc_PayInvestment, :lc_PayCurrency,    :ln_TotFeeAmt
+177000200812               ,:ln_MidPeriodFee,  :ln_TotFeeAmt,      :lnc_N
+177100200812               ,:lc_Username
+177200200812             )
+177300200812           END-EXEC.
+177400200812
+177500200812           EXEC SQL
+177600200812             INSERT INTO MFAMFHDTP
+177700200812             (
+177800200812                PERIOD_TO_DATE,  PAYMENT_XREF,       ACCOUNT_NO
+177900200812               ,INVESTMENT_CODE, MANAGEMENT_FEE_AMT, AMS_FEE_AMT
+178000200812               ,PAID,            USER
+178100200812             )
+178200200812             VALUES
+178300200812             (
+178400200812                :ln_ProcessDate,   :lc_PayeeReference, :ln_PayAccount
+178500200812               ,:lc_PayInvestment, :ln_MFE_FeeAmt,     :ln_AMS_FeeAmt
+178600200812               ,:lnc_N,             :lc_Username
+178700200812             )
+178800200812           END-EXEC.
+178900200812
+179000200812      *-------------
+179100200812       END-PROGRAM.
+179200200812      *-------------
+179300200812
+179400200812           IF ln_PayAccount NOT = 0
+179500200812              COMPUTE ln_AMS_FeeAmt ROUNDED = ln_AMS_TotFeeAmt
+179600200812              COMPUTE ln_MFE_FeeAmt ROUNDED = ln_MFE_TotFeeAmt
+179700200812              COMPUTE ln_TotFeeAmt  ROUNDED = ln_AMS_FeeAmt +
+179800200812                                              ln_MFE_FeeAmt
+179900200812              IF ln_AMS_TotFeeAmt > 0 OR ln_MFE_TotFeeAmt > 0
+180000200812                 PERFORM INSERT-FEE-DATA
+180100200812              END-IF
+180200200812           END-IF.
+180300200812
+180400200812           IF lb_CursorOpen
+180500200812              EXEC SQL
+180600200812                CLOSE CUR_FeeProcess
+180700200812              END-EXEC
+180800200812           END-IF.
+180900200812
+181000200812           GOBACK.
+181100200812
+181200200812      * ---------------------------------
+181300200812      * DSP-ERROR and FORCE-MSGW Routines
+181400200812      * ---------------------------------
+181500200812          COPY CPYSQLRTN.
+181600200812      *

@@ -1,0 +1,1426 @@
+000100050223       IDENTIFICATION DIVISION.
+000200110804       PROGRAM-ID.    AAMODUPD2.
+000300110830       AUTHOR.        Deepika.
+000400110902       INSTALLATION.  L & T Infotech.
+000500110804       DATE-WRITTEN.  August 2011.
+000600050223       DATE-COMPILED.
+000700050223      ******************************************************************
+000800050223      /**                                                              *
+000900110804      * Description:Select account with OA model that need to rebalance*
+001000110902      *             The purpose of this program is to                  *
+001100110902      *             update the pending of the account-rebal-instruction*
+001200110902      * Called By: JOBDAILY.                                           *
+001300110812      */                                                               *
+001400050223      ******************************************************************
+001500050223      * Programmer *Date of change* Description of change              *
+001600210909      ******************************************************************
+001700110830      * Deepika    * 2011/08/04   * RFS91768 - Created the program     *
+001800130702      * K Naveen   * 2013/07/02   * RFS123719 - Recompile only.        *
+001900140219      * R Miguel   * 2014/02/19   * RFS134195 - Valiadate the account  *
+002000140219      *            *              * to select to force the rebalance   *
+002100140219      *            *              * based on the rebalance date.       *
+002200140421      * Daisy Ly   * 2014/03/24   * RFS135365 - select act base on     *
+002300140421      *            *              * model frequency                    *
+002400140623      * SAIRAM     * 2014/06/23   * RFS137226 - Re-compile.            *
+002500140620      * Kamal T    * 2014/06/20   * RFS131947 - Rebalancing frequency  *
+002600140620      *            *              * option on account level AA models  *
+002700141120      * Dhev S     * 2014/11/20   * RFS137361 - To set pending realloc-*
+002800141120      *            *              * ation date for accounts with new   *
+002900141210      *            *              * frequency (3M, 3Q, 3S & 3A)        *
+003000150306      * Muthu      * 2015/03/06   * RFS143694 - Recompile for
+003100150306      * Lakshmi M  *              * MFAACRBTP
+003200150805      * Vinsfy J   * 2015/08/05   * RFS149165 - Auto Rebalance function*
+003300191030      * Mayilsamy D* 2019/10/30   * RFS184366 - Recompile              *
+003400200122      * Kavya K    * 2020/01/22   * RFS184872 - Recompile for MFADLRMSCP
+003500200704      * Mayilsamy D* 2020/07/04   * RFS186092 - Recompile              *
+003600210101      * Ragavi S   * 2020/11/25   *  RFS186018 - AA rebalancing and    *
+003700210101      *            *              *  constellation  *
+003800210902      * Vignesh    * 2021/09/02   *  RFS187304 - Enhancement to        *
+003900210902      *            *              *  rebalancing                       *
+004000050719      ******************************************************************
+004100210101       ENVIRONMENT DIVISION.
+004200200122       CONFIGURATION SECTION.
+004300210914       SPECIAL-NAMES.
+004400210914187304               DATA-AREA IS WS-DTAARA-MFAAAPARM.
+004500050223      *
+004600210914       INPUT-OUTPUT SECTION.
+004700050223       FILE-CONTROL.
+004800050223
+004900050223       DATA DIVISION.
+005000110913      *----------------------------------
+005100050223       WORKING-STORAGE SECTION.
+005200110913      *----------------------------------
+005300110804
+005400050223          COPY CPYSQLFLD
+005500110804               REPLACING == "CURRENT_PROGRAM" == BY == "AAMODUPD2" ==.
+005600050223      *
+005700050223           EXEC SQL
+005800050223              INCLUDE SQLCA
+005900050223           END-EXEC.
+006000050223
+006100050223      * Error Codes, Uniquely Identify where the error happened
+006200110902       01 WS-ERR-CODE                    PIC X(02)     VALUE SPACES.
+006300110902          88 WS-ERR-OK                                 VALUE SPACES.
+006400110902          88 WS-ERR-10                                 VALUE "10".
+006500110902          88 WS-ERR-11                                 VALUE "11".
+006600110902          88 WS-ERR-12                                 VALUE "12".
+006700110902          88 WS-ERR-13                                 VALUE "13".
+006800110902          88 WS-ERR-14                                 VALUE "14".
+006900110902          88 WS-ERR-15                                 VALUE "15".
+007000110902          88 WS-ERR-16                                 VALUE "16".
+007100050223
+007200050223       01 LT-LITERALS.
+007300110902          05 LT-Y                        PIC X(01)     VALUE "Y".
+007400140327135365    05 lnci_0                      PIC S9(08)    VALUE 0.
+007500140330135365    05 lncc_M                      PIC  X(01)    VALUE "M".
+007600140330135365    05 lncc_Y                      PIC  X(01)    VALUE "Y".
+007700050223
+007800050223      * Variables for the Process Date table
+007900110902       01 WS-WK-END                      PIC X(1)      VALUE SPACES.
+008000110902       01 WS-MO-END                      PIC X(1)      VALUE SPACES.
+008100110902       01 WS-QT-END                      PIC X(1)      VALUE SPACES.
+008200110902       01 WS-SA-END                      PIC X(1)      VALUE SPACES.
+008300110902       01 WS-AN-END                      PIC X(1)      VALUE SPACES.
+008400050223
+008500050223       01 WS-OTHERS.
+008600110902          05 WS-EOF                      PIC X(01)     VALUE "N".
+008700210211
+008800210101186018 01 lc_Oamodel                  PIC X(5)       VALUE SPACES.
+008900210101186018 01 lc_ScreenCode               PIC X(9)       VALUE "AMODUPD2".
+009000210101186018 01 lnc_005                     PIC X(03)      VALUE "005".
+009100210101186018 01 lnc_006                     PIC X(03)      VALUE "006".
+009200210101186018 01 li_StartDate1               PIC S9(8)      VALUE ZEROES.
+009300210101186018 01 LI_ForceRdate               PIC S9(8)      VALUE SPACES.
+009400210101186018 01 lc_OrigVal                  PIC X(35)      VALUE ZEROES.
+009500210101186018 01 lc_NewVal                   PIC X(35)      VALUE ZEROES.
+009600210101186018 01 lncc_U                      PIC X(01)      VALUE "U".
+009700210101
+009800110805       01 lc_Variables.
+009900110913          03 li_StartDate                PIC S9(8).
+010000110913          03 lc_model                    PIC X(5).
+010100140620131947    03 lc_ModelFreq                PIC X(2).
+010200140620131947    03 lc_Flag                     PIC X(1).
+010300110913          03 li_RebalDate                PIC S9(8).
+010400110913          03 lc_ForceRebal               PIC X.
+010500110902             88 lb_ForceRebalYes                       VALUE 'Y'.
+010600110902             88 lb_ForceRebalNo                        VALUE 'N'.
+010700110913          03 li_AsAtDate                 PIC S9(8).
+010800110913          03 lc_DA_freq                  PIC X(2)      VALUE "DA".
+010900110913          03 lc_WK_freq                  PIC X(2)      VALUE "WK".
+011000110913          03 lc_MO_freq                  PIC X(2)      VALUE "MO".
+011100110913          03 lc_QT_freq                  PIC X(2)      VALUE "QT".
+011200110913          03 lc_SA_freq                  PIC X(2)      VALUE "SA".
+011300110913          03 lc_AN_freq                  PIC X(2)      VALUE "AN".
+011400110913          03 lncc_C                      PIC X(1)      VALUE 'C'.
+011500110913          03 li_MaxFetch                 PIC S9(03)    VALUE 0.
+011600110913          03 lc_FetchIndicator-1         PIC X(1).
+011700110902             88 lb_StartOfFetch-1                      VALUE "Y".
+011800110902             88 lb_EndOfFetch-1                        VALUE "N".
+011900141120      * RFS137361 - Starts
+012000141217          03 li_Bus2_Days_Prior          PIC S9(8)     VALUE 0.
+012100141217          03 li_Bus3_Days_Prior          PIC S9(8)     VALUE 0.
+012200141121          03 lc_3M-Freq                  PIC X(2)      VALUE "3M".
+012300141121          03 lc_3Q-Freq                  PIC X(2)      VALUE "3Q".
+012400141121          03 lc_3S-Freq                  PIC X(2)      VALUE "3S".
+012500141121          03 lc_3A-Freq                  PIC X(2)      VALUE "3A".
+012600141201          03 lnc_Pass-ScreenCode         PIC X(8)      VALUE " ".
+012700141201          03 lnc_Pass-EditCode           PIC X(6)      VALUE " ".
+012800141201          03 lnc_Pass-LevelCode          PIC X(1)      VALUE " ".
+012900210908187304    03 li_UptoDate                 PIC S9(8).
+013000210908187304    03 LI_NEXTBUSDAY               PIC S9(8).
+013100210909187304    03 LCI_15                      PIC S9(8)     VALUE 15.
+013200210909187304    03 LNC_3                       PIC S9(8)     VALUE 3.
+013300210922187304    03 LC_DefaultTS                PIC X(26)   VALUE
+013400210922                                      '1999-01-01-10.10.10.000000'.
+013500141120
+013600141120       01  ld_DateYYYYMMDD               FORMAT DATE "@Y%m%d".
+013700141121       01  li_3M-Date                    PIC X(1)      VALUE SPACES.
+013800141121       01  li_3Q-Date                    PIC X(1)      VALUE SPACES.
+013900141121       01  li_3S-Date                    PIC X(1)      VALUE SPACES.
+014000141121       01  li_3A-Date                    PIC X(1)      VALUE SPACES.
+014100141120
+014200141201       01  lnc_AAREBASetup.
+014300141201           03  lnc_ScreenCode         PIC X(8)  VALUE "AAREBALP".
+014400141201           03  lnc_EditCode           PIC X(6)  VALUE "AAREBA".
+014500141201           03  lnc_LevelCode          PIC X(1)  VALUE "A".
+014600141201           03  lc_AAREBASetupFlag     PIC X(1)  VALUE " ".
+014700141201               88  lb_AAREBASetupYes            VALUE "Y".
+014800141201               88  lb_AAREBASetupNo             VALUE "N".
+014900141201
+015000141120       01  lc_ParameterFlag.
+015100141120           03  lc_Parameter              PIC  X(01).
+015200141120               88  lc_3Parameter         VALUE "3".
+015300141120               88  lc_4Parameter         VALUE "4".
+015400141120               88  lc_5Parameter         VALUE "5".
+015500141120               88  lc_6Parameter         VALUE "6".
+015600141120               88  lc_7Parameter         VALUE "7".
+015700141120               88  lc_8Parameter         VALUE "8".
+015800141120               88  lc_9Parameter         VALUE "9".
+015900141120      * RFS137361 - Ends
+016000110913      *----------------------------------
+016100050223      * Copybooks - Begin
+016200110913      *----------------------------------
+016300050223      * Copybook to get data from Process-Date Data Area
+016400110906       COPY CPPRCDTP.
+016500050223
+016600141217137361* Copybook to get business days using FXGETBUSDA
+016700141217137361 COPY CPFXGTBUDA.
+016800210902187304 COPY CPYAASPARM.
+016900110913      *----------------------------------
+017000050223       LINKAGE SECTION.
+017100110913      *----------------------------------
+017200110903        01 Pi_PROCESS_DATE               PIC S9(8).
+017300110903        01 Pc_RETN_CODE                  PIC  X(2).
+017400110913
+017500110913      *----------------------------------
+017600110830       PROCEDURE DIVISION USING Pi_PROCESS_DATE
+017700110830                                Pc_RETN_CODE.
+017800110810
+017900110913      *----------------------------------
+018000050223       MAIN-PROCESS.
+018100110913      *----------------------------------
+018200050223           PERFORM INITIAL-LOGIC
+018300050223           PERFORM PROCESS-DETAIL
+018400140624131497*    PERFORM END-JOB.
+018500140624131947     GO TO END-JOB.
+018600110913
+018700110913      *----------------------------------
+018800050223       INITIAL-LOGIC.
+018900110913      *----------------------------------
+019000050303      * Display info, that program Start
+019100110903           PERFORM DSP-PROGRAM-START
+019200050303
+019300050303      * Do initialization for Return Code
+019400110903           MOVE Pi_PROCESS_DATE      TO li_AsAtDate.
+019500110902           MOVE SPACES               TO Pc_RETN_CODE.
+019600110811
+019700210928187304     ACCEPT LC-MFAAAPARM-DTAARA FROM WS-DTAARA-MFAAAPARM
+019800210914187304                                FOR "MFAAAPARM".
+019900210914
+020000110811      * Get the COMM-CPPRCDTP-PARAMETERS from copybook linkage
+020100110811
+020200110902           SET PASS-ACTION-GETDTA    OF COMM-CPPRCDTP-PARAMETERS
+020300110902                                     TO TRUE
+020400110913           CALL "FXPRCDTP"   USING CPWPRCDTP-LINKAGE
+020500110913                                   COMM-CPPRCDTP-PARAMETERS.
+020600110913
+020700110902           MOVE PRCDTP-WEEK-END      OF CPWPRCDTP-LINKAGE
+020800110902                                     TO WS-WK-END.
+020900110913           MOVE PRCDTP-MONTH-END     OF CPWPRCDTP-LINKAGE
+021000110913                                     TO WS-MO-END.
+021100110913           MOVE PRCDTP-QUARTER-END   OF CPWPRCDTP-LINKAGE
+021200110913                                     TO WS-QT-END.
+021300110913           MOVE PRCDTP-SEMI-END      OF CPWPRCDTP-LINKAGE
+021400110913                                     TO WS-SA-END.
+021500110811           MOVE PRCDTP-YEAR-END   OF CPWPRCDTP-LINKAGE  TO
+021600110811                WS-AN-END.
+021700110811
+021800141120      * RFS137361 - Starts
+021900141217           INITIALIZE    li_Bus2_Days_Prior
+022000141217                         li_Bus3_Days_Prior.
+022100141217           PERFORM Set-New-Accountlevel-Frequency.
+022200141201
+022300141201      * Check for Edit Code AAREB is setup on RFSCREDI
+022400141201           INITIALIZE    lnc_Pass-ScreenCode
+022500141201                         lnc_Pass-EditCode
+022600141201                         lnc_Pass-LevelCode
+022700141201                         lc_AAREBASetupFlag.
+022800141201
+022900141201           MOVE lnc_ScreenCode      TO lnc_Pass-ScreenCode
+023000141201           MOVE lnc_EditCode        TO lnc_Pass-EditCode
+023100141201           MOVE lnc_LevelCode       TO lnc_Pass-LevelCode
+023200141201
+023300141201           CALL "FXSCEDTAL1" USING  lnc_Pass-ScreenCode
+023400141201                                    lnc_Pass-EditCode
+023500141201                                    lnc_Pass-LevelCode
+023600141201                                    lc_AAREBASetupFlag.
+023700141120      * RFS137361 - Ends
+023800210902      * RFS187304 - starts
+023900141120
+024000210902           PERFORM Checknxt_BusinessDay
+024100210902           MOVE Pi_PROCESS_DATE      TO li_UptoDate
+024200210927           IF LC-NON-BUSDAY = "B" AND
+024300210927              LC-REBAL-START-DATE = "Y"
+024400210902              EXEC SQL
+024500210902                SELECT
+024600210902                    DEC(DATE(DAYS(TIMESTAMP_FORMAT(CHAR
+024700210914                    (:li_nextbusday),"YYYYMMDD"))  - 1)
+024800210902                     , 8, 0)
+024900210902                INTO :li_UptoDate
+025000210902                FROM SQLEXEC
+025100210902              END-EXEC
+025200210902           END-IF
+025300210902      * RFS187304 - Ends
+025400110804      * SELECT ACCOUNT WITH OA MODEL
+025500110906
+025600110906           EXEC SQL
+025700110906             DROP TABLE QTEMP/SQREBACT
+025800110906           END-EXEC.
+025900110906
+026000110804           EXEC SQL
+026100110804             CREATE TABLE QTEMP/SQREBACT
+026200110902               (ACCOUNT_NO           NUMERIC (9,0),
+026300110804                FORCE_REBAL_DATE     NUMERIC (8,0),
+026400140620131947*         REBAL_FILE_EXISTS    CHARACTER(1))
+026500140620131947          REBAL_FILE_EXISTS    CHARACTER(1),
+026600210902131947*         FREQ_CODE            CHARACTER(2))
+026700210902187304          FREQ_CODE            CHARACTER(2),
+026800210909187304          START_DATE           TIMESTAMP,
+026900210909187304          NEXT_REBAL_DATE      TIMESTAMP)
+027000110804           END-EXEC.
+027100110810
+027200110804      * Check status after each IO to indicate if errors have occured
+027300110804      * write error information to error table
+027400110804      * Display error
+027500110810
+027600110906           MOVE SQLSTATE             TO WS-SQL-STATES
+027700110906                                     SW-SQL-STATES
+027800110804           EVALUATE TRUE
+027900110804             WHEN SW-SQL-SUCCESSFUL  OR
+028000110804                  SW-SQL-END
+028100110902                  CONTINUE
+028200110804             WHEN OTHER
+028300110906                  MOVE 99            TO Pc_RETN_CODE
+028400110804           END-EVALUATE.
+028500110810
+028600110804      * Add record to SQREBACT
+028700110913
+028800110809           EXEC SQL
+028900110809              INSERT INTO SQREBACT
+029000110902                SELECT ACRBIP.ACCOUNT_NO,
+029100110902                       COALESCE(CASE
+029200110902                       WHEN ACRBIP.FORCE_REBALANCE_DATE IS NOT NULL
+029300210902187304*                AND  ACRBIP.FORCE_REBALANCE_DATE <= :li_AsAtDate
+029400210902187304                 AND  ACRBIP.FORCE_REBALANCE_DATE <= :li_UptoDate
+029500110902                       AND  ACRBIP.FORCE_REBALANCE_DATE >0
+029600110902                       THEN ACRBIP.FORCE_REBALANCE_DATE
+029700110902                       ELSE 0
+029800110902                       END, 0),
+029900140330135365*                CASE
+030000140330135365*                WHEN ACRBIP.ACCOUNT_NO is NULL
+030100140330135365*                THEN "N"
+030200140330135365*                ELSE "Y"
+030300140330135365*                END
+030400140620      * RFS131947 - Begins
+030500140620135365*                :lncc_Y
+030600140620                       :lncc_Y,
+030700210907187304                 ACRBIP.FREQUENCY_CODE,
+030800140620      * RFS131947 - End
+030900210907187304                 ACRBIP.START_DATE,
+031000210907187304                 ACRBIP.NEXT_REBAL_DATE
+031100110913                FROM   MFAACRBIP ACRBIP
+031200110913                INNER  JOIN MFAACCNTP ACCNTP
+031300110913                ON     ACCNTP.ACCOUNT_NO       = ACRBIP.ACCOUNT_NO
+031400140324135365          AND    ACCNTP.ACCOUNT_STATUS  <> :lncc_C
+031500110809
+031600140219      * RFS 134195 - begin
+031700140219      *         LEFT   OUTER JOIN MFADEAMDP DEAMDP
+031800140219      *         ON     DEAMDP.DEALER_CODE      = ACCNTP.DEALER_CODE
+031900140219      *         AND    DEAMDP.REBAL_OPTION     = "Y"
+032000140219      *
+032100140219      *         LEFT   OUTER JOIN MFADLRMSCP DLRMSCP
+032200140219      *         ON     DLRMSCP.DEALER_CODE     = ACCNTP.DEALER_CODE
+032300140219      *         AND    DLRMSCP.DEALER_REP_CODE = ACCNTP.DEALER_REP_CODE
+032400140219      *         AND    DEAMDP.REBAL_OPTION     = "Y"
+032500140219      * RFS 134195 - end
+032600110809
+032700110902                WHERE ACRBIP.FORCE_REBALANCE_DATE  >  0
+032800210902187304*         AND ACRBIP.FORCE_REBALANCE_DATE <= :li_AsAtDate
+032900210902187304          AND ACRBIP.FORCE_REBALANCE_DATE <= :li_UptoDate
+033000140219      * RFS 134195 - begin
+033100140219      *         AND (ACRBIP.REBAL_OPTION        = "Y"
+033200140219      *         OR
+033300140219      *
+033400140219      *          ((ACRBIP.REBAL_OPTION  IS NULL OR
+033500140219      *               ACRBIP.REBAL_OPTION       =  "  ")
+033600140219      *               AND DLRMSCP.REBAL_OPTION  = "Y")
+033700140219      *         OR
+033800140219      *          ((ACRBIP.REBAL_OPTION  IS NULL OR
+033900140219      *               ACRBIP.REBAL_OPTION       =  "  ")
+034000140219      *               AND (DLRMSCP.REBAL_OPTION IS NULL
+034100140219      *               OR  DLRMSCP.REBAL_OPTION  =  "  ")
+034200140219      *               AND DEAMDP.REBAL_OPTION   = "Y"))
+034300140219      * RFS 134195 - end
+034400110809           END-EXEC.
+034500110913
+034600110809      * Check status after each IO to indicate if errors have occured
+034700110804      * write error information to error table
+034800110804      * Display error
+034900110811
+035000110906           MOVE SQLSTATE             TO WS-SQL-STATES
+035100110906                                        SW-SQL-STATES
+035200110809           EVALUATE TRUE
+035300110809             WHEN SW-SQL-SUCCESSFUL  OR
+035400110809                  SW-SQL-END
+035500110811               CONTINUE
+035600110809             WHEN OTHER
+035700110906               MOVE 99               TO Pc_RETN_CODE
+035800110810               PERFORM DSP-ERROR
+035900110809           END-EVALUATE.
+036000140620
+036100140620      * RFS131947 - Begins
+036200140620
+036300140620      * Add record to SQREBACT for accounts which have requency set
+036400140620      * rebalance frequency set up at the account level
+036500110913
+036600210927187304     IF LC-REBAL-START-DATE NOT = "Y"
+036700210902137361     IF lb_AAREBASetupYes
+036800140620           EXEC SQL
+036900140620              INSERT INTO SQREBACT
+037000140620                SELECT ACRBIP.ACCOUNT_NO,
+037100140620                       0,
+037200140620                       "Y",
+037300210907187304                 ACRBIP.FREQUENCY_CODE,
+037400210907187304                 ACRBIP.START_DATE,
+037500210907187304                 ACRBIP.NEXT_REBAL_DATE
+037600140620                FROM   MFAACRBIP ACRBIP
+037700140620                INNER  JOIN MFAACCNTP ACCNTP
+037800140620                ON     ACCNTP.ACCOUNT_NO = ACRBIP.ACCOUNT_NO
+037900140620                AND    ACCNTP.ACCOUNT_STATUS  <> :lncc_C
+038000141201137361          INNER  JOIN MFAACCATP ACCATP
+038100141201137361          ON     ACCNTP.ACCOUNT_NO = ACCATP.ACCOUNT_NO
+038200140623                WHERE  ACRBIP.FREQUENCY_CODE <> " "
+038300140620                AND    ACRBIP.ACCOUNT_NO NOT IN
+038400140620                       (SELECT ACCOUNT_NO
+038500140620                        FROM SQREBACT REBACT
+038600140620                        WHERE REBACT.ACCOUNT_NO = ACRBIP.ACCOUNT_NO)
+038700141201137361          AND    ACCATP.ACCOUNT_ATTRIBUTE_CODE = "AAREB"
+038800140620                AND (   (ACRBIP.FREQUENCY_CODE = :lc_DA_freq)
+038900140620
+039000140620                    OR  (ACRBIP.FREQUENCY_CODE = :lc_WK_freq
+039100140620                         AND :WS-WK-END        = :LT-Y)
+039200140620
+039300140620                    OR  (ACRBIP.FREQUENCY_CODE = :lc_MO_freq
+039400140620                         AND :WS-MO-END        = :LT-Y)
+039500140620
+039600140620                    OR  (ACRBIP.FREQUENCY_CODE = :lc_QT_freq
+039700140620                         AND :WS-QT-END        = :LT-Y)
+039800140620
+039900140620                    OR  (ACRBIP.FREQUENCY_CODE = :lc_SA_freq
+040000140620                         AND :WS-SA-END        = :LT-Y)
+040100140620
+040200140620                    OR  (ACRBIP.FREQUENCY_CODE = :lc_AN_freq
+040300141120      * RFS137361 - Starts
+040400141120      *                  AND :WS-AN-END        = :LT-Y))
+040500141120                         AND :WS-AN-END        = :LT-Y)
+040600140620
+040700141121                    OR  (ACRBIP.FREQUENCY_CODE = :lc_3M-Freq
+040800141121                         AND :li_3M-Date       = :LT-Y)
+040900141120
+041000141121                    OR  (ACRBIP.FREQUENCY_CODE = :lc_3Q-Freq
+041100141121                         AND :li_3Q-Date       = :LT-Y)
+041200141120
+041300141121                    OR  (ACRBIP.FREQUENCY_CODE = :lc_3S-Freq
+041400141121                         AND :li_3S-Date       = :LT-Y)
+041500141120
+041600141121                    OR  (ACRBIP.FREQUENCY_CODE = :lc_3A-Freq
+041700141121                         AND :li_3A-Date       = :LT-Y))
+041800141201      *    END-EXEC.
+041900141201            END-EXEC
+042000141201           ELSE
+042100141201            EXEC SQL
+042200141201               INSERT INTO SQREBACT
+042300141201                 SELECT ACRBIP.ACCOUNT_NO,
+042400141201                        0,
+042500141201                        "Y",
+042600210907187304                  ACRBIP.FREQUENCY_CODE,
+042700210907187304                  ACRBIP.START_DATE,
+042800210907187304                  ACRBIP.NEXT_REBAL_DATE
+042900141201                 FROM   MFAACRBIP ACRBIP
+043000141201                 INNER  JOIN MFAACCNTP ACCNTP
+043100141201                 ON     ACCNTP.ACCOUNT_NO = ACRBIP.ACCOUNT_NO
+043200141201                 AND    ACCNTP.ACCOUNT_STATUS  <> :lncc_C
+043300141201                 WHERE  ACRBIP.FREQUENCY_CODE <> " "
+043400141201                 AND    ACRBIP.ACCOUNT_NO NOT IN
+043500141201                        (SELECT ACCOUNT_NO
+043600141201                         FROM SQREBACT REBACT
+043700141201                         WHERE REBACT.ACCOUNT_NO = ACRBIP.ACCOUNT_NO)
+043800141201                 AND (   (ACRBIP.FREQUENCY_CODE = :lc_DA_freq)
+043900141201
+044000141201                     OR  (ACRBIP.FREQUENCY_CODE = :lc_WK_freq
+044100141201                          AND :WS-WK-END        = :LT-Y)
+044200141201
+044300141201                     OR  (ACRBIP.FREQUENCY_CODE = :lc_MO_freq
+044400141201                          AND :WS-MO-END        = :LT-Y)
+044500141201
+044600141201                     OR  (ACRBIP.FREQUENCY_CODE = :lc_QT_freq
+044700141201                          AND :WS-QT-END        = :LT-Y)
+044800141201
+044900141201                     OR  (ACRBIP.FREQUENCY_CODE = :lc_SA_freq
+045000141201                          AND :WS-SA-END        = :LT-Y)
+045100141201
+045200141201                     OR  (ACRBIP.FREQUENCY_CODE = :lc_AN_freq
+045300141201                          AND :WS-AN-END        = :LT-Y)
+045400141201
+045500141201                     OR  (ACRBIP.FREQUENCY_CODE = :lc_3M-Freq
+045600141201                          AND :li_3M-Date       = :LT-Y)
+045700141201
+045800141201                     OR  (ACRBIP.FREQUENCY_CODE = :lc_3Q-Freq
+045900141201                          AND :li_3Q-Date       = :LT-Y)
+046000141201
+046100141201                     OR  (ACRBIP.FREQUENCY_CODE = :lc_3S-Freq
+046200141201                          AND :li_3S-Date       = :LT-Y)
+046300141201
+046400141201                     OR  (ACRBIP.FREQUENCY_CODE = :lc_3A-Freq
+046500141201                          AND :li_3A-Date       = :LT-Y))
+046600141201            END-EXEC
+046700210902187304     END-IF
+046800210902           END-IF.
+046900141201      * RFS137361 - Ends
+047000140620
+047100140620      * Check status after each IO to indicate if errors have occured
+047200140620      * write error information to error table
+047300140620      * Display error
+047400140620
+047500140620           MOVE SQLSTATE            TO WS-SQL-STATES
+047600140620                                       SW-SQL-STATES
+047700140620           EVALUATE TRUE
+047800140620             WHEN SW-SQL-SUCCESSFUL OR
+047900140620                  SW-SQL-END
+048000140620               CONTINUE
+048100140620             WHEN OTHER
+048200140620               MOVE 99              TO Pc_RETN_CODE
+048300140620               PERFORM DSP-ERROR
+048400140620           END-EVALUATE.
+048500140620
+048600140620      * RFS131947 - End
+048700140620
+048800210927      * RFS187304 Start
+048900210927           EXEC SQL
+049000210927             INSERT INTO SQREBACT
+049100210927               SELECT ACRBIP.ACCOUNT_NO,
+049200210927                      CASE WHEN (ACRBIP.START_DATE IS NOT NULL
+049300210927                      AND  ACRBIP.START_DATE <> :LC_DefaultTS)
+049400210927                      AND ACRBIP.START_DATE
+049500210927                      >= ACRBIP.NEXT_REBAL_DATE
+049600210927                      AND DEC(TO_CHAR(ACRBIP.START_DATE,
+049700210927                      "YYYYMMDD"),8,0) <= :li_UptoDate
+049800210927                      THEN DEC(TO_CHAR(ACRBIP.START_DATE,
+049900210927                      "YYYYMMDD"),8, 0)
+050000210927                      ELSE DEC(TO_CHAR(ACRBIP.NEXT_REBAL_DATE,
+050100210927                      "YYYYMMDD"),8, 0) END,
+050200210927                      :lncc_Y,
+050300210927                      ACRBIP.FREQUENCY_CODE,
+050400210927                      ACRBIP.START_DATE,
+050500210927                      ACRBIP.NEXT_REBAL_DATE
+050600210927               FROM   MFAACRBIP ACRBIP
+050700210927               INNER  JOIN MFAACCNTP ACCNTP
+050800210927               ON     ACCNTP.ACCOUNT_NO       = ACRBIP.ACCOUNT_NO
+050900210927               AND    ACCNTP.ACCOUNT_STATUS <> :lncc_C
+051000210927               WHERE (ACRBIP.START_DATE  IS NOT NULL
+051100210927                     AND  ACRBIP.START_DATE <> :LC_DefaultTS)
+051200210927               AND ((ACRBIP.START_DATE >= ACRBIP.NEXT_REBAL_DATE
+051300210927               AND DEC(TO_CHAR(ACRBIP.START_DATE, "YYYYMMDD")
+051400210927                   ,8, 0) <= :li_UptoDate) OR
+051500210927                   (ACRBIP.NEXT_REBAL_DATE > ACRBIP.START_DATE
+051600210927               AND DEC(TO_CHAR(ACRBIP.NEXT_REBAL_DATE, "YYYYMMDD")
+051700210927                   ,8, 0)  <= :li_UptoDate))
+051800210927               AND    ACCNTP.ACCOUNT_NO NOT IN
+051900210927                      (SELECT ACCOUNT_NO
+052000210927                       FROM   SQREBACT REBACT
+052100210927                       WHERE  REBACT.ACCOUNT_NO = ACCNTP.ACCOUNT_NO)
+052200210927           END-EXEC.
+052300210927
+052400210927      * Check status after each IO to indicate if errors have occured
+052500210927      * write error information to error table
+052600210927      * Display error
+052700210927
+052800210927           MOVE SQLSTATE              TO WS-SQL-STATES
+052900210927                                      SW-SQL-STATES
+053000210927           EVALUATE TRUE
+053100210927              WHEN SW-SQL-SUCCESSFUL  OR
+053200210927                   SW-SQL-END
+053300210927                CONTINUE
+053400210927              WHEN OTHER
+053500210927                MOVE 99               TO Pc_RETN_CODE
+053600210927                PERFORM DSP-ERROR
+053700210927           END-EVALUATE.
+053800210927      * RFS187304 end
+053900110804      * Add record to SQREBACT for account with rebalance flag = 'Y'
+054000110913
+054100110805           EXEC SQL
+054200110804              INSERT INTO SQREBACT
+054300110913                SELECT ACRBIP.ACCOUNT_NO,
+054400110913                       0,
+054500140620      * RFS131947 - Begins
+054600140620      *                "Y"
+054700140620                       "Y",
+054800150807149165*                ACRBIP.FREQUENCY_CODE
+054900210907149165                 SHP.FREQUENCY_CODE,
+055000140620      * RFS131947 - End
+055100210907187304                ACRBIP.START_DATE,
+055200210907187304                ACRBIP.NEXT_REBAL_DATE
+055300110913                FROM   MFAACRBIP ACRBIP
+055400110913                INNER  JOIN MFAACCNTP ACCNTP
+055500110913                ON     ACCNTP.ACCOUNT_NO = ACRBIP.ACCOUNT_NO
+055600140324135365          AND    ACCNTP.ACCOUNT_STATUS  <> :lncc_C
+055700150805      *RFS149165 - START
+055800150806                INNER JOIN MFAACAAHP AHP ON
+055900150807                AHP.ACCOUNT_NO = ACRBIP.ACCOUNT_NO
+056000150807                INNER JOIN
+056100150807                     (SELECT  ACCOUNT_NO   ,
+056200150807                              MAX(START_DATE) AS START_DATE
+056300150807                      FROM MFAACAAHP
+056400210902187304*                WHERE START_DATE <= :li_AsAtDate
+056500210902187304*                AND (END_DATE >= :li_AsAtDate OR
+056600210902187304                 WHERE START_DATE <= :li_UptoDate
+056700210902187304                 AND (END_DATE >= :li_UptoDate OR
+056800150807                            END_DATE = 0)
+056900150807                      GROUP BY ACCOUNT_NO) AS AccModel ON
+057000150807                         AccModel.START_DATE = AHP.START_DATE
+057100150807                   AND   AccModel.ACCOUNT_NO = AHP.ACCOUNT_NO
+057200150805                INNER JOIN MFASAMSHP SHP ON
+057300150805                SHP.OA_MODEL_CODE = AHP.OA_MODEL_CODE AND
+057400210902187304*         SHP.START_DATE <= :li_AsAtDate        AND
+057500210902187304*        (SHP.END_DATE >= :li_AsAtDate          OR
+057600210902187304          SHP.START_DATE <= :li_UptoDate        AND
+057700210902187304         (SHP.END_DATE >= :li_UptoDate          OR
+057800150807                SHP.END_DATE = 0)
+057900150805      *RFS149165 - END
+058000110913                WHERE  ACRBIP.REBAL_OPTION  = "Y"
+058100150805      *RFS149165 - START
+058200150805                AND    ACRBIP.FREQUENCY_CODE = " "
+058300150805                AND (  (SHP.FREQUENCY_CODE = :lc_DA_freq)
+058400150805
+058500150805                    OR (SHP.FREQUENCY_CODE = :lc_WK_freq
+058600150805                         AND :WS-WK-END        = :LT-Y)
+058700150805
+058800150805                    OR  (SHP.FREQUENCY_CODE = :lc_MO_freq
+058900150805                         AND :WS-MO-END        = :LT-Y)
+059000150805
+059100150805                    OR  (SHP.FREQUENCY_CODE = :lc_QT_freq
+059200150805                         AND :WS-QT-END        = :LT-Y)
+059300150805
+059400150805                    OR  (SHP.FREQUENCY_CODE = :lc_SA_freq
+059500150805                         AND :WS-SA-END        = :LT-Y)
+059600150805
+059700150805                    OR  (SHP.FREQUENCY_CODE = :lc_AN_freq
+059800150805                         AND :WS-AN-END        = :LT-Y)
+059900150805
+060000150805                    OR  (SHP.FREQUENCY_CODE = :lc_3M-Freq
+060100150805                          AND :li_3M-Date       = :LT-Y)
+060200150805
+060300150805                    OR  (SHP.FREQUENCY_CODE = :lc_3Q-Freq
+060400150805                          AND :li_3Q-Date       = :LT-Y)
+060500150805
+060600150805                    OR  (SHP.FREQUENCY_CODE = :lc_3S-Freq
+060700150805                          AND :li_3S-Date       = :LT-Y)
+060800150805
+060900150805                    OR  (SHP.FREQUENCY_CODE = :lc_3A-Freq
+061000150805                          AND :li_3A-Date       = :LT-Y))
+061100150805      *RFS149165 - END
+061200110913                AND    ACRBIP.ACCOUNT_NO NOT IN
+061300110913                       (SELECT ACCOUNT_NO
+061400110913                        FROM SQREBACT REBACT
+061500110913                        WHERE REBACT.ACCOUNT_NO = ACRBIP.ACCOUNT_NO)
+061600110805           END-EXEC.
+061700110804
+061800110804      * Check status after each IO to indicate if errors have occured
+061900110804      * write error information to error table
+062000110804      * Display error
+062100110811
+062200110906           MOVE SQLSTATE            TO WS-SQL-STATES
+062300110913                                       SW-SQL-STATES
+062400110906           EVALUATE TRUE
+062500110913             WHEN SW-SQL-SUCCESSFUL OR
+062600110906                  SW-SQL-END
+062700110811               CONTINUE
+062800110906             WHEN OTHER
+062900110906               MOVE 99              TO Pc_RETN_CODE
+063000110906               PERFORM DSP-ERROR
+063100110906           END-EVALUATE.
+063200110804
+063300110804      * Select dealer rep with rebalance = 'Y'
+063400110913
+063500110805           EXEC SQL
+063600110906              INSERT INTO SQREBACT
+063700110913                SELECT ACCNTP.ACCOUNT_NO,
+063800110913                       0,
+063900140330                       CASE
+064000140330135365*                  WHEN ACRBIP.ACCOUNT_NO IS NULL
+064100140330135365                   WHEN COALESCE(ACRBIP.ACCOUNT_NO,0) = 0
+064200140330                         THEN "N"
+064300140330                         ELSE "Y"
+064400140620131947*                END
+064500140620131947                 END,
+064600210907131947                 ACRBIP.FREQUENCY_CODE,
+064700210907187304                 ACRBIP.START_DATE,
+064800210907187304                 ACRBIP.NEXT_REBAL_DATE
+064900110913                FROM   MFADLRMSCP DLRMSCP
+065000110913                INNER  JOIN MFAACCNTP ACCNTP
+065100110913                ON     ACCNTP.DEALER_CODE     = DLRMSCP.DEALER_CODE
+065200110913                AND    ACCNTP.DEALER_REP_CODE = DLRMSCP.DEALER_REP_CODE
+065300110913                AND    ACCNTP.ACCOUNT_STATUS  <> :lncc_C
+065400110913
+065500110913                LEFT   OUTER JOIN MFAACRBIP ACRBIP
+065600110913                ON     ACRBIP.ACCOUNT_NO      = ACCNTP.ACCOUNT_NO
+065700110804
+065800110913                WHERE  DLRMSCP.REBAL_OPTION   = "Y"
+065900140330                AND    (ACRBIP.REBAL_OPTION  IS NULL OR
+066000140324135365*                ACRBIP.REBAL_OPTION  =  "  ")
+066100140330135365                 COALESCE(ACRBIP.REBAL_OPTION, " ") <> "N")
+066200110913                AND    ACCNTP.ACCOUNT_NO NOT IN
+066300110913                       (SELECT ACCOUNT_NO
+066400110913                        FROM   SQREBACT REBACT
+066500110913                        WHERE  REBACT.ACCOUNT_NO = ACCNTP.ACCOUNT_NO)
+066600110805           END-EXEC.
+066700110810
+066800110804      * Check status after each IO to indicate if errors have occured
+066900110804      * write error information to error table
+067000110804      * Display error
+067100110804
+067200110906           MOVE SQLSTATE            TO WS-SQL-STATES
+067300110913                                       SW-SQL-STATES
+067400110906           EVALUATE TRUE
+067500110913             WHEN SW-SQL-SUCCESSFUL OR
+067600110906                  SW-SQL-END
+067700110906               CONTINUE
+067800110906             WHEN OTHER
+067900110906               MOVE 99              TO Pc_RETN_CODE
+068000110906               PERFORM DSP-ERROR
+068100110804            END-EVALUATE.
+068200110804
+068300110819      * Select dealer with rebalance = 'Y'
+068400110819
+068500110913           EXEC SQL
+068600110913             INSERT INTO SQREBACT
+068700110913               SELECT ACCNTP.ACCOUNT_NO,
+068800110913                      0,
+068900140330                      CASE
+069000140324135365*                 WHEN ACRBIP.ACCOUNT_NO IS NULL
+069100140330135365                  WHEN COALESCE(ACRBIP.ACCOUNT_NO,0) = 0
+069200140330                        THEN "N"
+069300140330                        ELSE "Y"
+069400140620131947*               END
+069500140620131947                END,
+069600210907131947                ACRBIP.FREQUENCY_CODE,
+069700210907187304                ACRBIP.START_DATE,
+069800210907187304                ACRBIP.NEXT_REBAL_DATE
+069900110913               FROM   MFADEAMDP DEAMDP
+070000140324
+070100110913               INNER  JOIN MFAACCNTP ACCNTP
+070200110913               ON     ACCNTP.DEALER_CODE     = DEAMDP.DEALER_CODE
+070300110913               AND    ACCNTP.ACCOUNT_STATUS <> :lncc_C
+070400110819
+070500110913               LEFT   OUTER JOIN MFAACRBIP ACRBIP
+070600110913               ON     ACRBIP.ACCOUNT_NO      = ACCNTP.ACCOUNT_NO
+070700110819
+070800110913               LEFT   OUTER JOIN MFADLRMSCP DLRMSCP
+070900110913               ON     ACCNTP.DEALER_CODE     = DLRMSCP.DEALER_CODE
+071000110913               AND    ACCNTP.DEALER_REP_CODE = DLRMSCP.DEALER_REP_CODE
+071100110819
+071200110913               WHERE  DEAMDP.REBAL_OPTION   = "Y"
+071300140330               AND    (ACRBIP.REBAL_OPTION IS NULL OR
+071400140330135365                 COALESCE(ACRBIP.REBAL_OPTION, " ") <> "N")
+071500140330135365*                ACRBIP.REBAL_OPTION  = " ")
+071600140330               AND    (DLRMSCP.REBAL_OPTION IS NULL OR
+071700140330135365                 COALESCE(DLRMSCP.REBAL_OPTION, " ") <> "N")
+071800140324135365*                DLRMSCP.REBAL_OPTION =  " ")
+071900110913               AND    ACCNTP.ACCOUNT_NO NOT IN
+072000110913                      (SELECT ACCOUNT_NO
+072100110913                       FROM   SQREBACT REBACT
+072200110913                       WHERE  REBACT.ACCOUNT_NO = ACCNTP.ACCOUNT_NO)
+072300110819           END-EXEC.
+072400110819
+072500110804      * Check status after each IO to indicate if errors have occured
+072600110804      * write error information to error table
+072700110804      * Display error
+072800110804
+072900110913           MOVE SQLSTATE              TO WS-SQL-STATES
+073000110913                                      SW-SQL-STATES
+073100110906           EVALUATE TRUE
+073200110906              WHEN SW-SQL-SUCCESSFUL  OR
+073300110906                   SW-SQL-END
+073400110906                CONTINUE
+073500110906              WHEN OTHER
+073600110913                MOVE 99               TO Pc_RETN_CODE
+073700110906                PERFORM DSP-ERROR
+073800110906           END-EVALUATE.
+073900110804
+074000110804      * Declare cursor MODCUR to select model that need to rebalance
+074100110804      * today
+074200110804
+074300110805           EXEC SQL
+074400110906              DECLARE MODCUR CURSOR FOR
+074500140328135365*          SELECT OA_MODEL_CODE,
+074600140328135365*                 START_DATE,
+074700140328135365           SELECT SAMSHP.OA_MODEL_CODE
+074800140328135365                 ,SAMSHP.START_DATE
+074900140328135365*                 CASE
+075000140328135365                 ,CASE
+075100210906187304*                   WHEN FORCE_REBALANCE_DATE<= :li_AsAtDate
+075200210906187304                    WHEN FORCE_REBALANCE_DATE<= :li_UptoDate
+075300140327135365                     AND FORCE_REBALANCE_DATE > :lnci_0
+075400140330135365                     AND FORCE_REBALANCE_DATE IS NOT NULL
+075500110913                          THEN FORCE_REBALAnCE_DATE
+075600140620                          ELSE :li_AsAtDate
+075700140620      * RFS 131947 - Begins
+075800140620      *                 END
+075900140620                        END,
+076000140620                        CASE
+076100210906187304*                   WHEN FORCE_REBALANCE_DATE<= :li_AsAtDate
+076200210906187304                    WHEN FORCE_REBALANCE_DATE<= :li_UptoDate
+076300140620                           AND FORCE_REBALANCE_DATE > :lnci_0
+076400140620                           AND FORCE_REBALANCE_DATE IS NOT NULL
+076500140620                          THEN "Y"
+076600140620                          ELSE "N"
+076700140620                        END,
+076800140620                        SAMSHP.FREQUENCY_CODE
+076900140620      * RFS 131947 - End
+077000110906                 FROM   MFASAMSHP SAMSHP
+077100140327      *rfs 135365 - begin
+077200140327                 INNER JOIN
+077300140327                       (SELECT OA_MODEL_CODE,
+077400140327                               MAX(START_DATE) AS START_DATE
+077500140327                          FROM MFASAMSHP
+077600210906187304*                  WHERE START_DATE <= :li_AsAtDate
+077700210906187304*                    AND (END_DATE >= :li_AsAtDate OR
+077800210906187304                   WHERE START_DATE <= :li_UptoDate
+077900210906187304                     AND (END_DATE >= :li_UptoDate OR
+078000140327                                END_DATE = :lnci_0)
+078100140327                       GROUP BY OA_MODEL_CODE)
+078200140327                    AS Curmodel ON
+078300140327                    Curmodel.OA_MODEL_CODE = SAMSHP.OA_MODEL_CODE
+078400140327                    AND Curmodel.START_DATE = SAMSHP.START_DATE
+078500140327      *rfs 135365 - end
+078600140327135365*          WHERE  SAMSHP.END_DATE = 0
+078700140327135365*          AND    ((SAMSHP.FORCE_REBALANCE_DATE  <= :li_AsAtDate
+078800140327135365           WHERE
+078900210906135365*                 ((SAMSHP.FORCE_REBALANCE_DATE  <= :li_AsAtDate
+079000210906187304                  ((SAMSHP.FORCE_REBALANCE_DATE  <= :li_UptoDate
+079100110913                          AND SAMSHP.FORCE_REBALANCE_DATE <> 0)
+079200110913
+079300110913                          OR  (SAMSHP.FREQUENCY_CODE = :lc_DA_freq)
+079400110913
+079500110913                          OR  (SAMSHP.FREQUENCY_CODE = :lc_WK_freq
+079600110913                               AND :WS-WK-END        = :LT-Y)
+079700110804
+079800110913                          OR  (SAMSHP.FREQUENCY_CODE = :lc_WK_freq
+079900110913                               AND :WS-WK-END        = :LT-Y)
+080000110804
+080100110913                          OR  (SAMSHP.FREQUENCY_CODE = :lc_MO_freq
+080200110913                               AND :WS-MO-END        = :LT-Y)
+080300110913
+080400110913                          OR  (SAMSHP.FREQUENCY_CODE = :lc_QT_freq
+080500110913                               AND :WS-QT-END        = :LT-Y)
+080600110913
+080700110913                          OR  (SAMSHP.FREQUENCY_CODE = :lc_SA_freq
+080800110913                               AND :WS-SA-END        = :LT-Y)
+080900110913
+081000110913                          OR  (SAMSHP.FREQUENCY_CODE = :lc_AN_freq
+081100141121                               AND :WS-AN-END        = :LT-Y))
+081200110805           END-EXEC.
+081300110804
+081400110805      * Open cursor MODCUR
+081500110913
+081600110805           EXEC SQL
+081700110906              OPEN MODCUR
+081800110805           END-EXEC.
+081900110913
+082000110913      *----------------------------------
+082100110805       PROCESS-DETAIL.
+082200110913      *----------------------------------
+082300110913
+082400110805      *Update account that have force rebalance setup
+082500110913
+082600110805           EXEC SQL
+082700110913             UPDATE MFAACRBIP ACRBIP
+082800110913             SET    (FORCE_REBALANCE_DATE,
+082900110913                     PENDING_REALLOCATION_DATE,
+083000210906187304*              REJECTION_CODE)=
+083100210906187304               REJECTION_CODE,
+083200210906187304               NEXT_REBAL_DATE)=
+083300210906                    (SELECT 0,
+083400210906187304*                 REBACT.FORCE_REBAL_DATE,
+083500211022187304               CASE WHEN(REBACT.NEXT_REBAL_DATE IS NOT NULL
+083501211022                           AND  REBACT.NEXT_REBAL_DATE <> :LC_DefaultTS)
+083600210906187304                    THEN :li_AsAtDate
+083700210907187304                    ELSE REBACT.FORCE_REBAL_DATE
+083800210908187304                     END,
+083900210914187304                           " ",
+084000210914187304             CASE WHEN REBACT.FREQ_CODE      = :lc_DA_freq
+084100210922187304                   AND (REBACT.NEXT_REBAL_DATE IS NOT NULL
+084200210928187304                   AND  REBACT.NEXT_REBAL_DATE <> :LC_DefaultTS)
+084300210920187304*                 THEN TIMESTAMP(DATE(:li_AsAtDate) + 1 days)
+084400210921187304                  THEN TIMESTAMP_FORMAT(CHAR
+084500211022187304                       (:li_NextBusDay),"YYYYMMDD")
+084600210914187304                  WHEN REBACT.FREQ_CODE      = :lc_WK_freq
+084700210922187304                   AND (REBACT.NEXT_REBAL_DATE IS NOT NULL
+084800210928187304                   AND  REBACT.NEXT_REBAL_DATE <> :LC_DefaultTS)
+084900210921187304*                 THEN TIMESTAMP(DATE(:li_NextBusDay) + 7 days)
+085000210921187304                  THEN  TIMESTAMP_FORMAT(CHAR
+085100210921187304                       (:li_NextBusDay),"YYYYMMDD")   + 7 days
+085200210914187304                  WHEN (REBACT.FREQ_CODE      = :lc_MO_freq
+085300210914187304                    OR REBACT.FREQ_CODE      = :lc_3M-Freq)
+085400210922187304                   AND (REBACT.NEXT_REBAL_DATE IS NOT NULL
+085500210928187304                   AND  REBACT.NEXT_REBAL_DATE <> :LC_DefaultTS)
+085600210914187304              THEN CASE WHEN
+085700210914187304                SUBSTR( TO_CHAR(DATE(REBACT.START_DATE),
+085800210914187304                         "DD"),3,2)  = "31" OR
+085900210906187304                SUBSTR( TO_CHAR(DATE(REBACT.START_DATE),
+086000210906187304                       "MMDD"),1,4)
+086100210906187304                    IN ("0229", "0228","0430", "0630", "0930",
+086200210906187304                       "1130")
+086300210906187304                  THEN TIMESTAMP(LAST_DAY(ADD_MONTHS
+086400210914187304                       (DATE (NEXT_REBAL_DATE), 1)))
+086500210906187304                  ELSE
+086600210906187304                       TIMESTAMP(ADD_MONTHS
+086700210914187304                       (DATE (NEXT_REBAL_DATE), 1))
+086800210906187304                   END
+086900210914187304                  WHEN (REBACT.FREQ_CODE      = :lc_QT_freq
+087000210914187304                    OR REBACT.FREQ_CODE      = :lc_3Q-Freq)
+087100210922187304                   AND (REBACT.NEXT_REBAL_DATE IS NOT NULL
+087200210928187304                   AND  REBACT.NEXT_REBAL_DATE <> :LC_DefaultTS)
+087300210914187304             THEN CASE WHEN
+087400210914187304                SUBSTR( TO_CHAR(DATE(REBACT.START_DATE),
+087500210914187304                         "DD"),3,2)  = "31" OR
+087600210906187304                SUBSTR( TO_CHAR(DATE(REBACT.START_DATE),
+087700210906187304                       "MMDD"),1,4)
+087800210906187304                    IN ("0229", "0228","0430", "0630", "0930",
+087900210906187304                       "1130")
+088000210906187304                  THEN TIMESTAMP(LAST_DAY(ADD_MONTHS
+088100210914187304                       (DATE (NEXT_REBAL_DATE), 3)))
+088200210906187304                  ELSE
+088300210906187304                       TIMESTAMP(ADD_MONTHS
+088400210914187304                      (DATE (NEXT_REBAL_DATE), 3))
+088500210906187304                   END
+088600210914187304                  WHEN (REBACT.FREQ_CODE      = :lc_SA_freq
+088700210914187304                    OR REBACT.FREQ_CODE      = :lc_3S-Freq)
+088800210922187304                   AND (REBACT.NEXT_REBAL_DATE IS NOT NULL
+088900210928187304                   AND  REBACT.NEXT_REBAL_DATE <> :LC_DefaultTS)
+089000210914187304             THEN CASE WHEN
+089100210914187304                SUBSTR( TO_CHAR(DATE(REBACT.START_DATE),
+089200210914187304                         "DD"),3,2)  = "31" OR
+089300210906187304                SUBSTR( TO_CHAR(DATE(REBACT.START_DATE),
+089400210906187304                       "MMDD"),1,4)
+089500210906187304                    IN ("0229", "0228","0430", "0630", "0930",
+089600210906187304                        "1130")
+089700210906187304                  THEN TIMESTAMP(LAST_DAY(ADD_MONTHS
+089800210914187304                       (DATE (NEXT_REBAL_DATE), 6)))
+089900210906187304                  ELSE
+090000210906187304                       TIMESTAMP(ADD_MONTHS
+090100210914187304                       (DATE (NEXT_REBAL_DATE), 6))
+090200210906187304                   END
+090300210914187304                  WHEN (REBACT.FREQ_CODE      = :lc_AN_freq
+090400210914187304                    OR REBACT.FREQ_CODE      = :lc_3A-Freq)
+090500210922187304                   AND (REBACT.NEXT_REBAL_DATE IS NOT NULL
+090600210928187304                   AND  REBACT.NEXT_REBAL_DATE <> :LC_DefaultTS)
+090700210914187304             THEN CASE WHEN
+090800210914187304                SUBSTR( TO_CHAR(DATE(REBACT.START_DATE),
+090900210914187304                         "DD"),3,2)  = "31" OR
+091000210906187304                SUBSTR( TO_CHAR(DATE(REBACT.START_DATE),
+091100210906187304                        "MMDD"),1,4)
+091200210908187304                    IN ("0229", "0228","0430", "0630", "0930",
+091300210906187304                        "1130")
+091400210906187304                  THEN TIMESTAMP(LAST_DAY(ADD_MONTHS
+091500210914187304                      (DATE (NEXT_REBAL_DATE), 12)))
+091600210906187304                  ELSE
+091700210906187304                       TIMESTAMP(ADD_MONTHS
+091800210914187304                       (DATE (NEXT_REBAL_DATE), 12))
+091900210908187304                   END
+092000210914187304                   END
+092100110913                     FROM   SQREBACT REBACT
+092200110913                     WHERE  REBACT.ACCOUNT_NO = ACRBIP.ACCOUNT_NO)
+092300110913             WHERE   EXISTS (SELECT REBACT2.ACCOUNT_NO
+092400110913                             FROM   SQREBACT REBACT2
+092500110913                             WHERE  REBACT2.ACCOUNT_NO =
+092600110913                                    ACRBIP.ACCOUNT_NO
+092700210909                             AND    REBACT2.FORCE_REBAL_DATE   > 0
+092800210909                             AND    REBACT2.REBAL_FILE_EXISTS  = "Y")
+092900110805           END-EXEC.
+093000110805
+093100110805      * Check status after each IO to indicate if errors have occured
+093200110805      * write error information to error table
+093300110805      * Display error
+093400110805
+093500110906           MOVE SQLSTATE             TO WS-SQL-STATES
+093600110913                                        SW-SQL-STATES
+093700110805           EVALUATE TRUE
+093800110805             WHEN SW-SQL-SUCCESSFUL  OR
+093900110805                  SW-SQL-END
+094000110811               CONTINUE
+094100110805             WHEN OTHER
+094200110906               MOVE 99               TO Pc_RETN_CODE
+094300110805               PERFORM DSP-ERROR
+094400110805           END-EVALUATE.
+094500110830
+094600210907      * RFS 187304 - START
+094700210907           EXEC SQL
+094800210907             UPDATE MFAACRBIP ACRBIP
+094900210914             SET    ACRBIP.NEXT_REBAL_DATE =
+095000210915      *      (SELECT TIMESTAMP_FORMAT(CHAR(X.BUSINESS_DAY),'YYYYMMDD')
+095100210915             (SELECT substr(char(business_day),1,4) || "-" ||
+095200210915                     substr(char(business_day),5,2) || "-" ||
+095300210915                     substr(char(business_day),7,2) ||
+095400210915                     substr(char(current_timestamp), 11, 17)
+095500210907                FROM
+095600210909              (SELECT ACRBIP2.ACCOUNT_NO,
+095700210907                      BUSDAP.BUSINESS_DAY,
+095800210907                      ROW_NUMBER()   OVER
+095900210907                     (PARTITION  by  ACRBIP2.ACCOUNT_NO
+096000210907                      ORDER BY ACRBIP2.ACCOUNT_NO,
+096100210907                      BUSDAP.BUSINESS_DAY DESC)
+096200210907                      AS ROW_CNT
+096300210907                 FROM   SQREBACT REBACT
+096400210907                INNER JOIN  MFAACRBIP ACRBIP2
+096500210909               ON ACRBIP2.ACCOUNT_NO = REBACT.ACCOUNT_NO
+096600210909               INNER JOIN MFABUSDAP BUSDAP
+096700210907               ON   BUSDAP.BUSINESS_DAY BETWEEN
+096800210907               DEC(DATE(DAYS(TIMESTAMP_FORMAT(
+096900210909               CHAR(ACRBIP2.NEXT_REBAL_DATE
+097000210909                ),"YYYYMMDD"))  - "15"), 8, 0)
+097100210914                AND DEC(DATE(DAYS(TIMESTAMP_FORMAT(
+097200210914                CHAR(ACRBIP2.NEXT_REBAL_DATE
+097300210915                ),"YYYYMMDD"))  ), 8, 0)
+097400210909                AND   BUSDAP.ALLOW_TRADING = "Y"
+097500210907                ) AS X
+097600210907                WHERE X.ACCOUNT_NO = ACRBIP.ACCOUNT_NO
+097700210914                AND X.ROW_CNT = 3
+097800210907                )
+097900210907                WHERE ACRBIP.FREQUENCY_CODE IN
+098000210907                (:lc_3M-freq, :lc_3Q-freq, :lc_3S-freq,
+098100210907                 :lc_3A-freq) AND
+098200210907                EXISTS (SELECT REBACT2.ACCOUNT_NO
+098300210907                FROM   SQREBACT REBACT2
+098400210907                WHERE  REBACT2.ACCOUNT_NO =
+098500210907                       ACRBIP.ACCOUNT_NO
+098600210909                    AND    REBACT2.FORCE_REBAL_DATE   > 0
+098700210909                    AND    REBACT2.REBAL_FILE_EXISTS  = "Y"
+098800210922                    AND (ACRBIP.NEXT_REBAL_DATE IS NOT NULL
+098900210922                     OR  ACRBIP.NEXT_REBAL_DATE <> :LC_DefaultTS))
+099000210907
+099100210907           END-EXEC.
+099200210907
+099300210907           MOVE SQLSTATE             TO WS-SQL-STATES
+099400210907                                        SW-SQL-STATES
+099500210907           EVALUATE TRUE
+099600210907             WHEN SW-SQL-SUCCESSFUL  OR
+099700210907                  SW-SQL-END
+099800210907               CONTINUE
+099900210907             WHEN OTHER
+100000210907               MOVE 99               TO Pc_RETN_CODE
+100100210907               PERFORM DSP-ERROR
+100200210907           END-EVALUATE.
+100300210907      * RFS 187304 - End
+100400210907
+100500110830           PERFORM FETCH-MODCUR UNTIL lb_EndOfFetch-1.
+100600140623131947     PERFORM UPDATE-ACCOUNT-LEVEL-REBALANCE.
+100700110830
+100800110830        FETCH-MODCUR.
+100900110913      *----------------------------------
+101000110913
+101100110805      * START FETCHING ROWS
+101200110830
+101300110805           EXEC SQL
+101400110906              FETCH NEXT FROM MODCUR
+101500110913              INTO  :lc_model,
+101600110913                    :li_startdate,
+101700140620      * RFS131947 - Begin
+101800140620      *             :li_rebaldate
+101900140620                    :li_rebaldate,
+102000140620                    :lc_Flag,
+102100140620                    :lc_ModelFreq
+102200140620      * RFS131947 - End
+102300110805           END-EXEC.
+102400110913
+102500110805      * Check status and proceed updating tables
+102600110913
+102700110906           MOVE SQLSTATE             TO WS-SQL-STATES
+102800110913                                        SW-SQL-STATES
+102900110805           EVALUATE TRUE
+103000110913             WHEN SW-SQL-SUCCESSFUL  OR
+103100110805                  SW-SQL-WARNING
+103200110906               MOVE SQLERRD(3)       TO li_MaxFetch
+103300110903               PERFORM PROCESS-EXTRACT-DETAIL  THRU PROCESS-EXIT
+103400140623131947       WHEN SW-SQL-END
+103500140623131947         SET lb_EndOfFetch-1   TO TRUE
+103600140623131947         CONTINUE
+103700110805             WHEN OTHER
+103800110906               SET lb_EndOfFetch-1   TO TRUE
+103900140623               GO TO END-JOB
+104000110805           END-EVALUATE.
+104100110805
+104200140620      * RFS 131947 - Begin
+104300140620
+104400140620      *-----------------------------------
+104500140620       UPDATE-ACCOUNT-LEVEL-REBALANCE.
+104600140620      *-----------------------------------
+104700140620
+104800140620           EXEC SQL
+104900140620             UPDATE MFAACRBIP ACRBIP
+105000140620             SET    (FORCE_REBALANCE_DATE,
+105100140620                     PENDING_REALLOCATION_DATE,
+105200140620                     REJECTION_CODE)=
+105300140620                    (SELECT 0,
+105400140620                            :li_asatdate,
+105500140620                            " "
+105600140620                     FROM   SQREBACT REBACT
+105700140620                     WHERE  REBACT.ACCOUNT_NO = ACRBIP.ACCOUNT_NO)
+105800140620             WHERE EXISTS (SELECT REBACT2.ACCOUNT_NO
+105900140620                           FROM   SQREBACT REBACT2
+106000140620                           WHERE  REBACT2.ACCOUNT_NO =
+106100140620                                  ACRBIP.ACCOUNT_NO
+106200140623                           AND   REBACT2.FREQ_CODE <> " "
+106300140625                           AND   REBACT2.FREQ_CODE <> "NA"
+106400140623                           AND   ACRBIP.PENDING_REALLOCATION_DATE = 0)
+106500140620           END-EXEC.
+106600140620
+106700140620      * Check status after each IO to indicate if errors have oc
+106800140620      * write error information to error table
+106900140620      * Display error
+107000140620
+107100140620           MOVE SQLSTATE             TO WS-SQL-STATES
+107200140620                                        SW-SQL-STATES
+107300140620           EVALUATE TRUE
+107400140620             WHEN SW-SQL-SUCCESSFUL  OR
+107500140620                  SW-SQL-END
+107600140624               CONTINUE
+107700140620             WHEN OTHER
+107800140620               MOVE 99               TO Pc_RETN_CODE
+107900140620               PERFORM DSP-ERROR
+108000140620           END-EVALUATE.
+108100140620      * RFS 131947 - End
+108200141210
+108300110913      *- ---------------------------------
+108400110805       PROCESS-EXTRACT-DETAIL.
+108500110913      *-----------------------------------
+108600110913
+108700110805      * Update account with MFAACRBIP record
+108800110913
+108900110805           EXEC SQL
+109000110906              UPDATE MFAACRBIP ACRBIP
+109100110913              SET    PENDING_REALLOCATION_DATE =  :li_rebaldate,
+109200110913                     REJECTION_CODE = " "
+109300140328      *rfs 135365 - begin
+109400140330              WHERE  ACCOUNT_NO IN
+109500110913                     (SELECT REBACT.ACCOUNT_NO
+109600110913                      FROM   SQREBACT REBACT
+109700140328                      INNER  JOIN MFAACAAHP ACAAHP
+109800140328                      ON     REBACT.ACCOUNT_NO =  ACAAHP.ACCOUNT_NO
+109900210906187304*               AND    ACAAHP.START_DATE <= :li_AsAtDate
+110000210906187304                AND    ACAAHP.START_DATE <= :li_UptoDate
+110100110913                      AND    (ACAAHP.END_DATE  =  0 OR
+110200140328                              ACAAHP.END_DATE  >=  :li_rebaldate)
+110300140328                        AND  ACAAHP.OA_MODEL_CODE     =  :lc_model
+110400140328                      INNER JOIN
+110500140328                      (SELECT ACCOUNT_NO,
+110600140328                              MAX(START_DATE) AS START_DATE
+110700140328                      FROM MFAACAAHP
+110800210906187304*               WHERE  START_DATE <= :li_AsAtDate
+110900210906187304                WHERE  START_DATE <= :li_UptoDate
+111000140328                      AND   (END_DATE  =  0 OR
+111100140328                             END_DATE  >=  :li_rebaldate)
+111200140330                       AND  OA_MODEL_CODE     =  :lc_model
+111300140328                      GROUP BY ACCOUNT_NO) AS CurActModel ON
+111400140328                      CurActModel.ACCOUNT_NO = ACAAHP.ACCOUNT_NO
+111500140328                      AND CurActModel.START_DATE = ACAAHP.START_DATE
+111600140328                    WHERE  REBACT.ACCOUNT_NO =  ACRBIP.ACCOUNT_NO
+111700140330                       AND REBACT.REBAL_FILE_EXISTS = "Y"
+111800140330                       AND REBACT.FORCE_REBAL_DATE  = 0
+111900140620      * RFS 131947 - Begin
+112000140620                       AND (:lncc_Y = :lc_Flag
+112100140624                               OR  REBACT.FREQ_CODE = " "
+112200140624                          OR :lc_ModelFreq = REBACT.FREQ_CODE)
+112300140620      * RFS 131947 - End
+112400140328                   )
+112500140328      *rfs 135365 - end
+112600110805           END-EXEC.
+112700110913
+112800110805      * Check status after each IO to indicate if errors have oc
+112900110805      * write error information to error table
+113000110805      * Display error
+113100110805
+113200110906           MOVE SQLSTATE             TO WS-SQL-STATES
+113300110913                                        SW-SQL-STATES
+113400110805           EVALUATE TRUE
+113500110805             WHEN SW-SQL-SUCCESSFUL  OR
+113600110805                  SW-SQL-END
+113700110811               CONTINUE
+113800110805             WHEN OTHER
+113900110906               MOVE 99               TO Pc_RETN_CODE
+114000110805               PERFORM DSP-ERROR
+114100110805           END-EVALUATE.
+114200110811
+114300140330      * Update account without MFAACRBIP record
+114400110822
+114500110822           EXEC SQL
+114600110822              INSERT INTO MFAACRBIP
+114700110913                 SELECT REBACT.ACCOUNT_NO,
+114800110913                        " ",
+114900110913                        " ",
+115000140328135365*                 " ",
+115100140328135365                  :lncc_M,
+115200110913                        0,
+115300110913                        " ",
+115400140623131947*                 :li_AsAtDate
+115500211022131947                  :li_AsAtDate,
+115700140624131947                  " "
+115800150806149165                 ," "
+115900150806149165                 ," "
+116000150806149165                 ," "
+116100150806149165                 ," "
+116200150806149165                 ," "
+116300150806149165                 ," "
+116400110913                 FROM   SQREBACT REBACT
+116500140330                 INNER  JOIN MFAACAAHP ACAAHP
+116600140330                 ON     REBACT.ACCOUNT_NO        = ACAAHP.ACCOUNT_NO
+116700140330135365*          AND    ACAAHP.START_DATE <= :li_startdate
+116800210906135365*          AND    ACAAHP.START_DATE <= :li_AsAtDate
+116900210906187304           AND    ACAAHP.START_DATE <= :li_UptoDate
+117000140330                 AND    (ACAAHP.END_DATE         = 0 OR
+117100140330                         ACAAHP.END_DATE         >= :li_rebaldate)
+117200140330                 AND    ACAAHP.OA_MODEL_CODE     = :lc_model
+117300140330      *rfs 135365 - begin
+117400140330                 INNER JOIN
+117500140330                      (SELECT ACCOUNT_NO,
+117600140330                              MAX(START_DATE) AS START_DATE
+117700140330                      FROM MFAACAAHP
+117800210906187304*               WHERE  START_DATE <= :li_AsAtDate
+117900210906187304                WHERE  START_DATE <= :li_UptoDate
+118000140330                      AND   (END_DATE  =  0 OR
+118100140330                             END_DATE  >=  :li_rebaldate)
+118200140330                       AND  OA_MODEL_CODE     =  :lc_model
+118300140330                      GROUP BY ACCOUNT_NO) AS CurActModel ON
+118400140330                      CurActModel.ACCOUNT_NO = ACAAHP.ACCOUNT_NO
+118500140330                      AND CurActModel.START_DATE = ACAAHP.START_DATE
+118600140330      *rfs 135365 - end
+118700110913                 WHERE  REBACT.REBAL_FILE_EXISTS = "N"
+118800110913                 AND    REBACT.FORCE_REBAL_DATE  =  0
+118900140620      * RFS 131947 - Begin
+119000140620                 AND (:lncc_Y = :lc_Flag
+119100140624                      OR  REBACT.FREQ_CODE =  " "
+119200140624                      OR :lc_ModelFreq = REBACT.FREQ_CODE)
+119300140620      * RFS 131947 - End
+119400140330
+119500110822           END-EXEC.
+119600110822
+119700110822      * Check status after each IO to indicate if errors have occured
+119800110822      * write error information to error table
+119900110822      * Display error
+120000110913
+120100110906           MOVE SQLSTATE             TO WS-SQL-STATES
+120200110906                                        SW-SQL-STATES
+120300110822           EVALUATE TRUE
+120400110822             WHEN SW-SQL-SUCCESSFUL  OR
+120500110822                  SW-SQL-END
+120600110822               CONTINUE
+120700110822             WHEN OTHER
+120800110906               MOVE 99               TO Pc_RETN_CODE
+120900110822               PERFORM DSP-ERROR
+121000110822           END-EVALUATE.
+121100110822
+121200110805      *UPDATE MODEL
+121300110805
+121400210101186018     PERFORM INSERT-AUDIT-FILES
+121500210101
+121600110805           EXEC SQL
+121700110906              UPDATE MFASAMSHP
+121800110913              SET    LAST_REBALANCE_DATE  = :li_RebalDate,
+121900110906                     FORCE_REBALANCE_DATE = 0
+122000110913              WHERE  OA_MODEL_CODE        = :lc_model
+122100110913              AND    START_DATE           = :li_startdate
+122200110805           END-EXEC.
+122300110811
+122400110805      * Check status after each IO to indicate if errors have occured
+122500110805      * write error information to error table
+122600110805      * Display error
+122700110913
+122800110906           MOVE SQLSTATE             TO WS-SQL-STATES
+122900110906                                        SW-SQL-STATES
+123000110805           EVALUATE TRUE
+123100110805             WHEN SW-SQL-SUCCESSFUL  OR
+123200110805                  SW-SQL-END
+123300110811               CONTINUE
+123400110805             WHEN OTHER
+123500110906               MOVE 99               TO Pc_RETN_CODE
+123600110805               PERFORM DSP-ERROR
+123700110805           END-EVALUATE.
+123800110903
+123900110903        PROCESS-EXIT.
+124000110903           EXIT.
+124100110903
+124200210101      *RFS186018 STARTS
+124300210101       INSERT-AUDIT-FILES.
+124400210101           EXEC SQL
+124500210101               SELECT OA_MODEL_CODE
+124600210101	                    ,START_DATE
+124700210101	                    ,CHAR(FORCE_REBALANCE_DATE)
+124800210101	                    ,CHAR(:li_RebalDate)
+124900210101                INTO :lc_oamodel
+125000210101                    ,:li_StartDate
+125100210101                    ,:li_ForceRdate
+125200210101                    ,:lc_NewVal
+125300210101                FROM MFASAMSHP  SAMSHP
+125400210101               WHERE  OA_MODEL_CODE   = :lc_model
+125500210101               AND    START_DATE      = :li_startdate
+125600210101           END-EXEC
+125700210101           MOVE SQLSTATE             TO WS-SQL-STATES
+125800210101                                        SW-SQL-STATES
+125900210101           EVALUATE TRUE
+126000210101             WHEN SW-SQL-SUCCESSFUL
+126100210101               PERFORM INSERT-AUDITFILE
+126200210101             WHEN OTHER
+126300210101               MOVE 99               TO Pc_RETN_CODE
+126400210101               PERFORM DSP-ERROR
+126500210101           END-EVALUATE.
+126600210101
+126700210101      *Audit log for Force-rebalance-date (element code = 006)
+126800210101       INSERT-AUDITFILE.
+126900210101
+127000210101           EXEC SQL
+127100210101                INSERT INTO MFASAMHLP(
+127200210101                           OA_MODEL_CODE
+127300210101                          ,START_DATE
+127400210101                          ,ORIG_VALUE
+127500210101                          ,NEW_VALUE
+127600210101                          ,ELEMENT_CODE
+127700210101                          ,SCREEN_CODE
+127800210101                          ,AUDIT_STATUS
+127900210101                          ,AUDIT_USER  )
+128000210101                  VALUES
+128100210101                         (:lc_oamodel
+128200210101                         ,:li_StartDate
+128300210101                         ,:li_ForceRdate
+128400210101                         ,"00000000"
+128500210101                         ,:lnc_006
+128600210208                         ,"RFASAFNC"
+128700210101                         ,:lncc_U
+128800210101                         ,:lc_ScreenCode )
+128900210101           END-EXEC
+129000210101           MOVE SQLSTATE     TO WS-SQL-STATES
+129100210101                                SW-SQL-STATES
+129200210101           EVALUATE TRUE
+129300210101             WHEN SW-SQL-SUCCESSFUL OR
+129400210101                  SW-SQL-END
+129500210101               CONTINUE
+129600210101             WHEN OTHER
+129700210101               MOVE 99              TO Pc_RETN_CODE
+129800210101               PERFORM DSP-ERROR
+129900210101           END-EVALUATE
+130000210101
+130100210101      *Audit log for last-rebalance-date (element code = 005)
+130200210101
+130300210101           EXEC SQL
+130400210101             INSERT INTO MFASAMHLP(
+130500210101                        OA_MODEL_CODE
+130600210101                       ,START_DATE
+130700210101                       ,ORIG_VALUE
+130800210101                       ,NEW_VALUE
+130900210101                       ,ELEMENT_CODE
+131000210101                       ,SCREEN_CODE
+131100210101                       ,AUDIT_STATUS
+131200210101                       ,AUDIT_USER  )
+131300210101               VALUES
+131400210101                      (:lc_oamodel
+131500210101                      ,:li_StartDate1
+131600210101                      ,:li_RebalDate
+131700210101                      ,:lc_NewVal
+131800210101                      ,:lnc_005
+131900210208                      ,"RFASAFNC"
+132000210101                      ,:lncc_U
+132100210101                      ,:lc_ScreenCode)
+132200210101           END-EXEC
+132300210101           MOVE SQLSTATE      TO WS-SQL-STATES
+132400210101                                 SW-SQL-STATES
+132500210101           EVALUATE TRUE
+132600210101             WHEN SW-SQL-SUCCESSFUL OR
+132700210101                  SW-SQL-END
+132800210101               CONTINUE
+132900210101             WHEN OTHER
+133000210101               MOVE 99              TO Pc_RETN_CODE
+133100210101               PERFORM DSP-ERROR
+133200210101           END-EVALUATE.
+133300210101      *RFS186018 ENDS
+133400210101
+133500141120      * RFS137361 - Starts
+133600141120      *-----------------------------------
+133700141217       Set-New-Accountlevel-Frequency.
+133800141120      *-----------------------------------
+133900141120
+134000141217      * To get 2nd business day prior to current date
+134100141217           SET pb_GetBusDayBefore      TO TRUE.
+134200141217           COMPUTE pi_GetBusDayBaseDate = li_AsAtDate.
+134300141217           COMPUTE pi_GetBusDayNumOfDays = 2.
+134400141217           CALL "FXGETBUSDA" USING pc_GetBusDayParms.
+134500141217           IF pb_GetBusDayReturnOK
+134600141217              MOVE pi_GetBusDayCalcBusDate TO  li_Bus2_Days_Prior
+134700141217           ELSE
+134800141217              PERFORM DSP-ERROR
+134900141217           END-IF.
+135000141217
+135100141217      * To get 3rd business day prior to current date
+135200141217           SET pb_GetBusDayBefore      TO TRUE.
+135300141217           COMPUTE pi_GetBusDayBaseDate = li_AsAtDate.
+135400141217           COMPUTE pi_GetBusDayNumOfDays = 3.
+135500141217           CALL "FXGETBUSDA" USING pc_GetBusDayParms.
+135600141217           IF pb_GetBusDayReturnOK
+135700141217              MOVE pi_GetBusDayCalcBusDate TO  li_Bus3_Days_Prior
+135800141217           ELSE
+135900141217              PERFORM DSP-ERROR
+136000141217           END-IF.
+136100141217
+136200141217      * To check retrieved date is MO,QT,SA,AN *
+136300141217           IF li_Bus2_Days_Prior(1:6) NOT = li_Bus3_Days_Prior(1:6)
+136400141217              MOVE "Y" TO li_3M-Date
+136500141217           END-IF.
+136600141217
+136700141217           IF li_3M-Date        = "Y" AND
+136800141217              (li_Bus3_Days_Prior(5:2) = "03" OR
+136900141217               li_Bus3_Days_Prior(5:2) = "06" OR
+137000141217               li_Bus3_Days_Prior(5:2) = "09" OR
+137100141217               li_Bus3_Days_Prior(5:2) = "12")
+137200141217              MOVE "Y" TO li_3Q-Date
+137300141217           END-IF.
+137400141217
+137500141217           IF li_3M-Date        = "Y" AND
+137600141217              (li_Bus3_Days_Prior(5:2) = "06" OR
+137700141217               li_Bus3_Days_Prior(5:2) = "12")
+137800141217              MOVE "Y" TO li_3S-Date
+137900141217           END-IF.
+138000141217
+138100141217           IF li_3M-Date        = "Y" AND
+138200141217              li_Bus3_Days_Prior(5:2) = "12"
+138300141217              MOVE "Y" TO li_3A-Date
+138400141217           END-IF.
+138500141120
+138600141120      * RFS137361 - Ends
+138700141120
+138800210902      * RFS187304 - Starts
+138900210902      *--------------------*
+139000210902       Checknxt_BusinessDay.
+139100210902      *--------------------*
+139200210902           INITIALIZE li_nextbusday.
+139300210902           EXEC SQL
+139400210902              SELECT COALESCE(Business_Day, :li_asatdate)
+139500210902              INTO :li_nextbusday
+139600210902              FROM  MFABUSDAP
+139700210902              WHERE RECORD_ID = "BUSDAY"
+139800210927              AND Business_Day > :li_asatdate
+139900210902              AND Allow_trading = "Y"
+140000210902              ORDER BY Business_Day
+140100210928              FETCH FIRST 1 ROW ONLY
+140200210902           END-EXEC.
+140300210902
+140400210902      * RFS187304 - Starts
+140500110913      *----------------------------------
+140600050223       END-JOB.
+140700110913      *----------------------------------
+140800110913
+140900110805      * Close cursor MODCUR
+141000110913
+141100110903         CLOSE-MODCUR.
+141200110903
+141300110805           EXEC SQL
+141400110805            CLOSE MODCUR
+141500110805           END-EXEC.
+141600050303
+141700050303      * Display info, that program End
+141800110811
+141900050303           PERFORM DSP-PROGRAM-END
+142000050223           GOBACK.
+142100110913
+142200050223      * ---------------------------------
+142300050223      * DSP-ERROR and FORCE-MSGW Routines
+142400050223      * ---------------------------------
+142500050225          COPY CPYSQLRTN.
+142600050223      *

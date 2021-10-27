@@ -1,0 +1,2913 @@
+000100200724      * %ATTR DBGVIEW(*SOURCE) CLOSQLCSR(*ENDMOD)
+000200200724       IDENTIFICATION DIVISION.
+000300200724       PROGRAM-ID.    HHAUTOLNK.
+000400200819       AUTHOR.        Aarthi M.
+000500200724       INSTALLATION.  L&T FSTI.
+000600200724       DATE-WRITTEN.  March  2020.
+000700200724       DATE-COMPILED.
+000800200724      *******************************************************************
+000900200724      * Description: Auto Linkage Household                             *
+001000200724      *******************************************************************
+001100200724      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE
+001200200724      *******************************************************************
+001300200724      * Aarthi M   * 2020/03/16   * RFS182642 New program               *
+001400200724      * Aarthi M   * 2020/07/15   * RFS1102517 - Fix for HOUSEHOLD_ID.  *
+001500200724      * Aarthi M   * 2020/07/20   * RFS1102647 - Fix for Audit log file *
+001600200724      * Aarthi M   * 2020/07/23   * RFS1102633 - Account added back to  *
+001700200724      *            *              * after its removed from HH manually. *
+001800200724      *            *              * It should get added to different HH *
+001900200724      *            *              * when there is a change in Account's *
+002000200724      *            *              * linkage criteria                    *
+002100200819      * Aarthi M   * 2020/08/05   * RFS1103254 - HSDLOG Change Category.*
+002200210406      * Rajesh R   * 2021/02/02   * RFS187018 - Recompile For MFAIVRHHP *
+002300210406      *            *              * MFAIVRHDP AND MFAIVRHLP             *
+002400210406      *            *              * Included default values for new     *
+002500210406      *            *              * Fields.                             *
+002600210406      * Rajesh R   * 2021/03/03   * RFS186280 - Modified Program to     *
+002700210406      *            *              * to process additional household     *
+002800210406      *            *              * linkage rules to create investor    *
+002900210406      *            *              * household with accounts or add to   *
+003000210406      *            *              * an existing investor household      *
+003100210406      *            *              * 3-Investor SIN,4-Joint Tenant SIN   *
+003200210406      *            *              * and 5-SIN Investor Type.            *
+003300210716      *Muthukumar S* 2021/06/24   * RFS1116158 - Account not added to   *
+003400210716      *            *              * HH when Investor SIN is found       *
+003500210716      *            *              * in the Investors that corresponding *
+003600210716      *            *              * to Accounts other than Primary for  *
+003700210716      *            *              * rule 2&3. Tag: 116158               *
+003800210706      * Mayilsamy D* 2021/07/06   * RFS187236 - Modified Program to use *
+003900210706      *            *              * the System parameter field 'Single  *
+004000210706      *            *              * Account Auto Householding' and      *
+004100210706      *            *              * create a Household either with      *
+004200210706      *            *              * Single Account or continue to create*
+004300210706      *            *              * it with more than 1 Account         *
+004400210828      * Mayilsamy D* 2021/08/28   * RFS187441 - Recompile for MFAIVRHHP *
+004500210927      * Rajesh R   * 2021/09/17   * RFS187775 - Recompile for MFAIVRHDP*
+004600211005      * MuthukumarS* 2021/10/05   * RFS187731 - Household ID populated  *
+004700211005      *            *              * in Household name doesnt have       *
+004800211005      *            *              * leading zeros for linkage code      *
+004900211005      *            *              * populated in System parameters      *
+005000211020      * MuthukumarS* 2021/10/05   * RFS187744 - Auto linkage process run*
+005100211020      *            *              * for longer time when there are large*
+005200211020      *            *              * no of Incoming accounts to be added *
+005300211020      *            *              * to existing large no of households  *
+005400211020      *            *              * that are already created            *
+005500210304      *******************************************************************
+005600200724       ENVIRONMENT DIVISION.
+005700200724      * ----------------------
+005800200724       CONFIGURATION SECTION.
+005900200724      * ----------------------
+006000200724       SOURCE-COMPUTER. ISeries.
+006100200724       OBJECT-COMPUTER. ISeries.
+006200200724       SPECIAL-NAMES. LOCAL-DATA IS WS-LOCAL
+006300200724                      DATA-AREA IS WS-DATA-AREA-1
+006400210304                      DATA-AREA IS WS-PRCD-DATA-AREA
+006500210426      * RFS187018 - Starts
+006600210304                      DATA-AREA IS WS-DTAARA-MFASYSPARM.
+006700210426      * RFS187018 - End
+006800200724
+006900200724      * ---------------------
+007000200724       INPUT-OUTPUT SECTION.
+007100200724      * ---------------------
+007200200724
+007300200724       DATA DIVISION.
+007400200724      * -------------
+007500200724       FILE SECTION.
+007600200724      * -------------
+007700200724
+007800200724      * ------------------------
+007900200724       WORKING-STORAGE SECTION.
+008000200724      * ------------------------
+008100200724
+008200200724           COPY CPYSQLFLD
+008300200724               REPLACING == "CURRENT_PROGRAM" == BY == "HHAUTOLNK" ==.
+008400200724
+008500200724           EXEC SQL
+008600200724             INCLUDE SQLCA
+008700200724           END-EXEC.
+008800200724
+008900200724      * Error Codes, Uniquely Identify where the error happened
+009000200724       01  WS-ERR-CODE                        PIC X(02) VALUE SPACES.
+009100200724           88 lncc_Err01                          VALUE "01".
+009200200724           88 lncc_Err02                          VALUE "02".
+009300200724           88 lncc_Err03                          VALUE "03".
+009400200724           88 lncc_Err04                          VALUE "04".
+009500200724           88 lncc_Err05                          VALUE "05".
+009600200724           88 lncc_Err06                          VALUE "06".
+009700200724           88 lncc_Err07                          VALUE "07".
+009800200724           88 lncc_Err08                          VALUE "08".
+009900200724           88 lncc_Err09                          VALUE "09".
+010000200724           88 lncc_Err10                          VALUE "10".
+010100210408      *RFS186280 - Start
+010200210304           88 lncc_Err11                          VALUE "11".
+010300210304           88 lncc_Err12                          VALUE "12".
+010400210409           88 lncc_Err13                          VALUE "13".
+010500210421           88 lncc_Err14                          VALUE "14".
+010600210421           88 lncc_Err15                          VALUE "15".
+010700210421           88 lncc_Err16                          VALUE "16".
+010800210408      *RFS186280 - End
+010900200724
+011000200724       01  lc_sqlErrShortDESCR                PIC X(80) VALUE SPACES.
+011100200724           88 lncc_ErrorOpenHH_CURSOR                    VALUE
+011200200724                           "Unable to open HH_CURSOR cursor".
+011300200724           88 lncc_ErrorFetchHH_CURSOR                   VALUE
+011400200724                           "Unable to fetch HH_CURSOR cursor".
+011500200724           88 lncc_ErrorInsertMFAIVRHDP                  VALUE
+011600200724                           "Unable to Insert MFAIVRHDP".
+011700200724           88 lncc_ErrorInsertMFAIVRHLP                  VALUE
+011800200724                           "Unable to Insert MFAIVRHLP".
+011900200724           88 lncc_ErrorInsertMFAIVRHHP                   VALUE
+012000200724                           "Unable to Insert MFAIVRHHP ".
+012100200724           88 lncc_ErrorInsertWKACCTOLNK                  VALUE
+012200200724                           "Unable to Insert WKACCTOLNK".
+012300200724           88 lncc_ErrorInsertWKHHLKDTA                   VALUE
+012400200724                           "Unable to Insert WKHHLKDTA".
+012500210305      *RFS186280 - Start
+012600210305           88 lncc_ErrorInsertWKHHLKDTA1                  VALUE
+012700210305                           "Unable to Insert WKHHLKDTA1".
+012800210305      *RFS186280 - End
+012900200724           88 lncc_ErrorUpdateMFAIVRHDP                   VALUE
+013000200724                           "Unable to Update MFAIVRHDP".
+013100210408      *RFS186280 - Start
+013200210305           88 lncc_ErrorUpdateMFAIVRHHP                   VALUE
+013300210305                           "Unable to Update MFAIVRHHP".
+013400210421           88 lncc_ErrorFetchNOPRI_CURSOR                 VALUE
+013500210422                           "Unable to fetch NOPRI_CURSOR cursor".
+013600210408      *RFS186280 - End
+013700210305
+013800200724       01  lc_DropTable1                      PIC X(300) VALUE SPACES.
+013900200724       01  lc_OJLibrary                       PIC X(10)  VALUE SPACES.
+014000200724       01  lc_Crt-VIEW                        PIC X(900) VALUE SPACES.
+014100200724       01  lc_ChangeCategory                  PIC X(03)  VALUE SPACES.
+014200200724       01  lc_Pend_HH_Flag                    PIC X(01) VALUE SPACES.
+014300200724           88 lc_Pend_New_HH_Dtl_Yes                    VALUE "Y".
+014400200724           88 lc_Pend_New_HH_Dtl_No                     VALUE "N".
+014500200724
+014600200724       01  lc_PrimaryAcc_Flag                 PIC X(01) VALUE SPACES.
+014700200724       01  ln_Pre_Investor_No                 PIC S9(9)  VALUE ZEROES.
+014800200819      *RFS1103254 - Starts
+014900200819       01  lc_PreHHID                         PIC S9(12) VALUE ZEROES.
+015000200819       01  ln_HHInvestor                      PIC S9(9)  VALUE ZEROES.
+015100200819      *RFS1103254 - Ends
+015200200724      * RFS 1102633 - Start
+015300200724       01 ln_ProcessDate                      PIC S9(8) VALUE 0.
+015400200724       01  lc_ScreenCode.
+015500200724           03 lc_ScreenCode1                  PIC X(10) VALUE SPACES.
+015600200724           03 lc_ScreenCode2                  PIC X(10) VALUE SPACES.
+015700200724       01  lnc_Constant.
+015800200724           03 lnc_DealerChg                   PIC X(20) VALUE
+015900200724                                              "ACCT DEALER".
+016000200724           03 lnc_DealerRepChg                PIC X(20) VALUE
+016100200724                                              "ACCT REPRESENTATIVE".
+016200200724           03 lnc_AddressChg                  PIC X(20) VALUE
+016300200724                                              "ADDRESS".
+016400200724           03 lnc_A                           PIC X(01) VALUE "A".
+016500200724           03 lnc_RPA                         PIC X(03) VALUE "RPA".
+016600200724           03 lnc_RMA                         PIC X(03) VALUE "RMA".
+016700200724      * RFS 1102633 - End
+016800210409      * RFS 186280 - Starts
+016900210409       01  li-Count-IVRHHP                    PIC S9(9) VALUE 0.
+017000210411       01  li-Count-IVRHDP                    PIC S9(9) VALUE 0.
+017100210409      * RFS186280 - End
+017200210406      * RFS 187018 - START
+017300210406       01  Lc_Effective_Date                  PIC X(10) VALUE SPACES.
+017400210406       01  lc_CnvtEffDate.
+017500210406           03 lc_CnvtDateYYYY                 PIC X(4).
+017600210406           03 Filler                          PIC X(1) VALUE "-".
+017700210406           03 lc_CnvtDateMM                   PIC X(2).
+017800210406           03 Filler                          PIC X(1) VALUE "-".
+017900210406           03 lc_CnvtDateDD                   PIC X(2).
+018000210406      * RFS 187018 - End
+018100210411      * RFS 186280 - Starts
+018200210411       01  lc_CnvtAudDate.
+018300210411           03 lc_AudtDateYYYY                 PIC X(4).
+018400210411           03 Filler                          PIC X(1) VALUE "-".
+018500210411           03 lc_AudtDateMM                   PIC X(2).
+018600210411           03 Filler                          PIC X(1) VALUE "-".
+018700210411           03 lc_AudtDateDD                   PIC X(2).
+018800210411       01  lc_HHCreationDate                  PIC X(10).
+018900210411      * RFS 186280 - End
+019000200724
+019100200724      * Flags
+019200200724       01 lc_Flags.
+019300200724          03  lc_LinkageRules        PIC X(01).
+019400200724              88  lc_LinkageRules_Exist         VALUE "Y".
+019500200724              88  lc_LinkageRules_NotExist      VALUE "N".
+019600200724
+019700200724          03  lc_HouseholdData       PIC X(01).
+019800200724              88  lc_HouseholdData_Exist        VALUE "Y".
+019900200724              88  lc_HouseholdData_NotExist     VALUE "N".
+020000210706      *RFS187236 - Starts
+020100210706       01 lc_SingleHH2Create            PIC X(01) VALUE SPACE.
+020200210706         88 lc_SingleHH2CreateYes           VALUE "Y".
+020300210706         88 lc_SingleHH2CreateNo            VALUE "N".
+020400210706      *RFS187236 - Ends
+020500200724
+020600200724      * Use to check the status of the cursor.
+020700200724       01 lb-CursorFlag                 PIC X(01) VALUE SPACE.
+020800200724         88 lc_CursorOpen                   VALUE "Y".
+020900200724         88 lc_CursorEnd                    VALUE "N".
+021000200724
+021100200724       01 lb-CursorHHFlag               PIC X(01) VALUE SPACE.
+021200200724         88 lc_CursorHHOpen                 VALUE "Y".
+021300200724         88 lc_CursorHHEnd                  VALUE "N".
+021400200724
+021500200724       01 lc_wrkVariables.
+021600200724          05  li_AuditDate               PIC S9(8) VALUE 0.
+021700200724          05  li_AuditTime               PIC S9(8)  COMP-3 VALUE 0.
+021800200724          05  lc_AuditUser               PIC X(10) VALUE "JOBDAILY".
+021900200724
+022000210422      * RFS 186280 - Start
+022100210421       01 lc_WKACCTOLNK_Data.
+022200210421          05 lc_WKACCTOLNK_ACCOUNT_NO         PIC S9(9)  VALUE ZEROES.
+022300210421          05 lc_WKACCTOLNK_INVESTOR_NO        PIC S9(9)  VALUE ZEROES.
+022400210421          05 lc_WKACCTOLNK_DEALER_CODE        PIC X(4)   VALUE SPACES.
+022500210421          05 lc_WKACCTOLNK_DEALER_REP_CODE    PIC X(6)   VALUE SPACES.
+022600210421          05 lc_WKACCTOLNK_ADDRESS_VALUE      PIC X(162) VALUE SPACES.
+022700210421          05 lc_WKACCTOLNK_INVESTOR_TYPE      PIC X(03)  VALUE SPACES.
+022800210421          05 lc_WKACCTOLNK_INVESTOR_SIN       PIC S9(09) VALUE ZEROES.
+022900210421          05 lc_WKACCTOLNK_INVESTOR_SIN_SUB   PIC S9(09) VALUE ZEROES.
+023000210421          05 lc_WKACCTOLNK_TENANT_SIN         PIC S9(09) VALUE ZEROES.
+023100210421          05 lc_WKACCTOLNK_TENANT_SIN_SUB     PIC S9(09) VALUE ZEROES.
+023200210421       01 lc_WKHHLKDTA1_Data.
+023300210421          05 lc_WKHHLKDTA1_INVESTOR_NO        PIC S9(9)  VALUE ZEROES.
+023400210421          05 lc_WKHHLKDTA1_HOUSEHOLD_ID       PIC S9(12) VALUE ZEROES.
+023500210421          05 lc_WKHHLKDTA1_INVESTOR_NO_2      PIC S9(9)  VALUE ZEROES.
+023600210421          05 lc_WKHHLKDTA1_ACCOUNT_NO         PIC S9(9)  VALUE ZEROES.
+023700210421          05 lc_WKHHLKDTA1_DEALER_CODE        PIC X(4)   VALUE SPACES.
+023800210421          05 lc_WKHHLKDTA1_DEALER_REP_CODE    PIC X(6)   VALUE SPACES.
+023900210421          05 lc_WKHHLKDTA1_ADDRESS_VALUE      PIC X(162) VALUE SPACES.
+024000210421          05 lc_WKHHLKDTA1_INVESTOR_TYPE      PIC X(03)  VALUE SPACES.
+024100210421          05 lc_WKHHLKDTA1_INVESTOR_SIN       PIC S9(09) VALUE ZEROES.
+024200210421          05 lc_WKHHLKDTA1_INVESTOR_SIN_SUB   PIC S9(09) VALUE ZEROES.
+024300210421          05 lc_WKHHLKDTA1_TENANT_SIN         PIC S9(09) VALUE ZEROES.
+024400210421          05 lc_WKHHLKDTA1_TENANT_SIN_SUB     PIC S9(09) VALUE ZEROES.
+024500210716      * RFS 1116158 - Start
+024600210716          05 lc_WKHHLKDTA_DEALER_CODE         PIC X(4)   VALUE SPACES.
+024700210716          05 lc_WKHHLKDTA_DEALER_REP_CODE     PIC X(6)   VALUE SPACES.
+024800210716      * RFS 1116158 - End
+024900210422       01 lc_Total_Rule_Match                 PIC S9(03) VALUE ZEROES.
+025000210422       01 lb_EOF1_Flag                        PIC X(01) VALUE "N".
+025100210422         88 lb_EOF1_Flag_True                           VALUE "Y".
+025200210422         88 lb_EOF1_Flag_False                          VALUE "N".
+025300210422       01 lb_EOF2_Flag                        PIC X(01) VALUE "N".
+025400210422         88 lb_EOF2_Flag_True                           VALUE "Y".
+025500210422         88 lb_EOF2_Flag_False                          VALUE "N".
+025600210422       01 lc_HH_Match_Flag                    PIC X(01) VALUE "N".
+025700210422         88 lc_HH_Match_Found                           VALUE "Y".
+025800210422         88 lc_HH_Match_NFound                          VALUE "N".
+025900210422       01 lb_Dealer_Code_Flag                 PIC X(01) VALUE "N".
+026000210422         88 lb_Dealer_Code_Fnd                          VALUE "Y".
+026100210422         88 lb_Dealer_Code_NFnd                         VALUE "N".
+026200210422       01 lb_DLRREP_Code_Flag                 PIC X(01) VALUE "N".
+026300210422         88 lb_DLRREP_Code_Fnd                          VALUE "Y".
+026400210422         88 lb_DLRREP_Code_NFnd                         VALUE "N".
+026500210422       01 lb_Investor_SIN_Flag                PIC X(01) VALUE "N".
+026600210422         88 lb_Investor_SIN_Fnd                         VALUE "Y".
+026700210422         88 lb_Investor_SIN_NFnd                        VALUE "N".
+026800210422       01 lb_Tenant_SIN_Flag                  PIC X(01) VALUE "N".
+026900210422         88 lb_Tenant_SIN_Fnd                           VALUE "Y".
+027000210422         88 lb_Tenant_SIN_NFnd                          VALUE "N".
+027100210422       01 lb_Ivr_type_Flag                    PIC X(01) VALUE "N".
+027200210422         88 lb_Ivr_type_Fnd                             VALUE "Y".
+027300210422         88 lb_Ivr_type_NFnd                            VALUE "N".
+027400210422      * RFS 186280 - End
+027500210421
+027600200724       01 lc_CURR_Data.
+027700200724          05 lc_Cur_Investor_No2       PIC S9(9)  VALUE ZEROES.
+027800200724          05 lc_Cur_HH_ID              PIC S9(12) VALUE ZEROES.
+027900200724          05 lc_Cur_Account_No         PIC S9(9)  VALUE ZEROES.
+028000200724          05 lc_Cur_Investor_No        PIC S9(9)  VALUE ZEROES.
+028100200724          05 lc_Cur_Dealer_Code        PIC X(4)   VALUE SPACES.
+028200200724          05 lc_Cur_Dealer_Rep         PIC X(6)   VALUE SPACES.
+028300200724          05 lc_Cur_AddressVal         PIC X(162) VALUE SPACES.
+028400210304      *RFS186280 - Starts
+028500210304          05 lc_Cur_Investor_Type_Code PIC X(03)  VALUE SPACES.
+028600210304          05 lc_Cur_Investor_SIN       PIC S9(09) VALUE ZEROES.
+028700210304          05 lc_Cur_Investor_SIN_SUB   pic S9(09) VALUE ZEROES.
+028800210304          05 lc_Cur_Tenant_SIN         pic S9(09) VALUE ZEROES.
+028900210304          05 lc_Cur_Tenant_SIN_SUB     pic S9(09) VALUE ZEROES.
+029000210316      *RFS186280 - End
+029100200724
+029200200724       01 lc_PREV_Data.
+029300200724          05 lc_Pre_Investor_No2       PIC S9(9)  VALUE ZEROES.
+029400200724          05 lc_Pre_HH_ID              PIC S9(12) VALUE ZEROES.
+029500200724          05 lc_Pre_Account_No         PIC S9(9)  VALUE ZEROES.
+029600200724          05 lc_Pre_Investor_No        PIC S9(9)  VALUE ZEROES.
+029700200724          05 lc_Pre_Dealer_Code        PIC X(4)   VALUE SPACES.
+029800200724          05 lc_Pre_Dealer_Rep         PIC X(6)   VALUE SPACES.
+029900200724          05 lc_Pre_AddressVal         PIC X(162) VALUE SPACES.
+030000210304      *RFS186280 - Starts
+030100210304          05 lc_Pre_Investor_Type_Code PIC X(03)  VALUE SPACES.
+030200210304          05 lc_Pre_Investor_SIN       PIC S9(09) VALUE ZEROES.
+030300210304          05 lc_Pre_Investor_SIN_SUB   PIC S9(09) VALUE ZEROES.
+030400210304          05 lc_Pre_Tenant_SIN         PIC S9(09) VALUE ZEROES.
+030500210304          05 lc_Pre_Tenant_SIN_SUB     PIC S9(09) VALUE ZEROES.
+030600210304      *RFS186280 - End
+030700210304
+030800200724
+030900200724       01 WorkVariables.
+031000200724          05 ln_Count                PIC S9(3)  VALUE 0.
+031100200724          05 ln_MFAHHLRLP_Count      PIC S9(3)  VALUE 0.
+031200200724          05 ln_Max_HOUSEHOLD_ID     PIC S9(12) VALUE 0.
+031300200724          05 ln_Curr_HOUSEHOLD_ID    PIC S9(12) VALUE 0.
+031400200724      *RFS1102517 - Starts
+031500200724          05 ln_ID_Value             PIC S9(12) VALUE 0.
+031600200724      *RFS1102517 - Ends
+031700200724          05 lc_LKNCODE              PIC X(03)  VALUE SPACE.
+031800210304      *RFS186280 Starts
+031900210304          05 lc-HH-Name              PIC X(35)  VALUE SPACES.
+032000210322          05 ln-Household-ID         PIC S9(12) VALUE ZEROES.
+032100210304      *   05 lc_LinkageRule          PIC X(2).
+032200210421          05 lc_PREV_HOUSEHOLD_ID    PIC S9(12).
+032300210421          05 lc_PREV_INVESTOR_NO     PIC S9(09).
+032400210422          05 lc_PREV_INVESTOR_NO_2   PIC S9(09).
+032500210421          05 lc_LinkageRule          PIC X(3).
+032600210304      *RFS186280 End
+032700200724             88 lc_LinkageRule1                 VALUE "1".
+032800200724             88 lc_LinkageRule2                 VALUE "2".
+032900200724             88 lc_LinkageRule12                VALUE "12".
+033000210304      *RFS186280 Starts
+033100210304             88 lc_LinkageRule3                 VALUE "3".
+033200210304             88 lc_LinkageRule4                 VALUE "4".
+033300210304             88 lc_LinkageRule23                VALUE "23".
+033400210304             88 lc_LinkageRule24                VALUE "24".
+033500210304             88 lc_LinkageRule35                VALUE "35".
+033600210304             88 lc_LinkageRule45                VALUE "45".
+033700210304             88 lc_LinkageRule235               VALUE "235".
+033800210304             88 lc_LinkageRule245               VALUE "245".
+033900210304      *RFS186280 End
+034000200724
+034100200724       01 lnc_SqlStatements.
+034200210409      *RFS186280 Starts
+034300211011      *RFS187744 Starts
+034400211011      *   05 LC_SQLSELECT_CURSOR     PIC X(800) VALUE SPACES.
+034500211011      *   05 LC_SQLSELECT_CURSOR2    PIC X(800) VALUE SPACES.
+034600211011          05 LC_SQLSELECT_CURSOR     PIC X(900) VALUE SPACES.
+034700211011          05 LC_SQLSELECT_CURSOR2    PIC X(900) VALUE SPACES.
+034800211011      *RFS187744 Ends
+034900210315          05 lc_SqlSelect            PIC X(400) VALUE SPACES.
+035000210409      *RFS186280 End
+035100200724          05 lc_SqlFrom1             PIC X(200) VALUE SPACES.
+035200200724          05 lc_SqlFrom2             PIC X(200) VALUE SPACES.
+035300200724          05 lc_SqlFrom12            PIC X(200) VALUE SPACES.
+035400210304      *RFS186280 Starts
+035500210304          05 lc_SqlFrom3             PIC X(200) VALUE SPACES.
+035600210313          05 lc_SqlFrom4             PIC X(200) VALUE SPACES.
+035700210314          05 lc_SqlFrom23            PIC X(300) VALUE SPACES.
+035800210315          05 lc_SqlFrom24            PIC X(300) VALUE SPACES.
+035900210304          05 lc_SqlFrom35            PIC X(200) VALUE SPACES.
+036000210304          05 lc_SqlFrom45            PIC X(200) VALUE SPACES.
+036100210316          05 lc_SqlFrom235           PIC X(300) VALUE SPACES.
+036200211011187744*   05 lc_SqlFrom245           PIC X(300) VALUE SPACES.
+036300211011187744    05 lc_SqlFrom245           PIC X(400) VALUE SPACES.
+036400210304      *RFS186280 Ends
+036500200724          05 lc_SqlOrder1            PIC X(200) VALUE SPACES.
+036600200724          05 lc_SqlOrder2            PIC X(200) VALUE SPACES.
+036700200724          05 lc_SqlOrder12           PIC X(200) VALUE SPACES.
+036800210304      *RFS186280 Starts
+036900210304          05 lc_SqlOrder3            PIC X(200) VALUE SPACES.
+037000210304          05 lc_SqlOrder4            PIC X(200) VALUE SPACES.
+037100210304          05 lc_SqlOrder23           PIC X(200) VALUE SPACES.
+037200210315          05 lc_SqlOrder24           PIC X(200) VALUE SPACES.
+037300210304          05 lc_SqlOrder35           PIC X(200) VALUE SPACES.
+037400210304          05 lc_SqlOrder45           PIC X(200) VALUE SPACES.
+037500210304          05 lc_SqlOrder235          PIC X(200) VALUE SPACES.
+037600210304          05 lc_SqlOrder245          PIC X(200) VALUE SPACES.
+037700210304      *RFS186280 End
+037800200724
+037900200724      * Local data area.                                               *
+038000200724       01 LOCALDATAAREA                       PIC X(1024).
+038100200724       01 lc_MFAPRCDTP                        PIC X(169).
+038200200724       01 lc_Curdate                          PIC 9(08).
+038300210426      *RFS187018 - Starts
+038400210304       01 lc_MFASYSPARM.
+038500210304         03  Lc-Filler-1                      PIC X(1174).
+038600210304         03  Lc-Auto-HH-Primary-SIN           PIC X(01).
+038700210304         03  Lc-HelloLife-HH-Code             PIC X(03).
+038800210426      *RFS187018 - End
+038900210706      *RFS187236 - Starts
+039000210706         03  Lc-Filler-2                      PIC X(04).
+039100210706         03  Lc-SingleAcc_AutoHH              PIC X(01).
+039200210706      *RFS187236 - Ends
+039300210304
+039400200724      * Other Variables.                                               *
+039500200724
+039600200724      * Copybook for Error Information program (FxErrInf).
+039700200724       COPY CPERRINF.
+039800200724
+039900200724       LINKAGE SECTION.
+040000200724
+040100200724       PROCEDURE DIVISION.
+040200200724
+040300200724      *--------------
+040400200724       MAIN-PROCESS.
+040500200724      *--------------
+040600200724
+040700200724           EXEC SQL
+040800200724              WHENEVER SQLERROR CONTINUE
+040900200724           END-EXEC.
+041000200724
+041100200724           PERFORM INITIAL-LOGIC.
+041200200724           PERFORM DETAIL-PROCESSING THRU DP-EXIT
+041300200724                    UNTIL lc_LinkageRules_NotExist.
+041400200724           PERFORM END-PROGRAM.
+041500200724
+041600200724      *---------------
+041700200724       INITIAL-LOGIC.
+041800200724      *---------------
+041900200724
+042000200724      * RFS 1102633 - Start
+042100200724           ACCEPT lc_MFAPRCDTP
+042200200724             FROM WS-PRCD-DATA-AREA  FOR "MFAPRCDTP".
+042300200724           MOVE lc_MFAPRCDTP(1:8)    TO ln_ProcessDate.
+042400200724      * RFS 1102633 - End
+042500210304
+042600210426      * RFS187018 - Starts
+042700210305           ACCEPT Lc_MFASYSPARM FROM WS-DTAARA-MFASYSPARM
+042800210304                                FOR "MFASYSPARM".
+042900210426      * RFS187018 - End
+043000210304
+043100200724      *Initialize required work variables
+043200200724           SET lc_LinkageRules_Exist  TO TRUE.
+043300200724           SET lc_HouseholdData_Exist TO TRUE.
+043400210409
+043500200724      *Check if Household linkage rules are defined already
+043600200724           Initialize ln_Count.
+043700200724           EXEC SQL
+043800200724              SELECT COUNT(*)
+043900200724               INTO  :ln_Count
+044000200724               FROM MFAHHLRLP
+044100200724           END-EXEC.
+044200200724           MOVE SQLSTATE   TO WS-SQL-STATES.
+044300200724
+044400200724           IF lncc_sqlSuccessful AND ln_Count = ZEROS
+044500200724              SET lc_LinkageRules_NotExist TO TRUE
+044600200724           END-IF.
+044700200724
+044800200724      *Get Household Id information
+044900200724           EXEC SQL
+045000200724              SELECT COALESCE(MAX(HOUSEHOLD_ID),0)
+045100200724               INTO  :ln_Max_HOUSEHOLD_ID
+045200200724               FROM MFAIVRHHP
+045300200724           END-EXEC.
+045400200724           MOVE SQLSTATE   TO WS-SQL-STATES.
+045500200724
+045600200724           IF lncc_sqlSuccessful
+045700200724              COMPUTE ln_Curr_HOUSEHOLD_ID = ln_Max_HOUSEHOLD_ID + 1
+045800200724           END-IF.
+045900200724
+046000200724           IF lncc_sqlEnd
+046100200724              SET lc_HouseholdData_NotExist TO TRUE
+046200200724           END-IF.
+046300200724
+046400200724
+046500200724
+046600200724      *------------------
+046700200724       DETAIL-PROCESSING.
+046800200724      *------------------
+046900200724
+047000200724      **Invoke the function GETLNKCODE passing the #of rules and rules
+047100200724      **as parameters to get the Linkage code.
+047200200724
+047300200724      *==> Rule 1 (=Investor Address)
+047400200724      *==> Get the linkage code associated ONLY WITH Rule 1 (=Investor Address)
+047500200724
+047600200724           EXEC SQL
+047700200724           SET :lc_LKNCODE = GETLNKCODE(1, "1")
+047800200724           END-EXEC.
+047900200724
+048000200724           IF lc_LKNCODE NOT = SPACE
+048100200724              SET  lc_LinkageRule1 TO TRUE
+048200210304      * RFS186280 - Starts
+048300200724      * RFS 1102633 - Start *
+048400210304      *       INITIALIZE lc_ScreenCode
+048500210304      *       MOVE "IVRDTL" TO lc_ScreenCode1
+048600210304      *       PERFORM GET-ACCOUNT-EXCEPTION
+048700200724      * RFS 1102633 - End   *
+048800210304      *       PERFORM CREATE-HOUSEHOLD
+048900210304              PERFORM PROCESS-RULES-FOR-INVESTOR
+049000210304      * RFS 186280  - End *
+049100200724              COMPUTE ln_Count  = ln_Count - 1
+049200200724              IF ln_Count = 0
+049300200724                 SET lc_LinkageRules_NotExist  TO TRUE
+049400200724                 GO TO DP-EXIT
+049500200724              END-IF
+049600200724           END-IF.
+049700200724
+049800200724      *==> Rule 2  (=Dealer Rep)
+049900200724      *==> Get the linkage code associated ONLY WITH Rule 2  (=Dealer Rep)
+050000200724
+050100200724           EXEC SQL
+050200200724           SET :lc_LKNCODE = GETLNKCODE(1, "2")
+050300200724           END-EXEC.
+050400200724
+050500200724           IF lc_LKNCODE NOT = SPACE
+050600200724              SET  lc_LinkageRule2 TO TRUE
+050700200724      * RFS 1102633 - Start *
+050800210319              INITIALIZE lc_ScreenCode
+050900210319              MOVE "ACCDTL" TO lc_ScreenCode2
+051000210319              PERFORM GET-ACCOUNT-EXCEPTION
+051100200724      * RFS 1102633 - End   *
+051200210319              PERFORM CREATE-HOUSEHOLD
+051300200724              COMPUTE ln_Count  = ln_Count - 1
+051400200724              IF ln_Count = 0
+051500200724                 SET lc_LinkageRules_NotExist  TO TRUE
+051600200724                 GO TO DP-EXIT
+051700200724              END-IF
+051800200724           END-IF.
+051900200724
+052000200724      *==> Rule 1 & 2 (=Investor Address and Dealer Rep)
+052100200724      *==> Get the linkage code associated with Rule 1 & 2 (=Investor Address
+052200200724      *==> and Dealer Rep)
+052300200724
+052400200724           EXEC SQL
+052500200724           SET :lc_LKNCODE = GETLNKCODE(2, "1", "2")
+052600200724           END-EXEC.
+052700200724
+052800200724           IF lc_LKNCODE NOT = SPACE
+052900200724              SET  lc_LinkageRule12 TO TRUE
+053000210304      * RFS186280 - Start
+053100200724      * RFS 1102633 - Start *
+053200210304      *       INITIALIZE lc_ScreenCode
+053300210304      *       MOVE "IVRDTL" TO lc_ScreenCode1
+053400210304      *       MOVE "ACCDTL" TO lc_ScreenCode2
+053500210304      *       PERFORM GET-ACCOUNT-EXCEPTION
+053600200724      * RFS 1102633 - End   *
+053700210304      *       PERFORM CREATE-HOUSEHOLD
+053800210304              PERFORM PROCESS-RULES-IVSTR-DEALER-REP
+053900210304      * RFS186280 - End
+054000200724              COMPUTE ln_Count  = ln_Count - 2
+054100200724              IF ln_Count = 0
+054200200724                 SET lc_LinkageRules_NotExist  TO TRUE
+054300200724                 GO TO DP-EXIT
+054400200724              END-IF
+054500200724           END-IF.
+054600200724
+054700210304      *RFS186280 - Starts
+054800210319      *==> Rule 3 (=Investor SIN)
+054900210322      *==> Get the linkage code associated ONLY WITH Rule 3
+055000210304
+055100210304           EXEC SQL
+055200210304           SET :lc_LKNCODE = GETLNKCODE(1, "3")
+055300210304           END-EXEC.
+055400210304
+055500210304           IF lc_LKNCODE NOT = SPACE
+055600210304              SET  lc_LinkageRule3 TO TRUE
+055700210304              PERFORM PROCESS-RULES-FOR-INVESTOR
+055800210304              COMPUTE ln_Count  = ln_Count - 1
+055900210304              IF ln_Count = 0
+056000210304                 SET lc_LinkageRules_NotExist  TO TRUE
+056100210304                 GO TO DP-EXIT
+056200210304              END-IF
+056300210304           END-IF.
+056400210304
+056500210304      *==> Rule 4 (=Joint Tenant SIN)
+056600210322      *==> Get the linkage code associated ONLY WITH Rule 4
+056700210322
+056800210319
+056900210304           EXEC SQL
+057000210304           SET :lc_LKNCODE = GETLNKCODE(1, "4")
+057100210304           END-EXEC.
+057200210304
+057300210304           IF lc_LKNCODE NOT = SPACE
+057400210304              SET  lc_LinkageRule4 TO TRUE
+057500210304              PERFORM PROCESS-RULES-FOR-INVESTOR
+057600210304              COMPUTE ln_Count  = ln_Count - 1
+057700210304              IF ln_Count = 0
+057800210304                 SET lc_LinkageRules_NotExist  TO TRUE
+057900210304                 GO TO DP-EXIT
+058000210304              END-IF
+058100210304           END-IF.
+058200200724
+058300210322      *==> Rule 2 & 3 (=Dealer Rep and Investor SIN)
+058400210322      *==> Get the linkage code associated with Rule 2 & 3
+058500210304
+058600210304           EXEC SQL
+058700210304           SET :lc_LKNCODE = GETLNKCODE(2, "2", "3")
+058800210304           END-EXEC.
+058900210304
+059000210304           IF lc_LKNCODE NOT = SPACE
+059100210304              SET  lc_LinkageRule23 TO TRUE
+059200210304              PERFORM PROCESS-RULES-IVSTR-DEALER-REP
+059300210304              COMPUTE ln_Count  = ln_Count - 2
+059400210304              IF ln_Count = 0
+059500210304                 SET lc_LinkageRules_NotExist  TO TRUE
+059600210304                 GO TO DP-EXIT
+059700210304              END-IF
+059800210304           END-IF.
+059900210304
+060000210322      *==> Rule 2 & 4 (=Dealer Rep and Joint Tenant SIN)
+060100210322      *==> Get the linkage code associated with Rule 2 & 4
+060200210304
+060300210304           EXEC SQL
+060400210304           SET :lc_LKNCODE = GETLNKCODE(2, "2", "4")
+060500210304           END-EXEC.
+060600210304
+060700210304           IF lc_LKNCODE NOT = SPACE
+060800210304              SET  lc_LinkageRule24 TO TRUE
+060900210304              PERFORM PROCESS-RULES-IVSTR-DEALER-REP
+061000210304              COMPUTE ln_Count  = ln_Count - 2
+061100210304              IF ln_Count = 0
+061200210304                 SET lc_LinkageRules_NotExist  TO TRUE
+061300210304                 GO TO DP-EXIT
+061400210304              END-IF
+061500210304           END-IF.
+061600210304
+061700210322      *==> Rule 3 & 5 (Investor SIN and SIN Investor Type)
+061800210322      *==> Get the linkage code associated ONLY WITH Rule 3 & 5
+061900210322
+062000210319
+062100210304           EXEC SQL
+062200210315           SET :lc_LKNCODE = GETLNKCODE(2, "3", "5")
+062300210304           END-EXEC.
+062400210304
+062500210304           IF lc_LKNCODE NOT = SPACE
+062600210304              SET  lc_LinkageRule35 TO TRUE
+062700210304              PERFORM PROCESS-RULES-FOR-INVESTOR
+062800210304              COMPUTE ln_Count  = ln_Count - 2
+062900210304              IF ln_Count = 0
+063000210304                 SET lc_LinkageRules_NotExist  TO TRUE
+063100210304                 GO TO DP-EXIT
+063200210304              END-IF
+063300210304           END-IF.
+063400210304
+063500210322      *==> Rule 4 & 5 (= Joint Tenant SIN and SIN Investor Type)
+063600210322      *==> Get the linkage code associated ONLY WITH Rule 4 & 5
+063700210304
+063800210304           EXEC SQL
+063900210315           SET :lc_LKNCODE = GETLNKCODE(2, "4", "5")
+064000210304           END-EXEC.
+064100210304
+064200210304           IF lc_LKNCODE NOT = SPACE
+064300210304              SET  lc_LinkageRule45 TO TRUE
+064400210304              PERFORM PROCESS-RULES-FOR-INVESTOR
+064500210304              COMPUTE ln_Count  = ln_Count - 2
+064600210304              IF ln_Count = 0
+064700210304                 SET lc_LinkageRules_NotExist  TO TRUE
+064800210304                 GO TO DP-EXIT
+064900210304              END-IF
+065000210304           END-IF.
+065100210304
+065200210322      *==> Rule 2,3,5 (=Dealer Rep,Investor SIN and SIN Investor Type)
+065300210322      *==> Get the linkage code associated with Rule 2,3,5
+065400210304
+065500210304           EXEC SQL
+065600210304           SET :lc_LKNCODE = GETLNKCODE(3, "2", "3", "5")
+065700210304           END-EXEC.
+065800210304
+065900210304           IF lc_LKNCODE NOT = SPACE
+066000210304              SET  lc_LinkageRule235 TO TRUE
+066100210304              PERFORM PROCESS-RULES-IVSTR-DEALER-REP
+066200210304              COMPUTE ln_Count  = ln_Count - 3
+066300210304              IF ln_Count = 0
+066400210304                 SET lc_LinkageRules_NotExist  TO TRUE
+066500210304                 GO TO DP-EXIT
+066600210304              END-IF
+066700210304           END-IF.
+066800210304
+066900210322      *==> Rule 2,4,5 (=Dealer Rep ,Joint Tenant SIN and
+067000210322      *==> SIN Investor Type)
+067100210322      *==> Get the linkage code associated with Rule 2,4,5
+067200210304
+067300210304           EXEC SQL
+067400210304           SET :lc_LKNCODE = GETLNKCODE(3, "2", "4", "5")
+067500210304           END-EXEC.
+067600210304
+067700210304           IF lc_LKNCODE NOT = SPACE
+067800210304              SET  lc_LinkageRule245 TO TRUE
+067900210304              PERFORM PROCESS-RULES-IVSTR-DEALER-REP
+068000210304              COMPUTE ln_Count  = ln_Count - 3
+068100210304              IF ln_Count = 0
+068200210304                 SET lc_LinkageRules_NotExist  TO TRUE
+068300210304                 GO TO DP-EXIT
+068400210304              END-IF
+068500210304           END-IF.
+068600210304      *RFS186280 - End
+068700210304
+068800200724       DP-EXIT.
+068900200724           EXIT.
+069000200724
+069100210304      *RFS186280 - Starts
+069200210304      *-----------------------
+069300210305       PROCESS-RULES-FOR-INVESTOR.
+069400210304      *-----------------------
+069500210304
+069600210304           INITIALIZE lc_ScreenCode.
+069700210304           MOVE "IVRDTL" TO lc_ScreenCode1.
+069800210304           PERFORM GET-ACCOUNT-EXCEPTION.
+069900210304           PERFORM CREATE-HOUSEHOLD.
+070000210304
+070100210304      *-------------------------------
+070200210304       PROCESS-RULES-IVSTR-DEALER-REP.
+070300210304      *-------------------------------
+070400210304
+070500210304           INITIALIZE lc_ScreenCode.
+070600210304           MOVE "IVRDTL" TO lc_ScreenCode1.
+070700210304           MOVE "ACCDTL" TO lc_ScreenCode2.
+070800210304           PERFORM GET-ACCOUNT-EXCEPTION.
+070900210304           PERFORM CREATE-HOUSEHOLD.
+071000210304
+071100210304      *RFS186280 - Ends
+071200210304
+071300200724      * RFS 1102633 - Start *
+071400200724      *-----------------------
+071500200724       GET-ACCOUNT-EXCEPTION.
+071600200724      *-----------------------
+071700200724
+071800200724           EXEC SQL
+071900200724             CREATE OR REPLACE TABLE WKACCEXCEP
+072000200724             (
+072100200724                ACCOUNT_NO       NUMERIC ( 9)  NOT NULL WITH DEFAULT
+072200200724             ) ON REPLACE DELETE ROWS
+072300200724           END-EXEC.
+072400200724
+072500200724           EXEC SQL
+072600200724              INSERT INTO WKACCEXCEP
+072700200724              SELECT DISTINCT ACCNTP.ACCOUNT_NO
+072800200724              FROM MFAACCNTP ACCNTP
+072900200724              INNER JOIN MFAIVRHLP IVRHLP ON
+073000200724                  IVRHLP.ACCOUNT_NO  = ACCNTP.ACCOUNT_NO
+073100200724              AND IVRHLP.INVESTOR_NO = ACCNTP.INVESTOR_NO
+073200200724              AND IVRHLP.LINKAGE_TYPE_CODE = :lc_LKNCODE
+073300200724              AND IVRHLP.CHANGE_CATEGORY IN (:lnc_RPA, :lnc_RMA)
+073400200724              EXCEPTION JOIN MFAIVRCLP IVRCLP ON
+073500200726                IVRCLP.INVESTOR_NO = ACCNTP.INVESTOR_NO
+073600200724                AND IVRCLP.AUDIT_DATE = :ln_ProcessDate
+073700200724                AND
+073800200724              (
+073900200726               (IVRCLP.ACCOUNT_NO = ACCNTP.ACCOUNT_NO AND
+074000200726                IVRCLP.CHANGE_CATEGORY IN (:lnc_DealerChg,
+074100200724                        :lnc_DealerRepChg) AND
+074200200724                IVRCLP.SCREEN_CODE = :lc_ScreenCode2 AND
+074300200724                :lc_ScreenCode2 <> " ") OR
+074400200726               (IVRHLP.INVESTOR_NO = ACCNTP.INVESTOR_NO  AND
+074500200726                IVRCLP.CHANGE_CATEGORY = :lnc_AddressChg AND
+074600200724                IVRCLP.SCREEN_CODE = :lc_ScreenCode1 AND
+074700200724                :lc_ScreenCode1 <> " ")
+074800200724              )
+074900200724              WHERE ACCNTP.ACCOUNT_STATUS = :lnc_A
+075000200724           END-EXEC.
+075100200724
+075200200724      * RFS 1102633 - End   *
+075300200724
+075400200724      *-----------------------
+075500200724       CREATE-HOUSEHOLD.
+075600200724      *-----------------------
+075700200724
+075800200724      *RFS1102517 - Starts
+075900200724      * This is to override the values entered in GUI screen during intraday to
+076000200724      *identify the household name created for Fee calculation purpose
+076100200724      *
+076200200724      *    EXEC SQL
+076300200724      *       UPDATE MFAIVRHHP SET LEGAL_LAST_NAME =
+076400200724      *        CONCAT("FEE HOUSEHOLD ",CHAR(HOUSEHOLD_ID))
+076500200724      *       WHERE HOUSEHOLD_LINKAGE_CODE = :LC_LKNCODE AND
+076600200724      *       LEGAL_LAST_NAME <>
+076700200724      *        CONCAT("FEE HOUSEHOLD ",CHAR(HOUSEHOLD_ID))
+076800200724      *    END-EXEC.
+076900200724      *    MOVE SQLSTATE TO lc_sqlStates.
+077000200724      *    IF lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+077100200724      *            CONTINUE
+077200200724      *    ELSE
+077300200724      *            SET lncc_Err10   TO TRUE
+077400200724      *            SET lncc_ErrorUpdateMFAIVRHDP  TO TRUE
+077500200724      *            PERFORM Dsp-Error
+077600200724      *            PERFORM Force-Msgw
+077700200724      *    END-IF.
+077800200724      *RFS1102517-Ends
+077900200724
+078000210304      *RFS186280 - Starts
+078100210304           EXEC SQL
+078200210304              DROP TABLE WKACCTOLNK
+078300210304           END-EXEC.
+078400210304
+078500210304           EXEC SQL
+078600210304              DROP TABLE WKHHLKDTA
+078700210304           END-EXEC.
+078800210304
+078900210304           EXEC SQL
+079000210304              DROP TABLE WKHHLKDTA1
+079100210304           END-EXEC.
+079200210422
+079300210422           EXEC SQL
+079400210422              DROP TABLE WKACCTODLT
+079500210422           END-EXEC.
+079600210422
+079700210422           EXEC SQL
+079800210422             CREATE TABLE WKACCTODLT
+079900210422             (
+080000210422               ACCOUNT_NO       NUMERIC ( 9)  NOT NULL WITH DEFAULT
+080100210422             )
+080200210422           END-EXEC.
+080300210304      *RFS186280 - Ends
+080400200724      *
+080500200724           EXEC SQL
+080600200724             CREATE TABLE WKACCTOLNK
+080700200724              (ACCOUNT_NO       NUMERIC ( 9)  NOT NULL WITH DEFAULT,
+080800200724               INVESTOR_NO      NUMERIC ( 9)  NOT NULL WITH DEFAULT,
+080900200724               DEALER_CODE         CHAR ( 4)  NOT NULL WITH DEFAULT,
+081000200724               DEALER_REP_CODE     CHAR ( 6)  NOT NULL WITH DEFAULT,
+081100210304               ADDRESS_VALUE       CHAR (162) NOT NULL WITH DEFAULT,
+081200210304      *RFS186280 - Starts
+081300210304               INVESTOR_TYPE       CHAR ( 3)  NOT NULL WITH DEFAULT,
+081400210304               INVESTOR_SIN     NUMERIC ( 9)  NOT NULL WITH DEFAULT,
+081500210304               INVESTOR_SIN_SUB NUMERIC ( 9)  NOT NULL WITH DEFAULT,
+081600210304               TENANT_SIN       NUMERIC ( 9)  NOT NULL WITH DEFAULT,
+081700210304               TENANT_SIN_SUB   NUMERIC ( 9)  NOT NULL WITH DEFAULT)
+081800210304      *RFS186280 - Ends
+081900200724           END-EXEC.
+082000200724
+082100200724           MOVE SQLSTATE TO lc_sqlStates.
+082200200724           IF lncc_sqlSuccessful
+082300200724              CONTINUE
+082400200724           ELSE
+082500200724              EXEC SQL
+082600200724                DELETE FROM WKACCTOLNK
+082700200724              END-EXEC
+082800200724              MOVE SQLSTATE         TO lc_sqlStates
+082900200724           END-IF.
+083000200724
+083100200724           EXEC SQL
+083200200724             CREATE TABLE WKHHLKDTA
+083300200724              (INVESTOR_NO      NUMERIC ( 9)  NOT NULL WITH DEFAULT,
+083400200724               HOUSEHOLD_ID     NUMERIC (12)  NOT NULL WITH DEFAULT,
+083500200724               INVESTOR_NO_2    NUMERIC ( 9)  NOT NULL WITH DEFAULT,
+083600200724               ACCOUNT_NO       NUMERIC ( 9)  NOT NULL WITH DEFAULT,
+083700200724               DEALER_CODE         CHAR ( 4)  NOT NULL WITH DEFAULT,
+083800200724               DEALER_REP_CODE     CHAR ( 6)  NOT NULL WITH DEFAULT,
+083900210304               ADDRESS_VALUE       CHAR (162) NOT NULL WITH DEFAULT,
+084000210304      *RFS186280 - Starts
+084100210304               INVESTOR_TYPE       CHAR ( 3)  NOT NULL WITH DEFAULT,
+084200210304               INVESTOR_SIN     NUMERIC ( 9)  NOT NULL WITH DEFAULT,
+084300210304               INVESTOR_SIN_SUB NUMERIC ( 9)  NOT NULL WITH DEFAULT,
+084400210304               TENANT_SIN       NUMERIC ( 9)  NOT NULL WITH DEFAULT,
+084500210304               TENANT_SIN_SUB   NUMERIC ( 9)  NOT NULL WITH DEFAULT)
+084600210304      *RFS186280 - Ends
+084700200724           END-EXEC.
+084800200724
+084900200724           MOVE SQLSTATE TO lc_sqlStates.
+085000200724           IF lncc_sqlSuccessful
+085100200724              CONTINUE
+085200200724           ELSE
+085300200724              EXEC SQL
+085400200724                DELETE FROM WKHHLKDTA
+085500200724              END-EXEC
+085600200724              MOVE SQLSTATE         TO lc_sqlStates
+085700200724           END-IF.
+085800200724
+085900200724           EXEC SQL
+086000200724           CREATE INDEX WKHHLKDTAL ON WKHHLKDTA
+086100200724             (DEALER_CODE, DEALER_REP_CODE, ADDRESS_VALUE)
+086200200724           END-EXEC.
+086300200724           MOVE SQLSTATE         TO lc_sqlStates
+086400200724           IF NOT lncc_sqlSuccessful
+086500200724              CONTINUE
+086600200724           END-IF.
+086700210304
+086800210304      *RFS186280 - Starts
+086900210304           EXEC SQL
+087000210304             CREATE TABLE WKHHLKDTA1
+087100210304              (INVESTOR_NO      NUMERIC ( 9)  NOT NULL WITH DEFAULT,
+087200210304               HOUSEHOLD_ID     NUMERIC (12)  NOT NULL WITH DEFAULT,
+087300210304               INVESTOR_NO_2    NUMERIC ( 9)  NOT NULL WITH DEFAULT,
+087400210304               ACCOUNT_NO       NUMERIC ( 9)  NOT NULL WITH DEFAULT,
+087500210304               DEALER_CODE         CHAR ( 4)  NOT NULL WITH DEFAULT,
+087600210304               DEALER_REP_CODE     CHAR ( 6)  NOT NULL WITH DEFAULT,
+087700210304               ADDRESS_VALUE       CHAR (162) NOT NULL WITH DEFAULT,
+087800210304               INVESTOR_TYPE       CHAR ( 3)  NOT NULL WITH DEFAULT,
+087900210304               INVESTOR_SIN     NUMERIC ( 9)  NOT NULL WITH DEFAULT,
+088000210304               INVESTOR_SIN_SUB NUMERIC ( 9)  NOT NULL WITH DEFAULT,
+088100210304               TENANT_SIN       NUMERIC ( 9)  NOT NULL WITH DEFAULT,
+088200210304               TENANT_SIN_SUB   NUMERIC ( 9)  NOT NULL WITH DEFAULT)
+088300210304           END-EXEC.
+088400210304
+088500210304           MOVE SQLSTATE TO lc_sqlStates.
+088600210304           IF lncc_sqlSuccessful
+088700210304              CONTINUE
+088800210304           ELSE
+088900210304              EXEC SQL
+089000210304                DELETE FROM WKHHLKDTA1
+089100210304              END-EXEC
+089200210304              MOVE SQLSTATE         TO lc_sqlStates
+089300210304           END-IF.
+089400210304
+089500210304           EXEC SQL
+089600210304           CREATE INDEX WKHHLKDT1L ON WKHHLKDTA1
+089700210304             (DEALER_CODE, DEALER_REP_CODE, ADDRESS_VALUE)
+089800210304           END-EXEC.
+089900210304           MOVE SQLSTATE         TO lc_sqlStates
+090000210304           IF NOT lncc_sqlSuccessful
+090100210304              CONTINUE
+090200210304           END-IF.
+090300210304      *RFS186280 - Ends
+090400210304
+090500211011      *RFS187744 - Starts
+090600211011
+090700211011           EXEC SQL
+090800211011           CREATE INDEX WKHHLKDTL1 ON WKHHLKDTA
+090900211011             (INVESTOR_NO, HOUSEHOLD_ID)
+091000211011           END-EXEC.
+091100211011           MOVE SQLSTATE         TO lc_sqlStates
+091200211011           IF NOT lncc_sqlSuccessful
+091300211011              CONTINUE
+091400211011           END-IF.
+091500211011
+091600211011           EXEC SQL
+091700211011           CREATE INDEX WKHHLKDTL2 ON WKHHLKDTA1
+091800211011             (INVESTOR_NO_2)
+091900211011           END-EXEC.
+092000211011           MOVE SQLSTATE         TO lc_sqlStates
+092100211011           IF NOT lncc_sqlSuccessful
+092200211011              CONTINUE
+092300211011           END-IF.
+092400211011
+092500211011      *RFS187744 - Ends
+092600211011
+092700200724             PERFORM GET-ALINK-DEALERS
+092800200724             PERFORM GET-ACCOUNTS-TO-ALINK
+092900200724             PERFORM GET-HOUSEHOLD-DETAILS
+093000200724             PERFORM AUTO-LINKAGE-PROCESS.
+093100210319      *RFS186280 - Starts
+093200210304             PERFORM UPDATE-HOUSEHOLD-NAME.
+093300210319      *RFS186280 - End
+093400210304
+093500200724      *RFS1102517 - Starts
+093600200724      * This is to override the values entered in GUI screen during intraday to
+093700200724      *identify the household name created for Fee calculation purpose
+093800210304      *RFS186280  - Starts
+093900210304       UPDATE-HOUSEHOLD-NAME.
+094000210304
+094100210304           IF Lc-HelloLife-HH-Code = SPACES
+094200200724           EXEC SQL
+094300200724              UPDATE MFAIVRHHP SET LEGAL_LAST_NAME =
+094400200724               CONCAT("FEE HOUSEHOLD ",CHAR(HOUSEHOLD_ID))
+094500200724              WHERE HOUSEHOLD_LINKAGE_CODE = :LC_LKNCODE AND
+094600200724              LEGAL_LAST_NAME <>
+094700200724               CONCAT("FEE HOUSEHOLD ",CHAR(HOUSEHOLD_ID))
+094800210304           END-EXEC
+094900210304           MOVE SQLSTATE TO lc_sqlStates
+095000200724           IF lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+095100200724                   CONTINUE
+095200200724           ELSE
+095300200724                   SET lncc_Err10   TO TRUE
+095400210304                   SET lncc_ErrorUpdateMFAIVRHHP  TO TRUE
+095500200724                   PERFORM Dsp-Error
+095600200724                   PERFORM Force-Msgw
+095700210304           END-IF
+095800210304           END-IF.
+095900210315
+096000210304           IF Lc-HelloLife-HH-Code NOT = SPACES
+096100210304             EXEC SQL
+096200210304               UPDATE MFAIVRHHP SET LEGAL_LAST_NAME =
+096300211020      * RFS 187731 - Starts
+096400211020      *         HOUSEHOLD_LINKAGE_CODE || " " ||
+096500211012      *               SUBSTR(CHAR(HOUSEHOLD_ID),1,7)
+096600211012      *        WHERE HOUSEHOLD_LINKAGE_CODE = :LC_LKNCODE
+096700211020                HOUSEHOLD_LINKAGE_CODE || DIGITS(HOUSEHOLD_ID)
+096800210304               WHERE HOUSEHOLD_LINKAGE_CODE = :LC_LKNCODE
+096900211021                 AND LEGAL_LAST_NAME = " "
+097100211012      * RFS 187731 - Ends
+097200210304             END-EXEC
+097300210304             MOVE SQLSTATE TO lc_sqlStates
+097400210304             IF lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+097500210304                   CONTINUE
+097600210304             ELSE
+097700210304                   SET lncc_Err10   TO TRUE
+097800210304                   SET lncc_ErrorUpdateMFAIVRHHP  TO TRUE
+097900210304                   PERFORM Dsp-Error
+098000210304                   PERFORM Force-Msgw
+098100210304             END-IF
+098200210304           END-IF.
+098300210304      *RFS186280-Ends
+098400200724      *RFS1102517 - Ends
+098500200724
+098600200724      * To select all the dealers eligible for Auto linkage
+098700200724      *-----------------------
+098800200724       GET-ALINK-DEALERS.
+098900200724      *-----------------------
+099000200724
+099100200724           ACCEPT lc_OJLibrary FROM WS-DATA-AREA-1
+099200200724                   FOR "MFAOBJECTS".
+099300200724
+099400200724           STRING "DROP VIEW " DELIMITED BY SIZE
+099500200724                  lc_OJLibrary DELIMITED BY SPACE
+099600200724                  "/"          DELIMITED BY SIZE
+099700200724                  "ALNKDLRS "  DELIMITED BY SIZE
+099800200724             INTO lc_DropTable1
+099900200724           END-STRING.
+100000200724
+100100200724           EXEC SQL
+100200200724             EXECUTE IMMEDIATE :lc_DropTable1
+100300200724           END-EXEC.
+100400200724
+100500200724            STRING "CREATE VIEW "               DELIMITED BY SIZE
+100600200724                   lc_OJLibrary                 DELIMITED BY SPACE
+100700200724                   "/"                          DELIMITED BY SIZE
+100800200724                   "ALNKDLRS AS "               DELIMITED BY SIZE
+100900200724                   "SELECT DEAP.DEALER_CODE "   DELIMITED BY SIZE
+101000200724                   "FROM MFADEAP DEAP "         DELIMITED BY SIZE
+101100200724                   "INNER JOIN "                 DELIMITED BY SIZE
+101200200724                   "MFADLRHLP DLRHLP ON "       DELIMITED BY SIZE
+101300200724                   " DLRHLP.HOUSEHOLD_LINKAGE_CODE = """
+101400200724                                                DELIMITED BY SIZE
+101500200724                   lc_LKNCODE                   DELIMITED BY " "
+101600200724                   """"                         DELIMITED BY SIZE
+101700200724                   " AND (DEAP.DEALER_CODE = "  DELIMITED BY SIZE
+101800200724                   " DLRHLP.DEALER_CODE OR "    DELIMITED BY SIZE
+101900200724                   " DLRHLP.DEALER_CODE = ""ALL"") "
+102000200724                                                DELIMITED BY SIZE
+102100200724              INTO lc_Crt-VIEW.
+102200200724
+102300200724            EXEC SQL
+102400200724              PREPARE PrpView   FROM :lc_Crt-VIEW
+102500200724            END-EXEC.
+102600200724
+102700200724            EXEC SQL
+102800200724              EXECUTE PrpView
+102900200724            END-EXEC.
+103000200724
+103100200724      *Get all the accounts into work file to be processed for Auto linking
+103200200724      *-----------------------
+103300200724       GET-ACCOUNTS-TO-ALINK.
+103400200724      *-----------------------
+103500200724           EXEC SQL
+103600200724             INSERT INTO WKACCTOLNK
+103700200724             (SELECT   ACCNTP.ACCOUNT_NO,
+103800200724                       ACCNTP.INVESTOR_NO,
+103900200724                       ACCNTP.DEALER_CODE,
+104000200724                       ACCNTP.DEALER_REP_CODE,
+104100200724                       COALESCE(CONCAT(Trim(ADDP.STREET_NO)," ")
+104200200724                       CONCAT(Trim(ADDP.STREET_NAME))
+104300200724                       CONCAT(" ")
+104400200724                       CONCAT(Trim(ADDP.STREET_TYPE_CODE))
+104500200724                       CONCAT(" ")
+104600200724                       CONCAT(Trim(ADDP.STREET_DIRCT_CODE))
+104700200724                       CONCAT(" ")
+104800200724                       CONCAT(Trim(ADDP.CITY))
+104900200724                       CONCAT(" ")
+105000200724                       CONCAT(Trim(ADDP.POSTAL_CODE))
+105100200724                       CONCAT(" ")
+105200200724                       CONCAT(Trim(ADDP.COUNTRY_CODE))
+105300200724                       CONCAT(" ")
+105400200724                       CONCAT(Trim(ADDP.PROVINCE_CODE))
+105500200724                       CONCAT(" ")
+105600200724                       CONCAT(Trim(ADDP.MISC_FIRST_ADDR_LINE))
+105700200724                       CONCAT(" ")
+105800200724                       CONCAT(Trim(ADDP.MISC_SECOND_ADDR_LINE))," ")
+105900210304                       AS ADDRESS_VALUE,
+106000210304      *RFS186280 - Starts
+106100210304                       IVRP.INVESTOR_TYPE_CODE ,
+106200210304                       IVRP.SOCIAL_INSURANCE_NO ,
+106300210304                       COALESCE(SBSINP.SUB_SIN, 0) ,
+106400210304                       COALESCE(IVRTEP.SOCIAL_INSURANCE_NO, 0),
+106500210304                       COALESCE(SBSINP1.SUB_SIN, 0)
+106600210304      *RFS186280 - End
+106700200724                FROM   MFAACCNTP ACCNTP
+106800200724                       INNER JOIN ALNKDLRS DLRS ON
+106900200724                       ACCNTP.DEALER_CODE    = DLRS.DEALER_CODE
+107000200724
+107100200724                       INNER JOIN MFAIVRADP IVRADP ON
+107200200724                       IVRADP.INVESTOR_NO    = ACCNTP.INVESTOR_NO AND
+107300200724                       IVRADP.ADDR_TYPE_CODE = "IVR"
+107400200724
+107500200724                       INNER JOIN MFAADDP ADDP ON
+107600200724                       ADDP.ADDR_NO          = IVRADP.ADDR_NO
+107700210304      *RFS186280 - Start
+107800210304                      INNER JOIN MFAIVRP IVRP ON
+107900210304                      ACCNTP.INVESTOR_NO = IVRP.INVESTOR_NO
+108000210304
+108100211007      * RFS 187744 - Starts
+108200211007                      EXCEPTION JOIN MFAIVRTYP IVRTYP ON
+108300211007                          IVRTYP.INVESTOR_TYPE_CODE =
+108400211007                          IVRP.INVESTOR_TYPE_CODE
+108500211007                      AND IVRTYP.INVESTOR_CATEGORY = "C"
+108600211007      * RFS 187744 - Ends
+108700211007
+108800210304                      LEFT OUTER JOIN MFASBSINP SBSINP ON
+108900210304                      IVRP.SOCIAL_INSURANCE_NO = SBSINP.SUB_SIN
+109000210304
+109100210304                      LEFT OUTER JOIN MFAIVRTEP IVRTEP ON
+109200210304                      ACCNTP.INVESTOR_NO  = IVRTEP.INVESTOR_NO
+109300210304
+109400210304                      LEFT OUTER JOIN MFASBSINP SBSINP1  ON
+109500210304                      IVRTEP.SOCIAL_INSURANCE_NO = SBSINP1.SUB_SIN
+109600210304      *RFS186280 - End
+109700210304
+109800200724      * RFS 1102633 - Start *
+109900200724                       EXCEPTION JOIN WKACCEXCEP ACCEXCP ON
+110000200724                       ACCEXCP.ACCOUNT_NO    = ACCNTP.ACCOUNT_NO
+110100200724      * RFS 1102633 - End   *
+110200200724
+110300200724                       EXCEPTION JOIN MFAIVRHDP IVRHDP ON
+110400200724                       IVRHDP.ACCOUNT_NO     = ACCNTP.ACCOUNT_NO  AND
+110500200724                       IVRHDP.HOUSEHOLD_LINKAGE_CODE
+110600200724                                             = :lc_LKNCODE
+110700200724                WHERE ACCNTP.ACCOUNT_STATUS = "A")
+110800200724           END-EXEC.
+110900200724
+111000200724           MOVE SQLSTATE TO lc_sqlStates.
+111100200724           IF lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+111200200724                   CONTINUE
+111300200724           ELSE
+111400200724                   SET lncc_Err07   TO TRUE
+111500200724                   SET lncc_ErrorInsertWKACCTOLNK TO TRUE
+111600200724                   PERFORM Dsp-Error
+111700200724                   PERFORM Force-Msgw
+111800200724           END-IF.
+111900200724
+112000200724      *Get the existing household details to match the account being processed
+112100200724      *with Household data to see if the account can be grouped under household
+112200200724      *or added under separate process
+112300200724      *-----------------------
+112400200724       GET-HOUSEHOLD-DETAILS.
+112500200724      *-----------------------
+112600200724
+112700200724           EXEC SQL
+112800200724             INSERT INTO WKHHLKDTA
+112900210304      *RFS186280 - Start
+113000210304      *      (SELECT   IVRHHP.INVESTOR_NO,
+113100210304             (SELECT DISTINCT
+113200210304                       IVRHHP.INVESTOR_NO,
+113300210304      *RFS186280 - End
+113400200724                       IVRHHP.HOUSEHOLD_ID,
+113500200724                       IVRHDP.INVESTOR_NO_2,
+113600200724                       ACCNTP.ACCOUNT_NO,
+113700200724                       ACCNTP.DEALER_CODE,
+113800200724                       ACCNTP.DEALER_REP_CODE,
+113900200724                       COALESCE(CONCAT(Trim(ADDP.STREET_NO)," ")
+114000200724                       CONCAT(Trim(ADDP.STREET_NAME))
+114100200724                       CONCAT(" ")
+114200200724                       CONCAT(Trim(ADDP.STREET_TYPE_CODE))
+114300200724                       CONCAT(" ")
+114400200724                       CONCAT(Trim(ADDP.STREET_DIRCT_CODE))
+114500200724                       CONCAT(" ")
+114600200724                       CONCAT(Trim(ADDP.CITY))
+114700200724                       CONCAT(" ")
+114800200724                       CONCAT(Trim(ADDP.POSTAL_CODE))
+114900200724                       CONCAT(" ")
+115000200724                       CONCAT(Trim(ADDP.COUNTRY_CODE))
+115100200724                       CONCAT(" ")
+115200200724                       CONCAT(Trim(ADDP.PROVINCE_CODE))
+115300200724                       CONCAT(" ")
+115400200724                       CONCAT(Trim(ADDP.MISC_FIRST_ADDR_LINE))
+115500200724                       CONCAT(" ")
+115600200724                       CONCAT(Trim(ADDP.MISC_SECOND_ADDR_LINE))," ")
+115700210304                       AS ADDRESS_VALUE,
+115800210304      *RFS186280 - Starts
+115900210304                       IVRP.INVESTOR_TYPE_CODE ,
+116000210304                       IVRP.SOCIAL_INSURANCE_NO ,
+116100210304                       COALESCE(SBSINP.SUB_SIN, 0) ,
+116200210304                       COALESCE(IVRTEP.SOCIAL_INSURANCE_NO, 0),
+116300210304                       COALESCE(SBSINP1.SUB_SIN, 0)
+116400210304      *RFS186280 - End
+116500200724                FROM   MFAIVRHHP IVRHHP
+116600200724                       INNER JOIN MFAIVRHDP IVRHDP ON
+116700200724                       IVRHHP.HOUSEHOLD_ID   = IVRHDP.HOUSEHOLD_ID
+116800200724
+116900200724                       INNER JOIN MFAACCNTP ACCNTP ON
+117000200724                       IVRHDP.ACCOUNT_NO     = ACCNTP.ACCOUNT_NO
+117100200724
+117200200724                       INNER JOIN MFAIVRADP IVRADP ON
+117300200724                       IVRADP.INVESTOR_NO    = ACCNTP.INVESTOR_NO AND
+117400200724                       IVRADP.ADDR_TYPE_CODE = "IVR"
+117500200724
+117600200724                       INNER JOIN MFAADDP ADDP ON
+117700200724                       ADDP.ADDR_NO          = IVRADP.ADDR_NO
+117800210304      *RFS186280 - Start
+117900210304                      INNER JOIN MFAIVRP IVRP ON
+118000210304                      ACCNTP.INVESTOR_NO = IVRP.INVESTOR_NO
+118100210304
+118200210304                      LEFT OUTER JOIN MFASBSINP SBSINP ON
+118300210304                      IVRP.SOCIAL_INSURANCE_NO = SBSINP.SUB_SIN
+118400210304
+118500210304                      LEFT OUTER JOIN MFAIVRTEP IVRTEP ON
+118600210304                      ACCNTP.INVESTOR_NO  = IVRTEP.INVESTOR_NO
+118700210304
+118800210304                      LEFT OUTER JOIN MFASBSINP SBSINP1  ON
+118900210304                      IVRTEP.SOCIAL_INSURANCE_NO = SBSINP1.SUB_SIN
+119000210304      *RFS186280 - End
+119100200724
+119200200724               WHERE   IVRHHP.HOUSEHOLD_LINKAGE_CODE = :lc_LKNCODE
+119300200724                  AND  IVRHDP.PRIMARY_ACCOUNT_FLAG = "Y" )
+119400200724
+119500200724           END-EXEC.
+119600200724
+119700200724           MOVE SQLSTATE TO lc_sqlStates.
+119800200724           IF lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+119900200724                   CONTINUE
+120000200724           ELSE
+120100200724                   SET lncc_Err08   TO TRUE
+120200200724                   SET lncc_ErrorInsertWKHHLKDTA  TO TRUE
+120300200724                   PERFORM Dsp-Error
+120400200724                   PERFORM Force-Msgw
+120500200724           END-IF.
+120600210304
+120700210304      *RFS186280 - Start
+120800210304           EXEC SQL
+120900210304             INSERT INTO WKHHLKDTA1
+121000210304             (SELECT DISTINCT
+121100210304                       IVRHHP.INVESTOR_NO,
+121200210304                       IVRHHP.HOUSEHOLD_ID,
+121300210304                       IVRHDP.INVESTOR_NO_2,
+121400210304                       ACCNTP.ACCOUNT_NO,
+121500210304                       ACCNTP.DEALER_CODE,
+121600210304                       ACCNTP.DEALER_REP_CODE,
+121700210304                       COALESCE(CONCAT(Trim(ADDP.STREET_NO)," ")
+121800210304                       CONCAT(Trim(ADDP.STREET_NAME))
+121900210304                       CONCAT(" ")
+122000210304                       CONCAT(Trim(ADDP.STREET_TYPE_CODE))
+122100210304                       CONCAT(" ")
+122200210304                       CONCAT(Trim(ADDP.STREET_DIRCT_CODE))
+122300210304                       CONCAT(" ")
+122400210304                       CONCAT(Trim(ADDP.CITY))
+122500210304                       CONCAT(" ")
+122600210304                       CONCAT(Trim(ADDP.POSTAL_CODE))
+122700210304                       CONCAT(" ")
+122800210304                       CONCAT(Trim(ADDP.COUNTRY_CODE))
+122900210304                       CONCAT(" ")
+123000210304                       CONCAT(Trim(ADDP.PROVINCE_CODE))
+123100210304                       CONCAT(" ")
+123200210304                       CONCAT(Trim(ADDP.MISC_FIRST_ADDR_LINE))
+123300210304                       CONCAT(" ")
+123400210304                       CONCAT(Trim(ADDP.MISC_SECOND_ADDR_LINE))," ")
+123500210304                       AS ADDRESS_VALUE,
+123600210304                       IVRP.INVESTOR_TYPE_CODE ,
+123700210304                       IVRP.SOCIAL_INSURANCE_NO ,
+123800210304                       COALESCE(SBSINP.SUB_SIN, 0) ,
+123900210304                       COALESCE(IVRTEP.SOCIAL_INSURANCE_NO, 0),
+124000210304                       COALESCE(SBSINP1.SUB_SIN, 0)
+124100210304                FROM   MFAIVRHHP IVRHHP
+124200210304                       INNER JOIN MFAIVRHDP IVRHDP ON
+124300210304                       IVRHHP.HOUSEHOLD_ID   = IVRHDP.HOUSEHOLD_ID
+124400210304
+124500210304                       INNER JOIN MFAACCNTP ACCNTP ON
+124600210304                       IVRHDP.ACCOUNT_NO     = ACCNTP.ACCOUNT_NO
+124700210304
+124800210304                       INNER JOIN MFAIVRADP IVRADP ON
+124900210304                       IVRADP.INVESTOR_NO    = ACCNTP.INVESTOR_NO AND
+125000210304                       IVRADP.ADDR_TYPE_CODE = "IVR"
+125100210304
+125200210304                       INNER JOIN MFAADDP ADDP ON
+125300210304                       ADDP.ADDR_NO          = IVRADP.ADDR_NO
+125400210304                      INNER JOIN MFAIVRP IVRP ON
+125500210304                      ACCNTP.INVESTOR_NO = IVRP.INVESTOR_NO
+125600210304
+125700210304                      LEFT OUTER JOIN MFASBSINP SBSINP ON
+125800210304                      IVRP.SOCIAL_INSURANCE_NO = SBSINP.SUB_SIN
+125900210304
+126000210304                      LEFT OUTER JOIN MFAIVRTEP IVRTEP ON
+126100210304                      ACCNTP.INVESTOR_NO  = IVRTEP.INVESTOR_NO
+126200210304
+126300210304                      LEFT OUTER JOIN MFASBSINP SBSINP1  ON
+126400210304                      IVRTEP.SOCIAL_INSURANCE_NO = SBSINP1.SUB_SIN
+126500210304
+126600210304               WHERE   IVRHHP.HOUSEHOLD_LINKAGE_CODE = :lc_LKNCODE )
+126700210304
+126800210304           END-EXEC.
+126900210304
+127000210304           MOVE SQLSTATE TO lc_sqlStates.
+127100210304           IF lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+127200210304                   CONTINUE
+127300210304           ELSE
+127400210304                   SET lncc_Err11   TO TRUE
+127500210304                   SET lncc_ErrorInsertWKHHLKDTA1 TO TRUE
+127600210304                   PERFORM Dsp-Error
+127700210304                   PERFORM Force-Msgw
+127800210304           END-IF.
+127900210426      *RFS186280 - End
+128000210304
+128100200724      *Generate the Auto linkage records and create audit log
+128200200724      *---------------------------
+128300200724       AUTO-LINKAGE-PROCESS.
+128400200724      *---------------------------
+128500200724
+128600200724           Initialize lc_SQLSelect_Cursor.
+128700200724           PERFORM  BUILD-SELECT.
+128800200724           DISPLAY  lc_SQLSelect_Cursor.
+128900210426      *RFS186280 - Starts
+129000210422      * Below AUTOHH-NO-PRILNKAGE Paragraph will be performed only
+129100210422      * For the Rule 4,Rule 2,4, Rule 2,4,5 and Rule 4,5 combinations
+129200210422      * When The Lc-Auto-HH-Primary-SIN Flag is Set to 'N'
+129300210422
+129400210421           IF Lc-Auto-HH-Primary-SIN = "N"
+129500210716116158     OR lc_LinkageRule23  OR lc_LinkageRule235
+129600210421              PERFORM AUTOHH-NO-PRILNKAGE
+129700210421           END-IF.
+129800210426      *RFS186280 - Ends
+129900200724           EXEC SQL
+130000200724             PREPARE HH_CURSOR_SEL FROM :lc_SQLSelect_Cursor
+130100200724           END-EXEC.
+130200200724
+130300200724           EXEC SQL
+130400200724             DECLARE HH_CURSOR CURSOR FOR HH_CURSOR_SEL
+130500200724           END-EXEC.
+130600200724
+130700200724           EXEC SQL
+130800200724             OPEN HH_CURSOR
+130900200724           END-EXEC.
+131000200724
+131100200724           MOVE SQLSTATE         TO lc_sqlStates.
+131200200724           IF lncc_sqlSuccessful OR lncc_sqlWarning
+131300200724              SET lc_CursorOpen
+131400200724                  lc_CursorHHOpen
+131500200724                  lc_Pend_New_HH_Dtl_No  TO TRUE
+131600200725      *RFS1102633 - Starts: Initialize issue fixed
+131700200725              INITIALIZE lc_CURR_Data
+131800200725                         lc_PREV_Data
+131900200725      *RFS1102633 - Ends
+132000200724           ELSE
+132100200724              SET lc_CursorEnd            TO TRUE
+132200200724              SET lc_CursorHHEnd          TO TRUE
+132300200724              SET lncc_Err01              TO TRUE
+132400200724              SET lncc_ErrorOpenHH_CURSOR TO TRUE
+132500200724              PERFORM Dsp-Error
+132600200724              PERFORM Force-Msgw
+132700200724           END-IF.
+132800200724
+132900200724           PERFORM FETCH-HH-CURSOR
+133000200724           PERFORM PROCESS-HH-CURSOR-DATA UNTIL lc_CursorHHEnd
+133100200724           PERFORM CLOSE-HH-CURSOR.
+133200210426      *RFS186280 - Start
+133300210422      *---------------------
+133400210421       AUTOHH-NO-PRILNKAGE.
+133500210422      *---------------------
+133600210421
+133700211011      * RFS 180770 - Starts
+133800211011
+133900211011           SET lc_HH_Match_NFound
+134000211011               lb_Dealer_Code_NFnd
+134100211011               lb_DLRREP_Code_NFnd
+134200211011               lb_Investor_SIN_NFnd
+134300211011               lb_Tenant_SIN_NFnd
+134400211011               lb_Ivr_type_NFnd
+134500211011                                 TO TRUE
+134600211011           INITIALIZE lc_Total_Rule_Match
+134700211011
+134800211011      * RFS 180770 - Ends
+134900211011
+135000210421           EXEC SQL
+135100210421             DECLARE CUR1_AUTOHH_NOPRI CURSOR FOR
+135200210421             SELECT * FROM WKACCTOLNK
+135300210421           END-EXEC.
+135400210421
+135500210421           EXEC SQL
+135600210421             OPEN CUR1_AUTOHH_NOPRI
+135700210421           END-EXEC.
+135800210421
+135900210421           MOVE SQLSTATE         TO lc_sqlStates.
+136000210421           IF lncc_sqlSuccessful OR lncc_sqlWarning
+136100210422             SET lb_EOF1_Flag_False           TO TRUE
+136200210421             PERFORM FETCH-AUTOHH-NO-PRILNKAGE1
+136300210422             PERFORM PROCESS-AUTOHH-NO-PRILNKAGE1 UNTIL
+136400210422                                                  lb_EOF1_Flag_True
+136500210421             EXEC SQL
+136600210421               CLOSE CUR1_AUTOHH_NOPRI
+136700210421             END-EXEC
+136800210422             INITIALIZE lc_Cur_HH_ID
+136900210422                        lc_Cur_Investor_No
+137000210422                        lc_Cur_Investor_No2
+137100210422                        lc_Cur_Account_No
+137200210422                        lc_PrimaryAcc_Flag
+137300210422             EXEC SQL
+137400210422                 DELETE FROM WKACCTOLNK ACCTOLNK
+137500210422                 WHERE ACCTOLNK.ACCOUNT_NO IN
+137600210422                 (SELECT ACCTODLT.ACCOUNT_NO FROM WKACCTODLT ACCTODLT)
+137700210422             END-EXEC
+137800210421           END-IF.
+137900210421
+138000210421      *---------------------------
+138100210421       FETCH-AUTOHH-NO-PRILNKAGE1.
+138200210421      *---------------------------
+138300210421
+138400210421           EXEC SQL
+138500210421              FETCH  CUR1_AUTOHH_NOPRI
+138600210421               INTO :lc_WKACCTOLNK_Data
+138700210421           END-EXEC.
+138800210421
+138900210421           MOVE SQLSTATE   TO WS-SQL-STATES.
+139000210421
+139100210421           IF lncc_sqlSuccessful
+139200210421              CONTINUE
+139300210421           ELSE
+139400210421              IF lncc_sqlEnd
+139500210422                 SET lb_EOF1_Flag_True           TO TRUE
+139600210421              ELSE
+139700210421                 SET lncc_Err15                  TO TRUE
+139800210421                 SET lncc_ErrorFetchNOPRI_CURSOR TO TRUE
+139900210421                 PERFORM Dsp-Error
+140000210421                 PERFORM Force-Msgw
+140100210421              END-IF
+140200210421           END-IF.
+140300210421
+140400210421      *-----------------------------
+140500210421       PROCESS-AUTOHH-NO-PRILNKAGE1.
+140600210421      *-----------------------------
+140700210421
+140800210421           EXEC SQL
+140900210422             DECLARE CUR2_AUTOHH_NOPRI CURSOR FOR
+141000210716      * RFS 1116158 - Start
+141100210716      *      SELECT * FROM WKHHLKDTA1
+141200210716             SELECT
+141300210716                  DTA1.*, DTA.DEALER_CODE
+141400210716                        , DTA.DEALER_REP_CODE
+141500211007      * RFS 187744 - Starts
+141600211007
+141700211007      *           FROM WKHHLKDTA1  DTA1
+141800211007      *      INNER JOIN (SELECT DISTINCT INVESTOR_NO,
+141900211007      *                                  HOUSEHOLD_ID,
+142000211007      *                                  DEALER_CODE,
+142100211007      *                                  DEALER_REP_CODE
+142200211007      *                            FROM  WKHHLKDTA) DTA ON
+142300211007      *      DTA1.INVESTOR_NO = DTA.INVESTOR_NO AND
+142400211007      *      DTA1.HOUSEHOLD_ID = DTA.HOUSEHOLD_ID
+142500211007                  FROM WKHHLKDTA1  DTA1,
+142600211007                  LATERAL (SELECT IVRHDP.HOUSEHOLD_ID
+142700211007                             FROM MFAIVRHDP IVRHDP, MFAIVRP IVRP
+142800211007                            WHERE DTA1.INVESTOR_NO_2 =
+142900211007                                  :lc_WKACCTOLNK_INVESTOR_NO
+143000211007                              AND DTA1.INVESTOR_NO_2 =
+143100211007                                  IVRHDP.INVESTOR_NO_2
+143200211007                              AND IVRP.INVESTOR_NO =
+143300211007                                  IVRHDP.INVESTOR_NO_2
+143400211007                              AND IVRHDP.HOUSEHOLD_LINKAGE_CODE =
+143500211007                                  :lc_LKNCODE
+143600211007                              AND IVRP.SOCIAL_INSURANCE_NO =
+143700211007                                  :lc_WKACCTOLNK_INVESTOR_SIN
+143800211007                             FETCH FIRST ROW ONLY) IVRHDP,
+143900211007                  LATERAL (SELECT DEALER_CODE, DEALER_REP_CODE
+144000211007                             FROM WKHHLKDTA DTA
+144100211007                            WHERE DTA1.INVESTOR_NO = DTA.INVESTOR_NO AND
+144200211007                                  DTA1.HOUSEHOLD_ID = DTA.HOUSEHOLD_ID
+144300211007                            FETCH FIRST ROW ONLY) DTA
+144400211007             WHERE DTA1.HOUSEHOLD_ID = IVRHDP.HOUSEHOLD_ID
+144500211021      * RFS 187744 - Ends
+144600211007
+144700210716      * RFS 1116158 - End
+144800210422             ORDER BY HOUSEHOLD_ID
+144900210421           END-EXEC.
+145000210421
+145100210421           EXEC SQL
+145200210421             OPEN CUR2_AUTOHH_NOPRI
+145300210421           END-EXEC.
+145400210421
+145500210421           MOVE SQLSTATE         TO lc_sqlStates.
+145600210421           IF lncc_sqlSuccessful OR lncc_sqlWarning
+145700210422            SET lb_EOF2_Flag_False       TO TRUE
+145800210422            PERFORM FETCH-AUTOHH-NO-PRILNKAGE2
+145900210422
+146000210422            IF NOT lb_EOF2_Flag_True
+146100210422             MOVE lc_WKHHLKDTA1_HOUSEHOLD_ID   TO lc_PREV_HOUSEHOLD_ID
+146200210422             MOVE lc_WKHHLKDTA1_INVESTOR_NO    TO lc_PREV_INVESTOR_NO
+146300210422             MOVE lc_WKHHLKDTA1_INVESTOR_NO_2  TO lc_PREV_INVESTOR_NO_2
+146400210422
+146500210422             PERFORM PROCESS-AUTOHH-NO-PRILNKAGE2 UNTIL
+146600210422                                                  lb_EOF2_Flag_True
+146700210422             PERFORM VALIDATE-ALL-MATCH
+146800210422            END-IF
+146900210422            EXEC SQL
+147000210422              CLOSE CUR2_AUTOHH_NOPRI
+147100210422            END-EXEC
+147200210422           END-IF.
+147300210421
+147400210421           PERFORM FETCH-AUTOHH-NO-PRILNKAGE1.
+147500210421
+147600210421      *---------------------------
+147700210421       FETCH-AUTOHH-NO-PRILNKAGE2.
+147800210421      *---------------------------
+147900210421
+148000210421           EXEC SQL
+148100210421              FETCH  CUR2_AUTOHH_NOPRI
+148200210421               INTO :lc_WKHHLKDTA1_Data
+148300210421           END-EXEC.
+148400210421
+148500210421           MOVE SQLSTATE   TO WS-SQL-STATES.
+148600210421
+148700210421           IF lncc_sqlSuccessful
+148800210421              CONTINUE
+148900210421           ELSE
+149000210421              IF lncc_sqlEnd
+149100210422                 SET lb_EOF2_Flag_True           TO TRUE
+149200210421              ELSE
+149300210421                 SET lncc_Err16                  TO TRUE
+149400210421                 SET lncc_ErrorFetchNOPRI_CURSOR TO TRUE
+149500210421                 PERFORM Dsp-Error
+149600210421                 PERFORM Force-Msgw
+149700210421              END-IF
+149800210421           END-IF.
+149900210421
+150000210421      *-----------------------------
+150100210421       PROCESS-AUTOHH-NO-PRILNKAGE2.
+150200210421      *-----------------------------
+150300210421
+150400210421           IF lc_PREV_HOUSEHOLD_ID = lc_WKHHLKDTA1_HOUSEHOLD_ID
+150500210421              PERFORM ACC-HH-COMPARE
+150600210421           ELSE
+150700210422              PERFORM VALIDATE-ALL-MATCH
+150800210422
+150900210422              SET lc_HH_Match_NFound
+151000210422                  lb_Dealer_Code_NFnd
+151100210422                  lb_DLRREP_Code_NFnd
+151200210422                  lb_Investor_SIN_NFnd
+151300210422                  lb_Tenant_SIN_NFnd
+151400210422                  lb_Ivr_type_NFnd
+151500210422                                    TO TRUE
+151600210422              INITIALIZE lc_Total_Rule_Match
+151700210422
+151800210422              PERFORM ACC-HH-COMPARE
+151900210421           END-IF
+152000210421
+152100210422           MOVE lc_WKHHLKDTA1_HOUSEHOLD_ID   TO lc_PREV_HOUSEHOLD_ID.
+152200210422           MOVE lc_WKHHLKDTA1_INVESTOR_NO    TO lc_PREV_INVESTOR_NO.
+152300210422           MOVE lc_WKHHLKDTA1_INVESTOR_NO_2  TO lc_PREV_INVESTOR_NO_2.
+152400210422
+152500210421           PERFORM FETCH-AUTOHH-NO-PRILNKAGE2.
+152600210421
+152700210422      *--------------------
+152800210422       VALIDATE-ALL-MATCH.
+152900210422      *--------------------
+153000210422
+153100210716      * RFS 1116158 - Start
+153200210716
+153300210716           IF lc_LinkageRule23  AND lc_Total_Rule_Match = 3
+153400210716              SET lc_HH_Match_Found TO TRUE
+153500210716           END-IF
+153600210716
+153700210716           IF lc_LinkageRule235  AND lc_Total_Rule_Match = 4
+153800210716              SET lc_HH_Match_Found TO TRUE
+153900210716           END-IF
+154000210716
+154100210716      * RFS 1116158 - End
+154200210716
+154300210422           IF lc_LinkageRule4   AND lc_Total_Rule_Match = 2
+154400210425               AND lc_WKACCTOLNK_INVESTOR_TYPE  NOT = "IND"
+154500210422              SET lc_HH_Match_Found TO TRUE
+154600210422           END-IF
+154700210422
+154800210425           IF lc_LinkageRule4
+154900210425               AND lc_WKACCTOLNK_INVESTOR_TYPE  = "IND"
+155000210425               AND lc_Total_Rule_Match = 1
+155100210425              SET lc_HH_Match_Found TO TRUE
+155200210425           END-IF
+155300210425
+155400210422           IF lc_LinkageRule24  AND lc_Total_Rule_Match = 4
+155500210425               AND lc_WKACCTOLNK_INVESTOR_TYPE  NOT = "IND"
+155600210422              SET lc_HH_Match_Found TO TRUE
+155700210422           END-IF
+155800210422
+155900210425           IF lc_LinkageRule24  AND lc_Total_Rule_Match = 3
+156000210425               AND lc_WKACCTOLNK_INVESTOR_TYPE  = "IND"
+156100210425              SET lc_HH_Match_Found TO TRUE
+156200210425           END-IF
+156300210425
+156400210422           IF lc_LinkageRule45  AND lc_Total_Rule_Match = 3
+156500211006187744     AND lc_WKACCTOLNK_INVESTOR_TYPE  NOT = "IND"
+156600210422              SET lc_HH_Match_Found TO TRUE
+156700210422           END-IF
+156800210422
+156900210422           IF lc_LinkageRule245 AND lc_Total_Rule_Match = 5
+157000211006187744     AND lc_WKACCTOLNK_INVESTOR_TYPE  NOT = "IND"
+157100210422              SET lc_HH_Match_Found TO TRUE
+157200210422           END-IF
+157300210422
+157400211006      * RFS 187744 - Starts
+157500211006
+157600211006           IF lc_LinkageRule245 AND lc_Total_Rule_Match = 4
+157700211006           AND lc_WKACCTOLNK_INVESTOR_TYPE = "IND"
+157800211006              SET lc_HH_Match_Found TO TRUE
+157900211006           END-IF
+158000211006
+158100211006           IF  lc_LinkageRule45  AND lc_Total_Rule_Match = 2
+158200211006           AND lc_WKACCTOLNK_INVESTOR_TYPE = "IND"
+158300211006              SET lc_HH_Match_Found TO TRUE
+158400211006           END-IF
+158500211006
+158600211006      * RFS 187744 - Ends
+158700211006
+158800210422           IF lc_HH_Match_Found
+158900210422              PERFORM INSERT-HH-RECORDS
+159000210422              SET lc_HH_Match_NFound TO TRUE
+159100210422              EXEC SQL
+159200210422                 INSERT INTO WKACCTODLT
+159300210422                 VALUES(:lc_WKACCTOLNK_ACCOUNT_NO)
+159400210422              END-EXEC
+159500210422           END-IF.
+159600210422
+159700210421      *----------------
+159800210421       ACC-HH-COMPARE.
+159900210421      *----------------
+160000210421
+160100210716      * RFS 1116158 - Start
+160200210716
+160300210716           IF lc_LinkageRule23
+160400210716              IF lc_WKACCTOLNK_DEALER_CODE  =
+160500210716                 lc_WKHHLKDTA_DEALER_CODE  AND lb_Dealer_Code_NFnd
+160600210716                 SET lb_Dealer_Code_Fnd TO TRUE
+160700210716                 ADD 1 TO lc_Total_Rule_Match
+160800210716              END-IF
+160900210716
+161000210716             IF lc_WKACCTOLNK_DEALER_REP_CODE =
+161100210716                 lc_WKHHLKDTA_DEALER_REP_CODE AND lb_DLRREP_Code_NFnd
+161200210716                 SET lb_DLRREP_Code_Fnd TO TRUE
+161300210716                 ADD 1 TO lc_Total_Rule_Match
+161400210716             END-IF
+161500210716
+161600210716             IF lc_WKACCTOLNK_INVESTOR_SIN =
+161700210716                 lc_WKHHLKDTA1_INVESTOR_SIN  AND lb_Investor_SIN_NFnd
+161800211011187744       AND lc_WKACCTOLNK_INVESTOR_SIN NOT = 0
+161900210716                 SET lb_Investor_SIN_Fnd TO TRUE
+162000210716                 ADD 1 TO lc_Total_Rule_Match
+162100210716             END-IF
+162200210716           END-IF.
+162300210716
+162400210716           IF lc_LinkageRule235
+162500210716              IF lc_WKACCTOLNK_DEALER_CODE  =
+162600210716                 lc_WKHHLKDTA_DEALER_CODE  AND lb_Dealer_Code_NFnd
+162700210716                 SET lb_Dealer_Code_Fnd TO TRUE
+162800210716                 ADD 1 TO lc_Total_Rule_Match
+162900210716              END-IF
+163000210716
+163100210716             IF lc_WKACCTOLNK_DEALER_REP_CODE =
+163200210716                 lc_WKHHLKDTA_DEALER_REP_CODE AND lb_DLRREP_Code_NFnd
+163300210716                 SET lb_DLRREP_Code_Fnd TO TRUE
+163400210716                 ADD 1 TO lc_Total_Rule_Match
+163500210716             END-IF
+163600210716
+163700210716             IF lc_WKACCTOLNK_INVESTOR_SIN =
+163800210716                 lc_WKHHLKDTA1_INVESTOR_SIN  AND lb_Investor_SIN_NFnd
+163900211011187744       AND lc_WKACCTOLNK_INVESTOR_SIN NOT = 0
+164000210716                 SET lb_Investor_SIN_Fnd TO TRUE
+164100210716                 ADD 1 TO lc_Total_Rule_Match
+164200210716             END-IF
+164300210716
+164400210716             IF lc_WKACCTOLNK_INVESTOR_TYPE =
+164500210716                lc_WKHHLKDTA1_INVESTOR_TYPE AND lb_Ivr_type_NFnd
+164600210716                SET lb_Ivr_Type_Fnd TO TRUE
+164700210716                ADD 1 TO lc_Total_Rule_Match
+164800210716             END-IF
+164900210716           END-IF.
+165000210716
+165100210716      * RFS 1116158 - End
+165200210716
+165300210425           IF lc_LinkageRule4 AND
+165400210425              lc_WKACCTOLNK_INVESTOR_TYPE  NOT = "IND"
+165500210421              IF lc_WKACCTOLNK_INVESTOR_SIN =
+165600210421                 lc_WKHHLKDTA1_INVESTOR_SIN  AND lb_Investor_SIN_NFnd
+165700211011187744        AND lc_WKACCTOLNK_INVESTOR_SIN NOT = 0
+165800210421                 SET lb_Investor_SIN_Fnd TO TRUE
+165900210421                 ADD 1 TO lc_Total_Rule_Match
+166000210421              END-IF
+166100210421
+166200210421              IF lc_WKACCTOLNK_TENANT_SIN =
+166300210421                 lc_WKHHLKDTA1_TENANT_SIN AND lb_Tenant_SIN_NFnd
+166400211011187744        AND lc_WKACCTOLNK_TENANT_SIN NOT = 0
+166500210421                 SET lb_Tenant_SIN_Fnd TO TRUE
+166600210421                 ADD 1 TO lc_Total_Rule_Match
+166700210421              END-IF
+166800210421           END-IF.
+166900210421
+167000210425           IF lc_LinkageRule4  AND
+167100210425              lc_WKACCTOLNK_INVESTOR_TYPE  = "IND"
+167200210425
+167300210425              IF lc_WKACCTOLNK_INVESTOR_SIN =
+167400210425                 lc_WKHHLKDTA1_INVESTOR_SIN  AND lb_Investor_SIN_NFnd
+167500211011187744        AND lc_WKACCTOLNK_INVESTOR_SIN NOT = 0
+167600210425                 SET lb_Investor_SIN_Fnd TO TRUE
+167700210425                 ADD 1 TO lc_Total_Rule_Match
+167800210425              END-IF
+167900210425
+168000210425           END-IF.
+168100210425
+168200210425           IF lc_LinkageRule24  AND
+168300210425              lc_WKACCTOLNK_INVESTOR_TYPE  NOT = "IND"
+168400210425
+168500210421              IF lc_WKACCTOLNK_DEALER_CODE  =
+168600210716116158*          lc_WKHHLKDTA1_DEALER_CODE  AND lb_Dealer_Code_NFnd
+168700210716116158           lc_WKHHLKDTA_DEALER_CODE   AND lb_Dealer_Code_NFnd
+168800210421                 SET lb_Dealer_Code_Fnd TO TRUE
+168900210421                 ADD 1 TO lc_Total_Rule_Match
+169000210421              END-IF
+169100210421
+169200210422              IF lc_WKACCTOLNK_DEALER_REP_CODE =
+169300210716116158*          lc_WKHHLKDTA1_DEALER_REP_CODE AND lb_DLRREP_Code_NFnd
+169400210716116158           lc_WKHHLKDTA_DEALER_REP_CODE  AND lb_DLRREP_Code_NFnd
+169500210421                 SET lb_DLRREP_Code_Fnd TO TRUE
+169600210421                 ADD 1 TO lc_Total_Rule_Match
+169700210421              END-IF
+169800210421
+169900210422              IF lc_WKACCTOLNK_INVESTOR_SIN =
+170000210422                 lc_WKHHLKDTA1_INVESTOR_SIN  AND lb_Investor_SIN_NFnd
+170100211011187744        AND lc_WKACCTOLNK_INVESTOR_SIN NOT = 0
+170200210422                 SET lb_Investor_SIN_Fnd TO TRUE
+170300210422                 ADD 1 TO lc_Total_Rule_Match
+170400210422              END-IF
+170500210422
+170600210421              IF lc_WKACCTOLNK_TENANT_SIN =
+170700210421                 lc_WKHHLKDTA1_TENANT_SIN AND lb_Tenant_SIN_NFnd
+170800211011187744        AND lc_WKACCTOLNK_TENANT_SIN NOT = 0
+170900210421                 SET lb_Tenant_SIN_Fnd TO TRUE
+171000210421                 ADD 1 TO lc_Total_Rule_Match
+171100210421              END-IF
+171200210421           END-IF.
+171300210421
+171400210425           IF lc_LinkageRule24  AND
+171500210425              lc_WKACCTOLNK_INVESTOR_TYPE  = "IND"
+171600210425
+171700210425              IF lc_WKACCTOLNK_DEALER_CODE  =
+171800210716116158*          lc_WKHHLKDTA1_DEALER_CODE  AND lb_Dealer_Code_NFnd
+171900210716116158           lc_WKHHLKDTA_DEALER_CODE   AND lb_Dealer_Code_NFnd
+172000210425                 SET lb_Dealer_Code_Fnd TO TRUE
+172100210425                 ADD 1 TO lc_Total_Rule_Match
+172200210425              END-IF
+172300210425
+172400210425              IF lc_WKACCTOLNK_DEALER_REP_CODE =
+172500210716116158*          lc_WKHHLKDTA1_DEALER_REP_CODE AND lb_DLRREP_Code_NFnd
+172600210716116158           lc_WKHHLKDTA_DEALER_REP_CODE  AND lb_DLRREP_Code_NFnd
+172700210425                 SET lb_DLRREP_Code_Fnd TO TRUE
+172800210425                 ADD 1 TO lc_Total_Rule_Match
+172900210425              END-IF
+173000210425
+173100210425              IF lc_WKACCTOLNK_INVESTOR_SIN =
+173200210425                 lc_WKHHLKDTA1_INVESTOR_SIN  AND lb_Investor_SIN_NFnd
+173300211011187744        AND lc_WKACCTOLNK_INVESTOR_SIN NOT = 0
+173400210425                 SET lb_Investor_SIN_Fnd TO TRUE
+173500210425                 ADD 1 TO lc_Total_Rule_Match
+173600210425              END-IF
+173700210425           END-IF.
+173800210425
+173900210422           IF lc_LinkageRule45
+174000211006187744     AND lc_WKACCTOLNK_INVESTOR_TYPE  NOT = "IND"
+174100210422              IF lc_WKACCTOLNK_INVESTOR_SIN =
+174200210422                 lc_WKHHLKDTA1_INVESTOR_SIN  AND lb_Investor_SIN_NFnd
+174300211011187744        AND lc_WKACCTOLNK_INVESTOR_SIN NOT = 0
+174400210422                 SET lb_Investor_SIN_Fnd TO TRUE
+174500210422                 ADD 1 TO lc_Total_Rule_Match
+174600210422              END-IF
+174700210422
+174800210422              IF lc_WKACCTOLNK_TENANT_SIN =
+174900210422                 lc_WKHHLKDTA1_TENANT_SIN AND lb_Tenant_SIN_NFnd
+175000211011187744        AND lc_WKACCTOLNK_TENANT_SIN NOT = 0
+175100210422                 SET lb_Tenant_SIN_Fnd TO TRUE
+175200210422                 ADD 1 TO lc_Total_Rule_Match
+175300210422              END-IF
+175400210422
+175500210422              IF lc_WKACCTOLNK_INVESTOR_TYPE =
+175600210422                 lc_WKHHLKDTA1_INVESTOR_TYPE AND lb_Ivr_type_NFnd
+175700210422                 SET lb_Ivr_Type_Fnd TO TRUE
+175800210422                 ADD 1 TO lc_Total_Rule_Match
+175900210422              END-IF
+176000210422           END-IF.
+176100210422
+176200210422           IF lc_LinkageRule245
+176300211006187744     AND lc_WKACCTOLNK_INVESTOR_TYPE  NOT = "IND"
+176400211006
+176500210422              IF lc_WKACCTOLNK_DEALER_CODE  =
+176600210716116158*          lc_WKHHLKDTA1_DEALER_CODE  AND lb_Dealer_Code_NFnd
+176700210716116158           lc_WKHHLKDTA_DEALER_CODE   AND lb_Dealer_Code_NFnd
+176800210422                 SET lb_Dealer_Code_Fnd TO TRUE
+176900210422                 ADD 1 TO lc_Total_Rule_Match
+177000210422              END-IF
+177100210422
+177200210422              IF lc_WKACCTOLNK_DEALER_REP_CODE =
+177300210716116158*          lc_WKHHLKDTA1_DEALER_REP_CODE  AND lb_DLRREP_Code_NFnd
+177400210716116158           lc_WKHHLKDTA_DEALER_REP_CODE   AND lb_DLRREP_Code_NFnd
+177500210422                 SET lb_DLRREP_Code_Fnd TO TRUE
+177600210422                 ADD 1 TO lc_Total_Rule_Match
+177700210422              END-IF
+177800210422
+177900210422              IF lc_WKACCTOLNK_INVESTOR_SIN =
+178000210422                 lc_WKHHLKDTA1_INVESTOR_SIN  AND lb_Investor_SIN_NFnd
+178100211011187744        AND lc_WKACCTOLNK_INVESTOR_SIN NOT = 0
+178200210422                 SET lb_Investor_SIN_Fnd TO TRUE
+178300210422                 ADD 1 TO lc_Total_Rule_Match
+178400210422              END-IF
+178500210422
+178600210422              IF lc_WKACCTOLNK_TENANT_SIN =
+178700210422                 lc_WKHHLKDTA1_TENANT_SIN AND lb_Tenant_SIN_NFnd
+178800211011187744        AND lc_WKACCTOLNK_TENANT_SIN NOT = 0
+178900210422                 SET lb_Tenant_SIN_Fnd TO TRUE
+179000210422                 ADD 1 TO lc_Total_Rule_Match
+179100210422              END-IF
+179200210422
+179300210422              IF lc_WKACCTOLNK_INVESTOR_TYPE =
+179400210422                 lc_WKHHLKDTA1_INVESTOR_TYPE AND lb_Ivr_type_NFnd
+179500210422                 SET lb_Ivr_Type_Fnd TO TRUE
+179600210422                 ADD 1 TO lc_Total_Rule_Match
+179700210422              END-IF
+179800210422           END-IF.
+179900210422
+180000211006      * RFS 187744 - Starts
+180100211006
+180200211006           IF lc_LinkageRule45
+180300211006           AND lc_WKACCTOLNK_INVESTOR_TYPE = "IND"
+180400211006              IF lc_WKACCTOLNK_INVESTOR_SIN =
+180500211006                 lc_WKHHLKDTA1_INVESTOR_SIN  AND lb_Investor_SIN_NFnd
+180600211012              AND lc_WKACCTOLNK_INVESTOR_SIN NOT = 0
+180700211006                 SET lb_Investor_SIN_Fnd TO TRUE
+180800211006                 ADD 1 TO lc_Total_Rule_Match
+180900211006              END-IF
+181000211006
+181100211006              IF lc_WKACCTOLNK_INVESTOR_TYPE =
+181200211006                 lc_WKHHLKDTA1_INVESTOR_TYPE AND lb_Ivr_type_NFnd
+181300211006                 SET lb_Ivr_Type_Fnd TO TRUE
+181400211006                 ADD 1 TO lc_Total_Rule_Match
+181500211006              END-IF
+181600211006           END-IF.
+181700211006
+181800211006           IF lc_LinkageRule245 AND lc_WKACCTOLNK_INVESTOR_TYPE  = "IND"
+181900211006
+182000211006              IF lc_WKACCTOLNK_DEALER_CODE  =
+182100211006                 lc_WKHHLKDTA_DEALER_CODE   AND lb_Dealer_Code_NFnd
+182200211006                 SET lb_Dealer_Code_Fnd TO TRUE
+182300211006                 ADD 1 TO lc_Total_Rule_Match
+182400211006              END-IF
+182500211006
+182600211006              IF lc_WKACCTOLNK_DEALER_REP_CODE =
+182700211006                 lc_WKHHLKDTA_DEALER_REP_CODE   AND lb_DLRREP_Code_NFnd
+182800211006                 SET lb_DLRREP_Code_Fnd TO TRUE
+182900211006                 ADD 1 TO lc_Total_Rule_Match
+183000211006              END-IF
+183100211006
+183200211006              IF lc_WKACCTOLNK_INVESTOR_SIN =
+183300211006                 lc_WKHHLKDTA1_INVESTOR_SIN  AND lb_Investor_SIN_NFnd
+183400211012              AND lc_WKACCTOLNK_INVESTOR_SIN NOT = 0
+183500211006                 SET lb_Investor_SIN_Fnd TO TRUE
+183600211006                 ADD 1 TO lc_Total_Rule_Match
+183700211006              END-IF
+183800211006
+183900211006              IF lc_WKACCTOLNK_INVESTOR_TYPE =
+184000211006                 lc_WKHHLKDTA1_INVESTOR_TYPE AND lb_Ivr_type_NFnd
+184100211006                 SET lb_Ivr_Type_Fnd TO TRUE
+184200211006                 ADD 1 TO lc_Total_Rule_Match
+184300211006              END-IF
+184400211006           END-IF.
+184500211006
+184600211006      * RFS 187744 - Ends
+184700211006
+184800210421      *-------------------
+184900210421       INSERT-HH-RECORDS.
+185000210421      *-------------------
+185100210421
+185200210422           MOVE lc_PREV_HOUSEHOLD_ID      TO lc_Cur_HH_ID.
+185300210422           MOVE lc_WKACCTOLNK_INVESTOR_NO TO lc_Cur_Investor_No.
+185400210422           MOVE lc_PREV_INVESTOR_NO       TO lc_Cur_Investor_No2.
+185500210422           MOVE lc_WKACCTOLNK_ACCOUNT_NO  TO lc_Cur_Account_No.
+185600210422           MOVE " "                       TO lc_PrimaryAcc_Flag.
+185700210422           ACCEPT li_AuditTime FROM TIME.
+185800210422           CALL "GETDAT" USING li_AuditDate.
+185900210422           PERFORM INSERT-EXISTING-HH.
+186000210426      *RFS186280 - Ends
+186100200724      *---------------------------
+186200200724       BUILD-SELECT.
+186300200724      *---------------------------
+186400200724
+186500200724           MOVE SPACES TO lc_SqlSelect.
+186600200724
+186700200724           STRING
+186800210315              "SELECT "               DELIMITED BY SIZE
+186900200724              " COALESCE(DTA.INVESTOR_NO,0) "     DELIMITED BY SIZE
+187000200724              ",COALESCE(DTA.HOUSEHOLD_ID,0) "    DELIMITED BY SIZE
+187100200724              ",COALESCE(LNK.ACCOUNT_NO,0) "      DELIMITED BY SIZE
+187200200724              ",COALESCE(LNK.INVESTOR_NO,0) "     DELIMITED BY SIZE
+187300200724              ",COALESCE(LNK.DEALER_CODE,"" ""), "
+187400200724                                                  DELIMITED BY SIZE
+187500200724              "COALESCE(LNK.DEALER_REP_CODE,"" ""), "
+187600200724                                                  DELIMITED BY SIZE
+187700210304              "COALESCE(LNK.ADDRESS_VALUE,"" "") "
+187800210304                                                   DELIMITED BY SIZE
+187900210313      * RFS186280 - Starts
+188000210308      *       ",COALESCE(LNK.INVESTOR_TYPE, "")"   DELIMITED BY SIZE
+188100210308              ",COALESCE(LNK.INVESTOR_TYPE,"" "")" DELIMITED BY SIZE
+188200210304              ",COALESCE(LNK.INVESTOR_SIN, 0) "    DELIMITED BY SIZE
+188300210304              ",COALESCE(LNK.INVESTOR_SIN_SUB, 0)" DELIMITED BY SIZE
+188400210304              ",COALESCE(LNK.TENANT_SIN, 0) "      DELIMITED BY SIZE
+188500210308              ",COALESCE(LNK.TENANT_SIN_SUB, 0) "   DELIMITED BY SIZE
+188600210313      * RFS186280 - End
+188700200724              INTO  lc_SqlSelect
+188800200724           END-STRING.
+188900200724
+189000200724           STRING
+189100200724              " FROM WKACCTOLNK LNK "        DELIMITED BY SIZE
+189200200724             "LEFT OUTER JOIN WKHHLKDTA DTA" DELIMITED BY SIZE
+189300200724             " ON LNK.ADDRESS_VALUE = "      DELIMITED BY SIZE
+189400200724             " DTA.ADDRESS_VALUE "           DELIMITED BY SIZE
+189500200724              INTO  lc_SqlFrom1
+189600200724           END-STRING.
+189700200724
+189800200724           STRING
+189900200724              "FROM WKACCTOLNK LNK "         DELIMITED BY SIZE
+190000200724             "LEFT OUTER JOIN WKHHLKDTA DTA" DELIMITED BY SIZE
+190100200724             " ON LNK.DEALER_CODE = "        DELIMITED BY SIZE
+190200200724             " DTA.DEALER_CODE  AND "        DELIMITED BY SIZE
+190300200724             " LNK.DEALER_REP_CODE = "       DELIMITED BY SIZE
+190400200724             " DTA.DEALER_REP_CODE "         DELIMITED BY SIZE
+190500200724              INTO  lc_SqlFrom2
+190600200724           END-STRING.
+190700200724
+190800200724           STRING
+190900210308              " FROM WKACCTOLNK LNK "         DELIMITED BY SIZE
+191000210308             " LEFT OUTER JOIN WKHHLKDTA DTA" DELIMITED BY SIZE
+191100200724             " ON LNK.ADDRESS_VALUE = "      DELIMITED BY SIZE
+191200200724             " DTA.ADDRESS_VALUE AND "       DELIMITED BY SIZE
+191300200724             " LNK.DEALER_CODE = "           DELIMITED BY SIZE
+191400200724             " DTA.DEALER_CODE  AND "        DELIMITED BY SIZE
+191500200724             " LNK.DEALER_REP_CODE = "       DELIMITED BY SIZE
+191600200724             " DTA.DEALER_REP_CODE "         DELIMITED BY SIZE
+191700200724              INTO  lc_SqlFrom12
+191800200724           END-STRING.
+191900210316
+192000210322      * RFS186280 - Starts
+192100210304           STRING
+192200210308              " FROM WKACCTOLNK LNK "         DELIMITED BY SIZE
+192300210308              " LEFT OUTER JOIN WKHHLKDTA"    DELIMITED BY SIZE
+192400210308              " DTA ON LNK.INVESTOR_SIN = "  DELIMITED BY SIZE
+192500210308              " DTA.INVESTOR_SIN"             DELIMITED BY SIZE
+192600210304              INTO  lc_SqlFrom3
+192700210304           END-STRING.
+192800210304
+192900210304           IF Lc-Auto-HH-Primary-SIN = "N"
+193000210304             STRING
+193100210331               " FROM WKACCTOLNK LNK"          DELIMITED BY SIZE
+193200210313               " LEFT OUTER JOIN WKHHLKDTA1"   DELIMITED BY SIZE
+193300210313               " DTA ON LNK.INVESTOR_SIN ="    DELIMITED BY SIZE
+193400210313               " DTA.INVESTOR_SIN AND     "    DELIMITED BY SIZE
+193500210313               " LNK.TENANT_SIN ="             DELIMITED BY SIZE
+193600210313               " DTA.TENANT_SIN"               DELIMITED BY SIZE
+193700210304               INTO lc_SqlFrom4
+193800210304             END-STRING
+193900210304           END-IF.
+194000210304
+194100210304           IF Lc-Auto-HH-Primary-SIN = "Y"
+194200210304             STRING
+194300210313               " FROM WKACCTOLNK LNK"          DELIMITED BY SIZE
+194400210313               " LEFT OUTER JOIN WKHHLKDTA"    DELIMITED BY SIZE
+194500210313               " DTA ON LNK.INVESTOR_SIN ="    DELIMITED BY SIZE
+194600210313               " DTA.INVESTOR_SIN AND"         DELIMITED BY SIZE
+194700210313               " LNK.TENANT_SIN ="             DELIMITED BY SIZE
+194800210313               " DTA.TENANT_SIN"               DELIMITED BY SIZE
+194900210304               INTO lc_SqlFrom4
+195000210304             END-STRING
+195100210304           END-IF.
+195200210304
+195300210304           STRING
+195400210304              "FROM WKACCTOLNK LNK "         DELIMITED BY SIZE
+195500210304             "LEFT OUTER JOIN WKHHLKDTA DTA" DELIMITED BY SIZE
+195600210304             " ON LNK.DEALER_CODE = "        DELIMITED BY SIZE
+195700210304             " DTA.DEALER_CODE  AND "        DELIMITED BY SIZE
+195800210304             " LNK.DEALER_REP_CODE = "       DELIMITED BY SIZE
+195900210304             " DTA.DEALER_REP_CODE "         DELIMITED BY SIZE
+196000210401             " AND LNK.INVESTOR_SIN ="       DELIMITED BY SIZE
+196100210401             " DTA.INVESTOR_SIN "            DELIMITED BY SIZE
+196200211021187744       " AND LNK.INVESTOR_SIN <> 0"    DELIMITED BY SIZE
+196300210304              INTO  lc_SqlFrom23
+196400210304           END-STRING.
+196500210304
+196600210304           IF Lc-Auto-HH-Primary-SIN = "N"
+196700210304           STRING
+196800210304             "FROM WKACCTOLNK LNK "        DELIMITED BY SIZE
+196900210304             "LEFT OUTER JOIN WKHHLKDTA1"  DELIMITED BY SIZE
+197000210315             " DTA ON LNK.DEALER_CODE = "  DELIMITED BY SIZE
+197100210315             " DTA.DEALER_CODE  AND "      DELIMITED BY SIZE
+197200210304             " LNK.DEALER_REP_CODE = "     DELIMITED BY SIZE
+197300210315             " DTA.DEALER_REP_CODE "       DELIMITED BY SIZE
+197400210401             " AND LNK.INVESTOR_SIN ="     DELIMITED BY SIZE
+197500210401             " DTA.INVESTOR_SIN  AND"      DELIMITED BY SIZE
+197600210401             " LNK.TENANT_SIN ="           DELIMITED BY SIZE
+197700210401             " DTA.TENANT_SIN"             DELIMITED BY SIZE
+197800210304             INTO lc_SqlFrom24
+197900210304           END-STRING
+198000210304           END-IF.
+198100210304
+198200210304           IF Lc-Auto-HH-Primary-SIN = "Y"
+198300210304           STRING
+198400210304             "FROM WKACCTOLNK LNK "        DELIMITED BY SIZE
+198500210304             "LEFT OUTER JOIN WKHHLKDTA"   DELIMITED BY SIZE
+198600210304             " DTA ON LNK.DEALER_CODE = "  DELIMITED BY SIZE
+198700210304             " DTA.DEALER_CODE  AND "      DELIMITED BY SIZE
+198800210304             " LNK.DEALER_REP_CODE = "     DELIMITED BY SIZE
+198900210304             " DTA.DEALER_REP_CODE "       DELIMITED BY SIZE
+199000210401             " AND LNK.INVESTOR_SIN ="     DELIMITED BY SIZE
+199100210401             " DTA.INVESTOR_SIN  AND"      DELIMITED BY SIZE
+199200210401             " LNK.TENANT_SIN ="           DELIMITED BY SIZE
+199300210401             " DTA.TENANT_SIN"             DELIMITED BY SIZE
+199400210304             INTO lc_SqlFrom24
+199500210304           END-STRING
+199600210304           END-IF.
+199700210304
+199800210304           STRING
+199900210304              "FROM WKACCTOLNK LNK "          DELIMITED BY SIZE
+200000210304              "LEFT OUTER JOIN WKHHLKDTA"     DELIMITED BY SIZE
+200100210304              " DTA ON LNK.INVESTOR_SIN ="    DELIMITED BY SIZE
+200200210304              " DTA.INVESTOR_SIN"             DELIMITED BY SIZE
+200300210304              " AND LNK.INVESTOR_TYPE ="      DELIMITED BY SIZE
+200400210304              " DTA.INVESTOR_TYPE"            DELIMITED BY SIZE
+200500210304              INTO  lc_SqlFrom35
+200600210304           END-STRING.
+200700210304
+200800210304           IF Lc-Auto-HH-Primary-SIN = "N"
+200900210304             STRING
+201000210316               "FROM WKACCTOLNK LNK "         DELIMITED BY SIZE
+201100210304               "LEFT OUTER JOIN WKHHLKDTA1"   DELIMITED BY SIZE
+201200210304               " DTA ON LNK.INVESTOR_SIN ="   DELIMITED BY SIZE
+201300210304               " DTA.INVESTOR_SIN AND"        DELIMITED BY SIZE
+201400210304               " LNK.TENANT_SIN ="            DELIMITED BY SIZE
+201500210304               " DTA.TENANT_SIN"              DELIMITED BY SIZE
+201600210304               " AND LNK.INVESTOR_TYPE ="      DELIMITED BY SIZE
+201700210304               " DTA.INVESTOR_TYPE"            DELIMITED BY SIZE
+201800210304               INTO lc_SqlFrom45
+201900210304             END-STRING
+202000210304           END-IF.
+202100210304
+202200210304           IF Lc-Auto-HH-Primary-SIN = "Y"
+202300210304             STRING
+202400210316               "FROM WKACCTOLNK LNK"          DELIMITED BY SIZE
+202500210316               " LEFT OUTER JOIN WKHHLKDTA"   DELIMITED BY SIZE
+202600210304               " DTA ON LNK.INVESTOR_SIN ="   DELIMITED BY SIZE
+202700210304               " DTA.INVESTOR_SIN AND"        DELIMITED BY SIZE
+202800210304               " LNK.TENANT_SIN ="            DELIMITED BY SIZE
+202900210304               " DTA.TENANT_SIN"              DELIMITED BY SIZE
+203000210304               " AND LNK.INVESTOR_TYPE ="     DELIMITED BY SIZE
+203100210304               " DTA.INVESTOR_TYPE"           DELIMITED BY SIZE
+203200210304               INTO lc_SqlFrom45
+203300210304             END-STRING
+203400210304           END-IF.
+203500210304
+203600210304           STRING
+203700210304              "FROM WKACCTOLNK LNK "         DELIMITED BY SIZE
+203800210304             "LEFT OUTER JOIN WKHHLKDTA DTA" DELIMITED BY SIZE
+203900210304             " ON LNK.DEALER_CODE = "        DELIMITED BY SIZE
+204000210304             " DTA.DEALER_CODE  AND "        DELIMITED BY SIZE
+204100210304             " LNK.DEALER_REP_CODE = "       DELIMITED BY SIZE
+204200210304             " DTA.DEALER_REP_CODE "         DELIMITED BY SIZE
+204300210401             " AND LNK.INVESTOR_SIN = "      DELIMITED BY SIZE
+204400210401             " DTA.INVESTOR_SIN"             DELIMITED BY SIZE
+204500210316             " AND LNK.INVESTOR_TYPE ="      DELIMITED BY SIZE
+204600210401             " DTA.INVESTOR_TYPE"            DELIMITED BY SIZE
+204700210304              INTO  lc_SqlFrom235
+204800210304           END-STRING.
+204900210304
+205000210304           IF Lc-Auto-HH-Primary-SIN = "N"
+205100210304           STRING
+205200210304             "FROM WKACCTOLNK LNK "        DELIMITED BY SIZE
+205300210304             "LEFT OUTER JOIN WKHHLKDTA1"  DELIMITED BY SIZE
+205400210304             " DTA ON LNK.DEALER_CODE = "  DELIMITED BY SIZE
+205500210304             " DTA.DEALER_CODE  AND "      DELIMITED BY SIZE
+205600210304             " LNK.DEALER_REP_CODE = "     DELIMITED BY SIZE
+205700210304             " DTA.DEALER_REP_CODE "       DELIMITED BY SIZE
+205800210401             " AND LNK.INVESTOR_SIN = "    DELIMITED BY SIZE
+205900210401             " DTA.INVESTOR_SIN "          DELIMITED BY SIZE
+206000210401             " AND LNK.TENANT_SIN ="       DELIMITED BY SIZE
+206100210401             " DTA.TENANT_SIN"             DELIMITED BY SIZE
+206200210401             " AND LNK.INVESTOR_TYPE ="    DELIMITED BY SIZE
+206300210401             " DTA.INVESTOR_TYPE"          DELIMITED BY SIZE
+206400211021187744       " AND LNK.INVESTOR_SIN <> 0"  DELIMITED BY SIZE
+206500211021187744       " AND LNK.TENANT_SIN <> 0"    DELIMITED BY SIZE
+206600210304             INTO lc_SqlFrom245
+206700210304           END-STRING
+206800210304           END-IF.
+206900210304
+207000210304           IF Lc-Auto-HH-Primary-SIN = "Y"
+207100210304            STRING
+207200210304              "FROM WKACCTOLNK LNK "        DELIMITED BY SIZE
+207300210304              "LEFT OUTER JOIN WKHHLKDTA"   DELIMITED BY SIZE
+207400210304              " DTA ON LNK.DEALER_CODE = "  DELIMITED BY SIZE
+207500210304              " DTA.DEALER_CODE  AND "      DELIMITED BY SIZE
+207600210304              " LNK.DEALER_REP_CODE = "     DELIMITED BY SIZE
+207700210304              " DTA.DEALER_REP_CODE "       DELIMITED BY SIZE
+207800210401              " AND LNK.INVESTOR_SIN = "    DELIMITED BY SIZE
+207900210401              " DTA.INVESTOR_SIN "          DELIMITED BY SIZE
+208000210401              " AND LNK.TENANT_SIN ="       DELIMITED BY SIZE
+208100210401              " DTA.TENANT_SIN"             DELIMITED BY SIZE
+208200210401              " AND LNK.INVESTOR_TYPE ="    DELIMITED BY SIZE
+208300210401              " DTA.INVESTOR_TYPE"          DELIMITED BY SIZE
+208400211021187744        " AND LNK.INVESTOR_SIN <> 0"  DELIMITED BY SIZE
+208500211021187744        " AND LNK.TENANT_SIN <> 0"    DELIMITED BY SIZE
+208600210304             INTO lc_SqlFrom245
+208700210304            END-STRING
+208800210304           END-IF.
+208900210304      *RFS186280 - Ends
+209000210304
+209100200724           STRING
+209200200724              "ORDER BY "                    DELIMITED BY SIZE
+209300200724              "LNK.ADDRESS_VALUE, "          DELIMITED BY SIZE
+209400200724              "LNK.INVESTOR_NO, "            DELIMITED BY SIZE
+209500200724              "LNK.ACCOUNT_NO     "          DELIMITED BY SIZE
+209600200724              INTO  lc_SqlOrder1
+209700200724           END-STRING.
+209800200724
+209900200724           STRING
+210000200724              "ORDER BY "                    DELIMITED BY SIZE
+210100200724              "LNK.DEALER_CODE, "            DELIMITED BY SIZE
+210200200724              "LNK.DEALER_REP_CODE, "        DELIMITED BY SIZE
+210300200724              "LNK.INVESTOR_NO, "            DELIMITED BY SIZE
+210400200724              "LNK.ACCOUNT_NO     "          DELIMITED BY SIZE
+210500200724              INTO  lc_SqlOrder2
+210600200724           END-STRING.
+210700200724
+210800200724           STRING
+210900200724              "ORDER BY "                    DELIMITED BY SIZE
+211000200724              "LNK.ADDRESS_VALUE, "          DELIMITED BY SIZE
+211100200724              "LNK.DEALER_CODE, "            DELIMITED BY SIZE
+211200200724              "LNK.DEALER_REP_CODE, "        DELIMITED BY SIZE
+211300200724              "LNK.INVESTOR_NO, "            DELIMITED BY SIZE
+211400200724              "LNK.ACCOUNT_NO     "          DELIMITED BY SIZE
+211500200724              INTO  lc_SqlOrder12
+211600200724           END-STRING.
+211700210304      *RFS186280 - Starts
+211800210304           STRING
+211900210304              "ORDER BY"                     DELIMITED BY SIZE
+212000210308              " LNK.INVESTOR_SIN,"           DELIMITED BY SIZE
+212100210405              " LNK.INVESTOR_NO,"            DELIMITED BY SIZE
+212200210308              " LNK.ACCOUNT_NO"              DELIMITED BY SIZE
+212300210304              INTO lc_SqlOrder3
+212400210304           END-STRING.
+212500210304
+212600210304           STRING
+212700210405              "ORDER BY"                      DELIMITED BY SIZE
+212800210313              " LNK.INVESTOR_SIN,"            DELIMITED BY SIZE
+212900210313              " LNK.TENANT_SIN,"              DELIMITED BY SIZE
+213000210405              " LNK.INVESTOR_NO,"             DELIMITED BY SIZE
+213100210313              " LNK.ACCOUNT_NO"               DELIMITED BY SIZE
+213200210304              INTO lc_SqlOrder4
+213300210304           END-STRING.
+213400210304
+213500210304           STRING
+213600210313              " ORDER BY"                     DELIMITED BY SIZE
+213700210313              " LNK.DEALER_CODE, "            DELIMITED BY SIZE
+213800210313              " LNK.DEALER_REP_CODE,"         DELIMITED BY SIZE
+213900210313              " LNK.INVESTOR_SIN,"            DELIMITED BY SIZE
+214000210405              " LNK.INVESTOR_NO,"             DELIMITED BY SIZE
+214100210313              " LNK.ACCOUNT_NO"               DELIMITED BY SIZE
+214200210304              INTO lc_SqlOrder23
+214300210304           END-STRING.
+214400210304
+214500210304           STRING
+214600210313              " ORDER BY"                     DELIMITED BY SIZE
+214700210313              " LNK.DEALER_CODE,"             DELIMITED BY SIZE
+214800210313              " LNK.DEALER_REP_CODE,"         DELIMITED BY SIZE
+214900210405              " LNK.INVESTOR_SIN, "           DELIMITED BY SIZE
+215000210313              " LNK.TENANT_SIN,"              DELIMITED BY SIZE
+215100210405              " LNK.INVESTOR_NO,"             DELIMITED BY SIZE
+215200210313              " LNK.ACCOUNT_NO"               DELIMITED BY SIZE
+215300210304              INTO lc_SqlOrder24
+215400210304            END-STRING.
+215500210304
+215600210304           STRING
+215700210313              " ORDER BY"                     DELIMITED BY SIZE
+215800210405              " LNK.INVESTOR_SIN,"            DELIMITED BY SIZE
+215900210313              " LNK.INVESTOR_TYPE,"           DELIMITED BY SIZE
+216000210405              " LNK.INVESTOR_NO,"             DELIMITED BY SIZE
+216100210313              " LNK.ACCOUNT_NO"               DELIMITED BY SIZE
+216200210304              INTO lc_SqlOrder35
+216300210304            END-STRING.
+216400210304
+216500210304           STRING
+216600210313              " ORDER BY"                     DELIMITED BY SIZE
+216700210405              " LNK.INVESTOR_SIN,"            DELIMITED BY SIZE
+216800210405              " LNK.TENANT_SIN,"              DELIMITED BY SIZE
+216900210313              " LNK.INVESTOR_TYPE,"           DELIMITED BY SIZE
+217000210313              " LNK.INVESTOR_NO,"             DELIMITED BY SIZE
+217100210313              " LNK.ACCOUNT_NO"               DELIMITED BY SIZE
+217200210304              INTO lc_SqlOrder45
+217300210304            END-STRING.
+217400210304
+217500210304           STRING
+217600210313              " ORDER BY"                     DELIMITED BY SIZE
+217700210313              " LNK.DEALER_CODE,"             DELIMITED BY SIZE
+217800210313              " LNK.DEALER_REP_CODE,"         DELIMITED BY SIZE
+217900210313              " LNK.INVESTOR_SIN,"            DELIMITED BY SIZE
+218000210405              " LNK.INVESTOR_TYPE,"           DELIMITED BY SIZE
+218100210405              " LNK.INVESTOR_NO,"             DELIMITED BY SIZE
+218200210313              " LNK.ACCOUNT_NO"               DELIMITED BY SIZE
+218300210304              INTO lc_SqlOrder235
+218400210304            END-STRING.
+218500210304
+218600210304           STRING
+218700210313              " ORDER BY"                     DELIMITED BY SIZE
+218800210313              " LNK.DEALER_CODE,"             DELIMITED BY SIZE
+218900210313              " LNK.DEALER_REP_CODE,"         DELIMITED BY SIZE
+219000211006              " LNK.INVESTOR_SIN,"            DELIMITED BY SIZE
+219100210405              " LNK.TENANT_SIN,"              DELIMITED BY SIZE
+219200210313              " LNK.INVESTOR_TYPE,"           DELIMITED BY SIZE
+219300210405              " LNK.INVESTOR_NO,"             DELIMITED BY SIZE
+219400210313              " LNK.ACCOUNT_NO"               DELIMITED BY SIZE
+219500210304              INTO lc_SqlOrder245
+219600210304            END-STRING.
+219700210304      *RFS186280 - End
+219800210304
+219900200724           IF lc_LinkageRule1
+220000200724              STRING FUNCTION TRIM(lc_SqlSelect)
+220100200724                     SPACE
+220200200724                     FUNCTION TRIM(lc_SqlFrom1)
+220300200724                     SPACE
+220400200724                     FUNCTION TRIM(lc_SqlOrder1)
+220500200724                                         DELIMITED BY SIZE
+220600200724                INTO lc_SQLSelect_Cursor
+220700200724              END-STRING
+220800200724           END-IF.
+220900200724
+221000200724
+221100200724           IF lc_LinkageRule2
+221200200724              STRING FUNCTION TRIM(LC_SQLSELECT)
+221300200724                     SPACE
+221400200724                     FUNCTION TRIM(lc_SqlFrom2)
+221500200724                     SPACE
+221600200724                     FUNCTION TRIM(lc_SqlOrder2)
+221700200724                                         DELIMITED BY SIZE
+221800200724                INTO lc_SQLSelect_Cursor
+221900200724              END-STRING
+222000200724           END-IF.
+222100200724
+222200200724
+222300200724           IF lc_LinkageRule12
+222400200724              STRING FUNCTION TRIM(LC_SQLSELECT)
+222500200724                     SPACE
+222600200724                     FUNCTION TRIM(lc_SqlFrom12)
+222700200724                     SPACE
+222800200724                     FUNCTION TRIM(lc_SqlOrder12)
+222900200724                                         DELIMITED BY SIZE
+223000200724                INTO lc_SQLSelect_Cursor
+223100200724              END-STRING
+223200200724           END-IF.
+223300210304      *RFS186280 - Starts
+223400210304           IF lc_LinkageRule3
+223500210304              STRING FUNCTION TRIM(LC_SQLSELECT)
+223600210304                     SPACE
+223700210304                     FUNCTION TRIM(lc_SqlFrom3)
+223800210304                     SPACE
+223900210304                     FUNCTION TRIM(lc_SqlOrder3)
+224000210304                                         DELIMITED BY SIZE
+224100210304                INTO lc_SQLSelect_Cursor
+224200210304              END-STRING
+224300210304           END-IF.
+224400210304
+224500210304           IF lc_LinkageRule4
+224600210304              STRING FUNCTION TRIM(LC_SQLSELECT)
+224700210304                     SPACE
+224800210304                     FUNCTION TRIM(lc_SqlFrom4)
+224900210304                     SPACE
+225000210304                     FUNCTION TRIM(lc_SqlOrder4)
+225100210304                                         DELIMITED BY SIZE
+225200210304                INTO lc_SQLSelect_Cursor
+225300210304              END-STRING
+225400210304           END-IF.
+225500210304
+225600210304           IF lc_LinkageRule23
+225700210304              STRING FUNCTION TRIM(LC_SQLSELECT)
+225800210304                     SPACE
+225900210304                     FUNCTION TRIM(lc_SqlFrom23)
+226000210304                     SPACE
+226100210304                     FUNCTION TRIM(lc_SqlOrder23)
+226200210304                                         DELIMITED BY SIZE
+226300210304                INTO lc_SQLSelect_Cursor
+226400210304              END-STRING
+226500210304           END-IF.
+226600210304
+226700210304           IF lc_LinkageRule24
+226800210304              STRING FUNCTION TRIM(LC_SQLSELECT)
+226900210304                     SPACE
+227000210304                     FUNCTION TRIM(lc_SqlFrom24)
+227100210304                     SPACE
+227200210304                     FUNCTION TRIM(lc_SqlOrder24)
+227300210304                                         DELIMITED BY SIZE
+227400210304                INTO lc_SQLSelect_Cursor
+227500210304              END-STRING
+227600210304           END-IF.
+227700210304
+227800210304           IF lc_LinkageRule35
+227900210304              STRING FUNCTION TRIM(LC_SQLSELECT)
+228000210304                     SPACE
+228100210304                     FUNCTION TRIM(lc_SqlFrom35)
+228200210304                     SPACE
+228300210304                     FUNCTION TRIM(lc_SqlOrder35)
+228400210304                                         DELIMITED BY SIZE
+228500210304                INTO lc_SQLSelect_Cursor
+228600210304              END-STRING
+228700210304           END-IF.
+228800210304
+228900210304           IF lc_LinkageRule45
+229000210304              STRING FUNCTION TRIM(LC_SQLSELECT)
+229100210304                     SPACE
+229200210304                     FUNCTION TRIM(lc_SqlFrom45)
+229300210304                     SPACE
+229400210304                     FUNCTION TRIM(lc_SqlOrder45)
+229500210304                                         DELIMITED BY SIZE
+229600210304                INTO lc_SQLSelect_Cursor
+229700210304              END-STRING
+229800210304           END-IF.
+229900210304
+230000210304           IF lc_LinkageRule235
+230100210304              STRING FUNCTION TRIM(LC_SQLSELECT)
+230200210304                     SPACE
+230300210304                     FUNCTION TRIM(lc_SqlFrom235)
+230400210304                     SPACE
+230500210304                     FUNCTION TRIM(lc_SqlOrder235)
+230600210304                                         DELIMITED BY SIZE
+230700210304                INTO lc_SQLSelect_Cursor
+230800210304              END-STRING
+230900210304           END-IF.
+231000210304
+231100210304           IF lc_LinkageRule245
+231200210304              STRING FUNCTION TRIM(LC_SQLSELECT)
+231300210304                     SPACE
+231400210304                     FUNCTION TRIM(lc_SqlFrom245)
+231500210304                     SPACE
+231600210304                     FUNCTION TRIM(lc_SqlOrder245)
+231700210304                                         DELIMITED BY SIZE
+231800210304                INTO lc_SQLSelect_Cursor
+231900210304              END-STRING
+232000210304           END-IF.
+232100210304      *RFS186280 - End
+232200210304
+232300200724      *-------------------
+232400200724       FETCH-HH-CURSOR.
+232500200724      *-------------------
+232600200724
+232700200724           EXEC SQL
+232800200724              FETCH  HH_CURSOR
+232900200724               INTO :lc_CURR_Data
+233000200724           END-EXEC.
+233100200724
+233200200724           MOVE SQLSTATE   TO WS-SQL-STATES.
+233300200724
+233400200724           IF lncc_sqlSuccessful
+233500200724              CONTINUE
+233600200724           ELSE
+233700200724              IF lncc_sqlEnd
+233800200724                 SET lc_CursorHHEnd          TO TRUE
+233900200724              ELSE
+234000200724                 SET lncc_Err02                 TO TRUE
+234100200724                 SET lncc_ErrorFetchHH_CURSOR   TO TRUE
+234200200724                 PERFORM Dsp-Error
+234300200724                 PERFORM Force-Msgw
+234400200724              END-IF
+234500200724           END-IF.
+234600200724
+234700200724      *--------------
+234800200724       PROCESS-HH-CURSOR-DATA.
+234900200724      *--------------
+235000200724
+235100211012      * RFS 187744 - Starts
+235200200724      * Get System Date and Time.
+235300211012      *    ACCEPT li_AuditTime FROM TIME.
+235400211012      *    CALL "GETDAT" USING li_AuditDate.
+235500210411
+235600210411      * RFS186280 - Starts
+235700211012      *    MOVE li_AuditDate(1:4) TO lc_AudtDateYYYY.
+235800211012      *    MOVE li_AuditDate(5:2) TO lc_AudtDateMM.
+235900211012      *    MOVE li_AuditDate(7:2) TO lc_AudtDateDD.
+236000211012      *    MOVE lc_CnvtAudDate   TO  lc_HHCreationDate.
+236100210426      * RFS186280 - Ends
+236200211012      * RFS 187744 - Ends
+236300210411
+236400200724      *Current Account being processed can be grouped under existing Household
+236500200724           IF lc_Cur_HH_ID OF lc_CURR_Data NOT = ZEROES
+236800200724              IF lc_Pend_New_HH_Dtl_Yes
+236900210706      *RFS187236 - Starts
+237000210706              OR (Lc-SingleAcc_AutoHH = "Y" AND
+237100210706                  lc_SingleHH2CreateYes)
+237200210706                 SET lc_SingleHH2CreateNo TO TRUE
+237300210706      *RFS187236 - Ends
+237400200724                 PERFORM INSERT-NEW-HH
+237500200724                 SET lc_Pend_New_HH_Dtl_No TO TRUE
+237600200724                 Initialize lc_PREV_Data
+237700200724                 COMPUTE ln_Curr_HOUSEHOLD_ID =
+237800200724                         ln_Curr_HOUSEHOLD_ID + 1
+237900200724              END-IF
+238000210331              PERFORM INSERT-EXISTING-HH
+238100200724           ELSE IF lc_Cur_HH_ID OF lc_CURR_Data = ZEROS  AND
+238200200724             (lc_Pre_AddressVal OF lc_PREV_Data = SPACES AND
+238300200724             lc_Pre_Dealer_Code OF lc_PREV_Data = SPACES AND
+238400210304              lc_Pre_Dealer_Rep OF lc_PREV_Data = SPACES AND
+238500210304      *RFS186280 - Starts
+238600210304              lc_Pre_Investor_Type_Code
+238700210304                                OF lc_PREV_Data = SPACES AND
+238800210304              lc_Pre_Investor_SIN
+238900210304                                OF lc_PREV_Data = ZEROS  AND
+239000210304              lc_Pre_Tenant_SIN OF lc_PREV_Data = ZEROS )
+239100210304      *RFS186280 - End
+239200200724                 MOVE lc_CURR_Data TO lc_PREV_Data
+239300200724           ELSE
+239400210706      *RFS187236 - Starts
+239500210706                 SET lc_SingleHH2CreateYes TO TRUE
+239600210706      *RFS187236 - Ends
+239700200724                 PERFORM VALIDATE-RULES
+239800200724           END-IF.
+239900200724           PERFORM FETCH-HH-CURSOR.
+240000200724
+240100200724      *------------
+240200200724       VALIDATE-RULES.
+240300200724      *--------------
+240400200724
+240500200724           IF (lc_LinkageRule1 AND
+240600200724               lc_Cur_AddressVal = lc_Pre_AddressVal) OR
+240700200724              (lc_LinkageRule2 AND
+240800200724               lc_Cur_Dealer_Code= lc_Pre_Dealer_Code AND
+240900200724               lc_Cur_Dealer_Rep = lc_Pre_Dealer_Rep) OR
+241000200724              (lc_LinkageRule12 AND
+241100200724               lc_Cur_Dealer_Code= lc_Pre_Dealer_Code AND
+241200200724               lc_Cur_Dealer_Rep = lc_Pre_Dealer_Rep  AND
+241300200724               lc_Cur_AddressVal = lc_Pre_AddressVal)
+241400210304      *RFS186280 - Starts
+241500210304               OR
+241600210304               (lc_LinkageRule3 AND
+241700210304                lc_Cur_Investor_SIN NOT =  0 AND
+241800210304               lc_Cur_Investor_SIN_SUB = 0 AND
+241900210304               lc_Cur_Investor_SIN = lc_Pre_Investor_SIN)
+242000210304               OR
+242100210304               (lc_LinkageRule4  AND
+242200210304                lc_Cur_Investor_SIN NOT = 0 AND
+242300210304                lc_Cur_Investor_SIN_SUB = 0 AND
+242400210304                lc_Cur_Tenant_SIN NOT = 0 AND
+242500210304                lc_Cur_Tenant_SIN_SUB = 0 AND
+242600210304                lc_Cur_Investor_SIN = lc_Pre_Investor_SIN AND
+242700210304                lc_Cur_Tenant_SIN = lc_Pre_Tenant_SIN)
+242800210304               OR
+242900210304                (lc_LinkageRule23 AND
+243000210304                lc_Cur_Dealer_Code = lc_Pre_Dealer_Code AND
+243100210304                lc_Cur_Dealer_Rep = lc_Pre_Dealer_Rep AND
+243200210304                lc_Cur_Investor_SIN NOT = 0 AND
+243300210304                lc_Cur_Investor_SIN_SUB = 0 AND
+243400210304                lc_Cur_Investor_SIN = lc_Pre_Investor_SIN)
+243500210304                OR
+243600210304                (lc_LinkageRule24 AND
+243700210304                lc_Cur_Dealer_Code = lc_Pre_Dealer_Code AND
+243800210304                lc_Cur_Dealer_Rep = lc_Pre_Dealer_Rep AND
+243900210304                lc_Cur_Investor_SIN NOT = 0 AND
+244000210304                lc_Cur_Investor_SIN_SUB = 0 AND
+244100210304                lc_Cur_Tenant_SIN NOT = 0 AND
+244200210304                lc_Cur_Tenant_SIN_SUB = 0 AND
+244300210304                lc_Cur_Investor_SIN = lc_Pre_Investor_SIN AND
+244400210304                lc_Cur_Tenant_SIN = lc_Pre_Tenant_SIN)
+244500210304                OR
+244600210304                (lc_LinkageRule35 AND
+244700210304                lc_Cur_Investor_SIN NOT = 0 AND
+244800210304                lc_Cur_Investor_SIN_SUB = 0 AND
+244900210304                lc_Cur_Investor_SIN = lc_Pre_Investor_SIN AND
+245000210304                lc_Cur_Investor_Type_Code = lc_Pre_Investor_Type_Code)
+245100210304                OR
+245200210304                (lc_LinkageRule45 AND
+245300210304                 lc_Cur_Investor_SIN NOT = 0 AND
+245400210304                 lc_Cur_Investor_SIN_SUB = 0 AND
+245500210304                 lc_Cur_Tenant_SIN NOT = 0 AND
+245600210304                 lc_Cur_Tenant_SIN_SUB = 0 AND
+245700210304                 lc_Cur_Investor_SIN = lc_Pre_Investor_SIN AND
+245800210304                 lc_Cur_Tenant_SIN = lc_Pre_Tenant_SIN AND
+245900210304                 lc_Cur_Investor_Type_Code = lc_Pre_Investor_Type_Code)
+246000210304                 OR
+246100210304                 (lc_LinkageRule235 AND
+246200210304                 lc_Cur_Dealer_Code = lc_Pre_Dealer_Code AND
+246300210304                 lc_Cur_Dealer_Rep = lc_Pre_Dealer_Rep AND
+246400210304                 lc_Cur_Investor_SIN NOT = 0 AND
+246500210304                 lc_Cur_Investor_SIN_SUB = 0 AND
+246600210304                 lc_Cur_Investor_SIN = lc_Pre_Investor_SIN AND
+246700210304                 lc_Cur_Investor_Type_Code = lc_Pre_Investor_Type_Code)
+246800210304                 OR
+246900210304                 (lc_LinkageRule245 AND
+247000210304                  lc_Cur_Dealer_Code = lc_Pre_Dealer_Code AND
+247100210304                  lc_Cur_Dealer_Rep = lc_Pre_Dealer_Rep AND
+247200211006      * RFS 187744 - Starts
+247300211006                  (
+247400211006                   (lc_Cur_Investor_Type_Code = "IND" AND
+247500211006                    lc_Cur_Investor_SIN NOT   = 0     AND
+247600211006                    lc_Cur_Investor_SIN_SUB   = 0     AND
+247700211006                    lc_Cur_Investor_Type_Code =
+247800211006                    lc_Pre_Investor_Type_Code         AND
+247900211006                    lc_Cur_Investor_SIN = lc_Pre_Investor_SIN) OR
+248000211006                   (lc_Cur_Investor_Type_Code NOT = "IND" AND
+248100211006                    lc_Cur_Investor_SIN NOT = 0 AND
+248200211006                    lc_Cur_Investor_SIN_SUB = 0 AND
+248300211006                    lc_Cur_Tenant_SIN NOT = 0 AND
+248400211006                    lc_Cur_Tenant_SIN_SUB = 0 AND
+248500211006                    lc_Cur_Investor_SIN = lc_Pre_Investor_SIN AND
+248600211006                    lc_Cur_Tenant_SIN = lc_Pre_Tenant_SIN AND
+248700211006                    lc_Cur_Investor_Type_Code =
+248800211006                    lc_Pre_Investor_Type_Code)))
+248900211006      * RFS 187744 - Ends
+249000210401                  IF lc_Cur_Account_No  NOT = lc_Pre_Account_No
+249100210331                     PERFORM INSERT-NEW-HH
+249200210401                  End-IF
+249300210706      *RFS187236 - Starts
+249400210706                  SET lc_SingleHH2CreateNo TO TRUE
+249500210706      *RFS187236 - Ends
+249600210331      *          PERFORM INSERT-NEW-HH
+249700210331      *RFS186280 - End
+249800200724           ELSE
+249900200724              IF lc_Pend_New_HH_Dtl_Yes
+250000210706      *RFS187236 - Starts
+250100210706              OR (Lc-SingleAcc_AutoHH = "Y" AND
+250200210706                  lc_SingleHH2Create  = "Y")
+250300210706                 SET lc_SingleHH2CreateNo TO TRUE
+250400210706      *RFS187236 - Ends
+250500200724                 PERFORM INSERT-NEW-HH
+250600200724                 SET lc_Pend_New_HH_Dtl_No TO TRUE
+250700200724                 INITIALIZE lc_PREV_Data
+250800200724                 COMPUTE ln_Curr_HOUSEHOLD_ID = ln_Curr_HOUSEHOLD_ID + 1
+250900200724              END-IF
+251000200724              MOVE lc_CURR_Data TO lc_PREV_Data
+251100200724           END-IF.
+251200200724
+251300200724      *----------------
+251400200724       INSERT-EXISTING-HH.
+251500200724      *----------------
+251600200724
+251700210406      *RFS 187018 - Starts*
+251800210406           MOVE SPACES TO Lc_Effective_Date.
+251900210406           IF Lc-HelloLife-HH-Code  = "HLI"
+252000210406             MOVE "1900-01-01" TO Lc_Effective_Date
+252100210406            ELSE
+252200210406             MOVE FUNCTION CURRENT-DATE(1:8) TO lc_Curdate
+252300210406             MOVE lc_Curdate(1:4) TO lc_CnvtDateYYYY
+252400210406             MOVE lc_Curdate(5:2) TO lc_CnvtDateMM
+252500210406             MOVE lc_Curdate(7:2) TO lc_CnvtDateDD
+252600210406             MOVE lc_CnvtEffDate  TO Lc_Effective_Date
+252700210406           END-IF.
+252800210409      *RFS 187018 - End
+252900210406
+252901211021187744        ACCEPT li_AuditTime FROM TIME
+252902211021187744        CALL "GETDAT" USING li_AuditDate
+253000210406
+253100200724           EXEC SQL
+253200200724             INSERT INTO
+253300200724               MFAIVRHDP
+253400200724             VALUES
+253500200724
+253600200724               (:lc_Cur_Investor_No2,
+253700200724                :LC_LKNCODE,
+253800200724                :lc_Cur_Investor_No,
+253900200724                :lc_Cur_HH_ID,
+254000200724                :lc_Cur_Account_No,
+254100210304      *RFS187018 - Starts
+254200210304      *         :lc_PrimaryAcc_Flag)
+254300210304                :lc_PrimaryAcc_Flag,
+254400210322                 CURRENT DATE,
+254500210406                :Lc_Effective_Date,
+254600210331                 "1900-01-01")
+254700210304      *RFS187018 - Ends
+254800200724           END-EXEC.
+254900200724
+255000200724           MOVE SQLSTATE TO lc_sqlStates.
+255100210426           IF lncc_sqlSuccessful OR lncc_sqlWarning
+255200210426      *RFS186280 - Starts
+255300210426                                 OR lncc_sqlDuplicate
+255400210426      *RFS186280 - End
+255500200724              CONTINUE
+255600200724           ELSE
+255700200724               SET lncc_Err03   TO TRUE
+255800200724               SET lncc_ErrorInsertMFAIVRHDP  TO TRUE
+255900200724               PERFORM Dsp-Error
+256000200724               PERFORM Force-Msgw
+256100200724           END-IF.
+256200200724
+256300200724      *Create Audit log
+256400200724      *Get System Time
+256500210304      *RFS186280 - Start
+256600210322           INITIALIZE ln-Household-ID.
+256700210322           MOVE lc_Cur_HH_ID TO ln-Household-ID.
+256800210422           PERFORM FORMAT-HOUSEHOLD-NAME.
+256900210304      *RFS186280 - End
+257000200724
+257100210331      *RFS186280 - Start
+257200210331           IF NOT lncc_sqlDuplicate
+257300210331      *RFS186280 - End
+257400200724           EXEC SQL
+257500200724             INSERT INTO
+257600200724               MFAIVRHLP
+257700200724             VALUES
+257800200724      *RFS1102647 - Starts
+257900200724      *        (:lc_Cur_Investor_No2,
+258000200724               (:lc_Cur_Investor_No,
+258100200724      *RFS1102647 - Ends
+258200200724                :LC_LKNCODE,
+258300210304      *RFS186280 - Starts
+258400210304      *         "FEE HOUSEHOLD " || :lc_Cur_HH_ID,
+258500210305                :lc-HH-Name,
+258600210304      *RFS186280 - Ends
+258700200724      *RFS1102647 - Starts
+258800200724      *         :lc_Cur_Investor_No,
+258900200724                :lc_Cur_Investor_No2,
+259000200724      *RFS1102647 - Ends
+259100200724                "A",
+259200200724                "ADD",
+259300200724                :li_AuditDate,
+259400200724                :li_AuditTime,
+259500200724                :lc_AuditUser,
+259600210426      *RFS187018 - Starts
+259700210304      *         :lc_Cur_Account_No)
+259800210304                :lc_Cur_Account_No,
+259900210304                " ",
+260000210426                " ")
+260100210426      *RFS187018 - Ends
+260200210331             END-EXEC
+260300200724
+260400210331             MOVE SQLSTATE  TO lc_sqlStates
+260500200724             IF lncc_sqlSuccessful OR lncc_sqlWarning
+260600200724                     CONTINUE
+260700200724             ELSE
+260800200724                     SET lncc_Err04   TO TRUE
+260900200724                     SET lncc_ErrorInsertMFAIVRHLP  TO TRUE
+261000200724                     PERFORM Dsp-Error
+261100200724                     PERFORM Force-Msgw
+261200210331             END-IF
+261300210331      *RFS186280 - Start
+261400210331            END-IF.
+261500210331      *RFS186280 - End
+261600200724
+261700200724      *----------------
+261800200724       INSERT-NEW-HH.
+261900200724      *----------------
+262000210406      *RFS 187018 - Starts*
+262100210406           MOVE SPACES TO Lc_Effective_Date.
+262200210406           IF Lc-HelloLife-HH-Code  = "HLI"
+262300210406             MOVE "1900-01-01" TO Lc_Effective_Date
+262400210406            ELSE
+262500210406             MOVE FUNCTION CURRENT-DATE(1:8) TO lc_Curdate
+262600210406             MOVE lc_Curdate(1:4) TO lc_CnvtDateYYYY
+262700210406             MOVE lc_Curdate(5:2) TO lc_CnvtDateMM
+262800210406             MOVE lc_Curdate(7:2) TO lc_CnvtDateDD
+262900210406             MOVE lc_CnvtEffDate  TO Lc_Effective_Date
+263000210406           END-IF.
+263100210409      *RFS 187018 - End*
+263200210410
+263201211021187744        ACCEPT li_AuditTime FROM TIME
+263202211021187744        CALL "GETDAT" USING li_AuditDate
+263203211021
+263300210409      *RFS 186280 - Starts*
+263400210409           INITIALIZE  li-Count-IVRHHP.
+263500210409
+263600210409           EXEC SQL
+263700210409             SELECT COUNT(*)
+263800210409               INTO :li-Count-IVRHHP
+263900210424              FROM MFAIVRHHP IVRHHP
+264000210424              INNER JOIN MFAIVRHDP IVRHDP ON
+264100210424              IVRHHP.INVESTOR_NO = IVRHDP.INVESTOR_NO
+264200210424              AND IVRHHP.HOUSEHOLD_LINKAGE_CODE =
+264300210424                  IVRHDP.HOUSEHOLD_LINKAGE_CODE
+264400210424              WHERE IVRHHP.INVESTOR_NO
+264500210424                      =  :lc_Pre_Investor_No
+264600210424               AND  IVRHHP.HOUSEHOLD_LINKAGE_CODE
+264700210424                      =  :LC_LKNCODE
+264800210424               AND  IVRHHP.DEALER_CODE
+264900210424                      =  " "
+265000210424               AND  IVRHHP.DEALER_REP_CODE
+265100210424                      =  " "
+265200210424               AND  IVRHDP.ACCOUNT_NO
+265300210424                      =    :lc_Pre_Account_No
+265400210409           END-EXEC.
+265500210409
+265600210409           MOVE SQLSTATE TO lc_sqlStates
+265700210409           EVALUATE TRUE
+265800210409              WHEN lncc_sqlSuccessful
+265900210411                   CONTINUE
+266000210412              WHEN lncc_sqlEnd
+266100210412                   CONTINUE
+266200210409              WHEN OTHER
+266300210409                   SET lncc_Err13   TO TRUE
+266400210409                   PERFORM Dsp-Error
+266500210409           END-EVALUATE.
+266600210411      *RFS 186280 - End
+266700210409
+266800210409
+266900210409           IF lc_Pend_New_HH_Dtl_No
+267000210411      *RFS186280 - Starts
+267100210411             AND li-Count-IVRHHP = 0
+267200210411      *RFS186280 - End
+267300200724             EXEC SQL
+267400200724               INSERT INTO
+267500200724                 MFAIVRHHP
+267600200724      *RFS1102517 - Starts
+267700200724                 (INVESTOR_NO
+267800200724                 ,LEGAL_LAST_NAME
+267900200724                 ,HOUSEHOLD_LINKAGE_CODE
+268000200724                 ,DISCOUNT_RATE
+268100200724                 ,CREATION_DATE
+268200200724                 ,MFR_SCHEDULE_CODE
+268300200724                 ,DEALER_CODE
+268400210304      *RFS187018 - Starts
+268500210304      *          ,DEALER_REP_CODE)
+268600210304                 ,DEALER_REP_CODE
+268700210304                 ,HOUSEHOLD_EFFECTIVE_DATE
+268800210304                 ,HOUSEHOLD_END_DATE
+268900210828      *RFS187441 - Starts
+269000210828      *          ,HOUSEHOLD_STATUS)
+269100210828                 ,HOUSEHOLD_STATUS
+269200210828                 ,AMS_RATE
+269300210828                 )
+269400210828      *RFS187441 - Ends
+269500210304      *RFS187018 - Ends
+269600200724      *RFS1102517 - Ends
+269700200724               VALUES
+269800200724                 (:lc_Pre_Investor_No,
+269900200724      *RFS1102517 - Starts
+270000200724      *           "FEE HOUSEHOLD " || :ln_Curr_HOUSEHOLD_ID,
+270100200724                  " ",
+270200200724      *RFS1102517 - Ends
+270300200724                  :LC_LKNCODE,
+270400200724                  0,
+270500200724                  :li_AuditDate,
+270600200724                  " ",
+270700200724      *RFS1102517 - Starts
+270800200724      *           :ln_Curr_HOUSEHOLD_ID,
+270900210426      *RFS1102517 - Ends
+271000200724                  " ",
+271100210304      *RFS187018 - Starts
+271200210304      *           " ")
+271300210304                  " ",
+271400210406                  :Lc_Effective_Date,
+271500210331                  "1900-01-01",
+271600210828      *RFS187441 - Starts
+271700210828      *           " " )
+271800210828                  " ",
+271900210828                  0
+272000210828                  )
+272100210828      *RFS187441 - Ends
+272200210304      *RFS187018 - End
+272300200724             END-EXEC
+272400200724
+272500200724           MOVE SQLSTATE TO lc_sqlStates
+272600200724           IF lncc_sqlSuccessful OR lncc_sqlWarning
+272700200724                   CONTINUE
+272800200724           ELSE
+272900200724                   SET lncc_Err09   TO TRUE
+273000200724                   SET lncc_ErrorInsertMFAIVRHHP  TO TRUE
+273100200724                   PERFORM Dsp-Error
+273200200724                   PERFORM Force-Msgw
+273300200724           END-IF
+273400200724
+273500200724             MOVE "Y" TO lc_PrimaryAcc_Flag
+273600200724                         lc_Pend_HH_Flag
+273700200724             MOVE lc_Pre_Investor_No TO ln_Pre_Investor_No
+273800200724
+273900200724      *RFS1102517 - Starts
+274000200724            EXEC SQL
+274100200724              SELECT IDENTITY_VAL_LOCAL()
+274200200724                INTO :ln_ID_Value
+274300200724                FROM SYSIBM/SYSDUMMY1
+274400200724            END-EXEC
+274500200724            MOVE ln_ID_Value TO ln_Curr_HOUSEHOLD_ID
+274600200724      *RFS1102517 - Ends
+274700200819
+274800200819      *RFS1103254 - Starts
+274900200819            MOVE ln_ID_Value        TO lc_PreHHID
+275000200819            MOVE ln_Pre_Investor_No TO ln_HHInvestor
+275100200819      *RFS1103254 - Ends
+275200200819
+275300200724           END-IF.
+275400210411
+275500210411      *RFS 186280 - Starts
+275600210424           IF li-Count-IVRHHP  =  ZEROES
+275700210412      *RFS 186280 - End
+275800200724           EXEC SQL
+275900200724             INSERT INTO
+276000200724               MFAIVRHDP
+276100200724             VALUES
+276200200724               (:ln_Pre_Investor_No,
+276300200724                :LC_LKNCODE,
+276400200724                :lc_Pre_Investor_No,
+276500200724                :ln_Curr_HOUSEHOLD_ID,
+276600200724                :lc_Pre_Account_No,
+276700210304      *RFS187018 - Starts
+276800210304      *         :lc_PrimaryAcc_Flag)
+276900210304                :lc_PrimaryAcc_Flag,
+277000210406                 CURRENT DATE,
+277100210406                :Lc_Effective_Date,
+277200210331                "1900-01-01")
+277300210304      *RFS187018 - End
+277400210411           END-EXEC
+277500200724
+277600210411           MOVE SQLSTATE TO lc_sqlStates
+277700200724           IF lncc_sqlSuccessful OR lncc_sqlWarning
+277800210411      *RFS186280 - Starts
+277900210426                                 OR lncc_sqlDuplicate
+278000210412      *RFS186280 - End
+278100200724                   CONTINUE
+278200200724           ELSE
+278300200724                   SET lncc_Err05   TO TRUE
+278400200724                   SET lncc_ErrorInsertMFAIVRHDP  TO TRUE
+278500200724                   PERFORM Dsp-Error
+278600200724                   PERFORM Force-Msgw
+278700210411           END-IF
+278800200724
+278900200724      *Create Audit log
+279000200724      *Get System Time
+279100200724
+279200200819      *RFS1103254 - Starts
+279300200819           IF lc_PreHHID   = ln_Curr_HOUSEHOLD_ID AND
+279400200819              ln_HHInvestor = lc_Pre_Investor_No
+279500200819              MOVE "SET"    TO  lc_ChangeCategory
+279600200819           ELSE
+279700200819              MOVE "ADD"    TO  lc_ChangeCategory
+279800210411           END-IF
+279900200819      *    IF lc_PrimaryAcc_Flag = "Y"
+280000200819      *       MOVE "SET"    TO  lc_ChangeCategory
+280100200819      *    ELSE
+280200200819      *       MOVE "ADD"    TO  lc_ChangeCategory
+280300200819      *    END-IF.
+280400200819      *RFS1103254 - Ends
+280500200724
+280600210304      *RFS186280 - Start
+280700210411           INITIALIZE ln-Household-ID
+280800210411           MOVE ln_Curr_HOUSEHOLD_ID TO ln-Household-ID
+280900210411           PERFORM FORMAT-HOUSEHOLD-NAME
+281000210304      *RFS186280 - End
+281100210304
+281200200724           EXEC SQL
+281300200724             INSERT INTO
+281400200724               MFAIVRHLP
+281500200724             VALUES
+281600200724      *RFS1102647 - Starts
+281700200724      *        (:ln_Pre_Investor_No,
+281800200724               (:lc_Pre_Investor_No,
+281900200724      *RFS1102647 - Ends
+282000200724                :LC_LKNCODE,
+282100210304      *RFS186280 - Starts
+282200210304      *         "FEE HOUSEHOLD " || :ln_Curr_HOUSEHOLD_ID,
+282300210305                :lc-HH-Name,
+282400210304      *RFS186280 - End
+282500200724      *RFS1102647 - Starts
+282600200724      *         :lc_Pre_Investor_No,
+282700200724                :ln_Pre_Investor_No,
+282800200724      *RFS1102647 - Ends
+282900200724                "A",
+283000200724                :lc_ChangeCategory,
+283100200724                :li_AuditDate,
+283200200724                :li_AuditTime,
+283300200724                :lc_AuditUser,
+283400210304      *RFS187018 - Starts
+283500210304      *         :lc_Pre_Account_No)
+283600210304                :lc_Pre_Account_No,
+283700210304                " ",
+283800210304                " ")
+283900210304      *RFS187018 - Ends
+284000210411             END-EXEC
+284100200724
+284200210411             MOVE SQLSTATE TO lc_sqlStates
+284300200724             IF lncc_sqlSuccessful OR lncc_sqlWarning
+284400200724                     CONTINUE
+284500200724             ELSE
+284600200724                     SET lncc_Err06   TO TRUE
+284700200724                     SET lncc_ErrorInsertMFAIVRHLP  TO TRUE
+284800200724                     PERFORM Dsp-Error
+284900200724                     PERFORM Force-Msgw
+285000210411             END-IF
+285100210411      *RFS186280 - Starts
+285200210411             END-IF.
+285300210411      *RFS186280 - End
+285400200724
+285500200724           INITIALIZE lc_PrimaryAcc_Flag.
+285600200724           MOVE lc_CURR_Data TO lc_PREV_Data.
+285700200724
+285800210304      *RFS186280 - Start
+285900210322      *----------------------
+286000210322       FORMAT-HOUSEHOLD-NAME.
+286100210322      *----------------------
+286200210322
+286300210322           MOVE SPACES TO lc-HH-Name.
+286400210322
+286500210322           IF Lc-HelloLife-HH-Code = SPACES
+286600210322            EXEC SQL
+286700210322            SET :lc-HH-Name = "FEE HOUSEHOLD " || :ln-Household-ID
+286800210322            END-EXEC
+286900210322           ELSE
+287000210322              EXEC SQL
+287100211020      * RFS 187731 - Starts
+287200211020      *         SET :lc-HH-Name = :LC_LKNCODE || " " ||
+287300211020      *             SUBSTR(CHAR(:ln-Household-ID),1,7)
+287400211020               SET :lc-HH-Name = :LC_LKNCODE || DIGITS(:ln-Household-ID)
+287500211020      * RFS 187731 - Ends
+287600210322              END-EXEC
+287700210322           END-IF.
+287800210316      *RFS186280 - End
+287900210322
+288000210304      *----------------
+288100210304       CLOSE-HH-CURSOR.
+288200210304      *----------------
+288300200724
+288400200724           IF lc_CursorOpen
+288500200724              IF lc_Pend_New_HH_Dtl_Yes
+288600210706      *RFS187236 - Starts
+288700210706              OR Lc-SingleAcc_AutoHH = "Y"
+288800210706                  SET lc_SingleHH2CreateNo TO TRUE
+288900210706      *RFS187236 - Ends
+289000200724                  PERFORM INSERT-NEW-HH
+289100200724                  COMPUTE ln_Curr_HOUSEHOLD_ID =
+289200200724                          ln_Curr_HOUSEHOLD_ID + 1
+289300200724              END-IF
+289400200724              EXEC SQL
+289500200724                 CLOSE HH_CURSOR
+289600200724              END-EXEC
+289700200724           END-IF.
+289800200724
+289900200724           SET lc_CursorEnd TO TRUE.
+290000200724
+290100200724      *-------------
+290200200724       END-PROGRAM.
+290300200724      *-------------
+290400200724
+290500200724           GOBACK.
+290600200724
+290700200724      * ---------------------------------
+290800200724      * DSP-ERROR and FORCE-MSGW Routines
+290900200724      * ---------------------------------
+291000200724          COPY CPYSQLRTN.
+291100200724      *

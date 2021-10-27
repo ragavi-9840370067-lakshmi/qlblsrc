@@ -1,0 +1,1726 @@
+000100170313      * %ATTR DBGVIEW(*SOURCE)
+000200000000       IDENTIFICATION DIVISION.
+000300130925       PROGRAM-ID.    RDSPTSF.
+000400130925       AUTHOR.        Nagamani Sunkana.
+000500130925       INSTALLATION.  L&T Financial Services Technology Inc.
+000600130925       DATE-WRITTEN.  Sept 2013.
+000700000000       DATE-COMPILED.
+000800030103      ******************************************************************
+000900130925      *    RFS-NUMBER : RFS-115188                                     *
+001000030103      *                                                                *
+001100130925      *    DESCRIPTION: This program will process and load record type *
+001200200124      *                 971 sent by HRSDC in the 'XFR' file.After      *
+001300131018      *                 loading the records,if all validation passes   *
+001400131018      *                 Transfer statsu marked to complete and three   *
+001500131018      *                 Work files are created for Successful, Error   *
+001600131018      *                 and Outstanding.                               *
+001700030103      *                                                                *
+001800130925      *      CALLED BY: JOBRDSPTSF.                                    *
+001900030103      *                                                                *
+002000030103      *     PARAMETERS: None.                                          *
+002100030103      *                                                                *
+002200130925      * LINKED MODULES: FXRDTSFSUM (Get Notional transactions sum)     *
+002300030103      *                                                                *
+002400030103      ******************************************************************
+002500030103      *    C H A N G E   H I S T O R Y                                 *
+002600091001      ******************************************************************
+002700091001      * PROGRAMMER  *  YY/MM/DD   *  DESCRIPTION                       *
+002800091001      ******************************************************************
+002900130925      * Nagamani S * 2013/09/25   * RFS 115188 - New Program           *
+003000140623      * Sushmita J * 2014/05/09   * RFS136702 - Recompile for MFAADTNP.*
+003100191125      * RAJA N     * 2019/11/25   * RFS1020212 - To populate the       *
+003200200124      *                             contribution(Activity) Date from   *
+003300200124      *                             Reporting Issuer Event Date        *
+003400200619      * Suresh P   * 2020/06/18   * RFS1100479 - To Process all the    *
+003500200619      *            *              * 971-02 records contained multiple  *
+003600200619      *            *              * transactions with same Reporting   *
+003700200619      *            *              * Issuer Transaction Number, Payment *
+003800200619      *            *              * Date, and Transaction Origin       *
+003900200619      *            *              * received from ESDC.                *
+004000210805      * Poojasri M * 2021/07/30   * RFS1118141 - Changes done to add   *
+004100210730      *            *              * the new field in file MFAADTNTP    *
+004200210806      * Poojasri M * 2021/08/05   * RFS187659 - Recompile for MFAROLP  *
+004300211008      * Poojasri M * 2021/10/08   * RFS1121329 - ACCDSPTD  does not    *
+004400211008      *            *              * display the refusal reason for     *
+004500211008      *            *              * records 971-03 and 971-07          *
+004600200619      *********************************************Number***************
+004700200124       ENVIRONMENT DIVISION.
+004800000000       CONFIGURATION SECTION.
+004900000000       SOURCE-COMPUTER. IBM-AS400.
+005000000000       OBJECT-COMPUTER. IBM-AS400.
+005100131008       SPECIAL-NAMES.  LOCAL-DATA IS WS-LOCAL
+005200131008       LINKAGE TYPE IS PROCEDURE FOR "FXRDTSFSUM".
+005300000000      /
+005400000000       INPUT-OUTPUT SECTION.
+005500000000       FILE-CONTROL.
+005600031121
+005700000000       DATA DIVISION.
+005800000000       FILE SECTION.
+005900000000      /
+006000000000       WORKING-STORAGE SECTION.
+006100030106
+006200131017       01  lc_LDA.
+006300131017         03  lc_LIB                         PIC X(10)   VALUE " ".
+006400131017         03  lc_FILE                        PIC X(10)   VALUE " ".
+006500090929
+006600030106      *SQL log variables
+006700131017       01  WS-CALLING-PROGRAM               PIC X(10)   VALUE "RDSPTSF".
+006800061018
+006900061018      *Removed VALUE clauses below as they caused level 20
+007000061018      *compile errors and were ignored by the compiler.
+007100130925       01  lc_Get-Cur-Rec-Cursor.
+007200131017         03  lc_FCH-REC-971                 PIC X(500)  VALUE " ".
+007300131001         03  lc_FCH-REC-971-X  REDEFINES lc_FCH-REC-971.
+007400131017           05  lc_FCH-Common-Data           PIC X(113).
+007500131008           05  lc_FCH-Common-Data-X REDEFINES lc_FCH-Common-Data.
+007600131001             07  lc_Rec-Type                PIC X(03).
+007700131001             07  lc_Transaction-Type        PIC X(02).
+007800131001             07  lc_Recev-Issuer-BN         PIC X(15).
+007900131001             07  lc_Recev-Issuer-SPN        PIC X(07).
+008000131001             07  lc_Recev-Issuer-CN         PIC X(15).
+008100131001             07  lc_Rpt-Issuer-BN           PIC X(15).
+008200131001             07  lc_Rpt-Issuer-TransNo      PIC X(15).
+008300131001             07  lc_Rpt-Issuer-SPN          PIC X(07).
+008400131001             07  lc_Rpt-Issuer-CN           PIC X(15).
+008500131001             07  lc_Bene-SIN-X              PIC X(09).
+008600131008             07  lc_Bene-SIN REDEFINES lc_Bene-SIN-X
+008700131001                                            PIC S9(09).
+008800131001             07  lc_Rpt-Issr-Eve-Dt-X       PIC X(08).
+008900131008             07  lc_Rpt-Issr-Eve-Dt REDEFINES lc_Rpt-Issr-Eve-Dt-X
+009000131001                                            PIC S9(08).
+009100131001             07  lc_Transaction-origin      PIC X(02).
+009200131001           05  lc_FCH-transactionTypeData   PIC X(387).
+009300130925         03  lc_FCH-REC-971-01 REDEFINES lc_FCH-REC-971.
+009400131017           05  lc_01-Rec-Type               PIC X(03).
+009500131017           05  lc_01-Transaction-Type       PIC X(02).
+009600131017           05  lc_01-Recev-Issuer-BN        PIC X(15).
+009700131017           05  lc_01-Recev-Issuer-SPN       PIC X(07).
+009800131017           05  lc_01-Recev-Issuer-CN        PIC X(15).
+009900131017           05  lc_01-Rpt-Issuer-BN          PIC X(15).
+010000131017           05  lc_01-Rpt-Issuer-TransNo     PIC X(15).
+010100131017           05  lc_01-Rpt-Issuer-SPN         PIC X(07).
+010200131017           05  lc_01-Rpt-Issuer-CN          PIC X(15).
+010300131017           05  lc_01-Bene-SIN-X             PIC X(09).
+010400131017           05  lc_01-Bene-SIN REDEFINES lc_01-Bene-SIN-X
+010500131017                                            PIC S9(09).
+010600131017           05  lc_01-Rpt-Issr-Eve-Dt-X      PIC X(08).
+010700131017           05  lc_01-Rpt-Issr-Eve-Dt REDEFINES lc_01-Rpt-Issr-Eve-Dt-X
+010800131017                                            PIC S9(08).
+010900131017           05  lc_01-Transaction-origin     PIC X(02).
+011000131017           05  lc_01-Orig-issue-BN          PIC X(15).
+011100131017           05  lc_01-Orig-issue-TransNo     PIC X(15).
+011200131017           05  lc_01-Contribution-Sign      PIC X(01).
+011300131017           05  lc_01-Contrib-Amt-X          PIC X(08).
+011400131017           05  lc_01-Contrib-Amt   REDEFINES lc_01-Contrib-Amt-X
+011500131017                                            PIC S9(08).
+011600131017           05  lc_01-Contrib-Amt-Dec-Pt     PIC X(1).
+011700131017           05  lc_01-contrib-Cents-X        PIC X(02).
+011800131017           05  lc_01-contrib-Cents REDEFINES lc_01-contrib-Cents-X
+011900131017                                            PIC S9(02).
+012000131017           05  lc_01-Grant-req              PIC X(1).
+012100131017           05  lc_01-Grant-Sign             PIC X(01).
+012200131017           05  lc_01-Grant-Amt-X            PIC X(08).
+012300131017           05  lc_01-Grant-Amt  REDEFINES lc_01-Grant-Amt-X
+012400131017                                            PIC S9(08).
+012500131017           05  lc_01-Grant-Amt-Dec-Pt       PIC X(1).
+012600131017           05  lc_01-Grant-Cents-X          PIC X(02).
+012700131017           05  lc_01-Grant-Cents REDEFINES lc_01-Grant-Cents-X
+012800131017                                            PIC S9(02).
+012900131017           05  lc_01-Refusal-reason         PIC X(02).
+013000131017           05  lc_01-Payment-Date-X         PIC X(08).
+013100131017           05  lc_01-Payment-Date REDEFINES lc_01-Payment-Date-X
+013200131017                                            PIC S9(8).
+013300131017           05  lc_01-Payment-Requisit       PIC X(01).
+013400131017           05  lc_01-Filler                 PIC X(321).
+013500130925         03  lc_FCH-REC-971-02 REDEFINES lc_FCH-REC-971.
+013600131017           05  lc_02-Rec-Type               PIC X(03).
+013700131017           05  lc_02-Transaction-Type       PIC X(02).
+013800131017           05  lc_02-Recev-Issuer-BN        PIC X(15).
+013900131017           05  lc_02-Recev-Issuer-SPN       PIC X(07).
+014000131017           05  lc_02-Recev-Issuer-CN        PIC X(15).
+014100131017           05  lc_02-Rpt-Issuer-BN          PIC X(15).
+014200131017           05  lc_02-Rpt-Issuer-TransNo     PIC X(15).
+014300131017           05  lc_02-Rpt-Issuer-SPN         PIC X(07).
+014400131017           05  lc_02-Rpt-Issuer-CN          PIC X(15).
+014500131017           05  lc_02-Bene-SIN-X             PIC X(09).
+014600131017           05  lc_02-Bene-SIN REDEFINES lc_02-Bene-SIN-X
+014700131017                                            PIC S9(09).
+014800131017           05  lc_02-Rpt-Issr-Eve-Dt-X      PIC X(08).
+014900131017           05  lc_02-Rpt-Issr-Eve-Dt REDEFINES lc_02-Rpt-Issr-Eve-Dt-X
+015000131017                                            PIC S9(08).
+015100131017           05  lc_02-Transaction-origin     PIC X(02).
+015200131017           05  lc_02-Bond-Sign              PIC X(01).
+015300131017           05  lc_02-Bond-Amt-X             PIC X(08).
+015400131017           05  lc_02-Bond-Amt REDEFINES lc_02-Bond-Amt-X
+015500131017                                            PIC S9(08).
+015600131017           05  lc_02-Bond-Amt-Dec-Pt        PIC X(1).
+015700131017           05  lc_02-Bond-Cents-X           PIC X(02).
+015800131017           05  lc_02-Bond-Cents REDEFINES lc_02-Bond-Cents-X
+015900131017                                            PIC S9(02).
+016000131017           05  lc_02-Refusal-reason         PIC X(02).
+016100131017           05  lc_02-Payment-Date-X         PIC X(08).
+016200131017           05  lc_02-Payment-Date REDEFINES lc_02-Payment-Date-X
+016300131017                                            PIC S9(8).
+016400131017           05  lc_02-Payment-Requisit       PIC X(01).
+016500131017           05  lc_02-Filler                 PIC X(364).
+016600130925         03  lc_FCH-REC-971-03 REDEFINES lc_FCH-REC-971.
+016700131017           05  lc_03-Rec-Type               PIC X(03).
+016800131017           05  lc_03-Transaction-Type       PIC X(02).
+016900131017           05  lc_03-Recev-Issuer-BN        PIC X(15).
+017000131017           05  lc_03-Recev-Issuer-SPN       PIC X(07).
+017100131017           05  lc_03-Recev-Issuer-CN        PIC X(15).
+017200131017           05  lc_03-Rpt-Issuer-BN          PIC X(15).
+017300131017           05  lc_03-Rpt-Issuer-TransNo     PIC X(15).
+017400131017           05  lc_03-Rpt-Issuer-SPN         PIC X(07).
+017500131017           05  lc_03-Rpt-Issuer-CN          PIC X(15).
+017600131017           05  lc_03-Bene-SIN-X             PIC X(09).
+017700131017           05  lc_03-Bene-SIN REDEFINES lc_03-Bene-SIN-X
+017800131017                                            PIC S9(09).
+017900131017           05  lc_03-Rpt-Issr-Eve-Dt-X      PIC X(08).
+018000131017           05  lc_03-Rpt-Issr-Eve-Dt REDEFINES lc_03-Rpt-Issr-Eve-Dt-X
+018100131017                                            PIC S9(08).
+018200131017           05  lc_03-Transaction-origin     PIC X(02).
+018300131017           05  lc_03-Orig-issue-BN          PIC X(15).
+018400131017           05  lc_03-Orig-issue-TransNo     PIC X(15).
+018500131017           05  lc_03-Rollover-Sign          PIC X(01).
+018600131017           05  lc_03-Rollover-Amt-X         PIC X(08).
+018700131017           05  lc_03-Rollover-Amt REDEFINES lc_03-Rollover-Amt-X
+018800131017                                            PIC S9(08).
+018900131017           05  lc_03-Rollover-Amt-Dec-Pt    PIC X(1).
+019000131017           05  lc_03-Rollover-Cents-X       PIC X(02).
+019100131017           05  lc_03-Rollover-Cents REDEFINES lc_03-Rollover-Cents-X
+019200131017                                            PIC S9(02).
+019300131017           05  lc_03-Rollover-Issue         PIC X(02).
+019400131017           05  lc_03-Filler                 PIC X(343).
+019500130925         03  lc_FCH-REC-971-04 REDEFINES lc_FCH-REC-971.
+019600131017           05  lc_04-Rec-Type               PIC X(03).
+019700131017           05  lc_04-Transaction-Type       PIC X(02).
+019800131017           05  lc_04-Recev-Issuer-BN        PIC X(15).
+019900131017           05  lc_04-Recev-Issuer-SPN       PIC X(07).
+020000131017           05  lc_04-Recev-Issuer-CN        PIC X(15).
+020100131017           05  lc_04-Rpt-Issuer-BN          PIC X(15).
+020200131017           05  lc_04-Rpt-Issuer-TransNo     PIC X(15).
+020300131017           05  lc_04-Rpt-Issuer-SPN         PIC X(07).
+020400131017           05  lc_04-Rpt-Issuer-CN          PIC X(15).
+020500131017           05  lc_04-Bene-SIN-X             PIC X(09).
+020600131017           05  lc_04-Bene-SIN REDEFINES lc_04-Bene-SIN-X
+020700131017                                            PIC S9(09).
+020800131017           05  lc_04-Rpt-Issr-Eve-Dt-X      PIC X(08).
+020900131017           05  lc_04-Rpt-Issr-Eve-Dt REDEFINES lc_04-Rpt-Issr-Eve-Dt-X
+021000131017                                            PIC S9(08).
+021100131017           05  lc_04-Transaction-origin     PIC X(02).
+021200131017           05  lc_04-Orig-issue-BN          PIC X(15).
+021300131017           05  lc_04-Orig-issue-TransNo     PIC X(15).
+021400131017           05  lc_04-Grnt-Repay-Sign        PIC X(01).
+021500131017           05  lc_04-Grnt-Repay-Amt-X       PIC X(08).
+021600131017           05  lc_04-Grnt-Repay-Amt REDEFINES lc_04-Grnt-Repay-Amt-X
+021700131017                                            PIC S9(08).
+021800131017           05  lc_04-Grnt-Repay-Amt-Dec-Pt  PIC X(1).
+021900131017           05  lc_04-Grnt-Repay-Cents-X     PIC X(02).
+022000131017           05  lc_04-Grnt-Repay-Cents REDEFINES lc_04-Grnt-Repay-Cents-X
+022100131017                                            PIC S9(02).
+022200131017           05  lc_04-Bond-Repay-Sign        PIC X(01).
+022300131017           05  lc_04-Bond-Repay-Amt-X       PIC X(08).
+022400131017           05  lc_04-Bond-Repay-Amt REDEFINES lc_04-Bond-Repay-Amt-X
+022500131017                                            PIC S9(08).
+022600131017           05  lc_04-Bond-Repay-Amt-Dec-Pt  PIC X(1).
+022700131017           05  lc_04-Bond-Repay-Cents-X     PIC X(02).
+022800131017           05  lc_04-Bond-Repay-Cents REDEFINES lc_04-Bond-Repay-Cents-X
+022900131017                                            PIC S9(02).
+023000131017           05  lc_04-Repayment-Reason       PIC X(02).
+023100131017           05  li_04-Repayment-Reason REDEFINES lc_04-Repayment-Reason
+023200131017                                            PIC S9(02).
+023300131017           05  lc_04-Payment-Requisition    PIC X(01).
+023400131017           05  lc_04-Filler                 PIC X(330).
+023500130925         03  lc_FCH-REC-971-05 REDEFINES lc_FCH-REC-971.
+023600131017           05  lc_05-Rec-Type               PIC X(03).
+023700131017           05  lc_05-Transaction-Type       PIC X(02).
+023800131017           05  lc_05-Recev-Issuer-BN        PIC X(15).
+023900131017           05  lc_05-Recev-Issuer-SPN       PIC X(07).
+024000131017           05  lc_05-Recev-Issuer-CN        PIC X(15).
+024100131017           05  lc_05-Rpt-Issuer-BN          PIC X(15).
+024200131017           05  lc_05-Rpt-Issuer-TransNo     PIC X(15).
+024300131017           05  lc_05-Rpt-Issuer-SPN         PIC X(07).
+024400131017           05  lc_05-Rpt-Issuer-CN          PIC X(15).
+024500131017           05  lc_05-Bene-SIN-X             PIC X(09).
+024600131017           05  lc_05-Bene-SIN REDEFINES lc_05-Bene-SIN-X
+024700131017                                            PIC S9(09).
+024800131017           05  lc_05-Rpt-Issr-Eve-Dt-X      PIC X(08).
+024900131017           05  lc_05-Rpt-Issr-Eve-Dt REDEFINES lc_05-Rpt-Issr-Eve-Dt-X
+025000131017                                            PIC S9(08).
+025100131017           05  lc_05-Transaction-origin     PIC X(02).
+025200131017           05  lc_05-Orig-issue-BN          PIC X(15).
+025300131017           05  lc_05-Orig-issue-TransNo     PIC X(15).
+025400131017           05  lc_05-Contribution-Sign      PIC X(01).
+025500131017           05  lc_05-Contrib-Amt-X          PIC X(08).
+025600131017           05  lc_05-Contrib-Amt   REDEFINES lc_05-Contrib-Amt-X
+025700131017                                            PIC S9(08).
+025800131017           05  lc_05-Contrib-Amt-Dec-Pt     PIC X(1).
+025900131017           05  lc_05-contrib-Cents-X        PIC X(02).
+026000131017           05  lc_05-contrib-Cents REDEFINES lc_05-contrib-Cents-X
+026100131017                                            PIC S9(02).
+026200131017           05  lc_05-Grant-Sign             PIC X(01).
+026300131017           05  lc_05-Grant-Amt-X            PIC X(08).
+026400131017           05  lc_05-Grant-Amt  REDEFINES lc_05-Grant-Amt-X
+026500131017                                            PIC S9(08).
+026600131017           05  lc_05-Grant-Amt-Dec-Pt       PIC X(1).
+026700131017           05  lc_05-Grant-Cents-X          PIC X(02).
+026800131017           05  lc_05-Grant-Cents REDEFINES lc_05-Grant-Cents-X
+026900131017                                            PIC S9(02).
+027000131017           05  lc_05-Bond-Sign              PIC X(01).
+027100131017           05  lc_05-Bond-Amt-X             PIC X(08).
+027200131017           05  lc_05-Bond-Amt REDEFINES lc_05-Bond-Amt-X
+027300131017                                            PIC S9(08).
+027400131017           05  lc_05-Bond-Amt-Dec-Pt        PIC X(1).
+027500131017           05  lc_05-Bond-Cents-X           PIC X(02).
+027600131017           05  lc_05-Bond-Cents REDEFINES lc_05-Bond-Cents-X
+027700131017                                            PIC S9(02).
+027800131017           05  lc_05-NonTx-Sign             PIC X(01).
+027900131017           05  lc_05-NonTx-Amt-X            PIC X(08).
+028000131017           05  lc_05-NonTx-Amt REDEFINES lc_05-NonTx-Amt-X
+028100131017                                            PIC S9(08).
+028200131017           05  lc_05-NonTx-Amt-Dec-Pt       PIC X(1).
+028300131017           05  lc_05-NonTx-Cents-X          PIC X(02).
+028400131017           05  lc_05-NonTx-Cents REDEFINES lc_05-NonTx-Cents-X
+028500131017                                            PIC S9(02).
+028600131017           05  lc_05-Total-Sign             PIC X(01).
+028700131017           05  lc_05-Total-Amt-X            PIC X(08).
+028800131017           05  lc_05-Total-Amt REDEFINES lc_05-Total-Amt-X
+028900131017                                            PIC S9(08).
+029000131017           05  lc_05-Total-Amt-Dec-Pt       PIC X(1).
+029100131017           05  lc_05-Total-Cents-X          PIC X(02).
+029200131017           05  lc_05-Total-Cents REDEFINES lc_05-Total-Cents-X
+029300131017                                            PIC S9(02).
+029400131017           05  lc_05-DAP-Reversal-RSN       PIC X(02).
+029500131017           05  lc_05-Filler                 PIC X(295).
+029600130925         03  lc_FCH-REC-971-06 REDEFINES lc_FCH-REC-971.
+029700131017           05  lc_06-Rec-Type               PIC X(03).
+029800131017           05  lc_06-Transaction-Type       PIC X(02).
+029900131017           05  lc_06-Recev-Issuer-BN        PIC X(15).
+030000131017           05  lc_06-Recev-Issuer-SPN       PIC X(07).
+030100131017           05  lc_06-Recev-Issuer-CN        PIC X(15).
+030200131017           05  lc_06-Rpt-Issuer-BN          PIC X(15).
+030300131017           05  lc_06-Rpt-Issuer-TransNo     PIC X(15).
+030400131017           05  lc_06-Rpt-Issuer-SPN         PIC X(07).
+030500131017           05  lc_06-Rpt-Issuer-CN          PIC X(15).
+030600131017           05  lc_06-Bene-SIN-X             PIC X(09).
+030700131017           05  lc_06-Bene-SIN REDEFINES lc_06-Bene-SIN-X
+030800131017                                            PIC S9(09).
+030900131017           05  lc_06-Rpt-Issr-Eve-Dt-X      PIC X(08).
+031000131017           05  lc_06-Rpt-Issr-Eve-Dt REDEFINES lc_06-Rpt-Issr-Eve-Dt-X
+031100131017                                            PIC S9(08).
+031200131017           05  lc_06-Transaction-origin     PIC X(02).
+031300131017           05  lc_06-Orig-issue-BN          PIC X(15).
+031400131017           05  lc_06-Orig-issue-TransNo     PIC X(15).
+031500131017           05  lc_06-Contribution-Sign      PIC X(01).
+031600131017           05  lc_06-Contrib-Amt-X          PIC X(08).
+031700131017           05  lc_06-Contrib-Amt   REDEFINES lc_06-Contrib-Amt-X
+031800131017                                            PIC S9(08).
+031900131017           05  lc_06-Contrib-Amt-Dec-Pt     PIC X(1).
+032000131017           05  lc_06-contrib-Cents-X        PIC X(02).
+032100131017           05  lc_06-contrib-Cents REDEFINES lc_06-contrib-Cents-X
+032200131017                                            PIC S9(02).
+032300131017           05  lc_06-Grant-Sign             PIC X(01).
+032400131017           05  lc_06-Grant-Amt-X            PIC X(08).
+032500131017           05  lc_06-Grant-Amt  REDEFINES lc_06-Grant-Amt-X
+032600131017                                            PIC S9(08).
+032700131017           05  lc_06-Grant-Amt-Dec-Pt       PIC X(1).
+032800131017           05  lc_06-Grant-Cents-X          PIC X(02).
+032900131017           05  lc_06-Grant-Cents REDEFINES lc_06-Grant-Cents-X
+033000131017                                            PIC S9(02).
+033100131017           05  lc_06-Bond-Sign              PIC X(01).
+033200131017           05  lc_06-Bond-Amt-X             PIC X(08).
+033300131017           05  lc_06-Bond-Amt REDEFINES lc_06-Bond-Amt-X
+033400131017                                            PIC S9(08).
+033500131017           05  lc_06-Bond-Amt-Dec-Pt        PIC X(1).
+033600131017           05  lc_06-Bond-Cents-X           PIC X(02).
+033700131017           05  lc_06-Bond-Cents REDEFINES lc_06-Bond-Cents-X
+033800131017                                            PIC S9(02).
+033900131017           05  lc_06-NonTx-Sign             PIC X(01).
+034000131017           05  lc_06-NonTx-Amt-X            PIC X(08).
+034100131017           05  lc_06-NonTx-Amt REDEFINES lc_06-NonTx-Amt-X
+034200131017                                            PIC S9(08).
+034300131017           05  lc_06-NonTx-Amt-Dec-Pt       PIC X(1).
+034400131017           05  lc_06-NonTx-Cents-X          PIC X(02).
+034500131017           05  lc_06-NonTx-Cents REDEFINES lc_06-NonTx-Cents-X
+034600131017                                            PIC S9(02).
+034700131017           05  lc_06-Total-Sign             PIC X(01).
+034800131017           05  lc_06-Total-Amt-X            PIC X(08).
+034900131017           05  lc_06-Total-Amt REDEFINES lc_06-Total-Amt-X
+035000131017                                            PIC S9(08).
+035100131017           05  lc_06-Total-Amt-Dec-Pt       PIC X(1).
+035200131017           05  lc_06-Total-Cents-X          PIC X(02).
+035300131017           05  lc_06-Total-Cents REDEFINES lc_06-Total-Cents-X
+035400131017                                            PIC S9(02).
+035500131017           05  lc_06-DAP-Reversal-RSN       PIC X(02).
+035600131017           05  lc_06-Filler                 PIC X(295).
+035700130925         03  lc_FCH-REC-971-07 REDEFINES lc_FCH-REC-971.
+035800131017           05  lc_07-Rec-Type               PIC X(03).
+035900131017           05  lc_07-Transaction-Type       PIC X(02).
+036000131017           05  lc_07-Recev-Issuer-BN        PIC X(15).
+036100131017           05  lc_07-Recev-Issuer-SPN       PIC X(07).
+036200131017           05  lc_07-Recev-Issuer-CN        PIC X(15).
+036300131017           05  lc_07-Rpt-Issuer-BN          PIC X(15).
+036400131017           05  lc_07-Rpt-Issuer-TransNo     PIC X(15).
+036500131017           05  lc_07-Rpt-Issuer-SPN         PIC X(07).
+036600131017           05  lc_07-Rpt-Issuer-CN          PIC X(15).
+036700131017           05  lc_07-Bene-SIN-X             PIC X(09).
+036800131017           05  lc_07-Bene-SIN REDEFINES lc_07-Bene-SIN-X
+036900131017                                            PIC S9(09).
+037000131017           05  lc_07-Rpt-Issr-Eve-Dt-X      PIC X(08).
+037100131017           05  lc_07-Rpt-Issr-Eve-Dt REDEFINES lc_07-Rpt-Issr-Eve-Dt-X
+037200131017                                            PIC S9(08).
+037300131017           05  lc_07-Transaction-origin     PIC X(02).
+037400131017           05  lc_07-Orig-issue-BN          PIC X(15).
+037500131017           05  lc_07-Orig-issue-TransNo     PIC X(15).
+037600131017           05  lc_07-Rollover-Sign          PIC X(01).
+037700131017           05  lc_07-Rollover-Amt-X         PIC X(08).
+037800131017           05  lc_07-Rollover-Amt REDEFINES lc_07-Rollover-Amt-X
+037900131017                                            PIC S9(08).
+038000131017           05  lc_07-Rollover-Amt-Dec-Pt    PIC X(1).
+038100131017           05  lc_07-Rollover-Cents-X       PIC X(02).
+038200131017           05  lc_07-Rollover-Cents REDEFINES lc_07-Rollover-Cents-X
+038300131017                                            PIC S9(02).
+038400131017           05  lc_07-Rollover-Issue         PIC X(02).
+038500131017           05  lc_07-Filler                 PIC X(343).
+038600091001
+038700131017       01  lc_Calculation-Variables.
+038800131017         03  lc_Calc-Amt-Sign               PIC X(01).
+038900131017         03  lc_Calc-Amt-X                  PIC X(08).
+039000131017         03  lc_Calc-Amt REDEFINES lc_Calc-Amt-X
+039100131017                                            PIC S9(08).
+039200131017         03  lc_Calc-Amt-Dec-Pt             PIC X(1).
+039300131017         03  lc_Calc-Amt-Cents-X            PIC X(02).
+039400131017         03  lc_Calc-Amt-Cents REDEFINES lc_Calc-Amt-Cents-X
+039500131017                                            PIC S9(02).
+039600130930
+039700131008       01  lc_TransactionType.
+039800131017         03  lnc_Trans01                    PIC X(02)  VALUE "01".
+039900131017         03  lnc_Trans02                    PIC X(02)  VALUE "02".
+040000131017         03  lnc_Trans03                    PIC X(02)  VALUE "03".
+040100131017         03  lnc_Trans04                    PIC X(02)  VALUE "04".
+040200131017         03  lnc_Trans05                    PIC X(02)  VALUE "05".
+040300131017         03  lnc_Trans06                    PIC X(02)  VALUE "06".
+040400131017         03  lnc_Trans07                    PIC X(02)  VALUE "07".
+040500131004
+040600131017       01  lc_ErrorCode                     PIC X(03).
+040700131017         88  lb_Err001                                 VALUE "001".
+040800131017         88  lb_Err002                                 VALUE "002".
+040900131017         88  lb_Err003                                 VALUE "003".
+041000131017         88  lb_Err004                                 VALUE "004".
+041100131017         88  lb_Err005                                 VALUE "005".
+041200131017         88  lb_Err006                                 VALUE "006".
+041300131017         88  lb_Err007                                 VALUE "007".
+041400131017         88  lb_NoError                                VALUE "   ".
+041500130926
+041600131004       01  lc_NotionalAmountTypes.
+041700131017         03  lnc_TotCapital                 PIC X(20)
+041800131017                                            VALUE "Total Capital".
+041900131017         03  lnc_TotGrant                   PIC X(20)
+042000131017                                            VALUE "Net Grant".
+042100131017         03  lnc_TotBond                    PIC X(20)
+042200131017                                            VALUE "Net Bond".
+042300131017         03  lnc_TotRollover                PIC X(20)
+042400131017                                            VALUE "Total Rollover".
+042500131031         03  lnc_TotNonTxDAP                PIC X(20)
+042600131031                                           VALUE "Tot Non Tax DAP/LDAP".
+042700131004
+042800130926       01  lc_Error-Desc.
+042900131017         03  lnc_ErrNoAcctFound             PIC X(80)  VALUE
+043000130926             "No Account Found".
+043100131017         03  lnc_ErrNoNotionalTrsfr         PIC X(80)  VALUE
+043200130926             "Notional Transfer with 'I' Incomplete status not found".
+043300131017         03  lnc_ErrMultiNotionalTrsfr      PIC X(80)  VALUE
+043400131016             "Multiple Notional Transfers with status 'I' Incomplete are
+043500131016      -      " found".
+043600131017         03  lnc_ErrAmountMismatch          PIC X(80)  VALUE
+043700131008             "Amount Mismatch".
+043800131017         03  lnc_ErrOutstandingRollover     PIC X(80)  VALUE
+043900131008             "This transfer is attached to an outstanding rollover".
+044000131017         03  lnc_ErrNoRDSPTITranslinked     PIC X(80)  VALUE
+044100131008             "Transactions must be linked to the transfer".
+044200131017         03  lnc_ErrTotTrsfrValMismatch     PIC X(80)  VALUE
+044300131016             "Total transaction amount does not equal the Total Transfer
+044400131016      -      " Value".
+044500131017         03  lnc_ErroContACRRTP             PIC X(80)  VALUE
+044600131018             "Error While Counting OutStanding Rollovers".
+044700131018         03  lnc_ErrFetchCursor             PIC X(80)  VALUE
+044800131018             "Error While Fetching Cursor lc_FCH-REC-971 ".
+044900131018         03  lnc_ErrAccountCnt              PIC X(80)  VALUE
+045000131018             "Error While Validating Account ".
+045100131018         03  lnc_ErrTransferCnt             PIC X(80)  VALUE
+045200131018             "Error While Counting Transfer Sequence No".
+045300131018         03  lnc_ErrUpdatingTrsfStatus      PIC X(80)  VALUE
+045400131018             "Error While Updating Transfer Status in MFAADTNP".
+045500131018         03  lnc_ErrGettingNotionalTotals   PIC X(80)  VALUE
+045600131018             "Error Retrieving Account Transfer Notional Totals".
+045700131018         03  lnc_ErrGetTrsfDtlSeqNo         PIC X(80)  VALUE
+045800131018             "Error Retrieving Transfer Detail Sequence No".
+045900131018         03  lnc_ErrValidatingRecord        PIC X(80)  VALUE
+046000131018             "Error while Validating the Input record".
+046100131018         03  lnc_ErrInsertMFAADTNTP         PIC X(80)  VALUE
+046200131018             "Error while Inserting into MFAADTNTP File".
+046300131018         03  lnc_ErrInsertWKRSPTSFE         PIC X(80)  VALUE
+046400131018             "Error while Inserting into WKRSPTSFE ".
+046500131018         03  lnc_ErrInsertWKRSPTSFS         PIC X(80)  VALUE
+046600131018             "Error while Inserting into WKRSPTSFS ".
+046700131018         03  lnc_ErrInsertWKRSPTSFO         PIC X(80)  VALUE
+046800131018             "Error while Inserting into WKRSPTSFO ".
+046900131025         03  lnc_ErrPreparingSELECT        PIC X(80)  VALUE
+047000131024             "Error while Preparing SELECT statement".
+047100131025         03  lnc_ErrOpeningCursor          PIC X(80)  VALUE
+047200131024             "Error while Opening the CC_971REC_CURR Cursor".
+047300131025         03  lnc_ErrDroppingWKRSPTSFS      PIC X(80)  VALUE
+047400131024             "Error while Dropping table WKRSPTSFS".
+047500131025         03  lnc_ErrDroppingWKRSPTSFE      PIC X(80)  VALUE
+047600131024             "Error while Dropping table WKRSPTSFE".
+047700131025         03  lnc_ErrDroppingWKRSPTSFO      PIC X(80)  VALUE
+047800131024             "Error while Dropping table WKRSPTSFO".
+047900131025         03  lnc_ErrCreatingWKRSPTSFS      PIC X(80)  VALUE
+048000131024             "Error while Creating table WKRSPTSFS".
+048100131025         03  lnc_ErrCreatingWKRSPTSFE      PIC X(80)  VALUE
+048200131024             "Error while Creating table WKRSPTSFE".
+048300131025         03  lnc_ErrCreatingWKRSPTSFO      PIC X(80)  VALUE
+048400131024             "Error while Creating table WKRSPTSFO".
+048500131031         03  lnc_ErrClosingCursor          PIC X(80)  VALUE
+048600131031             "Error while Closing the CC_971REC_CURR Cursor".
+048700130925
+048800131008       01  lc_SqlStatement                  PIC X(1000).
+048900020606
+049000130926      *Copy book for FXRDTSFSUM
+049100130926       COPY CPRDTSFSUM.
+049200030110
+049300130930       01  lc_MFAADTNTP.
+049400130927       COPY DD-ALL-FORMATS OF MFAADTNTP.
+049500130927
+049600090928       01  CONSTANTS.
+049700131017         03  lnc_Y                          PIC X(01)  VALUE "Y".
+049800131017         03  lnc_I                          PIC X(01)  VALUE "I".
+049900131017         03  lnc_C                          PIC X(01)  VALUE "C".
+050000131017         03  lnc_O                          PIC X(01)  VALUE "O".
+050100131017         03  lnc_HST                        PIC X(03)  VALUE "HST".
+050200131017         03  lnc_HSC                        PIC X(03)  VALUE "HSC".
+050300131017         03  lnc_971                        PIC X(03)  VALUE "971".
+050400131017         03  lnc_Dash                       PIC X(01)  VALUE "-".
+050500131017         03  lnc_1                          PIC X(02)  VALUE "1".
+050600131017         03  lnc_2                          PIC X(02)  VALUE "2".
+050700131017         03  lnc_3                          PIC X(02)  VALUE "3".
+050800131017         03  lnc_4                          PIC X(02)  VALUE "4".
+050900131017         03  lnc_5                          PIC X(02)  VALUE "5".
+051000131017         03  lnc_11                         PIC X(02)  VALUE "11".
+051100131017         03  lnc_12                         PIC X(02)  VALUE "12".
+051200131017         03  lnc_13                         PIC X(02)  VALUE "13".
+051300131017         03  lnc_14                         PIC X(02)  VALUE "14".
+051400131017         03  lnc_00                         PIC X(02)  VALUE "00".
+051500131017         03  lnci_100                       PIC S9(03) VALUE 100.
+051600131017         03  lnci_MinusOne                  PIC S9(02) VALUE -1.
+051700131017         03  lnci_1                         PIC S9(02) VALUE 1.
+051800131017         03  lnci_2                         PIC S9(02) VALUE 2.
+051900080213
+052000131004       01  lc_ErrorRecVariables.
+052100131017         03  li_ErrorAccountNo              PIC S9(09).
+052200131017         03  lc_Errordesc                   PIC X(80).
+052300131017         03  ln_RTfileAmount                PIC S9(09)V9(02).
+052400131017         03  ln_MFAADTNPAmount              PIC S9(09)V9(02).
+052500131017         03  lc_NotionalAmtType             PIC X(15).
+052600131004
+052700070725       01  lc_OtherVariables.
+052800131017         03  li_AccountCnt                  PIC S9(05) VALUE 0.
+052900131017         03  li_TransferCnt                 PIC S9(05) VALUE 0.
+053000131017         03  li_RecCount                    PIC S9(05) VALUE 0.
+053100131017         03  li_length                      PIC 9(02)  VALUE 0.
+053200131017         03  lc_AccountNo                   PIC X(09) .
+053300131017         03  li_AccountNo                   PIC S9(09) VALUE 0.
+053400131017         03  li_PrevAccountNo               PIC S9(09) VALUE 0.
+053500131017         03  li_TrsfSeqNo                   PIC S9(07) VALUE 0.
+053600131017         03  li_TrsfDtlSeqNo                PIC S9(07) VALUE 0.
+053700131017         03  ln_TotCaptial                  PIC S9(11)V9(2).
+053800131017         03  ln_TotGrant                    PIC S9(11)V9(2).
+053900131017         03  ln_TotBond                     PIC S9(11)V9(2).
+054000131017         03  ln_TotTrsfValu                 PIC S9(11)V9(2).
+054100131031         03  ln_TotNTxDapLDap               PIC S9(11)V9(2).
+054200131017         03  ln_TotRollover                 PIC S9(11)V9(2).
+054300131017         03  ln_CalcAmount                  PIC S9(11)V9(2).
+054400131017         03  ln_TransactionAmount           PIC S9(11)V9(2).
+054500131017         03  ln_CDSPGrantAmount             PIC S9(11)V9(2).
+054600131017         03  ln_CDSPBondAmount              PIC S9(11)V9(2).
+054700131017         03  li_TranCont                    PIC S9(09).
+054800131017         03  li_OustRollOverCont            PIC S9(09).
+054900131017         03  li_ActivityDate                PIC S9(08).
+055000131017         03  lc_VendorTransID               PIC X(15).
+055100131017         03  lc_VendorBN                    PIC X(15).
+055200131017         03  lc_TransType                   PIC X(02).
+055300090929
+055400131017       01  lc_Flags.
+055500131017         03  lc_EOF-MAIN-CURSOR             PIC X(01).
+055600131017           88  lb_EOF-Main-Cursor-Yes       VALUE "Y".
+055700131017           88  lb_EOF-Main-Cursor-No        VALUE "N".
+055800131017         03  lc_FirstRecord                 PIC X(01).
+055900131017           88  lb_FirstRecordYes            VALUE "Y".
+056000131017           88  lb_FirstRecordNo             VALUE "N".
+056100131017         03  lc_NotionalTransfer            PIC X(01).
+056200131017           88  lb_NotionalTransFnd          VALUE "Y".
+056300131017           88  lb_NotionalTransNFnd         VALUE "N".
+056400131017         03  lc_ValidData                   PIC X(01)  VALUE SPACES.
+056500131017           88  lb_ValidDataYes              VALUE "Y".
+056600131017           88  lb_ValidDataNo               VALUE "N".
+056700131017         03  lc_ValidAcct                   PIC X(01)  VALUE SPACES.
+056800131017           88  lb_ValidAcctYes              VALUE "Y".
+056900131017           88  lb_ValidAcctNo               VALUE "N".
+057000090930
+057100131008      * Error Codes, Uniquely Identify where the error happened
+057200131017       01  WS-ERR-CODE                       PIC X(02)  VALUE SPACES.
+057300131025         88  lnc_Err_OK                 VALUE "  ".
+057400131025         88  lnc_Err_01                 VALUE "01".
+057500131025         88  lnc_Err_02                 VALUE "02".
+057600131025         88  lnc_Err_03                 VALUE "03".
+057700131025         88  lnc_Err_04                 VALUE "04".
+057800131025         88  lnc_Err_05                 VALUE "05".
+057900131025         88  lnc_Err_06                 VALUE "06".
+058000131025         88  lnc_Err_07                 VALUE "07".
+058100131025         88  lnc_Err_08                 VALUE "08".
+058200131025         88  lnc_Err_09                 VALUE "09".
+058300131025         88  lnc_Err_10                 VALUE "10".
+058400131025         88  lnc_Err_11                 VALUE "11".
+058500131025         88  lnc_Err_12                 VALUE "12".
+058600131025         88  lnc_Err_13                 VALUE "13".
+058700131025         88  lnc_Err_14                 VALUE "14".
+058800131025         88  lnc_Err_15                 VALUE "15".
+058900131025         88  lnc_Err_16                 VALUE "16".
+059000131025         88  lnc_Err_17                 VALUE "17".
+059100131025         88  lnc_Err_18                 VALUE "18".
+059200131025         88  lnc_Err_19                 VALUE "19".
+059300131025         88  lnc_Err_20                 VALUE "20".
+059400131031         88  lnc_Err_21                 VALUE "21".
+059500131024
+059600131017        COPY CPYSQLFLD
+059700130926             REPLACING == "CURRENT_PROGRAM" == BY == "RDSPTSF" ==.
+059800070723
+059900020509           EXEC SQL
+060000020509            INCLUDE SQLCA
+060100020509           END-EXEC.
+060200100112
+060300020607       PROCEDURE DIVISION.
+060400020607
+060500000000      ********************************************************************
+060600000000      *    P R O C E D U R E     D I V I S I O N                         *
+060700000000      ********************************************************************
+060800000000
+060900000000       MAINLINE.
+061000090928           PERFORM INITIAL-LOGIC.
+061100090928           PERFORM PROCESS-DETAIL.
+061200090928           PERFORM END-JOB.
+061300000000      /
+061400020117       INITIAL-LOGIC.
+061500131017      *------------------------------------------------------------------*
+061600020117      *                                                                  *
+061700020117      *    I N I T I A L   L O G I C   R O U T I N E                     *
+061800020117      *                                                                  *
+061900131017      *------------------------------------------------------------------*
+062000030106
+062100131008           ACCEPT lc_LDA          FROM WS-LOCAL.
+062200020607
+062300131009           SET lb_FirstRecordYes TO TRUE.
+062400131009
+062500131015           INITIALIZE lc_OtherVariables.
+062600130927
+062700130927      *SET-971-REC-CURR.
+062800131008           INITIALIZE lc_SqlStatement.
+062900131008           STRING
+063000131008             "SELECT A."                         DELIMITED BY SIZE
+063100131008             lc_FILE                             DELIMITED BY " "
+063200131008             " FROM "                            DELIMITED BY SIZE
+063300131008             lc_LIB                              DELIMITED BY " "
+063400131008             "/"                                 DELIMITED BY SIZE
+063500131008             lc_FILE                             DELIMITED BY " "
+063600131008             " A "                               DELIMITED BY SIZE
+063700131008             " WHERE SUBSTR(A."                  DELIMITED BY SIZE
+063800131008             lc_FILE                             DELIMITED BY " "
+063900131008              ", 1, 3) = """                     DELIMITED BY SIZE
+064000131008              lnc_971                            DELIMITED BY SIZE
+064100131008              """ "                              DELIMITED BY SIZE
+064200131008             " ORDER BY SUBSTR(A."               DELIMITED BY SIZE
+064300131008             lc_FILE                             DELIMITED BY " "
+064400131008             ", 28, 15) ASC "                    DELIMITED BY SIZE
+064500131008             INTO lc_SqlStatement.
+064600131008
+064700131008           EXEC SQL
+064800131008             PREPARE SQL_SELECT FROM :lc_SqlStatement
+064900131008           END-EXEC.
+065000130927
+065100131024           MOVE SQLSTATE TO lc_sqlStates.
+065200131025           IF NOT lncc_sqlSuccessful
+065300131025              SET lnc_Err_01 TO TRUE
+065400131025              MOVE lnc_ErrPreparingSELECT TO lc_sqlErrShortDESCR
+065500131024              PERFORM  SQL_Fail_Process
+065600131024           END-IF.
+065700131024
+065800131008           EXEC SQL
+065900131008             DECLARE CC_971REC_CURR CURSOR FOR SQL_SELECT
+066000131008           END-EXEC.
+066100131008
+066200130927           EXEC SQL
+066300130927             OPEN CC_971REC_CURR
+066400130927           END-EXEC.
+066500131024
+066600131024           MOVE SQLSTATE TO lc_sqlStates.
+066700131025           IF NOT lncc_sqlSuccessful
+066800131025              SET lnc_Err_02 TO TRUE
+066900131025              MOVE lnc_ErrOpeningCursor TO lc_sqlErrShortDESCR
+067000131024              PERFORM  SQL_Fail_Process
+067100131024           END-IF.
+067200031118
+067300090928      *DROP-TABLES.
+067400030113           EXEC SQL
+067500130926             DROP TABLE WKRSPTSFS
+067600030113           END-EXEC.
+067700020604
+067800131024           MOVE SQLSTATE TO lc_sqlStates.
+067900131025           IF lncc_sqlTblNotExists OR lncc_sqlSuccessful
+068000131024              CONTINUE
+068100131024           ELSE
+068200131025              SET lnc_Err_03 TO TRUE
+068300131025              MOVE lnc_ErrDroppingWKRSPTSFS TO lc_sqlErrShortDESCR
+068400131024              PERFORM  SQL_Fail_Process
+068500131024           END-IF.
+068600131024
+068700030113           EXEC SQL
+068800130926             DROP TABLE WKRSPTSFE
+068900030113           END-EXEC.
+069000030113
+069100131024           MOVE SQLSTATE TO lc_sqlStates.
+069200131025           IF lncc_sqlTblNotExists OR lncc_sqlSuccessful
+069300131024              CONTINUE
+069400131024           ELSE
+069500131025              SET lnc_Err_04 TO TRUE
+069600131025              MOVE lnc_ErrDroppingWKRSPTSFE TO lc_sqlErrShortDESCR
+069700131024              PERFORM  SQL_Fail_Process
+069800131024           END-IF.
+069900131024
+070000030113           EXEC SQL
+070100130926             DROP TABLE WKRSPTSFO
+070200030113           END-EXEC.
+070300030113
+070400131024           MOVE SQLSTATE TO lc_sqlStates.
+070500131025           IF lncc_sqlTblNotExists OR lncc_sqlSuccessful
+070600131024              CONTINUE
+070700131024           ELSE
+070800131025              SET lnc_Err_05 TO TRUE
+070900131025              MOVE lnc_ErrDroppingWKRSPTSFO TO lc_sqlErrShortDESCR
+071000131024              PERFORM  SQL_Fail_Process
+071100131024           END-IF.
+071200131024
+071300090928      *CREATE-TABLES.
+071400020604           EXEC SQL
+071500130926             CREATE TABLE WKRSPTSFS
+071600130926              (ACCOUNT_NO       NUMERIC ( 9) NOT NULL WITH DEFAULT,
+071700130926               TOT_CAP_AMT       DEC (13, 2) NOT NULL WITH DEFAULT,
+071800130926               NET_GRANT         DEC (13, 2) NOT NULL WITH DEFAULT,
+071900130926               NET_BOND          DEC (13, 2) NOT NULL WITH DEFAULT,
+072000130926               TOT_ROLLOVER      DEC (13, 2) NOT NULL WITH DEFAULT,
+072100130926               TOT_TRANSFER_AMT  DEC (13, 2) NOT NULL WITH DEFAULT)
+072200020604           END-EXEC.
+072300131024
+072400131024           MOVE SQLSTATE TO lc_sqlStates.
+072500131025           IF lncc_sqlTblCrtedNotJrned OR lncc_sqlSuccessful
+072600131024              CONTINUE
+072700131024           ELSE
+072800131025              SET lnc_Err_06 TO TRUE
+072900131025              MOVE lnc_ErrCreatingWKRSPTSFS TO lc_sqlErrShortDESCR
+073000131024              PERFORM  SQL_Fail_Process
+073100131024           END-IF.
+073200131024
+073300030103           EXEC SQL
+073400130926             CREATE TABLE WKRSPTSFE
+073500130926              (ACCOUNT_NO         NUMERIC ( 9) NOT NULL WITH DEFAULT,
+073600131004               ERROR_CODE            CHAR ( 3) NOT NULL WITH DEFAULT,
+073700130926               ERROR_DESC            CHAR (80) NOT NULL WITH DEFAULT,
+073800130926               NOTIONAL_AMT_TYPE     CHAR (20) NOT NULL WITH DEFAULT,
+073900130926               TOT_AMT_RT971_FILE  DEC (13, 2) NOT NULL WITH DEFAULT,
+074000130926               TOT_TRANSFER_AMT    DEC (13, 2) NOT NULL WITH DEFAULT)
+074100030103           END-EXEC.
+074200030103
+074300131024           MOVE SQLSTATE TO lc_sqlStates.
+074400131025           IF lncc_sqlTblCrtedNotJrned OR lncc_sqlSuccessful
+074500131024              CONTINUE
+074600131024           ELSE
+074700131025              SET lnc_Err_07 TO TRUE
+074800131025              MOVE lnc_ErrCreatingWKRSPTSFE TO lc_sqlErrShortDESCR
+074900131024              PERFORM  SQL_Fail_Process
+075000131024           END-IF.
+075100131024
+075200030103           EXEC SQL
+075300130926             CREATE TABLE WKRSPTSFO
+075400130926              (ACCOUNT_NO         NUMERIC ( 9) NOT NULL WITH DEFAULT,
+075500130926               TRANSFER_DATE      NUMERIC ( 8) NOT NULL WITH DEFAULT,
+075600130926               TRANSFER_STATUS       CHAR ( 1) NOT NULL WITH DEFAULT,
+075700130926               TOT_TRASNFER_AMT    DEC (13, 2) NOT NULL WITH DEFAULT)
+075800030103           END-EXEC.
+075900090929
+076000131024           MOVE SQLSTATE TO lc_sqlStates.
+076100131025           IF lncc_sqlTblCrtedNotJrned OR lncc_sqlSuccessful
+076200131024              CONTINUE
+076300131024           ELSE
+076400131025              SET lnc_Err_08 TO TRUE
+076500131025              MOVE lnc_ErrCreatingWKRSPTSFO TO lc_sqlErrShortDESCR
+076600131024              PERFORM  SQL_Fail_Process
+076700131024           END-IF.
+076800131024
+076900130927      *----------------*
+077000090929       PROCESS-DETAIL.
+077100130927      *----------------*
+077200090929
+077300131008           SET lb_EOF-Main-Cursor-No TO TRUE.
+077400090929
+077500131024      * the logic here is First we validate the Account.If account not
+077600131024      * valid go to next record else Proceed.Check if one Incomplete
+077700131024      * Notional Transfer is found. If yes Process and load the record.
+077800131024      * Whenever there is a change of account, for the previous account
+077900131024      * validate the notional amounts and for the current account valid-
+078000131024      * ate notional transfer.
+078100090929           PERFORM
+078200131008              UNTIL lb_EOF-Main-Cursor-Yes
+078300130927                 PERFORM FETCH-NEXT-RECORD
+078400131016                 IF lb_ValidAcctYes
+078500131016                    IF li_AccountNo NOT = li_PrevAccountNo
+078600131016                    AND li_PrevAccountNo NOT = ZEROES
+078700131017                       IF lb_NotionalTransFnd
+078800131024      * Validate the notionals amounts for the previous Account
+078900131017                          PERFORM VALIDATE-NOTIONAL-DETAILS
+079000131017                       END-IF
+079100131024      * Validate the notional transfer for the Current Account
+079200131017                       PERFORM VALIDATE-NOTIONAL-TRANSFER
+079300131017                       IF lb_NotionalTransFnd
+079400131024                          PERFORM GET-TRANSFER-DTL-SEQ-NO
+079500131017                          PERFORM PROCESS-CURRENT-RECORD
+079600131017                       END-IF
+079700131016                    ELSE
+079800131024      * For the First record Validate notional transfer
+079900131016                       IF li_PrevAccountNo = ZEROES
+080000131017                          PERFORM VALIDATE-NOTIONAL-TRANSFER
+080100131017                          IF lb_NotionalTransFnd
+080200131024                             PERFORM GET-TRANSFER-DTL-SEQ-NO
+080300131017                             PERFORM PROCESS-CURRENT-RECORD
+080400131017                          END-IF
+080500131016                       END-IF
+080600131016                    END-IF
+080700131024      * For the same account, we process the record
+080800131016                    IF li_AccountNo = li_PrevAccountNo
+080900131016                    AND lb_NotionalTransFnd
+081000131024                       COMPUTE li_TrsfDtlSeqNo = li_TrsfDtlSeqNo +
+081100131024                                                 lnci_1
+081200131016                       PERFORM PROCESS-CURRENT-RECORD
+081300131016                    END-IF
+081400131016                    MOVE li_AccountNo TO li_PrevAccountNo
+081500131016                 END-IF
+081600131024      * At the end of the cursor, Validate notional amounts for
+081700131024      * the last record
+081800131017                 IF lb_EOF-Main-Cursor-Yes AND lb_NotionalTransFnd
+081900131014                    PERFORM VALIDATE-NOTIONAL-DETAILS
+082000131014                 END-IF
+082100131016
+082200090929           END-PERFORM.
+082300130927
+082400130927           PERFORM WRITE-OUTSTANDING-RECORDS.
+082500090929
+082600130927      *------------------*
+082700090929       FETCH-NEXT-RECORD.
+082800130927      *------------------*
+082900130927      * GET CURRENT RECORD ROUTINE
+083000020604
+083100131024           INITIALIZE li_AccountNo.
+083200131024
+083300131024           SET lb_ValidAcctNo         TO TRUE.
+083400131024           SET lb_NoError             TO TRUE.
+083500090928
+083600020604           EXEC SQL
+083700130927           FETCH NEXT FROM CC_971REC_CURR
+083800131017           INTO  :lc_FCH-REC-971
+083900020604           END-EXEC.
+084000090929
+084100131024           MOVE SQLSTATE TO lc_sqlStates.
+084200131024           EVALUATE TRUE
+084300131025           WHEN lncc_sqlSuccessful
+084400131024                MOVE lc_FCH-REC-971(4:2)   TO lc_TransType
+084500131024                MOVE lc_FCH-REC-971(28:15) TO lc_AccountNo
+084600131024
+084700131024                COMPUTE li_Length =
+084800131024                       FUNCTION LENGTH(FUNCTION TRIM(lc_AccountNo))
+084900131024
+085000131024                MOVE lc_AccountNo(1:li_Length) TO li_AccountNo
+085100131024
+085200131024                PERFORM VALIDATE-ACCOUNT
+085300131025           WHEN lncc_sqlEnd
+085400131024              SET lb_EOF-Main-Cursor-Yes TO TRUE
+085500131024           WHEN OTHER
+085600131025              SET lnc_Err_09 TO TRUE
+085700131024              MOVE lnc_ErrFetchCursor    TO lc_sqlErrShortDESCR
+085800131024              PERFORM SQL_Fail_Process
+085900131024           END-EVALUATE.
+086000130927
+086100130927      *-----------------------*
+086200130927       PROCESS-CURRENT-RECORD.
+086300130927      *-----------------------*
+086400130927
+086500131016           EVALUATE lc_TransType
+086600131017              WHEN lnc_Trans01
+086700131017                   PERFORM PROCESS-971-01-RECORD
+086800131017              WHEN lnc_Trans02
+086900131017                   PERFORM PROCESS-971-02-RECORD
+087000131017              WHEN lnc_Trans03
+087100131017                   PERFORM PROCESS-971-03-RECORD
+087200131017              WHEN lnc_Trans04
+087300131017                   PERFORM PROCESS-971-04-RECORD
+087400131017              WHEN lnc_Trans05
+087500131017                   PERFORM PROCESS-971-05-RECORD
+087600131017              WHEN lnc_Trans06
+087700131017                   PERFORM PROCESS-971-06-RECORD
+087800131017              WHEN lnc_Trans07
+087900131017                   PERFORM PROCESS-971-07-RECORD
+088000131016           END-EVALUATE.
+088100130927
+088200130927      *-----------------*
+088300130927       VALIDATE-ACCOUNT.
+088400130927      *-----------------*
+088500131016           INITIALIZE lc_ErrorRecVariables.
+088600131015
+088700130927           EXEC SQL
+088800130927             SELECT COUNT(*)
+088900130927             INTO   :li_AccountCnt
+089000130927             FROM   MFAACCNTP
+089100130927             WHERE  ACCOUNT_NO = :li_AccountNo
+089200130927           END-EXEC.
+089300130927
+089400131024           MOVE SQLSTATE TO lc_sqlStates.
+089500131025           IF lncc_sqlSuccessful
+089600131024              IF li_AccountCnt = 0
+089700131024                 MOVE li_AccountNo       TO li_ErrorAccountNo
+089800131024                 SET lb_Err001           TO TRUE
+089900131024                 MOVE lnc_ErrNoAcctFound TO lc_Errordesc
+090000131024                 PERFORM WRITE-WKRSPTSFE-RECORD
+090100131024              ELSE
+090200131024                 SET lb_ValidAcctYes TO TRUE
+090300131024              END-IF
+090400131024           ELSE
+090500131025              SET lnc_Err_10            TO TRUE
+090600131024              MOVE lnc_ErrAccountCnt     TO lc_sqlErrShortDESCR
+090700131025              PERFORM SQL_Fail_Process
+090800130927           END-IF.
+090900130927
+091000130927      *---------------------------*
+091100130927       VALIDATE-NOTIONAL-TRANSFER.
+091200131015      *---------------------------*
+091300131024           INITIALIZE lc_ErrorRecVariables.
+091400131024
+091500131024           SET lb_NotionalTransNFnd TO True.
+091600131015
+091700130927           EXEC SQL
+091800130927             SELECT COUNT(*)
+091900130927             INTO   :li_TransferCnt
+092000130927             FROM   MFAADTNP
+092100130927             WHERE  ACCOUNT_NO              = :li_AccountNo
+092200130927             AND    TRANSFER_STATUS         = :lnc_I
+092300130927             AND    TRANSFER_CONTR_OR_REDEM = :lnc_C
+092400130927           END-EXEC
+092500130927
+092600131024           MOVE SQLSTATE TO lc_sqlStates.
+092700131025           IF lncc_sqlSuccessful
+092800131024              IF li_TransferCnt = lnci_1
+092900131024                 SET lb_NotionalTransFnd TO True
+093000131024                 PERFORM GET-NOTIONAL-TRANSFER-TOTALS
+093100131024              ELSE
+093200131024                 IF li_TransferCnt > lnci_1
+093300131024                    MOVE li_AccountNo TO li_ErrorAccountNO
+093400131024                    SET lb_Err003  TO TRUE
+093500131024                    MOVE lnc_ErrMultiNotionalTrsfr TO lc_Errordesc
+093600131024                    PERFORM WRITE-WKRSPTSFE-RECORD
+093700131024                 ELSE
+093800131024                    MOVE li_AccountNo TO li_ErrorAccountNO
+093900131024                    SET lb_Err002  TO TRUE
+094000131024                    MOVE lnc_ErrNoNotionalTrsfr TO lc_Errordesc
+094100131024                    PERFORM WRITE-WKRSPTSFE-RECORD
+094200131024                 END-IF
+094300131024              END-IF
+094400131024           ELSE
+094500131025              SET lnc_Err_11            TO TRUE
+094600131024              MOVE lnc_ErrTransferCnt    TO lc_sqlErrShortDESCR
+094700131025              PERFORM SQL_Fail_Process
+094800131018           END-IF.
+094900130927
+095000130927      *--------------------------*
+095100130927       VALIDATE-NOTIONAL-DETAILS.
+095200130927      *--------------------------*
+095300130927           MOVE li_PrevAccountNo  TO  pi_RDTSFSUM_AcctNo
+095400130930           MOVE li_TrsfSeqNo      TO  pi_RDTSFSUM_TrsfSeqNo
+095500130927
+095600131008           CALL PROCEDURE "FXRDTSFSUM" USING
+095700131008                                 pi_RDTSFSUM_AcctNo
+095800130927                                 pi_RDTSFSUM_TrsfSeqNo
+095900130927                                 pn_RDTSFSUM_TotlCapt
+096000130927                                 pn_RDTSFSUM_TotlNtaxDAP
+096100130927                                 pn_RDTSFSUM_NetGrnt
+096200130927                                 pn_RDTSFSUM_NetBond
+096300130927                                 pn_RDTSFSUM_TotlTrsfValu
+096400130927                                 pi_RDTSFSUM_TranCont
+096500130927                                 pn_RDTSFSUM_TotlRollover
+096600130927                                 pc_RDTSFSUM_RejtCode.
+096700130930
+096800131008           IF pc_RDTSFSUM_RejtCode NOT = lnc_00
+096900131017              DISPLAY "Error calling FXRDTSFSUM. Return Code: "
+097000131001                      pc_RDTSFSUM_RejtCode
+097100130930                     "Account_no: " pi_RDTSFSUM_AcctNo
+097200131017              PERFORM DSP-ERROR
+097300130930           END-IF.
+097400130930
+097500131008           IF NOT (pn_RDTSFSUM_TotlCapt     = ln_TotCaptial)
+097600131017              INITIALIZE lc_ErrorRecVariables
+097700131017              MOVE li_PrevAccountNo          TO li_ErrorAccountNo
+097800131017              SET lb_Err004                  TO TRUE
+097900131017              MOVE lnc_TotCapital             TO lc_NotionalAmtType
+098000131017              MOVE lnc_ErrAmountMismatch      TO lc_Errordesc
+098100131017              MOVE pn_RDTSFSUM_TotlCapt       TO ln_RTfileAmount
+098200131017              MOVE ln_TotCaptial              TO ln_MFAADTNPAmount
+098300131017              PERFORM WRITE-WKRSPTSFE-RECORD
+098400130930           END-IF.
+098500130930
+098600131008           IF NOT (pn_RDTSFSUM_NetGrnt      = ln_TotGrant)
+098700131017              INITIALIZE lc_ErrorRecVariables
+098800131017              MOVE li_PrevAccountNo          TO li_ErrorAccountNo
+098900131017              SET lb_Err004  TO TRUE
+099000131017              MOVE lnc_TotGrant               TO lc_NotionalAmtType
+099100131017              MOVE lnc_ErrAmountMismatch      TO lc_Errordesc
+099200131017              MOVE pn_RDTSFSUM_NetGrnt        TO ln_RTfileAmount
+099300131017              MOVE ln_TotGrant                TO ln_MFAADTNPAmount
+099400131017              PERFORM WRITE-WKRSPTSFE-RECORD
+099500130930           END-IF.
+099600130930
+099700131008           IF NOT (pn_RDTSFSUM_NetBond      = ln_TotBond)
+099800131017              INITIALIZE lc_ErrorRecVariables
+099900131017              MOVE li_PrevAccountNo          TO li_ErrorAccountNo
+100000131017              SET lb_Err004  TO TRUE
+100100131017              MOVE lnc_TotBond                TO lc_NotionalAmtType
+100200131017              MOVE lnc_ErrAmountMismatch      TO lc_Errordesc
+100300131017              MOVE pn_RDTSFSUM_NetBond        TO ln_RTfileAmount
+100400131017              MOVE ln_TotBond                 TO ln_MFAADTNPAmount
+100500131017              PERFORM WRITE-WKRSPTSFE-RECORD
+100600130930           END-IF.
+100700130930
+100800131008           IF NOT (pn_RDTSFSUM_TotlRollover = ln_TotRollover)
+100900131017              INITIALIZE lc_ErrorRecVariables
+101000131017              MOVE li_PrevAccountNo          TO li_ErrorAccountNo
+101100131017              SET lb_Err004  TO TRUE
+101200131017              MOVE lnc_TotRollover            TO lc_NotionalAmtType
+101300131017              MOVE lnc_ErrAmountMismatch      TO lc_Errordesc
+101400131017              MOVE pn_RDTSFSUM_TotlRollover   TO ln_RTfileAmount
+101500131017              MOVE ln_TotRollover             TO ln_MFAADTNPAmount
+101600131017              PERFORM WRITE-WKRSPTSFE-RECORD
+101700130930           END-IF.
+101800130930
+101900131031           IF NOT (pn_RDTSFSUM_TotlNtaxDAP = ln_TotNTxDapLDap)
+102000131031              INITIALIZE lc_ErrorRecVariables
+102100131031              MOVE li_PrevAccountNo          TO li_ErrorAccountNo
+102200131031              SET lb_Err004  TO TRUE
+102300131031              MOVE lnc_TotNonTxDAP            TO lc_NotionalAmtType
+102400131031              MOVE lnc_ErrAmountMismatch      TO lc_Errordesc
+102500131031              MOVE pn_RDTSFSUM_TotlNtaxDAP    TO ln_RTfileAmount
+102600131031              MOVE ln_TotNTxDapLDap           TO ln_MFAADTNPAmount
+102700131031              PERFORM WRITE-WKRSPTSFE-RECORD
+102800131031           END-IF.
+102900131031
+103000130930           PERFORM Check-OutStanding-Rollover.
+103100130930
+103200130930           IF pi_RDTSFSUM_TranCont = 0
+103300131017              INITIALIZE lc_ErrorRecVariables
+103400131017              MOVE li_PrevAccountNo          TO li_ErrorAccountNo
+103500131017              SET lb_Err006  TO TRUE
+103600131017              MOVE lnc_ErrNoRDSPTITranslinked TO lc_Errordesc
+103700131017              PERFORM WRITE-WKRSPTSFE-RECORD
+103800130930           END-IF.
+103900130930
+104000131008           IF NOT (pn_RDTSFSUM_TotlTrsfValu = ln_TotTrsfValu)
+104100131017              INITIALIZE lc_ErrorRecVariables
+104200131017              MOVE li_PrevAccountNo          TO li_ErrorAccountNo
+104300131017              SET lb_Err007  TO TRUE
+104400131017              MOVE lnc_ErrTotTrsfrValMismatch    TO lc_Errordesc
+104500131127              MOVE pn_RDTSFSUM_TotlTrsfValu   TO ln_RTfileAmount
+104600131127              MOVE ln_TotTrsfValu             TO ln_MFAADTNPAmount
+104700131017              PERFORM WRITE-WKRSPTSFE-RECORD
+104800130930           END-IF.
+104900130930
+105000131001           IF lb_NoError
+105100131001              EXEC SQL
+105200131008                 UPDATE MFAADTNP
+105300131001                 SET TRANSFER_STATUS   = :lnc_C
+105400131014                 WHERE ACCOUNT_NO      = :li_PrevAccountNo
+105500131008                 AND   TRANSFER_SEQ_NO = :li_TrsfSeqNo
+105600131001              END-EXEC
+105700131001
+105800131024              MOVE SQLSTATE TO lc_sqlStates
+105900131025              IF lncc_sqlSuccessful
+106000131001                 PERFORM WRITE-WKRSPTSFS-RECORD
+106100131001              ELSE
+106200131025                 SET lnc_Err_12            TO TRUE
+106300131018                 MOVE lnc_ErrUpdatingTrsfStatus
+106400131024                   TO lc_sqlErrShortDESCR
+106500131025                 PERFORM SQL_Fail_Process
+106600131001              END-IF
+106700131001           END-IF.
+106800131001
+106900130930      *-----------------------------*
+107000130930       GET-NOTIONAL-TRANSFER-TOTALS.
+107100130930      *-----------------------------*
+107200130930
+107300130930           EXEC SQL
+107400131008             SELECT TRANSFER_SEQ_NO,
+107500131008                    TOTAL_CAPITAL,
+107600130930                    TOTAL_GRANT,
+107700130930                    TOTAL_BOND,
+107800130930                    TOTAL_ROLLOVER,
+107900131031                    TOTAL_TRANSFER_VALUE,
+108000131031                    TOTAL_NON_TAX_DAP_LDAP
+108100130930             INTO   :li_TrsfSeqNo,
+108200131008                    :ln_TotCaptial,
+108300131008                    :ln_TotGrant,
+108400131008                    :ln_TotBond,
+108500131008                    :ln_TotRollover,
+108600131031                    :ln_TotTrsfValu,
+108700131031                    :ln_TotNTxDapLDap
+108800130930             FROM   MFAADTNP
+108900130930             WHERE  ACCOUNT_NO              = :li_AccountNo
+109000130930             AND    TRANSFER_STATUS         = :lnc_I
+109100130930             AND    TRANSFER_CONTR_OR_REDEM = :lnc_C
+109200130930           END-EXEC.
+109300130930
+109400131024           MOVE SQLSTATE TO lc_sqlStates
+109500131025           IF NOT lncc_sqlSuccessful
+109600131025              SET lnc_Err_13            TO TRUE
+109700131018              MOVE lnc_ErrGettingNotionalTotals
+109800131024                TO lc_sqlErrShortDESCR
+109900131025              PERFORM SQL_Fail_Process
+110000131018           END-IF.
+110100131018
+110200130930      *---------------------------*
+110300130930       Check-OutStanding-Rollover.
+110400130930      *---------------------------*
+110500130930           EXEC SQL
+110600130930             SELECT COUNT(*)
+110700130930             INTO   :li_OustRollOverCont
+110800130930             FROM   MFAACRRTP ACRRTP
+110900130930             JOIN   MFAROLP ROLP
+111000130930             ON     ACRRTP.ROLLOVER_NO = ROLP.ROLLOVER_NO
+111100131014             WHERE  ACRRTP.ACCOUNT_NO = :li_PrevAccountNo
+111200131008             AND    ACRRTP.TRANSFER_SEQ_NO = :li_TrsfSeqNo
+111300131008             AND    ROLP.ROLLOVER_STATUS = :lnc_O
+111400130930           END-EXEC.
+111500130930
+111600131024           MOVE SQLSTATE TO lc_sqlStates
+111700131025           IF lncc_sqlSuccessful
+111800131024              IF li_OustRollOverCont > 0
+111900131024                 INITIALIZE lc_ErrorRecVariables
+112000131024                 MOVE li_PrevAccountNo          TO li_ErrorAccountNo
+112100131024                 SET lb_Err005  TO TRUE
+112200131024                 MOVE lnc_ErrOutstandingRollover TO lc_Errordesc
+112300131024                 PERFORM WRITE-WKRSPTSFE-RECORD
+112400131024              END-IF
+112500131024           ELSE
+112600131025              SET lnc_Err_14            TO TRUE
+112700131024              MOVE lnc_ErroContACRRTP TO lc_sqlErrShortDESCR
+112800131025              PERFORM SQL_Fail_Process
+112900130930           END-IF.
+113000130930
+113100130930      *------------------------*
+113200130930       GET-TRANSFER-DTL-SEQ-NO.
+113300130930      *------------------------*
+113400130930           EXEC SQL
+113500131008             SELECT TRANSFER_DTL_SEQ_NO
+113600130930             INTO   :li_TrsfDtlSeqNo
+113700130930             FROM   MFAADTNTP
+113800130930             WHERE  ACCOUNT_NO      = :li_AccountNo
+113900131008             AND    TRANSFER_SEQ_NO = :li_TrsfSeqNo
+114000131008             ORDER BY TRANSFER_DTL_SEQ_NO DESC
+114100130930             FETCH FIRST ROW ONLY
+114200130930           END-EXEC.
+114300130930
+114400131024           MOVE SQLSTATE TO lc_sqlStates
+114500131025           IF lncc_sqlSuccessful
+114600131008              COMPUTE li_TrsfDtlSeqNo = li_TrsfDtlSeqNo + lnci_1
+114700130930           ELSE
+114800131025              IF lncc_sqlEnd
+114900131008                 MOVE  lnci_1  TO li_TrsfDtlSeqNo
+115000130930              ELSE
+115100131025                 SET lnc_Err_15            TO TRUE
+115200131018                 MOVE lnc_ErrGetTrsfDtlSeqNo
+115300131024                   TO  lc_sqlErrShortDESCR
+115400131025                 PERFORM SQL_Fail_Process
+115500130930              END-IF
+115600130930           END-IF.
+115700130930
+115800130930      *----------------------*
+115900130930       PROCESS-971-01-RECORD.
+116000130930      *----------------------*
+116100130930           INITIALIZE  MFAADTNTP OF lc_MFAADTNTP.
+116200131001           PERFORM SET-COMMON-VALUES.
+116300131008           MOVE  lnc_1                    TO  CONTR-REDEM-CODE-RULE
+116400131001                                          OF  lc_MFAADTNTP.
+116500191125      *RFS1020212 STARTS
+116600191125      *    MOVE  lc_01-Payment-Date       TO  ACTIVITY-DATE
+116700191125           MOVE  lc_01-Rpt-Issr-Eve-Dt    TO  ACTIVITY-DATE
+116800191125      *RFS1020212 ENDS
+116900130930                                          OF  lc_MFAADTNTP
+117000131001                                              li_ActivityDate.
+117100131008           MOVE  lc_01-Orig-issue-TransNo TO  ORIG-VENDOR-TRANS-ID
+117200131001                                          OF  lc_MFAADTNTP.
+117300131008           MOVE  lc_01-Orig-issue-BN      TO  ORIG-VENDOR-BN
+117400131001                                          OF  lc_MFAADTNTP.
+117500131008           MOVE  lc_01-Grant-req          TO  GRANT-REQUESTED
+117600131001                                          OF  lc_MFAADTNTP.
+117700210730      *RFS1118141 - Starts
+117800210730           MOVE  lc_01-Refusal-reason     TO  HRDC-REASON-CODE
+117900210730                                          OF  lc_MFAADTNTP.
+118000210730      *RFS1118141 - Ends
+118100130930
+118200131001           MOVE  lc_01-Contribution-Sign  TO  lc_Calc-Amt-Sign.
+118300131001           MOVE  lc_01-Contrib-Amt-X      TO  lc_Calc-Amt-X.
+118400131001           MOVE  lc_01-contrib-Cents-X    TO  lc_Calc-Amt-Cents-X.
+118500130930           PERFORM  SET-CALC-AMOUNTS.
+118600131008           MOVE  ln_CalcAmount            TO  CAPITAL-AMT
+118700131001                                          OF  lc_MFAADTNTP.
+118800131008           MOVE  ln_CalcAmount            TO  TRANSACTION-AMT
+118900131001                                          OF  lc_MFAADTNTP.
+119000130930
+119100130930           PERFORM VALIDATE-INSERT-RECORD
+119200130930
+119300130930           IF lb_ValidDataYes
+119400130930              PERFORM INSERT-MFAADTNTP-REC
+119500130930
+119600131025              MOVE  lc_01-Grant-Sign         TO  lc_Calc-Amt-Sign
+119700131025              MOVE  lc_01-Grant-Amt-X        TO  lc_Calc-Amt-X
+119800131025              MOVE  lc_01-Grant-Cents-X      TO  lc_Calc-Amt-Cents-X
+119900131025
+120000131025              PERFORM  SET-CALC-AMOUNTS
+120100131210              IF ln_CalcAmount NOT = 0
+120200191125      *RFS1020212 STARTS
+120300191125                 MOVE lc_01-Payment-Date       TO  ACTIVITY-DATE
+120400191125                                               OF  lc_MFAADTNTP
+120500191125                                                   li_ActivityDate
+120600191125      *RFS1020212 ENDS
+120700191125
+120800131025                 COMPUTE li_TrsfDtlSeqNo = li_TrsfDtlSeqNo + lnci_1
+120900131025
+121000131025                 MOVE  li_TrsfDtlSeqNo       TO  TRANSFER-DTL-SEQ-NO
+121100131025                                             OF  lc_MFAADTNTP
+121200131025                 MOVE  lnc_2                 TO  CONTR-REDEM-CODE-RULE
+121300131025                                             OF  lc_MFAADTNTP
+121400131025                 MOVE  ZEROES                TO  CAPITAL-AMT
+121500131025                                             OF  lc_MFAADTNTP
+121600131025                 MOVE  ln_CalcAmount         TO  CDSP-GRANT-AMOUNT
+121700131025                                             OF  lc_MFAADTNTP
+121800131025                 MOVE  ln_CalcAmount         TO  TRANSACTION-AMT
+121900131025                                             OF  lc_MFAADTNTP
+122000131025                 PERFORM INSERT-MFAADTNTP-REC
+122100131025              END-IF
+122200131025           END-IF.
+122300130930
+122400131001      *----------------------*
+122500131001       PROCESS-971-02-RECORD.
+122600131001      *----------------------*
+122700131001
+122800131001           INITIALIZE  MFAADTNTP OF lc_MFAADTNTP.
+122900131001           PERFORM SET-COMMON-VALUES.
+123000131008           MOVE  lnc_3                    TO  CONTR-REDEM-CODE-RULE
+123100131001                                          OF  lc_MFAADTNTP.
+123200131008           MOVE  lc_02-Payment-Date       TO  ACTIVITY-DATE
+123300131001                                          OF  lc_MFAADTNTP
+123400131001                                              li_ActivityDate.
+123500131001
+123600200619      *RFS1100479 - Start
+123700200619           MOVE lc_02-Rpt-Issr-Eve-Dt     TO  HRDC-FILE-DATE OF
+123800200619                                              lc_MFAADTNTP
+123900200619      *RFS1100479 - End
+124000210730      *RFS1118141 - Starts
+124100210730           MOVE  lc_02-Refusal-reason     TO  HRDC-REASON-CODE OF
+124200210730                                              lc_MFAADTNTP
+124300210730      *RFS1118141 - Ends
+124400131001           MOVE  lc_02-Bond-Sign          TO  lc_Calc-Amt-Sign.
+124500131001           MOVE  lc_02-Bond-Amt-X         TO  lc_Calc-Amt-X.
+124600131001           MOVE  lc_02-Bond-Cents-X       TO  lc_Calc-Amt-Cents-X.
+124700131001           PERFORM  SET-CALC-AMOUNTS.
+124800131008           MOVE  ln_CalcAmount            TO  CDSP-BOND-AMOUNT
+124900131001                                          OF  lc_MFAADTNTP.
+125000131008           MOVE  ln_CalcAmount            TO  TRANSACTION-AMT
+125100131001                                          OF  lc_MFAADTNTP.
+125200131001
+125300200619      *RFS1100479 - Start
+125400200619      *    PERFORM VALIDATE-INSERT-RECORD
+125500200619           PERFORM VALIDATE-INSERT-RECORD-971-02
+125600200619      *RFS1100479 - End
+125700131001
+125800131001           IF lb_ValidDataYes
+125900131001              PERFORM INSERT-MFAADTNTP-REC
+126000131001           END-IF.
+126100131001
+126200131001      *----------------------*
+126300131001       PROCESS-971-03-RECORD.
+126400131001      *----------------------*
+126500131001
+126600131001           INITIALIZE  MFAADTNTP OF lc_MFAADTNTP.
+126700131001           PERFORM SET-COMMON-VALUES.
+126800131008           MOVE  lnc_4                    TO  CONTR-REDEM-CODE-RULE
+126900131001                                          OF  lc_MFAADTNTP.
+127000131008           MOVE  lc_03-Rpt-Issr-Eve-Dt    TO  ACTIVITY-DATE
+127100131001                                          OF  lc_MFAADTNTP
+127200131001                                              li_ActivityDate.
+127300131008           MOVE  lc_03-Orig-issue-TransNo TO  ORIG-VENDOR-TRANS-ID
+127400131001                                          OF  lc_MFAADTNTP.
+127500131008           MOVE  lc_03-Orig-issue-BN      TO  ORIG-VENDOR-BN
+127600131001                                          OF  lc_MFAADTNTP.
+127700131001
+127800131001           MOVE  lc_03-Rollover-Sign      TO  lc_Calc-Amt-Sign.
+127900131001           MOVE  lc_03-Rollover-Amt-X     TO  lc_Calc-Amt-X.
+128000131001           MOVE  lc_03-Rollover-Cents-X   TO  lc_Calc-Amt-Cents-X.
+128100211008      *RFS1121329 - Starts
+128200211008           MOVE  lc_03-Rollover-Issue     TO  HRDC-REASON-CODE
+128300211008                                          OF  lc_MFAADTNTP.
+128400211008      *RFS1121329 - Ends
+128500131001           PERFORM  SET-CALC-AMOUNTS.
+128600131008           MOVE  ln_CalcAmount            TO  CDSP-ROLLOVER-AMOUNT
+128700131001                                          OF  lc_MFAADTNTP.
+128800131008           MOVE  ln_CalcAmount            TO  TRANSACTION-AMT
+128900131001                                          OF  lc_MFAADTNTP.
+129000131001
+129100131001           PERFORM VALIDATE-INSERT-RECORD
+129200131001
+129300131001           IF lb_ValidDataYes
+129400131001              PERFORM INSERT-MFAADTNTP-REC
+129500131001           END-IF.
+129600131001
+129700131001      *----------------------*
+129800131001       PROCESS-971-04-RECORD.
+129900131001      *----------------------*
+130000131001
+130100131001           INITIALIZE  MFAADTNTP OF lc_MFAADTNTP.
+130200131001           PERFORM SET-COMMON-VALUES.
+130300131001
+130400131016           IF li_04-Repayment-Reason = lnci_1 OR lnci_2
+130500131008              MOVE  lnc_13                   TO  CONTR-REDEM-CODE-RULE
+130600131001                                             OF  lc_MFAADTNTP
+130700131001           ELSE
+130800131008              MOVE  lnc_14                   TO  CONTR-REDEM-CODE-RULE
+130900131001                                             OF  lc_MFAADTNTP
+131000131001           END-IF
+131100131001
+131200131008           MOVE  lc_04-Rpt-Issr-Eve-Dt    TO  ACTIVITY-DATE
+131300131001                                          OF  lc_MFAADTNTP
+131400131001                                              li_ActivityDate.
+131500131008           MOVE  lc_04-Orig-issue-TransNo TO  ORIG-VENDOR-TRANS-ID
+131600131001                                          OF  lc_MFAADTNTP.
+131700131008           MOVE  lc_04-Orig-issue-BN      TO  ORIG-VENDOR-BN
+131800131001                                          OF  lc_MFAADTNTP.
+131900131016           MOVE  li_04-Repayment-Reason   TO  REPAYMENT-REASON-CODE
+132000131001                                          OF  lc_MFAADTNTP.
+132100131001
+132200131001           MOVE  lc_04-Grnt-Repay-Sign    TO  lc_Calc-Amt-Sign.
+132300131001           MOVE  lc_04-Grnt-Repay-Amt-X   TO  lc_Calc-Amt-X.
+132400131001           MOVE  lc_04-Grnt-Repay-Cents-X TO  lc_Calc-Amt-Cents-X.
+132500131001           PERFORM  SET-CALC-AMOUNTS.
+132600131008           MOVE  ln_CalcAmount            TO  CDSP-GRANT-AMOUNT
+132700131001                                          OF  lc_MFAADTNTP
+132800131008                                              ln_CDSPGrantAmount.
+132900131001
+133000131001           MOVE  lc_04-Bond-Repay-Sign    TO  lc_Calc-Amt-Sign.
+133100131001           MOVE  lc_04-Bond-Repay-Amt-X   TO  lc_Calc-Amt-X.
+133200131001           MOVE  lc_04-Bond-Repay-Cents-X TO  lc_Calc-Amt-Cents-X.
+133300131001           PERFORM  SET-CALC-AMOUNTS.
+133400131008           MOVE  ln_CalcAmount            TO  CDSP-BOND-AMOUNT
+133500131001                                          OF  lc_MFAADTNTP
+133600131008                                              ln_CDSPBondAmount.
+133700131001
+133800131008           COMPUTE ln_TransactionAmount =  ln_CDSPGrantAmount +
+133900131008                                           ln_CDSPBondAmount.
+134000131008           MOVE  ln_TransactionAmount     TO  TRANSACTION-AMT
+134100131001                                          OF  lc_MFAADTNTP.
+134200131001           PERFORM VALIDATE-INSERT-RECORD
+134300131001
+134400131001           IF lb_ValidDataYes
+134500131001              PERFORM INSERT-MFAADTNTP-REC
+134600131001           END-IF.
+134700131001
+134800131001      *----------------------*
+134900131001       PROCESS-971-05-RECORD.
+135000131001      *----------------------*
+135100131001
+135200131001           INITIALIZE  MFAADTNTP OF lc_MFAADTNTP.
+135300131001           PERFORM SET-COMMON-VALUES.
+135400131001
+135500131008           MOVE  lnc_11                   TO  CONTR-REDEM-CODE-RULE
+135600131001                                          OF  lc_MFAADTNTP
+135700131001
+135800131008           MOVE  lc_05-Rpt-Issr-Eve-Dt    TO  ACTIVITY-DATE
+135900131001                                          OF  lc_MFAADTNTP
+136000131001                                              li_ActivityDate.
+136100131008           MOVE  lc_05-Orig-issue-TransNo TO  ORIG-VENDOR-TRANS-ID
+136200131001                                          OF  lc_MFAADTNTP.
+136300131008           MOVE  lc_05-Orig-issue-BN      TO  ORIG-VENDOR-BN
+136400131001                                          OF  lc_MFAADTNTP.
+136500131001
+136600131001           MOVE  lc_05-NonTx-Sign         TO  lc_Calc-Amt-Sign.
+136700131001           MOVE  lc_05-NonTx-Amt-X        TO  lc_Calc-Amt-X.
+136800131001           MOVE  lc_05-NonTx-Cents-X      TO  lc_Calc-Amt-Cents-X.
+136900131001           PERFORM  SET-CALC-AMOUNTS.
+137000131008           MOVE  ln_CalcAmount            TO  CAPITAL-AMT
+137100131001                                          OF  lc_MFAADTNTP
+137200131001
+137300131001           MOVE  lc_05-Grant-Sign         TO  lc_Calc-Amt-Sign
+137400131001           MOVE  lc_05-Grant-Amt-X        TO  lc_Calc-Amt-X
+137500131001           MOVE  lc_05-Grant-Cents-X      TO  lc_Calc-Amt-Cents-X
+137600131001           PERFORM  SET-CALC-AMOUNTS.
+137700131008           MOVE  ln_CalcAmount            TO  CDSP-GRANT-AMOUNT
+137800131001                                          OF  lc_MFAADTNTP.
+137900131001
+138000131001           MOVE  lc_05-Bond-Sign          TO  lc_Calc-Amt-Sign.
+138100131001           MOVE  lc_05-Bond-Amt-X         TO  lc_Calc-Amt-X.
+138200131001           MOVE  lc_05-Bond-Cents-X       TO  lc_Calc-Amt-Cents-X.
+138300131001           PERFORM  SET-CALC-AMOUNTS.
+138400131008           MOVE  ln_CalcAmount            TO  CDSP-BOND-AMOUNT
+138500131001                                          OF  lc_MFAADTNTP.
+138600131001
+138700131001           MOVE  lc_05-Total-Sign         TO  lc_Calc-Amt-Sign.
+138800131001           MOVE  lc_05-Total-Amt-X        TO  lc_Calc-Amt-X.
+138900131001           MOVE  lc_05-Total-Cents-X      TO  lc_Calc-Amt-Cents-X.
+139000131001           PERFORM  SET-CALC-AMOUNTS.
+139100131008           MOVE  ln_CalcAmount            TO  TRANSACTION-AMT
+139200131001                                          OF  lc_MFAADTNTP.
+139300131001
+139400131001           MOVE  lc_05-Contribution-Sign  TO  lc_Calc-Amt-Sign.
+139500131001           MOVE  lc_05-Contrib-Amt-X      TO  lc_Calc-Amt-X.
+139600131001           MOVE  lc_05-contrib-Cents-X    TO  lc_Calc-Amt-Cents-X.
+139700131001           PERFORM  SET-CALC-AMOUNTS.
+139800131008           MOVE  ln_CalcAmount            TO  TOTAL-CAPITAL
+139900131001                                          OF  lc_MFAADTNTP.
+140000131001           PERFORM VALIDATE-INSERT-RECORD
+140100131001
+140200131001           IF lb_ValidDataYes
+140300131001              PERFORM INSERT-MFAADTNTP-REC
+140400131001           END-IF.
+140500131001
+140600131001      *----------------------*
+140700131001       PROCESS-971-06-RECORD.
+140800131001      *----------------------*
+140900131001
+141000131001           INITIALIZE  MFAADTNTP OF lc_MFAADTNTP.
+141100131001           PERFORM SET-COMMON-VALUES.
+141200131001
+141300131008           MOVE  lnc_12                   TO  CONTR-REDEM-CODE-RULE
+141400131001                                          OF  lc_MFAADTNTP
+141500131001
+141600131008           MOVE  lc_06-Rpt-Issr-Eve-Dt    TO  ACTIVITY-DATE
+141700131001                                          OF  lc_MFAADTNTP
+141800131001                                              li_ActivityDate.
+141900131008           MOVE  lc_06-Orig-issue-TransNo TO  ORIG-VENDOR-TRANS-ID
+142000131001                                          OF  lc_MFAADTNTP.
+142100131008           MOVE  lc_06-Orig-issue-BN      TO  ORIG-VENDOR-BN
+142200131001                                          OF  lc_MFAADTNTP.
+142300131001
+142400131001           MOVE  lc_06-NonTx-Sign         TO  lc_Calc-Amt-Sign.
+142500131001           MOVE  lc_06-NonTx-Amt-X        TO  lc_Calc-Amt-X.
+142600131001           MOVE  lc_06-NonTx-Cents-X      TO  lc_Calc-Amt-Cents-X.
+142700131001           PERFORM  SET-CALC-AMOUNTS.
+142800131008           MOVE  ln_CalcAmount            TO  CAPITAL-AMT
+142900131001                                          OF  lc_MFAADTNTP
+143000131001
+143100131001           MOVE  lc_06-Grant-Sign         TO  lc_Calc-Amt-Sign
+143200131001           MOVE  lc_06-Grant-Amt-X        TO  lc_Calc-Amt-X
+143300131001           MOVE  lc_06-Grant-Cents-X      TO  lc_Calc-Amt-Cents-X
+143400131001           PERFORM  SET-CALC-AMOUNTS.
+143500131008           MOVE  ln_CalcAmount            TO  CDSP-GRANT-AMOUNT
+143600131001                                          OF  lc_MFAADTNTP.
+143700131001
+143800131001           MOVE  lc_06-Bond-Sign          TO  lc_Calc-Amt-Sign.
+143900131001           MOVE  lc_06-Bond-Amt-X         TO  lc_Calc-Amt-X.
+144000131001           MOVE  lc_06-Bond-Cents-X       TO  lc_Calc-Amt-Cents-X.
+144100131001           PERFORM  SET-CALC-AMOUNTS.
+144200131008           MOVE  ln_CalcAmount            TO  CDSP-BOND-AMOUNT
+144300131001                                          OF  lc_MFAADTNTP.
+144400131001
+144500131001           MOVE  lc_06-Total-Sign         TO  lc_Calc-Amt-Sign.
+144600131001           MOVE  lc_06-Total-Amt-X        TO  lc_Calc-Amt-X.
+144700131001           MOVE  lc_06-Total-Cents-X      TO  lc_Calc-Amt-Cents-X.
+144800131001           PERFORM  SET-CALC-AMOUNTS.
+144900131008           MOVE  ln_CalcAmount            TO  TRANSACTION-AMT
+145000131001                                          OF  lc_MFAADTNTP.
+145100131001
+145200131001           MOVE  lc_06-Contribution-Sign  TO  lc_Calc-Amt-Sign.
+145300131001           MOVE  lc_06-Contrib-Amt-X      TO  lc_Calc-Amt-X.
+145400131001           MOVE  lc_06-contrib-Cents-X    TO  lc_Calc-Amt-Cents-X.
+145500131001           PERFORM  SET-CALC-AMOUNTS.
+145600131008           MOVE  ln_CalcAmount            TO  TOTAL-CAPITAL
+145700131001                                          OF  lc_MFAADTNTP.
+145800131001           PERFORM VALIDATE-INSERT-RECORD
+145900131001
+146000131001           IF lb_ValidDataYes
+146100131001              PERFORM INSERT-MFAADTNTP-REC
+146200131001           END-IF.
+146300131001
+146400131001      *----------------------*
+146500131001       PROCESS-971-07-RECORD.
+146600131001      *----------------------*
+146700131001
+146800131001           INITIALIZE  MFAADTNTP OF lc_MFAADTNTP.
+146900131001           PERFORM SET-COMMON-VALUES.
+147000131008           MOVE  lnc_5                    TO  CONTR-REDEM-CODE-RULE
+147100131001                                          OF  lc_MFAADTNTP.
+147200131008           MOVE  lc_07-Rpt-Issr-Eve-Dt    TO  ACTIVITY-DATE
+147300131001                                          OF  lc_MFAADTNTP
+147400131001                                              li_ActivityDate.
+147500131008           MOVE  lc_07-Orig-issue-TransNo TO  ORIG-VENDOR-TRANS-ID
+147600131001                                          OF  lc_MFAADTNTP.
+147700131008           MOVE  lc_07-Orig-issue-BN      TO  ORIG-VENDOR-BN
+147800131001                                          OF  lc_MFAADTNTP.
+147900131001
+148000131001           MOVE  lc_07-Rollover-Sign      TO  lc_Calc-Amt-Sign.
+148100131001           MOVE  lc_07-Rollover-Amt-X     TO  lc_Calc-Amt-X.
+148200131001           MOVE  lc_07-Rollover-Cents-X   TO  lc_Calc-Amt-Cents-X.
+148300211008      *RFS1121329 - Starts
+148400211008           MOVE  lc_07-Rollover-Issue     TO  HRDC-REASON-CODE
+148500211008                                          OF  lc_MFAADTNTP.
+148600211008      *RFS1121329 - Ends
+148700131001           PERFORM  SET-CALC-AMOUNTS.
+148800131008           MOVE  ln_CalcAmount            TO  CDSP-ROLLOVER-AMOUNT
+148900131001                                          OF  lc_MFAADTNTP.
+149000131008           MOVE  ln_CalcAmount            TO  TRANSACTION-AMT
+149100131001                                          OF  lc_MFAADTNTP.
+149200131001
+149300131001           PERFORM VALIDATE-INSERT-RECORD
+149400131001
+149500131001           IF lb_ValidDataYes
+149600131001              PERFORM INSERT-MFAADTNTP-REC
+149700131001           END-IF.
+149800131001
+149900131001
+150000130930      *-----------------*
+150100130930       Set-Calc-Amounts.
+150200130930      *-----------------*
+150300130930
+150400131017           INSPECT lc_Calc-Amt-X REPLACING LEADING
+150500131017                                 SPACES BY '0'.
+150600131017           INSPECT lc_Calc-Amt-Cents-X REPLACING LEADING
+150700131017                                 SPACES BY '0'.
+150800130930            IF lc_Calc-Amt-X         IS NUMERIC
+150900130930               AND
+151000130930               lc_Calc-Amt-Cents-X   IS NUMERIC
+151100131008               COMPUTE ln_CalcAmount
+151200130930                     = lc_Calc-Amt +
+151300131017                     ( lc_Calc-Amt-Cents / lnci_100 )
+151400131008               IF lc_Calc-Amt-Sign = lnc_dash
+151500131008                  COMPUTE ln_CalcAmount
+151600131017                        = ln_CalcAmount * ( lnci_MinusOne )
+151700130930               END-IF
+151800130930            ELSE
+151900131008               MOVE ZEROS TO ln_CalcAmount
+152000130930            END-IF.
+152100130930
+152200131001      *------------------*
+152300131001       SET-COMMON-VALUES.
+152400131001      *------------------*
+152500131009           MOVE  li_AccountNo             TO  ACCOUNT-NO
+152600131001                                          OF  lc_MFAADTNTP
+152700131008           MOVE  li_TrsfSeqNo             TO  TRANSFER-SEQ-NO
+152800131001                                          OF  lc_MFAADTNTP
+152900131008           MOVE  li_TrsfDtlSeqNo          TO  TRANSFER-DTL-SEQ-NO
+153000131001                                          OF  lc_MFAADTNTP
+153100131008           MOVE  lc_Rpt-Issuer-TransNo    TO  VENDOR-TRANSACTION-ID
+153200131001                                          OF  lc_MFAADTNTP
+153300131008                                              lc_VendorTransID.
+153400131008           MOVE  lc_Rpt-Issuer-BN         TO  VENDOR-BN
+153500131001                                          OF  lc_MFAADTNTP
+153600131008                                              lc_VendorBN.
+153700131008           MOVE  lc_Transaction-origin    TO  HRDC-TRANS-ORIG
+153800131001                                          OF  lc_MFAADTNTP
+153900131008           MOVE  lc_Rec-Type              TO  RDSP-RECORD-TYPE
+154000131001                                          OF  lc_MFAADTNTP
+154100131008           MOVE  lc_Transaction-Type      TO  RDSP-TRANS-TYPE
+154200131001                                          OF  lc_MFAADTNTP.
+154300131001
+154400130930      *-----------------------*
+154500130930       VALIDATE-INSERT-RECORD.
+154600130930      *-----------------------*
+154700131024           SET lb_ValidDataNo  TO TRUE
+154800131009
+154900130930           EXEC SQL
+155000130930             SELECT Count(*)
+155100130930             INTO   :li_RecCount
+155200130930             FROM   MFAADTNTP
+155300130930             WHERE  ACCOUNT_NO              = :li_AccountNo
+155400131008             AND    TRANSFER_SEQ_NO         = :li_TrsfSeqNo
+155500131008             AND    ACTIVITY_DATE           = :li_ActivityDate
+155600131008             AND    VENDOR_TRANSACTION_ID   = :lc_VendorTransID
+155700131008             AND    VENDOR_BN               = :lc_VendorBN
+155800130930           END-EXEC.
+155900131018
+156000131024           MOVE SQLSTATE TO lc_sqlStates
+156100131025           IF lncc_sqlSuccessful
+156200131018              IF li_RecCount = 0
+156300131018                 SET lb_ValidDataYes TO TRUE
+156400131018              END-IF
+156500131018           ELSE
+156600131025              SET lnc_Err_16            TO TRUE
+156700131018              MOVE lnc_ErrValidatingRecord
+156800131024                TO  lc_sqlErrShortDESCR
+156900131025              PERFORM SQL_Fail_Process
+157000131018           END-IF.
+157100130930
+157200200619      *RFS1100479 - Starts
+157300200619      *-----------------------------*
+157400200619       VALIDATE-INSERT-RECORD-971-02.
+157500200619      *-----------------------------*
+157600200619           SET lb_ValidDataNo  TO TRUE
+157700200619
+157800200619           EXEC SQL
+157900200619             SELECT Count(*)
+158000200619             INTO   :li_RecCount
+158100200619             FROM   MFAADTNTP
+158200200619             WHERE  ACCOUNT_NO              = :li_AccountNo
+158300200619             AND    TRANSFER_SEQ_NO         = :li_TrsfSeqNo
+158400200619             AND    ACTIVITY_DATE           = :li_ActivityDate
+158500200619             AND    VENDOR_TRANSACTION_ID   = :lc_VendorTransID
+158600200619             AND    VENDOR_BN               = :lc_VendorBN
+158700200619             AND    HRDC_FILE_DATE          = :lc_02-Rpt-Issr-Eve-Dt
+158800200622             AND    HRDC_TRANS_ORIG         = :lc_Transaction-origin
+158900200619           END-EXEC.
+159000200619
+159100200619           MOVE SQLSTATE TO lc_sqlStates
+159200200619           IF lncc_sqlSuccessful
+159300200619              IF li_RecCount = 0
+159400200619                 SET lb_ValidDataYes TO TRUE
+159500200619              END-IF
+159600200619           ELSE
+159700200619              SET lnc_Err_16            TO TRUE
+159800200619              MOVE lnc_ErrValidatingRecord
+159900200619                TO  lc_sqlErrShortDESCR
+160000200619              PERFORM SQL_Fail_Process
+160100200619           END-IF.
+160200200619
+160300200619      *RFS1100479 - End
+160400131001      *---------------------*
+160500131001       INSERT-MFAADTNTP-REC.
+160600131001      *---------------------*
+160700131001           EXEC SQL
+160800131001             INSERT
+160900131001             INTO   MFAADTNTP
+161000131001             VALUES (:MFAADTNTP)
+161100131001           END-EXEC
+161200131001
+161300131024           MOVE SQLSTATE TO lc_sqlStates
+161400131025           IF NOT lncc_sqlSuccessful
+161500131025              SET lnc_Err_17            TO TRUE
+161600131018              MOVE lnc_ErrInsertMFAADTNTP
+161700131024                TO  lc_sqlErrShortDESCR
+161800131025              PERFORM SQL_Fail_Process
+161900131001           END-IF.
+162000131001
+162100131008      *-------------------*
+162200131015       WRITE-WKRSPTSFE-RECORD.
+162300131008      *-------------------*
+162400131004           EXEC SQL
+162500131004             INSERT
+162600131008             INTO   WKRSPTSFE
+162700131015             VALUES (:li_ErrorAccountNo,
+162800131008                     :lc_ErrorCode,
+162900131008                     :lc_ErrorDesc,
+163000131008                     :lc_NotionalAmtType,
+163100131017                     :ln_RTfileAmount,
+163200131017                     :ln_MFAADTNPAmount)
+163300131004           END-EXEC
+163400131004
+163500131024           MOVE SQLSTATE TO lc_sqlStates
+163600131025           IF NOT lncc_sqlSuccessful
+163700131025              SET lnc_Err_18            TO TRUE
+163800131018              MOVE lnc_ErrInsertWKRSPTSFE
+163900131024                TO  lc_sqlErrShortDESCR
+164000131025              PERFORM SQL_Fail_Process
+164100131018           END-IF.
+164200131004
+164300131008      *-----------------------*
+164400131008       WRITE-WKRSPTSFS-RECORD.
+164500131008      *-----------------------*
+164600131008           EXEC SQL
+164700131008             INSERT
+164800131008             INTO   WKRSPTSFS
+164900131015             VALUES (:li_PrevAccountNo,
+165000131008                     :ln_TotCaptial,
+165100131008                     :ln_TotGrant,
+165200131008                     :ln_TotBond,
+165300131008                     :ln_TotRollover,
+165400131008                     :ln_TotTrsfValu)
+165500131008           END-EXEC
+165600131008
+165700131024           MOVE SQLSTATE TO lc_sqlStates
+165800131025           IF NOT lncc_sqlSuccessful
+165900131025              SET lnc_Err_19            TO TRUE
+166000131018              MOVE lnc_ErrInsertWKRSPTSFS
+166100131024                TO  lc_sqlErrShortDESCR
+166200131025              PERFORM SQL_Fail_Process
+166300131018           END-IF.
+166400131008
+166500131008      *--------------------------*
+166600131008       WRITE-OUTSTANDING-RECORDS.
+166700131008      *--------------------------*
+166800131008           EXEC SQL
+166900131008             INSERT
+167000131008             INTO   WKRSPTSFO
+167100131008             (SELECT ADTNP.ACCOUNT_NO,
+167200131008                     ADTNP.TRANSFER_DATE,
+167300131008                     ADTNP.TRANSFER_STATUS,
+167400131008                     ADTNP.TOTAL_TRANSFER_VALUE
+167500131008              FROM   MFAADTNP ADTNP
+167600131008              EXCEPTION JOIN  MFAADTNTP ADTNTP
+167700131008              ON ADTNP.ACCOUNT_NO = ADTNTP.ACCOUNT_NO
+167800131008              WHERE ADTNP.TRANSFER_STATUS = :lnc_I
+167900131008              AND   ADTNP.TRANSFER_CONTR_OR_REDEM = :lnc_C
+168000131008              AND   ADTNP.ACCOUNT_NO IN
+168100131008              (SELECT TRNP.ACCOUNT_NO
+168200131008               FROM   MFATRRTNP   TRRTNP
+168300131008               INNER JOIN MFATRNP TRNP
+168400131008               ON  TRRTNP.PLACEMENT_DATE = TRNP.PLACEMENT_DATE
+168500131008               AND TRRTNP.TRANS_NO       = TRNP.TRANS_NO
+168600131008               WHERE TRNP.REVERSE <> :lnc_Y
+168700131008               AND   TRNP.TRANS_STATUS_CODE IN (:lnc_HST,:lnc_HSC)))
+168800131008           END-EXEC
+168900131008
+169000131024           MOVE SQLSTATE TO lc_sqlStates
+169100131031           IF lncc_sqlSuccessful OR lncc_sqlend
+169200131031              CONTINUE
+169300131031           ELSE
+169400131025              SET lnc_Err_20            TO TRUE
+169500131018              MOVE lnc_ErrInsertWKRSPTSFO
+169600131024                TO  lc_sqlErrShortDESCR
+169700131025              PERFORM SQL_Fail_Process
+169800131018           END-IF.
+169900131008
+170000130927      *---------*
+170100130927       END-JOB.
+170200130927      *---------*
+170300090929           EXEC SQL
+170400131008             CLOSE CC_971REC_CURR
+170500090929           END-EXEC.
+170600131031
+170700131031           MOVE SQLSTATE TO lc_sqlStates.
+170800131031           IF NOT lncc_sqlSuccessful
+170900131031              SET lnc_Err_21 TO TRUE
+171000131031              MOVE lnc_ErrClosingCursor TO lc_sqlErrShortDESCR
+171100131031              PERFORM  SQL_Fail_Process
+171200131031           END-IF.
+171300090929
+171400131018           GOBACK.
+171500131018
+171600131024      *-----------------*
+171700131024       SQL_FAIL_PROCESS.
+171800131024      *-----------------*
+171900131024           PERFORM Dsp-Error.
+172000131024           PERFORM Force-Msgw.
+172100131024
+172200131024      *-----------------------------------*
+172300131024      * DSP-ERROR and FORCE-MSGW Routines
+172400131024      *-----------------------------------*
+172500090930          COPY CPYSQLRTN.
+172600090930      *

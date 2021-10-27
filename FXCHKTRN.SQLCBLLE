@@ -1,0 +1,209 @@
+000100130418       IDENTIFICATION DIVISION.
+000200130418       PROGRAM-ID.    FXCHKTRN.
+000300130418       AUTHOR.        Antony S.
+000400130418       INSTALLATION.  L&T Financial Services Technology Inc.
+000500130418       DATE-WRITTEN.  Mar 2013.
+000600130418       DATE-COMPILED.
+000700130418      ******************************************************************
+000800130418      *                                                                *
+000900130418      *    Description: This pgm is used to validate transactions      *
+001000130418      *                 inclusion or exclusion.                        *
+001100130418      *                                                                *
+001200130418      *    Calling Pgm: ANNSTMTJSI                                     *
+001300130418      ******************************************************************
+001400130418      *    Programmer *Date of change* Description of change           *
+001500130418      ******************************************************************
+001600130418      *    Antony S   * 2013/03/23   * RFS117038- initial coding       *
+001700131011      *TamilSelvi G * 2013/07/29 * RFS125894-Recompile for MFAEXTRNSP **
+001800140618      *Noble T    * 2014/05/02   * RFS302398 - Recompile CPYJSISTMT    *
+001900140418      *Sangeetha V  * 2014/03/25 * RFS129378 - Recompile for CPYJSISTMT*
+002000140618      *Kamal T       * 2014/06/17 * RFS118472 - Recompile              *
+002100140618      *Manjusha V * 2014/04/01   * RFS129902 - Recompile for CPGLWBRULE
+002200140826      *Nagamnai S * 2014/08/13   * RFS139007 - Recompile for CPGLWBRULE*
+002300150216      *POOJA K    * 2015/02/16   * RFS 143392 - RECOMPILE FOR CPYJSISTMT
+002400150224      *Pooja K    * 2015/02/24   * RFS142624-Removal of statement logic*
+002500150224      *           *              * for ECF                             *
+002600150330      * POOJA K   * 2015/03/27  * RFS144030 - RECOMPILE FOR CPYJSISTMT *
+002700150423      * POOJA K   * 2015/04/21  * RFS142884 - RECOMPILE FOR CPYJSISTMT *
+002800150511      * Pooja K   * 2015/05/08  * RFS144587 - Recompile for CPYJSISTMT *
+002801211019      * Surendran C* 2021/10/19   * RFS186592 -RECOMPILE FOR CPYJSISTMT*
+002900130418      ******************************************************************
+003000130418      */                                                               *
+003100130418      * =================================
+003200130418       ENVIRONMENT DIVISION.
+003300130418      * =================================
+003400130418       CONFIGURATION SECTION.
+003500130418       SOURCE-COMPUTER. IBM-AS400.
+003600130418       OBJECT-COMPUTER. IBM-AS400.
+003700130418       SPECIAL-NAMES.
+003800130418       INPUT-OUTPUT SECTION.
+003900130418       FILE-CONTROL.
+004000130418
+004100130418       DATA DIVISION.
+004200130418       FILE SECTION.
+004300130418      * ---------------------------------
+004400130418       WORKING-STORAGE SECTION.
+004500130418      * ---------------------------------
+004600130418           EXEC SQL
+004700130418             INCLUDE SQLCA
+004800130418           END-EXEC.
+004900130418
+005000130418      * Cobol standard copybook
+005100130418          COPY CPYSQLFLD
+005200130418               REPLACING == "CURRENT_PROGRAM" == BY == "FXCHKTRN" ==.
+005300130418
+005400130418      * To define STATEMENT-REC-E external array
+005500130418            COPY CPYSTMTREC.
+005600130418
+005700130418      * To define statement/confirmation detail record format
+005800130418             COPY CPYJSISTMT.
+005900130418
+006000130418       01  lc_Constants.
+006100130418           03  lnc_N                    PIC X(01)  VALUE "N".
+006200130418           03  lnc_Y                    PIC X(01)  VALUE "Y".
+006300130418           03  lnc_C                    PIC X(01)  VALUE "C".
+006400130418           03  lnc_S                    PIC X(01)  VALUE "S".
+006500130418           03  lnc_Confirm              PIC X(01)  VALUE "C".
+006600130418           03  lnc_Statement            PIC X(01)  VALUE "S".
+006700130418           03  lnc_Zero                 PIC S9(01) VALUE 0.
+006800130418           03  lnc_ConfirmLong          PIC X(10)  VALUE "CONFIRM".
+006900130418           03  lnc_StatementLong        PIC X(10)  VALUE "STATEMENT".
+007000130418
+007100130418       01  lc_Variables.
+007200130418           03  lc_TransTypeCode         PIC X(03).
+007300130418           03  lc_TransOriginCode       PIC X(03).
+007400130418
+007500130418       01 li_ix                         PIC S9(04) VALUE 0.
+007600130418       01 li_RecCount                   PIC S9(10) VALUE 0.
+007700130418       01 lc_ConversionCode             PIC X(10)  VALUE SPACES.
+007800130418       01 li_Account                    PIC S9(09) VALUE 0.
+007900130418       01 lc_NotZeroAcct                PIC X(01)  VALUE SPACES.
+008000130418
+008100130418
+008200130418      * =================================
+008300130418       LINKAGE SECTION.
+008400130418
+008500130418       01 pc_ConfirmStmt                PIC X(01).
+008600130418       01 pi_Isr                        PIC S9(4).
+008700130418       01 pc_Return                     PIC X(01).
+008800130418
+008900130418      * =================================
+009000130418       PROCEDURE DIVISION USING pc_ConfirmStmt
+009100130418                                pi_Isr
+009200130418                                pc_Return.
+009300130418
+009400130418      *---------------------------------------
+009500130418       Main-Process.
+009600130418      *--------------------------------------
+009700130418           EXEC SQL
+009800130418             WHENEVER SQLERROR   CONTINUE
+009900130418           END-EXEC.
+010000130418
+010100130418           PERFORM Read-Statement-Rec.
+010200130418           PERFORM Termination.
+010300130418
+010400130418      *---------------------------------------
+010500130418       Read-Statement-Rec.
+010600130418      *--------------------------------------
+010700130418           PERFORM VARYING li_ix FROM 1 BY 1 UNTIL li_ix > pi_Isr
+010800130418
+010900130418               IF STMTX-SECTION-NO-E(li_ix) = 80
+011000130418                 MOVE   STATEMENT-REC-E(li_ix) TO  ACCOUNT-TXN-SECTION
+011100130418                 MOVE lnc_Y TO AT-OMS-INCLUDE
+011200130418
+011300150224      *RFS 142624 Starts - Commenting out the below code
+011400150224      *          IF (AT-TRADE-DATE < STMTX-START-DATE-E(li_ix) OR
+011500150224      *             AT-TRADE-DATE > STMTX-END-DATE-E(li_ix))   AND
+011600150224      *             pc_ConfirmStmt = lnc_S THEN
+011700150224      *               MOVE lnc_N               TO AT-OMS-INCLUDE
+011800150224      *          ELSE
+011900150224      *            IF AT-ACCOUNT OF ACCOUNT-TXN-SECTION NOT = li_Account
+012000150224      *              AND pc_ConfirmStmt = lnc_S
+012100150224      *              MOVE lnc_N                TO lc_NotZeroAcct
+012200150224      *              MOVE AT-ACCOUNT           TO li_Account
+012300150224      *              PERFORM CHK-ZERO-ACCT
+012400150224      *            END-IF
+012500130418
+012600150224      *            IF lc_NotZeroAcct = lnc_N
+012700150224      *               MOVE lc_NotZeroAcct         TO AT-OMS-INCLUDE
+012800150224      *            END-IF
+012900150224      *            IF AT-OMS-INCLUDE = lnc_Y
+013000130418                      PERFORM CHK-TRN THRU CHK-TRN-EXIT
+013100150224      *               END-IF
+013200150224      *            END-IF
+013300130418
+013400130418                   MOVE ACCOUNT-TXN-SECTION    TO STATEMENT-REC-E(li_ix)
+013500130418                 END-IF
+013600150224      * RFS142624 ENDS
+013700130418           END-PERFORM.
+013800150224      * RFS 142624 STARTS - Commenting the below code
+013900130418      *--------------------------------------
+014000150224      *CHK-ZERO-ACCT.
+014100130418      *--------------------------------------
+014200150224      *     MOVE lnc_Zero                      TO li_RecCount.
+014300130418
+014400150224      *     EXEC SQL
+014500150224      *       SELECT COUNT(*) INTO :li_RecCount
+014600150224      *       FROM MFAACCIVP
+014700150224      *       WHERE ACCOUNT_NO = :li_Account  AND
+014800150224      *       CURR_UNIT_BAL > 0
+014900150224      *     END-EXEC.
+015000130418
+015100150224      *     IF li_RecCount > lnc_Zero THEN
+015200150224      *        MOVE lnc_Y                      TO lc_NotZeroAcct
+015300130418
+015400150224      *     END-IF.
+015500150224      * RFS 142624 ENDS
+015600130418      *--------------------------------------
+015700130418       CHK-TRN.
+015800130418      *--------------------------------------
+015900130418              MOVE AT-TRANS-TYPE-CODE          TO lc_TransTypeCode.
+016000130418              MOVE AT-TRANS-ORIGIN-CODE        TO lc_TransOriginCode.
+016100130418
+016200130418             IF pc_ConfirmStmt = lnc_C THEN
+016300130418                MOVE lnc_ConfirmLong           TO lc_ConversionCode
+016400130418             END-IF
+016500130418
+016600130418             IF pc_ConfirmStmt = lnc_S THEN
+016700130418                MOVE lnc_StatementLong         TO lc_ConversionCode
+016800130418             END-IF
+016900130418
+017000130418            MOVE lnc_Zero                      TO li_RecCount
+017100130418
+017200130418             EXEC SQL
+017300130418                SELECT COUNT(*) INTO :li_RecCount
+017400130418                FROM MFAEXTRNSP
+017500130418                WHERE CONVERSION_CODE =:lc_ConversionCode AND
+017600130418                TRANS_TYPE_CODE =:lc_TransTypeCode AND
+017700130418                TRANS_ORIGIN_CODE =:lc_TransOriginCode
+017800130418             END-EXEC
+017900130418
+018000130418             IF li_RecCount > lnc_Zero THEN
+018100130418                MOVE lnc_N                     TO AT-OMS-INCLUDE
+018200130418                CONTINUE
+018300130418             ELSE
+018400130418                MOVE lnc_Zero                  TO li_RecCount
+018500130418
+018600130418                EXEC SQL
+018700130418                  SELECT COUNT(*) INTO :li_RecCount
+018800130418                  FROM MFAEXTRNSP
+018900130418                  WHERE CONVERSION_CODE = :lc_ConversionCode AND
+019000130418                  TRANS_TYPE_CODE       = :lc_TransTypeCode  AND
+019100130418                  TRANS_ORIGIN_CODE     = "  "
+019200130418                END-EXEC
+019300130418             END-IF
+019400130418
+019500130418             IF li_RecCount > lnc_Zero THEN
+019600130418                MOVE lnc_N                     TO AT-OMS-INCLUDE
+019700130418                CONTINUE
+019800130418             END-IF.
+019900130418
+020000130418       CHK-TRN-EXIT.
+020100130418           EXIT.
+020200130418
+020300130418      *---------------------------------------
+020400130418       Termination.
+020500130418      *--------------------------------------
+020600130418
+020700130418           GOBACK.
+020800130418

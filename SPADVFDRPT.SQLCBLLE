@@ -1,0 +1,1055 @@
+000100170828       IDENTIFICATION DIVISION.
+000200210809       PROGRAM-ID.    SPADVFDRPT.
+000300170828       AUTHOR.        Ewa Kolasinska-Roj.
+000400170828       INSTALLATION.  L & T Infotech.
+000500210817       DATE-WRITTEN.  Aug 2021.
+000600170828       DATE-COMPILED.
+000700170828      *******************************************************************
+000800210831      * This stored procedure return result set for the Wealthlink      *
+000900210831      * Fund Holders/Trial Balance Report, called from Advisor menu.    *
+001000170828      *******************************************************************
+001100210831      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE               *
+001200170828      *******************************************************************
+001400210831      * Ewa K       * 2021/08/09 * RFS187025 - Create program.          *
+001401210831      * Ewa K       * 2021/08/31 * RFS187025 - Return Market Value at   *
+001402210831      *             *            * fund currency and Curr Unit Balance. *
+001403210901      * Ewa K       * 2021/09/01 * RFS187025 - Return fund Currency     *
+001404210905      * Ewa K       * 2021/09/05 * RFS187025 - Return Acct Type, Nominee*
+001405210905      *             *            * flag, Book Value (FRQ change). Remove*
+001406210905      *             *            * Market Value at base currency. Change*
+001407210905      *             *            * default sort (Investment Name+Account*
+001408210907      * Ewa K       * 2021/09/07 * RFS187025 - Default sort will be     *
+001409210907      *             *            * identified by "00".                  *
+001410210924      * Ewa K       * 2021/09/24 * RFS187025 - Add new parm for the     *
+001411210924      *             *            * "Include Zero Balance Fund" check box*
+001412211013      * Ewa K       * 2021/10/13 * RFS187025 - Return Account Type Code *
+001413211013      *             *            * in Language provided. Defect# 118441 *
+001600170828      *******************************************************************
+001700170828       ENVIRONMENT DIVISION.
+001800170828       CONFIGURATION SECTION.
+001900170828       SOURCE-COMPUTER. IBM-AS400.
+002000170828       OBJECT-COMPUTER. IBM-AS400.
+002100170828       SPECIAL-NAMES.
+002101210809           LINKAGE TYPE IS PROCEDURE FOR "FXCHKOBJ".
+002200170828      *
+002300170828       INPUT-OUTPUT SECTION.
+002400170828       FILE-CONTROL.
+002500170828
+002600170828       DATA DIVISION.
+002700170828       FILE SECTION.
+002800170828      * ---------------------------------
+002900170828       WORKING-STORAGE SECTION.
+003000170828      * ---------------------------------
+003100170828      * Replace "SQLSTD" with the name of Current Program
+003200170828          COPY CPYSQLFLD
+003300210809             REPLACING == "CURRENT_PROGRAM" == BY == "SPADVFDRPT" ==.
+003400170828
+003500170828       01 lc_WorkFields.
+003600210809          03 li_Count              PIC S9(09) COMP-3 VALUE 0.
+003700210809          03 li_EndRow             PIC S9(09) COMP-3 VALUE 0.
+003800210809          03 li_TotalRows          PIC S9(09) COMP-3 VALUE 0.
+003900210809          03 lc_OrderBy            PIC  X(01) VALUE SPACES.
+003901210809          03 lc_DealerCode         PIC  X(04) VALUE SPACES.
+003902210809          03 lc_DealerRep          PIC  X(06) VALUE SPACES.
+003903210809          03 li_Account_No         PIC S9(09) COMP-3 VALUE 0.
+003904210809          03 lc_Dealer_Acct_No     PIC  X(15) VALUE SPACES.
+003905210809          03 lc_ExchangeRateType   PIC  X(01) VALUE SPACES.
+003906210810          03 lc-BaseCurrency       PIC  X(03) VALUE SPACES.
+003907210809          03 lc_BaseCurrency       PIC  X(03) VALUE SPACES.
+003908210809          03 lc_CreateView         PIC  X(25) VALUE SPACES.
+003909210905          03 lc_ViewColumns        PIC X(250) VALUE SPACES.
+003910210905          03 lc_SelectColumns      PIC X(900) VALUE SPACES.
+003911210924          03 lc_ViewFrom           PIC X(700) VALUE SPACES.
+003912210924          03 lc_ViewWhere          PIC X(200) VALUE SPACES.
+003913210905          03 lc_String             PIC X(2300) VALUE SPACES.
+003914210810          03 lc_ProcessDate.
+003915210810             05 lc_AsAtDate           PIC X(08).
+003916210810             05 li_AsAtDate REDEFINES lc_AsAtDate PIC S9(08).
+003917210810             05 FILLER                PIC X(161).
+004008210809
+004009210809       01 lb_EOFArrayInd           PIC 1.
+004010210809         88 lb_noMoreFunds          VALUE B"0".
+004011210809         88 lb_MoreFunds            VALUE B"1".
+004012210809
+004100210809       01 lc_Constants.
+004101210810           03 lnc_Space            PIC X(01) VALUE SPACE.
+004102210810           03 lnc_Quote            PIC X(01) VALUE QUOTE.
+004103210809           03 lnc_elemDelim        PIC X(01) VALUE ";".
+004104210809           03 lnc_rowDelim         PIC X(01) VALUE ",".
+004105210809           03 li_MaxEntries        PIC S9(03) COMP-3 VALUE 10.
+004200210809           03 lncc-All             PIC X(03) VALUE "ALL".
+004300210809           03 lncc-A               PIC X(01) VALUE "A".
+004400210809           03 lncc-D               PIC X(01) VALUE "D".
+004500210809           03 lncc-Y               PIC X(01) VALUE "Y".
+004600210809           03 lncc-N               PIC X(01) VALUE "N".
+004601210809           03 li_One               PIC S9(01) VALUE 1.
+004602210809           03 lnc_English          PIC X(01) VALUE "E".
+004604210831           03 lnc_ProgramCode      PIC X(08) VALUE "ACILST".
+004605210809           03 lnc_ProgramAction    PIC X(10) VALUE "DEFAULT".
+004606210809           03 lnc_CurrencyCAD      PIC X(10) VALUE "CAD".
+004607210809      **List of errors returned to the front-end app.
+004608210809           03 lnc_Success          PIC X(05) VALUE "00000".
+004609210809           03 lnc_WrongParms       PIC X(05) VALUE "00001".
+004610210809           03 lnc_DealerNotFound   PIC X(05) VALUE "00002".
+004611210809           03 lnc_RepNotFound      PIC X(05) VALUE "00003".
+004612210809           03 lnc_PrepareView      PIC X(05) VALUE "00004".
+004613210809           03 lnc_ExecuteView      PIC X(05) VALUE "00005".
+004700170828
+004800170828      * Error Codes, Uniquely Identify where the error happened
+004900210809       01 WS-ERR-CODE              PIC X(02) VALUE SPACES.
+005000210809          88 lnc_Err_Ok                      VALUE SPACES.
+005100210809          88 lnc_Err_10                      VALUE "10".
+005200210809          88 lnc_Err_11                      VALUE "11".
+005300210809          88 lnc_Err_12                      VALUE "12".
+005301210809          88 lnc_Err_13                      VALUE "13".
+005302210809          88 lnc_Err_14                      VALUE "14".
+005303210809          88 lnc_Err_15                      VALUE "15".
+005304210809          88 lnc_Err_16                      VALUE "16".
+005305210809          88 lnc_Err_17                      VALUE "17".
+005306210809          88 lnc_Err_18                      VALUE "18".
+005307210809          88 lnc_Err_19                      VALUE "19".
+005400170828
+005500210809       01 lc_ErrorCodeDescr        PIC X(40) VALUE SPACES.
+005600210809          88 lnc_ErrOpenCur                  VALUE
+005700210809              "SPADVFDRPT: Error while opening Cursor".
+006000210809          88 lncc_ErrCountTotalRows           VALUE
+006100210809              "SPADVFDRPT: Error in count Total Rows".
+006101210809          88 lnc_ErrPrepareView               VALUE
+006102210809              "SPADVFDRPT: Error in Prepare View".
+006103210809          88 lnc_ErrExecuteView               VALUE
+006104210809              "SPADVFDRPT: Error in Execute View".
+006105210809          88  lnc_ErrInsertWRKINVCDP          VALUE
+006106210809              "SPADVFDRPT: Error on insert into QTEMP".
+006200170828
+006201210809      * FXCHKOBJ parametes
+006202210809       01 lc_checkObjectParms.
+006203210809         03 lc_checkObjectConstants.
+006204210809           05 lnc_libQtemp         PIC X(10) VALUE "QTEMP".
+006205210809           05 lnc_objectTypeFile   PIC X(10) VALUE "*FILE".
+006206210809         03 lc_objectName          PIC X(10).
+006207210809         03 lc_messageId           PIC X(10).
+006208210809           88 lnc_messageIdOk                VALUE SPACES.
+006209210809
+006210210809       01  lc_ClearPhysicalfile.
+006211210809         03  lnc_ClearPfm           PIC X(25)      VALUE
+006212210809                                    "CLRPFM QTEMP/WRKINVCDP".
+006213210809         03  lnc_ClearLen           PIC 9(10)V9(5) COMP-3
+006214210809                                                  VALUE 25.
+006215210809       01 li_Idx                    PIC S9(05) COMP-3 VALUE 0.
+006217210809       01 ln_Pointer                PIC S9(09) Value 0.
+006219210809
+006224210809       01 lc_TempInvVar.
+006225210809         03 lc_tmpInvCd             PIC X(05)  VALUE  SPACES.
+006226210809
+006300170828           EXEC SQL
+006400170828             INCLUDE SQLCA
+006500170828           END-EXEC.
+006501210809
+006502210809      * Constants.
+006503210809       77 lnc_TableName  PIC  X(10) VALUE "WRKINVCDP".
+006600170828
+006700170828       LINKAGE SECTION.
+006800210810       01  pc_Dealer                PIC X(04).
+006900170828       01  pc_Rep                   PIC X(06).
+006901210809       01  pi_Account               PIC S9(09) COMP-3.
+006902210809       01  pc_DlerAccount           PIC X(15).
+006903210809       01  pc_FundArray             PIC X(100).
+007200170828       01  pc_Lang                  PIC X(01).
+007300210809       01  pc_SortId                PIC X(02).
+007301210907           88 SortbyDefaultSort         VALUE "00".
+007302210809           88 SortbyAccount             VALUE "1 ".
+007303210809           88 SortbyDlrAcct             VALUE "2 ".
+007304210809           88 SortbyIvrName             VALUE "3 ".
+007305210809           88 SortbyFundName            VALUE "4 ".
+007306210809           88 SortbyMktValue            VALUE "5 ".
+007307210907           88 SortbyCurrUnitBal         VALUE "6 ".
+007308210907           88 SortbyBookValue           VALUE "7 ".
+007309210907           88 SortbyAcctType            VALUE "8 ".
+007310210907           88 SortbyNomineeFlag         VALUE "9 ".
+007400210809       01  pc_SorDir                PIC X(01).
+007401210809           88 OrderAsc                  VALUE "A".
+007402210809           88 OrderDesc                 VALUE "D".
+007500170828       01  pi_StrRow                PIC S9(09) COMP-3.
+007600170828       01  pi_NumberOfRows          PIC S9(09) COMP-3.
+007601210924       01  pc_ZeroBalanceFund       PIC X(01).
+007602210924           88 IncludeZeroBal         VALUE "Y".
+007700170828       01  pi_ToTalRows             PIC S9(09) COMP-3.
+007701210810       01  pc_MsgCode               PIC X(05).
+007800170828
+007900210810       PROCEDURE DIVISION USING     pc_Dealer,
+008000210809                                    pc_Rep,
+008100210809                                    pi_Account,
+008200210809                                    pc_DlerAccount,
+008201210809                                    pc_FundArray,
+008300170828                                    pc_Lang,
+008400170828                                    pc_SortId,
+008500210809                                    pc_SorDir,
+008600170828                                    pi_StrRow,
+008700170828                                    pi_NumberOfRows,
+008701210924                                    pc_ZeroBalanceFund,
+008800210809                                    pi_TotalRows,
+008802210810                                    pc_MsgCode.
+008803210809
+008900170828      *****************************************************************
+009000170828       MainLine.
+009001210809
+009100170828           PERFORM Initial-Logic.
+009101210809           PERFORM Detail-Processing.
+009103210809           PERFORM Termination.
+009104210809
+010200170828      *****************************************************************
+010300170828       Initial-Logic.
+010301210809
+010400170828           EXEC SQL
+010500170828             WHENEVER SQLERROR
+010600170828               CONTINUE
+010700170828           END-EXEC.
+010800170828
+010901210809           INITIALIZE lc_WorkFields, pc_MsgCode.
+011000170828           INITIALIZE pi_TotalRows.
+011100170828           SET lnc_Err_Ok  TO TRUE.
+011101210809
+011102210810           MOVE lnc_Success TO pc_MsgCode.
+011901210809
+011902210810           IF pc_Dealer = SPACES AND
+011903210810              pc_Rep    = SPACES
+011908210809                MOVE lnc_WrongParms TO pc_MsgCode
+011909210809                PERFORM Termination
+011910210809           END-IF.
+011911210809
+011912210810           MOVE pc_Dealer      TO lc_DealerCode.
+011913210810           MOVE pc_Rep         TO lc_DealerRep.
+011914210809           MOVE pc_DlerAccount TO lc_Dealer_Acct_No.
+011915210809           COMPUTE li_Account_No = pi_Account.
+011916210809
+011917210809           PERFORM ValidateMFADEAP.
+011918210809           PERFORM ValidateMFADEAREP.
+011919210809
+011920210809           IF pc_Lang = SPACES THEN
+011921210809              MOVE lnc_English TO pc_Lang
+011922210809           ELSE
+011923210809              EXEC SQL
+011924210809                SET :pc_Lang = UPPER(:pc_Lang)
+011925210809              END-EXEC
+011926210809           END-IF.
+011927210809
+011928210809           COMPUTE li_EndRow = (pi_StrRow + pi_NumberOfRows) - li_One.
+011929210809
+011930210809           CALL "RTVPRCDTP" USING lc_ProcessDate.
+011931210809           CANCEL "RTVPRCDTP".
+011932210809
+011933210810      ** Get base Exchange Rate Type.  Default to Noon Rate ('N')
+011934210809           INITIALIZE lc_ExchangeRateType.
+011935210809           EXEC SQL
+011936210810             SELECT COALESCE(Exchange_Rate_Type, :lncc-N)
+011937210809               INTO :lc_ExchangeRateType
+011938210809               FROM Mfaprgerp
+011939210809               WHERE Program_Code = :lnc_ProgramCode
+011940210810                 AND Program_Action = :lnc_ProgramAction
+011941210809           END-EXEC.
+011942210809
+011943210809      ** Get base currency. Default is Canadian.
+011944210809           EXEC SQL
+011945210810             SELECT COALESCE(curp.Currency, :lnc_CurrencyCAD)
+011947210810             INTO   :lc-BaseCurrency
+011949210810             FROM   MFACURP curp
+011950210810             WHERE  curp.Base_Currency = :lncc-Y
+011952210810           END-EXEC.
+011953210809
+011954210809           IF SQLCODE NOT = 0  OR
+011955210809              lc-BaseCurrency = SPACES
+011956210809              MOVE lnc_CurrencyCAD TO lc-BaseCurrency
+011957210809           END-IF.
+011958210809
+011959210809           PERFORM Create-View.
+011960210809
+011961210809      * Insert funds from array into WRKINVCDP tbl.
+011962210809           IF pc_FundArray NOT = SPACES
+011963210809              PERFORM Create-Table-WRKINVCDP
+011964210809              PERFORM Load-Funds-Array
+011965210809           END-IF.
+011966210809
+012201210809      *****************************************************************
+012202210809       Detail-Processing.
+012203210809
+012204210809           IF pc_FundArray NOT = SPACES
+012218210809              PERFORM CountTotalRowsWithFunds
+012219210809              PERFORM Declare-Cursor-WithFunds
+012220210809           ELSE
+012221210809              PERFORM CountTotalRows
+012222210809              PERFORM Declare-Cursor-All
+012223210809           END-IF.
+012224210809           PERFORM Prepare-Result-Set.
+012300170828
+012301210810      *****************************************************************
+012302210810       Declare-Cursor-WithFunds.
+012303210810
+012304210810           EXEC SQL
+012305210810               DECLARE CUR_RPTFUNDS CURSOR FOR
+012306210810               SELECT
+012307210810                Y.ACCOUNT_NO
+012308210810               ,Y.DEALER_ACCOUNT_NO
+012309210810               ,Y.LEGAL_NAME
+012310210905               ,Y.ACCOUNT_TYPE_CODE
+012311210905               ,Y.NOMINEE
+012312210810               ,Y.INVESTMENT_CODE
+012313210810               ,Y.INVESTMENT_NAME_LONG
+012314210831               ,Y.CURR_UNIT_BAL
+012316210831               ,Y.MARKET_VALUE_FUND
+012317210905               ,Y.BOOK_VALUE
+012318210901               ,Y.CURRENCY
+012319210810                FROM (
+012320210810                SELECT
+012321210810                X.ACCOUNT_NO
+012322210810               ,X.DEALER_ACCOUNT_NO
+012323210810               ,X.LEGAL_NAME
+012324210905               ,X.ACCOUNT_TYPE_CODE
+012325210905               ,X.NOMINEE
+012326210810               ,X.INVESTMENT_CODE
+012327210810               ,X.INVESTMENT_NAME_LONG
+012328210831               ,X.CURR_UNIT_BAL
+012330210831               ,X.MARKET_VALUE_FUND
+012331210905               ,X.BOOK_VALUE
+012332210901               ,X.CURRENCY
+012333210810              ,ROW_NUMBER() OVER (
+012334210810               ORDER BY
+012335210810               CASE WHEN (:pc_SorDir = :lncc-D
+012336210907                AND :pc_SortId = "00") THEN X.ORDER_BY_FUND_ACCT
+012337210810               END DESC,
+012338210810               CASE WHEN (:pc_SorDir = :lncc-A
+012339210907                AND :pc_SortId = "00") THEN X.ORDER_BY_FUND_ACCT
+012340210810               END ASC,
+012341210907               CASE WHEN (:pc_SorDir = :lncc-D
+012342210907                AND :pc_SortId = "1") THEN X.ACCOUNT_NO
+012343210907               END DESC,
+012344210907               CASE WHEN (:pc_SorDir = :lncc-A
+012345210907                AND :pc_SortId = "1") THEN X.ACCOUNT_NO
+012346210907               END ASC,
+012347210810               CASE WHEN (:pc_SorDir = :lncc-D
+012348210810                AND :pc_SortId = "2") THEN X.DEALER_ACCOUNT_NO
+012349210810               END DESC,
+012350210810               CASE WHEN (:pc_SorDir = :lncc-A
+012351210810                AND :pc_SortId = "2") THEN X.DEALER_ACCOUNT_NO
+012352210810               END ASC,
+012353210810               CASE WHEN (:pc_SorDir = :lncc-D
+012354210810                AND :pc_SortId = "3") THEN X.LEGAL_NAME
+012355210810               END DESC,
+012356210810               CASE WHEN (:pc_SorDir = :lncc-A
+012357210810                AND :pc_SortId = "3") THEN X.LEGAL_NAME
+012358210810               END ASC,
+012359210810               CASE WHEN (:pc_SorDir = :lncc-D
+012360210810                AND :pc_SortId = "4") THEN X.INVESTMENT_NAME_LONG
+012361210810               END DESC,
+012362210810               CASE WHEN (:pc_SorDir = :lncc-A
+012363210810                AND :pc_SortId = "4") THEN X.INVESTMENT_NAME_LONG
+012364210810               END ASC,
+012365210810               CASE WHEN (:pc_SorDir = :lncc-A
+012366210905                AND :pc_SortId = "5") THEN X.MARKET_VALUE_FUND
+012367210810               END ASC,
+012368210810               CASE WHEN (:pc_SorDir = :lncc-D
+012369210905                AND :pc_SortId = "5") THEN X.MARKET_VALUE_FUND
+012370210817               END DESC
+012371210831              ,CASE WHEN (:pc_SorDir = :lncc-A
+012372210831                AND :pc_SortId = "6") THEN X.CURR_UNIT_BAL
+012373210831               END ASC
+012374210831              ,CASE WHEN (:pc_SorDir = :lncc-D
+012375210831                AND :pc_SortId = "6") THEN X.CURR_UNIT_BAL
+012376210831               END DESC
+012377210831              ,CASE WHEN (:pc_SorDir = :lncc-A
+012378210905                AND :pc_SortId = "7") THEN X.BOOK_VALUE
+012379210831               END ASC
+012380210831              ,CASE WHEN (:pc_SorDir = :lncc-D
+012381210905                AND :pc_SortId = "7") THEN X.BOOK_VALUE
+012382210831               END DESC
+012383210905              ,CASE WHEN (:pc_SorDir = :lncc-A
+012384210905                AND :pc_SortId = "8") THEN X.ACCOUNT_TYPE_CODE
+012385210905               END ASC
+012386210905              ,CASE WHEN (:pc_SorDir = :lncc-D
+012387210905                AND :pc_SortId = "8") THEN X.ACCOUNT_TYPE_CODE
+012388210905               END DESC
+012389210905              ,CASE WHEN (:pc_SorDir = :lncc-A
+012390210905                AND :pc_SortId = "9") THEN X.NOMINEE
+012391210905               END ASC
+012392210905              ,CASE WHEN (:pc_SorDir = :lncc-D
+012393210905                AND :pc_SortId = "9") THEN X.NOMINEE
+012394210905               END DESC
+012395210810               ) AS RowNumber
+012396210810               FROM (
+012397210810               SELECT
+012398210810                  a.ACCOUNT_NO
+012399210810                 ,a.DEALER_ACCOUNT_NO
+012400210810                 ,a.LEGAL_NAME
+012401211013118441**         ,a.ACCOUNT_TYPE_CODE
+012402211013118441           ,COALESCE(actylp.Account_Type_Code_Lang,
+012403211013118441            a.Account_Type_Code) AS Account_Type_Code
+012404210905                 ,a.NOMINEE
+012405210810                 ,a.INVESTMENT_CODE
+012406210818                 ,CHAR(CASE WHEN a.INVESTMENT_NAME_LONG <> " "
+012407210818                   THEN TRIM(a.INVESTMENT_NAME_LONG) || " - " ||
+012408210818                    a.INDUSTRY_FUND_CODE
+012409210818                   ELSE a.INDUSTRY_FUND_CODE
+012410210818                   END, 43) AS INVESTMENT_NAME_LONG
+012411210831                 ,a.CURR_UNIT_BAL
+012412210905      **         ,CASE WHEN a.currency = :lc-BaseCurrency
+012413210905      **           THEN
+012414210905      **             DEC(ROUND((a.curr_unit_bal * a.unit_price),2),13,2)
+012415210905      **           ELSE
+012416210905      **             DEC(ROUND(((a.curr_unit_bal * a.unit_price)/
+012417210905      **             COALESCE(exrhmp.exchange_rate,1)),2),13,2)
+012418210905      **          END As MARKET_VALUE
+012419210831                 ,DEC(ROUND((a.curr_unit_bal * a.unit_price),2),13,2)
+012420210831                  AS MARKET_VALUE_FUND
+012421210905                 ,DEC(ROUND((a.curr_unit_bal *
+012422210905                  a.AVERAGE_UNIT_COST),2),13,2) AS BOOK_VALUE
+012423210901                 ,a.currency
+012424210924                 ,CAST(a.INVESTMENT_NAME_LONG ||
+012425210905                  CHAR(DIGITS(a.Account_No),9) AS CHAR(44))
+012426210905                  AS ORDER_BY_FUND_ACCT
+012427210810               FROM QTEMP/TRLRPTV a
+012428210816               INNER JOIN QTEMP/WRKINVCDP temp ON
+012429210810                  a.Investment_Code = temp.Investment_Code
+012430211013118441         LEFT OUTER JOIN MFAACTYLP actylp ON
+012431211013118441            a.Account_Type_Code = actylp.Account_Type_Code
+012432211013118441            AND actylp.Language_Code = :pc_Lang
+012433210810               LEFT OUTER JOIN Mfaexrhmp exrhmp ON
+012434210810                  exrhmp.Currency = a.Currency
+012435210810                  AND exrhmp.Trade_Date = :li_AsAtDate
+012436210810                  AND exrhmp.Exchange_Rate_Type = :lc_ExchangeRateType
+012437210816               WHERE
+012438210818                 a.Account_Status = :lncc-A     and
+012439210816              (((a.Account_NO = :li_Account_No  and
+012440210810               :li_Account_No <> 0) or (Trim(a.DEALER_ACCOUNT_NO) =
+012441210810               TRIM(:lc_Dealer_Acct_No) and :lc_Dealer_Acct_No <> "  "))
+012442210810               or (:li_Account_No = 0 and :lc_Dealer_Acct_No = " "))
+012443210810               ) AS X
+012444210810               ) AS Y
+012445210810               WHERE RowNumber >= :pi_StrRow
+012446210810                 AND RowNumber <= :li_EndRow
+012447210816               FOR READ ONLY
+012448210810           END-EXEC.
+012449210810
+012450210810           EXEC SQL
+012451210810                OPEN CUR_RPTFUNDS
+012452210810           END-EXEC.
+012453210810
+012454210810           MOVE SQLSTATE TO lc_sqlStates.
+012455210810           IF NOT lncc_sqlSuccessful
+012456210810              SET lnc_Err_10         TO TRUE
+012457210810              SET lnc_ErrOpenCur     TO TRUE
+012458210810              MOVE Ws-Err-Code       TO pc_MsgCode
+012459210810              PERFORM BuildShortDesc
+012460210810              PERFORM Dsp-Error
+012461210810              PERFORM Termination
+012462210810           END-IF.
+012463210810
+012464170828      *****************************************************************
+012500210809       Declare-Cursor-All.
+012501210809
+012600170828           EXEC SQL
+012700210809               DECLARE CUR_RPTALL   CURSOR FOR
+012701210810               SELECT
+012702210810                Y.ACCOUNT_NO
+012703210810               ,Y.DEALER_ACCOUNT_NO
+012704210831               ,Y.LEGAL_NAME
+012705210905               ,Y.ACCOUNT_TYPE_CODE
+012706210905               ,Y.NOMINEE
+012707210810               ,Y.INVESTMENT_CODE
+012708210810               ,Y.INVESTMENT_NAME_LONG
+012709210831               ,Y.CURR_UNIT_BAL
+012711210831               ,Y.MARKET_VALUE_FUND
+012712210905               ,Y.BOOK_VALUE
+012713210901               ,Y.CURRENCY
+012714210810                FROM (
+012715210810                SELECT
+012716210810                X.ACCOUNT_NO
+012717210810               ,X.DEALER_ACCOUNT_NO
+012718210810               ,X.LEGAL_NAME
+012719210905               ,X.ACCOUNT_TYPE_CODE
+012720210905               ,X.NOMINEE
+012721210810               ,X.INVESTMENT_CODE
+012722210810               ,X.INVESTMENT_NAME_LONG
+012723210831               ,X.CURR_UNIT_BAL
+012725210831               ,X.MARKET_VALUE_FUND
+012726210905               ,X.BOOK_VALUE
+012727210901               ,X.CURRENCY
+012728210810              ,ROW_NUMBER() OVER (
+012729210810               ORDER BY
+012736210907               CASE WHEN (:pc_SorDir = :lncc-D
+012737210907                AND :pc_SortId = "00") THEN X.ORDER_BY_FUND_ACCT
+012738210907               END DESC,
+012739210907               CASE WHEN (:pc_SorDir = :lncc-A
+012740210907                AND :pc_SortId = "00") THEN X.ORDER_BY_FUND_ACCT
+012741210907               END ASC,
+012742210907               CASE WHEN (:pc_SorDir = :lncc-D
+012743210907                AND :pc_SortId = "1") THEN X.ACCOUNT_NO
+012744210907               END DESC,
+012745210907               CASE WHEN (:pc_SorDir = :lncc-A
+012746210907                AND :pc_SortId = "1") THEN X.ACCOUNT_NO
+012747210907               END ASC,
+012748210810               CASE WHEN (:pc_SorDir = :lncc-D
+012749210810                AND :pc_SortId = "2") THEN X.DEALER_ACCOUNT_NO
+012750210810               END DESC,
+012751210810               CASE WHEN (:pc_SorDir = :lncc-A
+012752210810                AND :pc_SortId = "2") THEN X.DEALER_ACCOUNT_NO
+012753210810               END ASC,
+012754210810               CASE WHEN (:pc_SorDir = :lncc-D
+012755210810                AND :pc_SortId = "3") THEN X.LEGAL_NAME
+012756210810               END DESC,
+012757210810               CASE WHEN (:pc_SorDir = :lncc-A
+012758210810                AND :pc_SortId = "3") THEN X.LEGAL_NAME
+012759210810               END ASC,
+012760210810               CASE WHEN (:pc_SorDir = :lncc-D
+012761210810                AND :pc_SortId = "4") THEN X.INVESTMENT_NAME_LONG
+012762210810               END DESC,
+012763210810               CASE WHEN (:pc_SorDir = :lncc-A
+012764210810                AND :pc_SortId = "4") THEN X.INVESTMENT_NAME_LONG
+012765210810               END ASC,
+012766210810               CASE WHEN (:pc_SorDir = :lncc-A
+012767210905                AND :pc_SortId = "5") THEN X.MARKET_VALUE_FUND
+012768210810               END ASC,
+012769210810               CASE WHEN (:pc_SorDir = :lncc-D
+012770210905                AND :pc_SortId = "5") THEN X.MARKET_VALUE_FUND
+012771210816               END DESC
+012772210831              ,CASE WHEN (:pc_SorDir = :lncc-A
+012773210831                AND :pc_SortId = "6") THEN X.CURR_UNIT_BAL
+012774210831               END ASC
+012775210831              ,CASE WHEN (:pc_SorDir = :lncc-D
+012776210831                AND :pc_SortId = "6") THEN X.CURR_UNIT_BAL
+012777210831               END DESC
+012778210831              ,CASE WHEN (:pc_SorDir = :lncc-A
+012779210905                AND :pc_SortId = "7") THEN X.BOOK_VALUE
+012780210831               END ASC
+012781210831              ,CASE WHEN (:pc_SorDir = :lncc-D
+012782210905                AND :pc_SortId = "7") THEN X.BOOK_VALUE
+012783210831               END DESC
+012784210905              ,CASE WHEN (:pc_SorDir = :lncc-A
+012785210905                AND :pc_SortId = "8") THEN X.ACCOUNT_TYPE_CODE
+012786210905               END ASC
+012787210905              ,CASE WHEN (:pc_SorDir = :lncc-D
+012788210905                AND :pc_SortId = "8") THEN X.ACCOUNT_TYPE_CODE
+012789210905               END DESC
+012790210905              ,CASE WHEN (:pc_SorDir = :lncc-A
+012791210905                AND :pc_SortId = "9") THEN X.NOMINEE
+012792210905               END ASC
+012793210905              ,CASE WHEN (:pc_SorDir = :lncc-D
+012794210905                AND :pc_SortId = "9") THEN X.NOMINEE
+012795210905               END DESC
+012796210810               ) AS RowNumber
+012797210810               FROM (
+012798210810               SELECT
+012799210810                  a.ACCOUNT_NO
+012800210810                 ,a.DEALER_ACCOUNT_NO
+012801210810                 ,a.LEGAL_NAME
+012803211013118441**         ,a.ACCOUNT_TYPE_CODE
+012804211013118441           ,COALESCE(actylp.Account_Type_Code_Lang,
+012805211013118441            a.Account_Type_Code) AS Account_Type_Code
+012807210905                 ,a.NOMINEE
+012808210810                 ,a.INVESTMENT_CODE
+012809210818                 ,CHAR(CASE WHEN a.INVESTMENT_NAME_LONG <> " "
+012810210818                   THEN TRIM(a.INVESTMENT_NAME_LONG) || " - "  ||
+012811210818                   a.INDUSTRY_FUND_CODE
+012812210818                   ELSE a.INDUSTRY_FUND_CODE
+012813210818                   END, 43) AS INVESTMENT_NAME_LONG
+012814210831                 ,a.CURR_UNIT_BAL
+012815210905      **         ,CASE WHEN a.currency = :lc-BaseCurrency
+012816210905      **           THEN
+012817210905      **             DEC(ROUND((a.curr_unit_bal * a.unit_price),2),13,2)
+012818210905      **           ELSE
+012819210905      **             DEC(ROUND(((a.curr_unit_bal * a.unit_price)/
+012820210905      **             COALESCE(exrhmp.exchange_rate,1)),2),13,2)
+012821210905      **          END As MARKET_VALUE
+012822210905                 ,DEC(ROUND((a.curr_unit_bal * a.unit_price),2),13,2)
+012823210831                  AS MARKET_VALUE_FUND
+012824210905                 ,DEC(ROUND((a.curr_unit_bal *
+012825210905                  a.AVERAGE_UNIT_COST),2),13,2) AS BOOK_VALUE
+012826210901                 ,a.currency
+012827210924                 ,CAST(a.INVESTMENT_NAME_LONG ||
+012828210905                  CHAR(DIGITS(a.Account_No),9) AS CHAR(44))
+012829210905                  AS ORDER_BY_FUND_ACCT
+012830210810               FROM QTEMP/TRLRPTV a
+012831211013118441         LEFT OUTER JOIN MFAACTYLP actylp ON
+012832211013118441            a.Account_Type_Code = actylp.Account_Type_Code
+012833211013118441            AND actylp.Language_Code = :pc_Lang
+012834210810               LEFT OUTER JOIN Mfaexrhmp exrhmp ON
+012835210810                  exrhmp.Currency = a.Currency
+012836210810                  AND exrhmp.Trade_Date = :li_AsAtDate
+012837210810                  AND exrhmp.Exchange_Rate_Type = :lc_ExchangeRateType
+012838210816               WHERE
+012839210818                 a.Account_Status = :lncc-A     and
+012840210816              (((a.Account_NO = :li_Account_No  and
+012841210810               :li_Account_No <> 0) or (Trim(a.DEALER_ACCOUNT_NO) =
+012842210810               TRIM(:lc_Dealer_Acct_No) and :lc_Dealer_Acct_No <> "  "))
+012843210810               or (:li_Account_No = 0 and :lc_Dealer_Acct_No = " "))
+012844210810               ) AS X
+012845210810               ) AS Y
+012846210810               WHERE RowNumber >= :pi_StrRow
+012847210810                 AND RowNumber <= :li_EndRow
+012848210816               FOR READ ONLY
+024000170828           END-EXEC.
+024100170828
+024200170828           EXEC SQL
+024300210809                OPEN CUR_RPTALL
+024400170828           END-EXEC.
+024500170828
+024600170828           MOVE SQLSTATE TO lc_sqlStates.
+024700170828           IF NOT lncc_sqlSuccessful
+024800210810              SET lnc_Err_11         TO TRUE
+024900210809              SET lnc_ErrOpenCur     TO TRUE
+024901210810              MOVE Ws-Err-Code       TO pc_MsgCode
+025000170828              PERFORM BuildShortDesc
+025100170828              PERFORM Dsp-Error
+025200170828              PERFORM Termination
+025300170828           END-IF.
+025400170828
+028801210809      ********t********************************************************
+028802210809       Create-View.
+028803210809
+028804210809           INITIALIZE lc_CreateView, lc_ViewColumns, lc_ViewFrom.
+028807210809           EXEC SQL
+028808210809             DROP VIEW QTEMP/TRLRPTV
+028809210809           END-EXEC.
+028810210809
+028811210816           STRING "CREATE VIEW "            DELIMITED BY SIZE
+028812210816                  "QTEMP"                   DELIMITED BY SIZE
+028813210816                  "/TRLRPTV "               DELIMITED BY SIZE
+028814210809           INTO lc_CreateView.
+028815210809
+028816210816           STRING "(UNIT_PRICE, "           DELIMITED BY SIZE
+028817210816              "ACCOUNT_NO, "                DELIMITED BY SIZE
+028818210816              "INVESTMENT_CODE, "           DELIMITED BY SIZE
+028819210816              "CURR_UNIT_BAL, "             DELIMITED BY SIZE
+028820210905              "AVERAGE_UNIT_COST, "         DELIMITED BY SIZE
+028821210905              "ACCOUNT_TYPE_CODE, "         DELIMITED BY SIZE
+028822210905              "NOMINEE,"                    DELIMITED BY SIZE
+028823210816              "ACCOUNT_STATUS, "            DELIMITED BY SIZE
+028824210816              "DEALER_ACCOUNT_NO, "         DELIMITED BY SIZE
+028825210816              "LEGAL_NAME, "                DELIMITED BY SIZE
+028826210816              "INDUSTRY_FUND_CODE, "        DELIMITED BY SIZE
+028827210816              "CURRENCY, "                  DELIMITED BY SIZE
+028828210816              "INVESTMENT_NAME_LONG) AS "   DELIMITED BY SIZE
+028829210809           INTO lc_ViewColumns.
+028830210809
+028831210817           STRING "SELECT "                     DELIMITED BY SIZE
+028832210817              "invlpp.UNIT_PRICE, "             DELIMITED BY SIZE
+028833210817              "accivp.ACCOUNT_NO, "             DELIMITED BY SIZE
+028834210817              "accivp.INVESTMENT_CODE, "        DELIMITED BY SIZE
+028835210817              "accivp.CURR_UNIT_BAL, "          DELIMITED BY SIZE
+028836210905              "accivp.AVERAGE_UNIT_COST, "      DELIMITED BY SIZE
+028837210905              "CHAR(CASE WHEN accnmp.ACCOUNT_TYPE_CODE IS NULL THEN "
+028838210905              "accntp.ACCOUNT_TYPE_CODE "       DELIMITED BY SIZE
+028839210905              " ELSE "                          DELIMITED BY SIZE
+028840210905              "accnmp.ACCOUNT_TYPE_CODE "       DELIMITED BY SIZE
+028858210905              " END,5) AS ACCOUNT_TYPE_CODE, "  DELIMITED BY SIZE
+028859210905              "accntp.NOMINEE , "               DELIMITED BY SIZE
+028860210817              "accntp.ACCOUNT_STATUS, "         DELIMITED BY SIZE
+028861210817              "accntp.DEALER_ACCOUNT_NO, "      DELIMITED BY SIZE
+028862210817              "CHAR(CASE WHEN ivrp.Last_Name = " DELIMITED BY SIZE
+028863210817              QUOTE                             DELIMITED BY SIZE
+028864210817              lnc_Space                         DELIMITED BY SIZE
+028865210817              QUOTE                             DELIMITED BY SIZE
+028866210817              " THEN"                           DELIMITED BY SIZE
+028867210817              " TRIM(ivrp.Legal_Name) || "      DELIMITED BY SIZE
+028868210817              QUOTE                             DELIMITED BY SIZE
+028869210817              lnc_Space                         DELIMITED BY SIZE
+028870210817              QUOTE                             DELIMITED BY SIZE
+028871210817              " ||"                             DELIMITED BY SIZE
+028872210817              " ivrp.Legal_Name2 "              DELIMITED BY SIZE
+028873210817              " ELSE "                          DELIMITED BY SIZE
+028874210817              " TRIM(ivrp.First_Name) || "      DELIMITED BY SIZE
+028875210817              QUOTE                             DELIMITED BY SIZE
+028876210817              lnc_Space                         DELIMITED BY SIZE
+028877210817              QUOTE                             DELIMITED BY SIZE
+028878210817              " ||"                             DELIMITED BY SIZE
+028879210817              " ivrp.Last_Name "                DELIMITED BY SIZE
+028880210817              " END, 71) AS LEGAL_NAME, "       DELIMITED BY SIZE
+028881210817              "invp.INDUSTRY_FUND_CODE, "       DELIMITED BY SIZE
+028882210817              "invp.CURRENCY, "                 DELIMITED BY SIZE
+028883210816              "CASE WHEN invnmp.INVESTMENT_NAME_LONG IS NOT NULL "
+028884210817                                                DELIMITED BY SIZE
+028885210816              "THEN invnmp.INVESTMENT_NAME_LONG "
+028886210817                                                DELIMITED BY SIZE
+028887210816              "WHEN invnmp2.INVESTMENT_NAME_LONG IS NOT NULL "
+028888210817                                                DELIMITED BY SIZE
+028889210816              "THEN invnmp2.INVESTMENT_NAME_LONG "
+028890210817                                                DELIMITED BY SIZE
+028891210817              "ELSE """" END AS INVESTMENT_NAME_LONG "
+028892210817                                                DELIMITED BY SIZE
+028893210809           INTO lc_SelectColumns.
+028894210924
+028896210817           STRING "FROM MFAINVLPP invlpp "     DELIMITED BY SIZE
+028897210817           "INNER JOIN MFAINVP invp ON "       DELIMITED BY SIZE
+028898210809           "invp.Investment_Code = invlpp.Investment_Code "
+028899210817                                               DELIMITED BY SIZE
+028900210817           "INNER JOIN MFAACCIVP accivp ON "   DELIMITED BY SIZE
+028901210809           "accivp.Investment_Code = invlpp.Investment_Code "
+028902210817                                               DELIMITED BY SIZE
+028903210817           "INNER JOIN Mfaaccntp accntp ON "   DELIMITED BY SIZE
+028904210809           "accntp.Account_No = accivp.Account_No "
+028905210817                                               DELIMITED BY SIZE
+028906210905           "LEFT OUTER JOIN MFAACCNMP accnmp ON "
+028907210905                                               DELIMITED BY SIZE
+028908210905           "accnmp.Account_No = accivp.Account_No "
+028909210905                                               DELIMITED BY SIZE
+028910210817           "INNER JOIN Mfaivrp ivrp ON "       DELIMITED BY SIZE
+028911210809           "ivrp.investor_no = accntp.investor_no "
+028912210817                                               DELIMITED BY SIZE
+028913210816           "LEFT OUTER JOIN MFAinvnmp invnmp ON "
+028914210817                                               DELIMITED BY SIZE
+028915210809           "accivp.investment_Code = invnmp.investment_Code "
+028916210817                                               DELIMITED BY SIZE
+028917210817           "and invnmp.Language_Code = "       DELIMITED BY SIZE
+028918210817            lnc_Quote                          DELIMITED BY SIZE
+028919210817            pc_Lang                            DELIMITED BY SPACE
+028920210817            lnc_Quote                          DELIMITED BY SIZE
+028921210817            lnc_space                          DELIMITED BY SIZE
+028922210816           "LEFT OUTER JOIN MFAinvnmp invnmp2 ON "
+028923210817                                               DELIMITED BY SIZE
+028924210816           "accivp.investment_Code = invnmp2.investment_Code "
+028925210817                                               DELIMITED BY SIZE
+028926210816           "and invnmp2.Language_Code = """" " DELIMITED BY SIZE
+028927210924           INTO lc_ViewFrom.
+028928210924
+028929210924           IF IncludeZeroBal
+028930210924               STRING "WHERE accntp.Dealer_Code =  "
+028931210924                                                  DELIMITED BY SIZE
+028932210924               lnc_Quote                          DELIMITED BY SIZE
+028933210924               Function Trim(lc_DealerCode)       DELIMITED BY SIZE
+028934210924               lnc_Quote                          DELIMITED BY SIZE
+028935210924               lnc_space                          DELIMITED BY SIZE
+028936210924              "and TRIM(accntp.Dealer_Rep_Code) = "
+028937210924                                                  DELIMITED BY SIZE
+028938210924               lnc_Quote                          DELIMITED BY SIZE
+028939210924               Function Trim(lc_DealerRep)        DELIMITED BY SIZE
+028940210924               lnc_Quote                          DELIMITED BY SIZE
+028941210924               lnc_space                          DELIMITED BY SIZE
+028942210924              INTO lc_ViewWhere
+028943210924           ELSE
+028944210924               STRING "WHERE accntp.Dealer_Code =  "
+028945210924                                                  DELIMITED BY SIZE
+028946210924               lnc_Quote                          DELIMITED BY SIZE
+028947210924               Function Trim(lc_DealerCode)       DELIMITED BY SIZE
+028948210924               lnc_Quote                          DELIMITED BY SIZE
+028949210924               lnc_space                          DELIMITED BY SIZE
+028950210924              "and TRIM(accntp.Dealer_Rep_Code) = "
+028951210924                                                  DELIMITED BY SIZE
+028952210924               lnc_Quote                          DELIMITED BY SIZE
+028953210924               Function Trim(lc_DealerRep)        DELIMITED BY SIZE
+028954210924               lnc_Quote                          DELIMITED BY SIZE
+028955210924               lnc_space                          DELIMITED BY SIZE
+028956210924              "and accivp.Curr_Unit_Bal > 0 "     DELIMITED BY SIZE
+028958210924              INTO lc_ViewWhere
+028959210924           END-IF.
+028960210809
+028961210817           STRING lc_CreateView                DELIMITED BY SIZE
+028962210817             Function Trim(lc_ViewColumns)     DELIMITED BY SIZE
+028963210817                  lnc_Space                    DELIMITED BY SIZE
+028964210817             Function Trim(lc_SelectColumns)   DELIMITED BY SIZE
+028965210817                  lnc_Space                    DELIMITED BY SIZE
+028966210817             Function Trim(lc_ViewFrom)        DELIMITED BY SIZE
+028967210924                  lnc_Space                    DELIMITED BY SIZE
+028968210924             Function Trim(lc_ViewWhere)       DELIMITED BY SIZE
+028969210809           INTO lc_String.
+028970210809
+028971210809           EXEC SQL
+028972210809             PREPARE Crt_View FROM :lc_String
+028973210809           END-EXEC.
+028974210809
+028975210809           MOVE SQLSTATE TO lc_sqlStates.
+028976210809           IF lncc_sqlSuccessful OR lncc_sqlend
+028977210809              CONTINUE
+028978210809           ELSE
+028979210809              MOVE lnc_PrepareView   TO pc_MsgCode
+028980210810              SET lnc_Err_12         TO TRUE
+028981210809              SET lnc_ErrPrepareView TO TRUE
+028982210809              PERFORM BuildShortDesc
+028983210809              PERFORM Dsp-Error
+028984210809              PERFORM Termination
+028985210809           END-IF.
+028986210809
+028987210809           EXEC SQL
+028988210809             EXECUTE Crt_View
+028989210809           END-EXEC.
+028990210809
+028991210809           MOVE SQLSTATE TO lc_sqlStates.
+028992210809           IF lncc_sqlSuccessful OR lncc_sqlend
+028993210809              CONTINUE
+028994210809           ELSE
+028995210809              MOVE lnc_ExecuteView   TO pc_MsgCode
+028996210810              SET lnc_Err_13         TO TRUE
+028997210809              SET lnc_ErrExecuteView TO TRUE
+028998210809              PERFORM BuildShortDesc
+028999210809              PERFORM Dsp-Error
+029000210809              PERFORM Termination
+029001210809           END-IF.
+040500170828
+040600170828      *****************************************************************
+040700170828       Prepare-Result-Set.
+040701210810
+040702210810           IF pc_FundArray NOT = SPACES
+040900210810              EXEC SQL
+041000210810                SET RESULT SETS CURSOR CUR_RPTFUNDS
+041100210810              END-EXEC
+041101210810           ELSE
+041103210810              EXEC SQL
+041104210810                SET RESULT SETS CURSOR CUR_RPTALL
+041105210810              END-EXEC
+041106210810           END-IF.
+041107210809
+041601210809      *****************************************************************
+041602210809       Create-Table-WRKINVCDP.
+041603210809
+041604210809           MOVE lnc_TableName TO lc_objectName.
+041605210809           PERFORM CheckObject.
+041606210809           IF lnc_messageIdOk
+041607210809              CALL "QCMDEXC" USING lnc_ClearPfm lnc_ClearLen
+041608210809           ELSE
+041609210809            EXEC SQL
+041610210809             CREATE TABLE QTEMP/WRKINVCDP (
+041611210809               INVESTMENT_CODE FOR F0000 CHAR(5) NOT NULL WITH DEFAULT
+041612210809                )
+041613210809            END-EXEC
+041614210809            EXEC SQL
+041615210809              CREATE INDEX QTEMP/WRKINVCDX ON QTEMP/WRKINVCDP
+041616210809              ( INVESTMENT_CODE  asc
+041617210809              )
+041618210809            END-EXEC
+041619210809           END-IF.
+041620210809
+041621210809      *****************************************************************
+041622210809       Load-Funds-Array.
+041623210809
+041624210809           INITIALIZE li_Idx.
+041625210809           MOVE 1  TO ln_pointer.
+041626210809           SET lb_MoreFunds TO TRUE
+041631210809           PERFORM VARYING li_Idx FROM 1 BY 1
+041632210809              UNTIL li_Idx > li_MaxEntries
+041633210809              OR lb_noMoreFunds
+041634210809
+041635210809              INITIALIZE lc_TempInvVar
+041636210809              UNSTRING pc_FundArray
+041637210809                 DELIMITED BY lnc_elemDelim OR
+041638210809                              lnc_RowDelim
+041639210809                 INTO lc_tmpInvCd
+041640210809                 WITH POINTER ln_Pointer
+041641210809                   ON OVERFLOW
+041642210809                      CONTINUE
+041643210809                   NOT ON OVERFLOW
+041644210809                      CONTINUE
+041645210809              END-UNSTRING
+041646210809
+041647210809              IF lc_tmpInvCd = SPACES
+041648210809                SET lb_NoMoreFunds TO TRUE
+041649210809              ELSE
+041650210809                PERFORM InsertWRKINVCDP
+041651210809              END-IF
+041652210809           END-PERFORM.
+041653210809
+041654210809      *****************************************************************
+041655210809       InsertWRKINVCDP.
+041656210809
+041657210809           EXEC SQL
+041658210809             INSERT INTO QTEMP/WRKINVCDP
+041659210809             VALUES (:lc_tmpInvCd )
+041660210809           END-EXEC.
+041661210809
+041662210809           MOVE SQLSTATE TO lc_sqlStates.
+041663210809           EVALUATE TRUE
+041664210809             WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+041665210809                  CONTINUE
+041666210809             WHEN OTHER
+041667210810                  SET  lnc_Err_14      TO TRUE
+041669210809                  SET lnc_ErrInsertWRKINVCDP TO TRUE
+041670210810                  MOVE Ws-Err-Code       TO pc_MsgCode
+041672210809                  PERFORM BuildShortDesc
+041673210809                  PERFORM Dsp-Error
+041674210809           END-EVALUATE.
+041691210809
+041692210809      *****************************************************************
+041693210809       CountTotalRowsWithFunds.
+041694210809
+041695210809           INITIALIZE li_Count.
+041696210819
+041697210819           EVALUATE TRUE
+041698210819           WHEN li_Account_No NOT = ZEROES
+041699211001            AND lc_Dealer_Acct_No = SPACE
+041700210819              EXEC SQL
+041701210819                SELECT COUNT(1)
+041702210819                  INTO :li_Count
+041703210819                FROM QTEMP/TRLRPTV vw
+041704210819                INNER JOIN QTEMP/WRKINVCDP temp ON
+041705210819                  vw.Investment_Code = temp.Investment_Code
+041706210819                WHERE
+041707210819                  vw.Account_NO = :li_Account_No
+041708210819                  and vw.Account_Status = :lncc-A
+041710210819              END-EXEC
+041711210819           WHEN lc_Dealer_Acct_No NOT = SPACES
+041712211001            AND li_Account_No = ZEROES
+041713210819             EXEC SQL
+041714210819               SELECT COUNT(1)
+041715210819                 INTO :li_Count
+041716210819               FROM QTEMP/TRLRPTV vw
+041717210819               INNER JOIN QTEMP/WRKINVCDP temp ON
+041718210819                 vw.Investment_Code = temp.Investment_Code
+041719210819               WHERE
+041720210819                 Trim(vw.DEALER_ACCOUNT_NO) = TRIM(:lc_Dealer_Acct_No)
+041721210819                 and vw.Account_Status = :lncc-A
+041724210819             END-EXEC
+041725211001           WHEN li_Account_No NOT = ZEROES
+041726211001             AND lc_Dealer_Acct_No NOT = SPACE
+041727211001             EXEC SQL
+041728211001               SELECT COUNT(1)
+041729211001                 INTO :li_Count
+041730211001               FROM QTEMP/TRLRPTV vw
+041731211001               INNER JOIN QTEMP/WRKINVCDP temp ON
+041732211001                 vw.Investment_Code = temp.Investment_Code
+041733211001               WHERE
+041734211001                 (vw.Account_NO = :li_Account_No or
+041735211001                 Trim(vw.DEALER_ACCOUNT_NO) = TRIM(:lc_Dealer_Acct_No))
+041736211001                 and vw.Account_Status = :lncc-A
+041737211001             END-EXEC
+041738210819           WHEN li_Account_No = ZEROES AND lc_Dealer_Acct_No = SPACES
+041739210819             EXEC SQL
+041740210819               SELECT COUNT(1)
+041741210819                 INTO :li_Count
+041742210819               FROM QTEMP/TRLRPTV vw
+041743210819               INNER JOIN QTEMP/WRKINVCDP temp ON
+041744210819                 vw.Investment_Code = temp.Investment_Code
+041745210819               WHERE
+041746210819                 vw.Account_Status = :lncc-A
+041747210819             END-EXEC
+041748210819           END-EVALUATE.
+041749210809
+041750210809           MOVE SQLSTATE TO lc_sqlStates.
+041751210809           EVALUATE TRUE
+041752210809             WHEN lncc_sqlSuccessful
+041753210809                  COMPUTE pi_TotalRows = li_count
+041754210809             WHEN lncc_sqlEnd
+041755210809                  CONTINUE
+041756210809             WHEN OTHER
+041757210810                  SET lnc_Err_15             TO TRUE
+041758210809                  SET lncc_ErrCountTotalRows TO TRUE
+041759210810                  MOVE Ws-Err-Code           TO pc_MsgCode
+041760210809                  PERFORM BuildShortDesc
+041761210809                  PERFORM Dsp-Error
+041762210809           END-EVALUATE.
+041763210809
+041764210809      *****************************************************************
+041765210809       CountTotalRows.
+041766210809
+041767210809           INITIALIZE li_Count.
+041768210819
+041769210819           EVALUATE TRUE
+041770210819           WHEN li_Account_No NOT = ZEROES
+041771211001            AND lc_Dealer_Acct_No = SPACE
+041772210819              EXEC SQL
+041773210819                SELECT COUNT(1)
+041774210819                  INTO :li_Count
+041775210819                FROM QTEMP/TRLRPTV vw
+041776210819                WHERE
+041777210819                  vw.Account_NO = :li_Account_No
+041778210819                  and vw.Account_Status = :lncc-A
+041779210819              END-EXEC
+041780210819           WHEN lc_Dealer_Acct_No NOT = SPACES
+041781211001            AND li_Account_No = ZEROES
+041782210819              EXEC SQL
+041783210819                SELECT COUNT(1)
+041784210819                  INTO :li_Count
+041785210819                FROM QTEMP/TRLRPTV vw
+041786210819                WHERE
+041787210819                   Trim(vw.DEALER_ACCOUNT_NO) = TRIM(:lc_Dealer_Acct_No)
+041788210819                   and vw.Account_Status = :lncc-A
+041789210819              END-EXEC
+041790211001           WHEN li_Account_No NOT = ZEROES
+041791211001             AND lc_Dealer_Acct_No NOT = SPACE
+041792211001             EXEC SQL
+041793211001               SELECT COUNT(1)
+041794211001                 INTO :li_Count
+041795211001               FROM QTEMP/TRLRPTV vw
+041798211001               WHERE
+041799211001                 (vw.Account_NO = :li_Account_No or
+041800211001                 Trim(vw.DEALER_ACCOUNT_NO) = TRIM(:lc_Dealer_Acct_No))
+041801211001                 and vw.Account_Status = :lncc-A
+041802211001             END-EXEC
+041803210819           WHEN li_Account_No = ZEROES AND lc_Dealer_Acct_No = SPACES
+041804210819              EXEC SQL
+041805210819                SELECT COUNT(1)
+041806210819                  INTO :li_Count
+041807210819                FROM QTEMP/TRLRPTV vw
+041808210819                WHERE
+041809210819                  vw.Account_Status = :lncc-A
+041810210819              END-EXEC
+041811210819           END-EVALUATE.
+041812210809
+041813210809           MOVE SQLSTATE TO lc_sqlStates.
+041814210809           EVALUATE TRUE
+041815210809             WHEN lncc_sqlSuccessful
+041816210809                  COMPUTE pi_TotalRows = li_count
+041817210809             WHEN lncc_sqlEnd
+041818210809                  CONTINUE
+041819210809             WHEN OTHER
+041820210810                  SET lnc_Err_16             TO TRUE
+041821210809                  SET lncc_ErrCountTotalRows TO TRUE
+041822210810                  MOVE Ws-Err-Code           TO pc_MsgCode
+041823210809                  PERFORM BuildShortDesc
+041824210809                  PERFORM Dsp-Error
+041825210809           END-EVALUATE.
+041826210809
+041827210809      *****************************************************************
+041828210809       ValidateMFADEAP.
+041829210809
+041830210809           INITIALIZE li_Count.
+041831210809           EXEC SQL
+041832210809             SELECT COUNT(1)
+041833210809               INTO :li_Count
+041834210809               FROM MFADEAP
+041835210809              WHERE DEALER_CODE = :lc_DealerCode
+041836210809           END-EXEC.
+041837210809
+041838210809           MOVE SQLSTATE TO lc_sqlStates.
+041839210809           IF li_Count = 0
+041840210809              MOVE lnc_DealerNotFound TO pc_MsgCode
+041841210810              PERFORM Termination
+041842210809           END-IF.
+041843210809
+041844210809      *****************************************************************
+041845210809       ValidateMFADEAREP.
+041846210809
+041847210809           INITIALIZE li_Count.
+041848210809           EXEC SQL
+041849210809             SELECT COUNT(1)
+041850210809               INTO :li_Count
+041851210809               FROM MFADEAREP
+041852210809              WHERE DEALER_CODE       = :lc_DealerCode
+041853210809                AND DEALER_REP_CODE   = :lc_DealerRep
+041854210809           END-EXEC.
+041855210809
+041856210809           MOVE SQLSTATE TO lc_sqlStates.
+041857210809           IF li_Count = 0
+041858210809              MOVE lnc_RepNotFound TO pc_MsgCode
+041859210810              PERFORM Termination
+041860210809           END-IF.
+041861170828
+041862170828      *****************************************************************
+041900170828       BuildShortDesc.
+041901210810
+042000170828           STRING lc_ErrorCodeDescr   DELIMITED BY "  "
+042100170828                  " "                 DELIMITED BY SIZE
+042200170828                  SQLSTATE            DELIMITED BY SIZE
+042300170828                  INTO Ws-Sql-Err-Short-Descr.
+042301210809
+042302210809      *****************************************************************
+042303210809       CheckObject.
+042304210809
+042305210809           CALL "FXCHKOBJ" USING lc_objectName
+042306210809                                 lnc_libQtemp
+042307210809                                 lnc_objectTypeFile
+042308210809                                 lc_messageId.
+042400170828
+042500170828      *****************************************************************
+042600170828       Termination.
+042700170828           GOBACK.
+042800170828
+042900170828      * ---------------------------------
+043000170828      * DSP-ERROR and FORCE-MSGW Routines
+043100170828      * ---------------------------------
+043200170828          COPY CPYSQLRTN.

@@ -1,0 +1,3112 @@
+000100000000       IDENTIFICATION DIVISION.
+000200000000       PROGRAM-ID.     STMTHHM.
+000300000000       INSTALLATION.   Jewelstone Systems Inc.
+000400000000       AUTHOR.         Jewelstone Systems Inc.
+000500000000       DATE-WRITTEN.   May 9, 1997.
+000600000000       DATE-COMPILED.
+000700171007
+000800000000      ******************************************************************
+000900000000      *                                                                *
+001000000000      *    STMTDUP:    Statement Household Mailing Generation          *
+001100000000      *                                                                *
+001200000000      *    PURPOSE:    To format and create the Statement Household    *
+001300000000      *                Mailing file (MFASTMHFP).                       *
+001400000000      *                                                                *
+001500000000      *    LEVELS:      1. INVESTOR_NO                                 *
+001600000000      *                 2. HOUSEHOLD_LINKAGE-CODE                      *
+001700000000      *                                                                *
+001800000000      *    FILES:      (I) MFAIVRHDP   Investor Household Details      *
+001900000000      *                (I) MFAIVRHHP   Investor Household Header       *
+002000000000      *                (I) MFASTMEXP   Statement Extract               *
+002100981103      *                (I) MFASTMINV   Statement Investor File
+002200000000      *                (O) STMHHM1     Statement Household Mailing     *
+002300000000      *                (O) PRINTER     Control Report                  *
+002400000000      *                                                                *
+002500000000      *    CREATED:    18/JUL/97 (MFH)                                 *
+002600980609      *    CHANGED:    09/JUN/98 (MFH)                                 *
+002700000000      *                                                                *
+002800000000      ******************************************************************
+002900000000      /
+003000000000      ******************************************************************
+003100000000      *                                                                *
+003200000000      *    C H A N G E   H I S T O R Y                                 *
+003300000000      *                                                                *
+003400000000      ******************************************************************
+003500000000      ******************************************************************
+003600000000      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE              *
+003700000000      ******************************************************************
+003800971004      * M.Howorth  *  1997/10/04  * RFS #1524                          *
+003900971004      *            *              * - Modifications to add the Equity  *
+004000971004      *            *              *   sub-class Mexican Equity (MXEQ). *
+004100030623      ******************************************************************
+004200971024      *M.Howorth   *  1997/10/24  * RFS LOG #1502, #1544, #1549        *
+004300971024      *            *              * - Modifications to use the new LDA *
+004400971024      *            *              *   copy book (CPYLDASTMT).          *
+004500030623      ******************************************************************
+004600980604      *T.Hamid     *  1998/06/03  * RFS LOG #2334                      *
+004700980604      *            *              * - Modifications to exclude 20,30.40*
+004800980604      *            *              *   and 50 records if GGF.           *
+004900980604      *            *              * - Modifications to update the      *
+005000980604      *            *              *   IS-PRINT-STATEMENT if GGF.       *
+005100030623      ******************************************************************
+005200980608      * M.Howorth  *  1998/06/08  * RFS LOG #2334                      *
+005300980608      *            *              * - Modifications to only select     *
+005400980608      *            *              *   Investor Household Details with  *
+005500980608      *            *              *   a household linkage code of STM  *
+005600980608      *            *              *   for GGF.                         *
+005700030623      ******************************************************************
+005800980609      * M.Howorth  *  1998/06/09  * RFS LOG #2334                      *
+005900980609      *            *              * - Modifications to the handling of *
+006000980609      *            *              *   the summary generation flag      *
+006100980609      *            *              *   (WS-LDA-HHMSUM-GEN).             *
+006200030623      ******************************************************************
+006300980821      * H.SHENG    *  1998/07/24  * RFS #2692                          *
+006400980821      *            *              * - Modifications to add and format  *
+006500980821      *            *              *   HIS-LEGAL-NAME-2 and             *
+006600980821      *            *              *   HFS-INVESTMENT-NUMBER            *
+006700030623      ******************************************************************
+006800980821      * H.SHENG    *  1998/08/13  * RFS #2983                          *
+006900980821      *            *              * - Modifications to change rounding *
+007000980821      *            *              *   to one decimal for               *
+007100980821      *            *              *   HIS-PERCENTAGE, HAS-PERCENTAGE,  *
+007200980821      *            *              *   HFS-PERCENTAGE.                  *
+007300030623      ******************************************************************
+007400000327      * H.SHENG    * 2000/03/01   * RFS 6532                           *
+007500000327      *            *              * -Change statement extract and      *
+007600000327      *            *              *  statement/confirm programs to     *
+007700000327      *            *              *  support up to $99,999.99 price    *
+007800000327      *            *              *  and 99 billion market and book    *
+007900000327      *            *              *  value.                            *
+008000030623      ******************************************************************
+008100000803      *B.LU        *  2000/08/03  * RFS 7485                           *
+008200000803      *            *              * - Populate the EOR-INDICATOR       *
+008300000803      *            *              *   field with a "X".                *
+008400030623      ******************************************************************
+008500001011      * B.LU       *  2000/10/11  * RFS 7776 - AD-BOOK-VALUE was
+008600001011      *            *              * renamed to AD-BOOK-VALUE-BASE.    *
+008700030623      ******************************************************************
+008800011022      * B.Lu       * 2001/10/22   * RFS10901, 11127, 10605
+008900011022      *            *              * -Recompile only.
+009000030623      ******************************************************************
+009100011123      * A.ALNEMER  * 2001/11/23   * RFS12150
+009200011123      *            *              * -Recompile only.
+009300030623      ******************************************************************
+009400020402      * B.LU       * 2002/01/30   * RFS12102
+009500020402      *            *              * -Recompile only.
+009600030623      ******************************************************************
+009700020326      * A.ALNEMER  * 2002/03/26   * RFS12173
+009800020326      *            *              * -Recompile only.
+009900030623      ******************************************************************
+010000020424      * JOHN M     * 2002/04/16   * RFS 13473 (PART OF 13304)
+010100020424      *            *              * -RECOMPILE ONLY.
+010200030623      ******************************************************************
+010300020404      * A.ALNEMER  * 2002/04/04   * RFS13184
+010400020404      *            *              * -Recompile only.
+010500030623      ******************************************************************
+010600020416      * A.ALNEMER  * 2002/04/16   * RFS13211
+010700020416      *            *              * -Recompile only.
+010800030623      ******************************************************************
+010900020614      * A.ALNEMER  * 2002/06/14   * RFS13756
+011000020614      *            *              * -Recompile only.
+011100030623      ******************************************************************
+011200020821      * A.ALNEMER  * 2002/08/21   * RFS13955
+011300020821      *            *              * -Recompile only.
+011400030623      ******************************************************************
+011500020821      * A.ALNEMER  * 2002/08/21   * RFS14136
+011600020821      *            *              * -Recompile only.
+011700030623      ******************************************************************
+011800020925      * B.LU       * 2002/09/25   * RFS14556  Recompile.
+011900030623      ******************************************************************
+012000021202      * A.ALNEMER  * 2002/12/02   * RFS15022
+012100021202      *            *              * -Recompile only.
+012200030623      ******************************************************************
+012300030327      * B.LU       * 2003/03/27   * RFS16256  Recompile.
+012400030623      ******************************************************************
+012500030327      * B.LU       * 2003/03/27   * RFS16633  Recompile.
+012600030623      ******************************************************************
+012700030407      * ALI.A      * 2003/03/24   * RFS16419  RECOMPILE.
+012800030623      ******************************************************************
+012900030623      * ALI.A      * 2003/05/01   * RFS17280  RECOMPILE.
+013000030623      ******************************************************************
+013100030623      * O.McMillan * 2003/06/17   * RFS17217  RECOMPILE.
+013200000000      ******************************************************************
+013300030529      * Odette     * 2003/05/08   * RFS17165  MFASTMEXP expanded from
+013400030529      * McMillan   *              * 1100 to 1350. Recompile.           *
+013500030529      ******************************************************************
+013600030624      * Odette     * 2003/06/04   * RFS16881  Recompile.
+013700030624      * McMillan   *              *
+013800030624      ******************************************************************
+013900030822      * Odette     * 2003/08/22   * RFS18091  Recompile for addition
+014000030822      * McMillan   *              * of Section 17 to CPYJSISTMT.
+014100030822      ******************************************************************
+014200030825      * Odette     * 2003/08/25   * RFS17380  Recompile for additional
+014300030825      * McMillan   *              * fields in Section 05 of CPYJSISTMT.
+014400030915      ******************************************************************
+014500030915      * ALI        * 2003/09/15   * RFS17974  Increase the array size
+014600030915      * ALNEMER    *              * of the Asset-Class to 250.
+014700030825      ******************************************************************
+014800031002      * Odette     * 2003/09/22   * RFS 18653 - Recompile.
+014900031002      * McMillan   *              * Moved Section 17 rec counter field
+015000031002      *            *              * in Section 99 to bottom of rec.
+015100031002      ******************************************************************
+015200031003      * B.LU       * 2003/10/02   * RFS17527  Recompile.
+015300031003      ******************************************************************
+015400031015      * ALI.A      * 2003/10/15   * RFS17626  Recompile.
+015500031015      ******************************************************************
+015600031020      * ALI.A      * 2003/10/20   * RFS18667  Recompile.
+015700031020      ******************************************************************
+015800031021      * ALI.A      * 2003/10/21   * RFS18312  Recompile.
+015900031021      ******************************************************************
+016000040105      * ALI.A      * 2003/10/21   * RFS18515  Recompile.
+016100031121      ******************************************************************
+016200031125      * ALI.A      * 2003/10/21   * RFS18814  Recompile.
+016300031125      ******************************************************************
+016400040217      * ALI.A      * 2004/02/17   * RFS19444  Recompile.
+016500040217      ******************************************************************
+016600040406      * ALI.A      * 2004/04/06   * RFS20870  Recompile.
+016700040406      ******************************************************************
+016800040414      * ALI.A      * 2004/04/14   * RFS20758  Recompile.
+016900040414      ******************************************************************
+017000040514      * Odette     *  2004/04/27  * RFS21714 - Recompile
+017100040514      * Aguinaldo- *              * Add new fields to Section 10 to
+017200040514      * McMillan   *              * indicate if Dealer, Rep or Nominee
+017300040514      *            *              * is/isn't suppressed.
+017400040531      ******************************************************************
+017500040531      * Reece Tam  * 2004/05/31   * RFS20804  Recompile - CPYLADASTMT.
+017600040514      ******************************************************************
+017700040908      * B.LU       * 2004/09/08   * RFS18924 -RECOMPILE - CPYJSISTMT.
+017800040908      ******************************************************************
+017900041012      * B.LU       * 2004/10/12   * RFS22856 -RECOMPILE - CPYJSISTMT.
+018000041012      ******************************************************************
+018100041025      * ALI.A      * 2004/10/25   * RFS18780 -RECOMPILE - CPYJSISTMT.
+018200041025      ******************************************************************
+018300041028      * ALI.A      * 2004/10/28   * RFS21715 -RECOMPILE - CPYJSISTMT.
+018400041028      ******************************************************************
+018500041220      * B.LU       * 2004/12/20   * RFS24514 -RECOMPILE - CPYJSISTMT
+018600041220      ******************************************************************
+018700050429      * CHANDANA R * 2005/03/09   * RFS26213 -RECOMPILE - CPYJSISTMT
+018800050429      ******************************************************************
+018900051002      * ADE ADEYEMI* 2005/09/08   * RFS29550 -RECOMPILE - CPYJSISTMT
+019000051002      ******************************************************************
+019100051002      * ADE ADEYEMI* 2005/09/28   * RFS30065 -RECOMPILE - CPYJSISTMT
+019200051002      ******************************************************************
+019300050920      * Ali.A      * 2005/09/18   * RFS28931 -RECOMPILE - CPYJSISTMT
+019400050920      ******************************************************************
+019500050926      * C.LENTINI  * 2005/09/26   * RFS28692 -RECOMPILE - CPYJSISTMT
+019600050926      ******************************************************************
+019700050926      * Geeta S.   * 2005/09/15   * RFS 28107: Recompile for CPYJSISTMT
+019800060327      ******************************************************************
+019900060327      * Esin A.    * 2006/03/23   * RFS 31514: Recompile for CPYJSISTMT
+020000060821      ******************************************************************
+020100060821      * Raymond Mui* 2006/08/21   * RFS 34848: Recompile for CPYJSISTMT
+020200060821      *            *              *            and CPYLDASTMT.
+020300050926      ******************************************************************
+020400061024      * L. Wong    * 2006/10/24   * RFS36342 - Recompile - CPYJSISTMT,
+020500061024      *            *              *                        CPYLDASTMT.
+020600080620      ******************************************************************
+020700080620      * Bathuu L   * 2008/06/20   * RFS50993 - RECOMPILE FOR CPYJSISTMT
+020800061024      ******************************************************************
+020900091111      * A. Lo      * 2009/11/11   * RFS69515 - Recompile - CPYJSISTMT,
+021000091111      *            *              *                        CPYLDASTMT.
+021100091111      ******************************************************************
+021200100308      * A. Lo      * 2010/03/08   * RFS78161 -Recompile - CPYJSISTMT.
+021300100308      ***************************************************************
+021400100409      * A. Lo      * 2010/03/08   * RFS74626 -Recompile - CPYJSISTMT.
+021500100308      ***************************************************************
+021600120127      * Rekha S    * 2012/01/27   * RFS93662 -Recompile - CPYJSISTMT.
+021700120127      ***************************************************************
+021800120207      * ANDY CHAN  * 2012/01/03   * 92459 - RECOMPILE              .
+021900120912      *****************************************************************
+022000120912      * Suresh G.  * 2012/09/12   * RFS112003-Recompile for CPYJSISTMT.
+022100120912      *****************************************************************
+022200130408      * ANDY CHAN  * 2013/04/08   * 117038- RECOMPILE              .
+022300130408      *****************************************************************
+022400130529      * NOBLE T .  * 2013/05/29   * RFS121116-RECOMPILE FOR CPYLDASTMT.
+022500130529      *****************************************************************
+022600130905      * PRAVEEN E  * 2013/09/05   *RFS123925 RECOMPIL ONLY - CPYJSISTMT.
+022700140519      * NOBLE T    * 2014/05/02   * RFS130239 - RECOMPILE - CPYJSISTMT.
+022800140418      *****************************************************************
+022900140418      *SANGEETHA V  * 2014/03/25 * RFS129378 - RECOMPILE FOR CPYJSISTMT*
+023000130905      *****************************************************************
+023100140706      * Suresh G.   * 2014/07/05 * RFS132121 - RECOMPILE FOR CPYJSISTMT.
+023200140706      *****************************************************************
+023300140814      * Suresh G.   * 2014/08/14 * RFS133489 - RECOMPILE FOR CPYJSISTMT.
+023400150216      * POOJA K     * 2015/02/16 * RFS143392 - RECOMPILE FOR CPYJSISTMT
+023500150330      * POOJA K     * 2015/03/27 * RFS144030 - RECOMPILE FOR CPYJSISTMT
+023600150424      * POOJA K     * 2015/04/21 * RFS142884 - RECOMPILE FOR CPYJSISTMT
+023700150511      * POOJA K     * 2015/05/08 * RFS144587 - RECOMPILE FOR CPYJSISTMT
+023800160216      * AARTHI M    * 2016/02/16 * RFS148326 - ADDTION OF NEW FIELDS
+023900160216      *             *            *             STATEMENT EXTRACT.
+024000160615      * AARTHI M    * 2016/04/28 * RFS158417 - HIS-OPENING-VALUE
+024100160615      *             *            *             AMT CALCULATION.
+024200160615      * AARTHI M    * 2016/05/20 * RFS159593 - ASSET CLASS DESCRIPTION
+024300160615      *             *            *             ON HH FILE.
+024400161205      * Shaik R     * 2016/11/23 * RFS164113 - House hold statement -
+024500161205      *             *            *             Section 30 & 40 Changes
+024600180612      *Janapriya J * 2018/05/25   * RFS179223 - Recompile for MFAIVRHHP*
+024700180816      * Sethu B    * 2018/08/16   * RFS180381 - Recompile for MFAIVRHHP*
+024800190812      * Priya N    * 2019/08/12   * RFS184258 - Reset Array index of   *
+024900190812      *            *              *             Section 30 calcultaion *
+025000190812      *            *              *             to avoid decimal data  *
+025100190812      *            *              *             error.                 *
+025200200421      * Mayilsamy D* 2020/04/21   * RFS185774 - Recompile for MFAIVRHDP*
+025300210301      * Rajesh R   * 2021/02/05   * RFS187018 - Recompile for MFAIVRHDP*
+025400210829      * Mayilsamy D* 2021/08/28   * RFS187441 - Recompile for MFAIVRHHP*
+025500210927      * Rajesh R   * 2021/09/17   * RFS187775 - Recompile for MFAIVRHDP*
+025501211019      * Surendran C* 2021/10/19   * RFS186592 -RECOMPILE FOR CPYJSISTMT*
+025600140814      *****************************************************************
+025700000000      /
+025800000000       ENVIRONMENT DIVISION.
+025900000000
+026000000000      ******************************************************************
+026100000000      *                                                                *
+026200000000      *    E N V I R O N M E N T   D I V I S I O N                     *
+026300000000      *                                                                *
+026400000000      ******************************************************************
+026500000000
+026600000000       CONFIGURATION SECTION.
+026700000000
+026800000000      ******************************************************************
+026900000000      *                                                                *
+027000000000      *    C O N F I G U R A T I O N   S E C T I O N                   *
+027100000000      *                                                                *
+027200000000      ******************************************************************
+027300000000
+027400000000       SOURCE-COMPUTER.    AS-400.
+027500000000       OBJECT-COMPUTER.    AS-400.
+027600981104
+027700000000       SPECIAL-NAMES.
+027800000000
+027900000000      *****
+028000000000      *****    Special Names.
+028100000000      *****
+028200000000
+028300000000           LOCAL-DATA          IS  WS-LOCAL.
+028400000000      /
+028500000000       INPUT-OUTPUT SECTION.
+028600000000
+028700000000      ******************************************************************
+028800000000      *                                                                *
+028900000000      *    I N P U T   /   O U T P U T   S E C T I O N                 *
+029000000000      *                                                                *
+029100000000      ******************************************************************
+029200000000
+029300000000       FILE-CONTROL.
+029400000000
+029500000000      *****
+029600000000      *****    FILE CONTROL.
+029700000000      *****
+029800980529
+029900981104           SELECT INVESTOR-FILE
+030000981104               ASSIGN          TO  DATABASE-MFASTMINV
+030100981104               ORGANIZATION    IS  INDEXED
+030200981104               ACCESS          IS  DYNAMIC
+030300981104               RECORD KEY      IS  EXTERNALLY-DESCRIBED-KEY.
+030400981104
+030500980529           SELECT INVESTOR-HOUSEHOLD-DETAILS
+030600000000               ASSIGN          TO  DATABASE-MFAIVRHDP
+030700000000               ORGANIZATION    IS  INDEXED
+030800000000               ACCESS          IS  SEQUENTIAL
+030900000000               RECORD KEY      IS  EXTERNALLY-DESCRIBED-KEY.
+031000000000
+031100000000           SELECT INVESTOR-HOUSEHOLD-HEADER
+031200180620               ASSIGN          TO  DATABASE-MFAIVRHHP
+031300000000               ORGANIZATION    IS  INDEXED
+031400000000               ACCESS          IS  RANDOM
+031500000000               RECORD KEY      IS  EXTERNALLY-DESCRIBED-KEY.
+031600000000
+031700980529           SELECT STATEMENT-EXTRACT-UPD
+031800980529               ASSIGN          TO  DATABASE-MFASTMEXP
+031900980529               ORGANIZATION    IS  INDEXED
+032000980529               ACCESS          IS  RANDOM
+032100980529               RECORD KEY      IS  EXTERNALLY-DESCRIBED-KEY.
+032200980529
+032300000000           SELECT STATEMENT-EXTRACT
+032400000000               ASSIGN          TO  DATABASE-MFASTMEXP
+032500000000               ORGANIZATION    IS  INDEXED
+032600000000               ACCESS          IS  DYNAMIC
+032700000000               RECORD KEY      IS  EXTERNALLY-DESCRIBED-KEY.
+032800000000
+032900000000           SELECT STMT-HOUSEHOLD-MAIL
+033000000000               ASSIGN          TO  DATABASE-STMHHM1.
+033100000000
+033200000000           SELECT PRINT-FILE
+033300000000               ASSIGN          TO  PRINTER-QPRINT.
+033400000000      /
+033500000000       DATA DIVISION.
+033600000000
+033700000000      ******************************************************************
+033800000000      *                                                                *
+033900000000      *    D A T A   D I V I S I O N                                   *
+034000000000      *                                                                *
+034100000000      ******************************************************************
+034200000000
+034300000000       FILE SECTION.
+034400000000
+034500000000      ******************************************************************
+034600000000      *                                                                *
+034700000000      *    F I L E   S E C T I O N                                     *
+034800000000      *                                                                *
+034900000000      ******************************************************************
+035000981104      /
+035100981104       FD  INVESTOR-FILE
+035200981104           LABEL RECORDS      ARE  OMITTED.
+035300981104
+035400981104       01  INVESTOR-EXTRACT-RECD.     COPY DD-ALL-FORMATS
+035500981104                                           OF  MFASTMINV.
+035600000000      /
+035700000000       FD  INVESTOR-HOUSEHOLD-DETAILS
+035800000000           LABEL RECORDS      ARE  OMITTED.
+035900000000
+036000000000       01  IVR-HOUSEHOLD-DTL-RECD.     COPY DD-ALL-FORMATS
+036100000000                                           OF  MFAIVRHDP.
+036200000000      /
+036300000000       FD  INVESTOR-HOUSEHOLD-HEADER
+036400000000           LABEL RECORDS      ARE  OMITTED.
+036500000000
+036600000000       01  IVR-HOUSEHOLD-HDR-RECD.     COPY DD-ALL-FORMATS
+036700180620                                           OF  MFAIVRHHP.
+036800980529      /
+036900980529       FD  STATEMENT-EXTRACT-UPD
+037000980529           LABEL RECORDS      ARE  OMITTED.
+037100980529
+037200980529       01  STATEMENT-EXTRACT-UPD-RECD. COPY DD-ALL-FORMATS
+037300980529                                           OF  MFASTMEXP.
+037400000000      /
+037500000000       FD  STATEMENT-EXTRACT
+037600000000           LABEL RECORDS      ARE  OMITTED.
+037700000000
+037800000000       01  STATEMENT-EXTRACT-RECD.     COPY DD-ALL-FORMATS
+037900000000                                           OF  MFASTMEXP.
+038000000000      /
+038100000000       FD  STMT-HOUSEHOLD-MAIL
+038200000000           LABEL RECORDS      ARE  STANDARD
+038300000000           RECORD CONTAINS    400  CHARACTERS.
+038400000000
+038500000000       01  STMT-HOUSEHOLD-MAIL-RECD    PICTURE X(400).
+038600000000      /
+038700000000       FD  PRINT-FILE
+038800000000           LABEL RECORDS      ARE  OMITTED.
+038900000000
+039000000000       01  PRINT-RECD                  PICTURE X(150).
+039100000000      /
+039200000000       WORKING-STORAGE SECTION.
+039300000000
+039400000000      ******************************************************************
+039500000000      *                                                                *
+039600000000      *    W O R K I N G   S T O R A G E   S E C T I O N               *
+039700000000      *                                                                *
+039800000000      ******************************************************************
+039900000000      /
+040000971024       01  WS-LOCAL-DATA-AREA.         COPY CPYLDASTMT.
+040100000000      /
+040200000000                                       COPY CPYHHMSTMT.
+040300000000      /
+040400000000                                       COPY CPYJSISTMT.
+040500000000      /
+040600160216      *RFS148326 -STARTS
+040700160615158417*01 WS-HIS-OPENING-VALUE-TOT       PIC 9(11)V99 VALUE ZEROS.
+040800160615158417*01 WS-HIS-CHANGE-IN-INV-VALUE-TOT PIC S9(11)V99 VALUE ZEROS.
+040900160226       01 LN-HIS-CHANGE-IN-INV-VALUE     PIC S9(11)V99 VALUE ZEROS.
+041000160615158417*01 WS-SEC10-ACCOUNT-OPENING-BAL.
+041100160615158417*    05 WS-SEC10-ACCOUNT-OPEN-BAL-ARR OCCURS 500
+041200160615158417*                          INDEXED BY SEC10ACCIDX.
+041300160615158417*       07 WS-SEC10-INVESTOR-NO         PIC 9(9).
+041400160615158417*       07 WS-SEC10-ACCOUNT-NO          PIC 9(9).
+041500160615158417*       07 WS-SEC10-OPENING-VALUE       PIC 9(11)V99.
+041600160216      *RFS148326 -ENDS
+041700161205      *RFS164113 -Starts
+041800161205          01 PREV-WS-ASTDESC-6              PIC X(25) VALUE SPACES.
+041900161205          01 PREV-AC-ACCOUNT                PIC 9(9)  VALUE ZEROS.
+042000161205          01 FIRST-ACCOUNT-TO-PROCESS       PIC X(1)  VALUE "Y".
+042100161205          01 WS-GENERATE-SECTION-40-SPECIAL PIC X(1)  VALUE "N".
+042200161205      *RFS164113 -Ends
+042300180620
+042400000000      ******************************************************************
+042500000000      *                                                                *
+042600000000      *    H E A D I N G   P R I N T   L I N E S                       *
+042700000000      *                                                                *
+042800000000      ******************************************************************
+042900000000
+043000000000       01  HEADING-LINE-1.
+043100000000           05  FILLER                  PICTURE X(11)       VALUE
+043200000000               "DATE     : ".
+043300000000           03  HL1-YY                  PICTURE 9(2).
+043400000000           03  FILLER                  PICTURE X(1)        VALUE "/".
+043500000000           03  HL1-MM                  PICTURE 9(2).
+043600000000           03  FILLER                  PICTURE X(1)        VALUE "/".
+043700000000           03  HL1-DD                  PICTURE 9(2).
+043800000000           03  FILLER                  PICTURE X(95)       VALUE SPACES.
+043900000000           03  FILLER                  PICTURE X(6)        VALUE
+044000000000               "TIME: ".
+044100000000           03  HL1-TIME                PICTURE 99B99B99B99.
+044200000000           03  HL1-TIME-R              REDEFINES HL1-TIME.
+044300000000               05  FILLER              PICTURE X(8).
+044400000000               05  HL1-TIME-DOT        PICTURE X(1).
+044500000000               05  FILLER              PICTURE X(2).
+044600000000           03  FILLER                  PICTURE X(19)       VALUE SPACES.
+044700000000
+044800000000       01  HEADING-LINE-2.
+044900000000           03  FILLER                  PICTURE X(11)       VALUE
+045000000000               "REPORT NO: ".
+045100000000           03  FILLER                  PICTURE X(10)       VALUE
+045200000000               "STMTHHM   ".
+045300000000           03  FILLER                  PICTURE X(15)       VALUE SPACES.
+045400000000           03  FILLER                  PICTURE X(39)       VALUE
+045500000000               "STATEMENT HOUSEHOLD MAIL CONTROL REPORT".
+045600000000           03  FILLER                  PICTURE X(39)       VALUE SPACES.
+045700000000           03  FILLER                  PICTURE X(5)        VALUE
+045800000000               "PAGE:".
+045900000000           03  FILLER                  PICTURE X(8)        VALUE SPACES.
+046000000000           03  HL2-PGECNT              PICTURE ZZZZ9.
+046100000000           03  FILLER                  PICTURE X(18)       VALUE SPACES.
+046200000000
+046300000000       01  HEADING-LINE-3.
+046400000000           03  FILLER                  PICTURE X(9)        VALUE
+046500000000               "H/H IVR #".
+046600000000           03  FILLER                  PICTURE X(1)        VALUE SPACES.
+046700000000           03  FILLER                  PICTURE X(3)        VALUE
+046800000000               "LNK".
+046900000000           03  FILLER                  PICTURE X(1)        VALUE SPACES.
+047000000000           03  FILLER                  PICTURE X(9)        VALUE
+047100000000               "INVESTOR#".
+047200000000           03  FILLER                  PICTURE X(1)        VALUE SPACES.
+047300000000           03  FILLER                  PICTURE X(50)       VALUE
+047400000000               "MESSAGE                                           ".
+047500000000           03  FILLER                  PICTURE X(76)       VALUE SPACES.
+047600000000      /
+047700000000      ******************************************************************
+047800000000      *                                                                *
+047900000000      *    E R R O R   P R I N T   L I N E S
+048000000000      *                                                                *
+048100000000      ******************************************************************
+048200000000
+048300000000       01  ERROR-LINE-1.
+048400000000           03  EL1-INVESTOR-NO         PICTURE 9(9).
+048500000000           03  FILLER                  PICTURE X(1).
+048600000000           03  EL1-HOUSEHOLD-LINKAGE-CODE
+048700000000                                       PICTURE X(3).
+048800000000           03  FILLER                  PICTURE X(1).
+048900000000           03  EL1-INVESTOR-NO-2       PICTURE 9(9).
+049000000000           03  FILLER                  PICTURE X(1).
+049100000000           03  EL1-MSG                 PICTURE X(50).
+049200000000           03  FILLER                  PICTURE X(76).
+049300000000      /
+049400000000      ******************************************************************
+049500000000      *                                                                *
+049600000000      *    C O N T R O L   P R I N T   L I N E S                       *
+049700000000      *                                                                *
+049800000000      ******************************************************************
+049900000000
+050000000000       01  CONTROL-LINE-1.
+050100000000           03  FILLER                  PICTURE X(3).
+050200000000           03  CL1-LIT                 PICTURE X(50) JUST RIGHT.
+050300000000           03  FILLER                  PICTURE X(1).
+050400000000           03  CL1-CNT                 PICTURE ZZZ,ZZZ,ZZ9.
+050500000000           03  FILLER                  PICTURE X(85).
+050600000000      /
+050700000000       01  WS-PGM-DEFIND-WORK-ITEMS.
+050800000000
+050900000000      ******************************************************************
+051000000000      *                                                                *
+051100000000      *    P R O G R A M   D E F I N E D   W O R K   I T E M S         *
+051200000000      *                                                                *
+051300000000      ******************************************************************
+051400000000
+051500000000      *****
+051600000000      *****    Asset Class Table.
+051700000000      *****
+051800000000
+051900000000           03  WS-ASTCLS-TBL.
+052000030915R17974*      04  WS-ASTCLS-ENT         OCCURS  50  TIMES
+052100030915R17974       04  WS-ASTCLS-ENT         OCCURS  250 TIMES
+052200000000                                       INDEXED BY  AC
+052300000000                                                   ACH.
+052400000000               05  WS-AC-ACSH          PICTURE S9(3)       COMP-3.
+052500000000               05  WS-AC-CODE          PICTURE X(6).
+052600000000               05  WS-AC-DESC          PICTURE X(25).
+052700000000               05  WS-AC-PCT           PICTURE S9(3)V9(4)  COMP-3.
+052800000000               05  WS-AC-SLST          PICTURE S9(3)       COMP-3.
+052900000301               05  WS-AC-VAL           PICTURE S9(11)V9(2) COMP-3.
+053000030915R17974*        05  WS-AC-SUBCLS-ENT    OCCURS  50  TIMES
+053100030915R17974         05  WS-AC-SUBCLS-ENT    OCCURS  250 TIMES
+053200000000                                       INDEXED BY  ACS
+053300000000                                                   ACSH.
+053400000000                 06  WS-ACS-CODE       PICTURE X(6).
+053500000000                 06  WS-ACS-DESC       PICTURE X(25).
+053600000000                 06  WS-ACS-PCT        PICTURE S9(3)V9(4)  COMP-3.
+053700000301                 06  WS-ACS-VAL        PICTURE S9(11)V9(2)  COMP-3.
+053800000000
+053900000000           03  WS-AC-LST               PICTURE S9(3)       COMP-3.
+054000000000           03  WS-AC-MAX               PICTURE S9(3)       COMP-3
+054100030915R17974*                                                    VALUE 50.
+054200030915R17974                                                     VALUE 250.
+054300000000           03  WS-AC-PCTTOT            PICTURE S9(3)V9(4)  COMP-3.
+054400000000           03  WS-AC-SMAX              PICTURE S9(3)       COMP-3
+054500030915R17974*                                                    VALUE 50.
+054600030915R17974                                                     VALUE 250.
+054700000301           03  WS-AC-VALHGH            PICTURE S9(11)V9(2) COMP-3.
+054800000301           03  WS-AC-VALTOT            PICTURE S9(11)V9(2) COMP-3.
+054900000000
+055000000000           03  WS-ACS-PCTTOT           PICTURE S9(3)V9(4)  COMP-3.
+055100000301           03  WS-ACS-VALHGH           PICTURE S9(11)V9(2)  COMP-3.
+055200000000
+055300000000      *****
+055400000000      *****    Control Report Counters.
+055500000000      *****
+055600000000
+055700000000           03  WS-MFAIVRHDP-BCNT       PICTURE S9(7)       COMP-3.
+055800000000           03  WS-MFAIVRHDP-ECNT       PICTURE S9(7)       COMP-3.
+055900980608           03  WS-MFAIVRHDP-LCNT       PICTURE S9(7)       COMP-3.
+056000000000           03  WS-MFAIVRHDP-MCNT       PICTURE S9(7)       COMP-3.
+056100000000           03  WS-MFAIVRHDP-RCNT       PICTURE S9(7)       COMP-3.
+056200000000           03  WS-MFAIVRHHP-MCNT       PICTURE S9(7)       COMP-3.
+056300000000           03  WS-MFASTMEXP-RCNT       PICTURE S9(7)       COMP-3.
+056400000000           03  WS-STMT-HHM-WCNT-10     PICTURE S9(7)       COMP-3.
+056500000000           03  WS-STMT-HHM-WCNT-20     PICTURE S9(7)       COMP-3.
+056600000000           03  WS-STMT-HHM-WCNT-30     PICTURE S9(7)       COMP-3.
+056700000000           03  WS-STMT-HHM-WCNT-40     PICTURE S9(7)       COMP-3.
+056800000000           03  WS-STMT-HHM-WCNT-50     PICTURE S9(7)       COMP-3.
+056900180620179223     03  WS-HOUSEHOLD-ID         PICTURE S9(12)      COMP-3.
+057000180620179223     03  WS-INVESTOR-NO          PICTURE S9(9)       COMP-3.
+057100180620179223     03  WS-HOUSEHOLD-LINK-CODE  PICTURE X(3).
+057200180620179223     03  WS-IVR-LGL-LAST-NAME    PICTURE X(35).
+057300000000
+057400000000      *****
+057500000000      *****    Control Report Literals.
+057600000000      *****
+057700000000
+057800000000           03  WS-MFAIVRHDP-BLIT       PICTURE X(50)       VALUE
+057900000000               "INVESTOR H/H DETAIL RECS BYPASSED (IVR NO ZERO):  ".
+058000000000           03  WS-MFAIVRHDP-ELIT       PICTURE X(50)       VALUE
+058100000000               "INVESTOR H/H DETAIL RECS BYPASSED (H/H HDR ERR):  ".
+058200980608           03  WS-MFAIVRHDP-LLIT       PICTURE X(50)       VALUE
+058300980608               "INVESTOR H/H DETAIL RECS BYPASSED (NON STM LNK):  ".
+058400000000           03  WS-MFAIVRHDP-MLIT       PICTURE X(50)       VALUE
+058500000000               "INVESTOR H/H DETAIL RECS BYPASSED (NO STMT EXT):  ".
+058600000000           03  WS-MFAIVRHDP-RLIT       PICTURE X(50)       VALUE
+058700000000               "INVESTOR H/H DETAIL RECS READ:                    ".
+058800000000           03  WS-MFAIVRHHP-MLIT       PICTURE X(50)       VALUE
+058900000000               "INVESTOR H/H HEADER RECS MISSING:                 ".
+059000000000           03  WS-MFASTMEXP-RLIT       PICTURE X(50)       VALUE
+059100000000               "STATEMENT EXTRACT RECS READ:                      ".
+059200000000           03  WS-STMT-HHM-WLIT-10     PICTURE X(50)       VALUE
+059300000000               "STATEMENT HOUSEHOLD MAILING (HEADER) RECS WRITTEN:".
+059400000000           03  WS-STMT-HHM-WLIT-20     PICTURE X(50)       VALUE
+059500000000               "STATEMENT HOUSEHOLD MAILING (DETAIL) RECS WRITTEN:".
+059600000000           03  WS-STMT-HHM-WLIT-30     PICTURE X(50)       VALUE
+059700000000               "STATEMENT HOUSEHOLD MAILING (IVRSUM) RECS WRITTEN:".
+059800000000           03  WS-STMT-HHM-WLIT-40     PICTURE X(50)       VALUE
+059900000000               "STATEMENT HOUSEHOLD MAILING (ASTCLS) RECS WRITTEN:".
+060000000000           03  WS-STMT-HHM-WLIT-50     PICTURE X(50)       VALUE
+060100000000               "STATEMENT HOUSEHOLD MAILING (FNDSUM) RECS WRITTEN:".
+060200000000
+060300000000      *****
+060400000000      *****    Error Messages.
+060500000000      *****
+060600000000
+060700000000           03  WS-MSGS.
+060800000000               05  WS-MSG-01           PICTURE X(50)       VALUE
+060900000000                   "H/H DETAIL INVESTOR ZEROES, RECORD BYPASSED       ".
+061000000000               05  WS-MSG-02           PICTURE X(50)       VALUE
+061100000000                   "H/H HDR/IVR RECORD NOT FOUND, RECORD BYPASSED     ".
+061200000000               05  WS-MSG-03           PICTURE X(50)       VALUE
+061300000000                   "ASSET CLASSES EXCEED PROGRAM MAXIMUM, PGM ABORTED ".
+061400000000               05  WS-MSG-04           PICTURE X(50)       VALUE
+061500000000                   "ASSET SUB-CLASSES EXCEED PGM MAXIMUM, PGM ABORTED ".
+061600000000               05  WS-MSG-05           PICTURE X(50)       VALUE
+061700000000                   "H/H FUNDS EXCEED PROGRAM MAXIMUM, PROGRAM ABORTED ".
+061800000000               05  WS-MSG-06           PICTURE X(50)       VALUE
+061900000000                   "H/H ACCOUNTS EXCEED PROGRAM MAXIMUM, PGM ABORTED  ".
+062000000000               05  WS-MSG-07           PICTURE X(50)       VALUE
+062100000000                   "NO STATEMENT EXTRACT RECORDS FOUND, RECD BYPASSED ".
+062200000000               05  WS-MSG-08           PICTURE X(50)       VALUE
+062300000000                   "NO STATEMENT EXTRACT RECORDS FOR H/H INVESTOR     ".
+062400000000               05  WS-MSG-09           PICTURE X(50)       VALUE
+062500000000                   "H/H HEADER RECORD NOT FOUND                       ".
+062600000000               05  WS-MSG-10           PICTURE X(50)       VALUE
+062700000000                   "NO STMT EXTRACT RECORDS FOR H/H IVR, RECD BYPASSED".
+062800000000           03  WS-MSGS-R               REDEFINES WS-MSGS.
+062900000000               05  WS-MSG              OCCURS  10  TIMES
+063000000000                                       INDEXED BY  MSG
+063100000000                                       PICTURE X(50).
+063200000000
+063300000000      *****
+063400000000      *****    Fund Summary Table.
+063500000000      *****
+063600000000
+063700000000           03  WS-FNDSUM-TBL.
+063800000000             04  WS-FNDSUM-ENT         OCCURS  50  TIMES
+063900000000                                       INDEXED BY  FS
+064000000000                                                   FSH.
+064100000301               05  WS-FS-BKVAL         PICTURE S9(11)V9(2) COMP-3.
+064200000000               05  WS-FS-CURRCD        PICTURE X(3).
+064300000000               05  WS-FS-EXGRTE        PICTURE S9(2)V9(7)  COMP-3.
+064400000000               05  WS-FS-FNDNO         PICTURE X(8).
+064500000000               05  WS-FS-INVNM         PICTURE X(35).
+064600000301               05  WS-FS-MKTVAL        PICTURE S9(11)V9(2)  COMP-3.
+064700000301               05  WS-FS-MKTVALBSE     PICTURE S9(11)V9(2)  COMP-3.
+064800000000               05  WS-FS-PCT           PICTURE S9(3)V9(2)  COMP-3.
+064900000000               05  WS-FS-UNITS         PICTURE S9(9)V9(3)  COMP-3.
+065000000301               05  WS-FS-UNTPRC        PICTURE S9(5)V9(4)  COMP-3.
+065100000301               05  WS-FS-UNTPRCBSE     PICTURE S9(5)V9(4)  COMP-3.
+065200000000
+065300000301           03  WS-FS-BKVALTOT          PICTURE S9(11)V9(2) COMP-3.
+065400000000           03  WS-FS-LST               PICTURE S9(3)       COMP-3.
+065500000000           03  WS-FS-MAX               PICTURE S9(3)       COMP-3
+065600000000                                                           VALUE 50.
+065700000301           03  WS-FS-MKTVALBSEHGH      PICTURE S9(11)V9(2) COMP-3.
+065800000301           03  WS-FS-MKTVALBSETOT      PICTURE S9(11)V9(2) COMP-3.
+065900000301           03  WS-FS-MKTVALTOT         PICTURE S9(11)V9(2) COMP-3.
+066000000000           03  WS-FS-PCTTOT            PICTURE S9(3)V9(4)  COMP-3.
+066100000000           03  WS-FS-UNITSTOT          PICTURE S9(9)V9(3)  COMP-3.
+066200000000
+066300000000      *****
+066400000000      *****    Investor Summary Table.
+066500000000      *****
+066600000000
+066700000000           03  WS-IVRSUM-TBL.
+066800000000             04  WS-IVRSUM-ENT         OCCURS  50  TIMES
+066900000000                                       INDEXED BY  IS1
+067000000000                                                   ISH.
+067100000000               05  WS-IS-ACTNO         PICTURE X(9).
+067200000000               05  WS-IS-ACTTYP        PICTURE X(35).
+067300000000               05  WS-IS-IVRNO         PICTURE 9(9).
+067400000000               05  WS-IS-LGLNM         PICTURE X(45).
+067500980724               05  WS-IS-LGLNM2        PICTURE X(45).
+067600000301               05  WS-IS-MKTVAL        PICTURE S9(11)V9(2) COMP-3.
+067700000000               05  WS-IS-PCT           PICTURE S9(3)V9(4)  COMP-3.
+067800160615158417         05  WS-IS-MKTVAL-PRIORQ1 PICTURE S9(11)V9(2) COMP-3.
+067900000000
+068000000000           03  WS-IS-LST               PICTURE S9(3)       COMP-3.
+068100000000           03  WS-IS-MAX               PICTURE S9(3)       COMP-3
+068200000000                                                           VALUE 50.
+068300000301           03  WS-IS-MKTVALHGH         PICTURE S9(11)V9(2)  COMP-3.
+068400000301           03  WS-IS-MKTVALTOT         PICTURE S9(11)V9(2)  COMP-3.
+068500000000           03  WS-IS-PCTTOT            PICTURE S9(3)V9(4)  COMP-3.
+068600161205164113     03  WS-40-AC-MKTVAL         PICTURE S9(11)V9(2) COMP-3.
+068700161205164113     03  WS-40-AC-PER            PICTURE S9(3)V9(4)  COMP-3.
+068800160615158417     03  WS-IS-MKTVAL-PRIORQ1-TOT
+068900160615158417                                 PICTURE S9(11)V9(2) COMP-3.
+069000160615158417     03  WS-HIS-CHANGE-IN-INV-VALUE-TOT
+069100160615158417                                 PICTURE S9(11)V9(2) COMP-3.
+069200160615
+069300000000      *****
+069400000000      *****    Non-Numeric Items.
+069500000000      *****
+069600000000
+069700000000           03  WS-DATE.
+069800000000               05  WS-DATE-YY          PICTURE 9(2).
+069900000000               05  WS-DATE-MM          PICTURE 9(2).
+070000000000               05  WS-DATE-DD          PICTURE 9(2).
+070100000000
+070200000000           03  WS-ASTDESC.
+070300000000               05  WS-ASTDESC-6        PICTURE X(6).
+070400000000               05  FILLER              PICTURE X(19).
+070500000000
+070600000000      *****
+070700000000      *****    Numeric Items.
+070800000000      *****
+070900000000
+071000000000           03  WS-HD-SECTION-SEQUENCE  PICTURE S9(7)       COMP-3.
+071100000000           03  WS-HAS-SECTION-SEQUENCE PICTURE S9(7)       COMP-3.
+071200000000           03  WS-HIS-SECTION-SEQUENCE PICTURE S9(7)       COMP-3.
+071300000000           03  WS-HFS-SECTION-SEQUENCE PICTURE S9(7)       COMP-3.
+071400000000           03  WS-LNECNT               PICTURE S9(3)       COMP-3.
+071500000000           03  WS-LNEMAX               PICTURE S9(3)       COMP-3.
+071600000000           03  WS-PGECNT               PICTURE S9(5)       COMP-3.
+071700980818           03  WS-IS-PCT-PHN           PICTURE S9(3)V9(1)  COMP-3.
+071800980818           03  WS-AC-PCT-PHN           PICTURE S9(3)V9(1)  COMP-3.
+071900980818           03  WS-ACS-PCT-PHN          PICTURE S9(3)V9(1)  COMP-3.
+072000980818           03  WS-FS-PCT-PHN           PICTURE S9(3)V9(1)  COMP-3.
+072100000000
+072200000000      *****
+072300000000      *****    Switches.
+072400000000      *****
+072500000000
+072600000000           03  WS-EOJHDG-SW            PICTURE X(1).
+072700000000           03  WS-L01BYP-SW            PICTURE X(1).
+072800000000           03  WS-L02BYP-SW            PICTURE X(1).
+072900000000           03  WS-MFASTMHFP-WSW        PICTURE X(1).
+073000000000      /
+073100161205      *RFS164113 STARTS
+073200161205         01  SCREEN-EDITS-ALLOWED.
+073300161205           03  SCREEN-EDITS-ALLOWED-REC.
+073400161205                                       COPY DD-ALL-FORMATS OF MFAEDTSCP.
+073500161205           03  LC-SCREEN-EDITS-ALLOWED.
+073600161205               05  LNC-EDIT-SQLLOG         PIC X(1) VALUE "N".
+073700161205               05  LNC-RETURN-CODE         PIC X(2) VALUE "00".
+073800161205           03  LC-SCREEN-EDITS-ALLOWED-STMHSD.
+073900161205               05  LNC-STMHSD-SCREEN-CODE  PIC X(8) VALUE "STMTJSI".
+074000161205               05  LNC-STMHSD-EDIT-CODE    PIC X(6) VALUE "STMHSD".
+074100161205               05  LNC-STMHSD-LEVEL-CODE   PIC X(1) VALUE "T".
+074200161205           03  LB-EDITCODESTMHSD           PIC X(1) VALUE " ".
+074300161205               88 LB-STMHSDYES                      VALUE "Y".
+074400161205               88 LB-STMHSDNO                       VALUE "N".
+074500161205      *RFS164113 ENDS
+074600180620      *RFS179223 Starts
+074700180620           EXEC SQL
+074800180620              INCLUDE SQLCA
+074900180620           END-EXEC.
+075000180620      *RFS179223 Ends
+075100000000       01  DUMP-ARGUMENTS.
+075200000000
+075300000000      ******************************************************************
+075400000000      *                                                                *
+075500000000      *    D U M P   P A S S   P A R A M E T E R S                     *
+075600000000      *                                                                *
+075700000000      ******************************************************************
+075800000000
+075900000000           03  DA-TYPE                 PICTURE X(1)        VALUE "F".
+076000000000               88  COBOL-IDENTIFIERS                       VALUE "D".
+076100000000               88  FULL-DUMP                               VALUE "F".
+076200000000           03  FILLER                  PICTURE X(1).
+076300000000           03  DA-PGM-NAME             PICTURE X(10)       VALUE
+076400000000               "STMTPRT   ".
+076500000000      /
+076600000000      ******************************************************************
+076700000000      *                                                                *
+076800000000      *    C U R R E N T   /   P R E V I O U S   C O N T R O L S       *
+076900000000      *                                                                *
+077000000000      ******************************************************************
+077100000000
+077200000000       01  CURR-CONTROLS.
+077300000000           03  CURR-LEVEL1.
+077400000000               05  CURR-LEVEL2.
+077500000000                   07  CURR-INVESTOR-NO
+077600000000                                       PICTURE 9(9).
+077700000000               05  CURR-HOUSEHOLD-LINKAGE-CODE
+077800000000                                       PICTURE X(3).
+077900000000
+078000000000       01  PREV-CONTROLS.
+078100000000           03  PREV-LEVEL1.
+078200000000               05  PREV-LEVEL2.
+078300000000                   07  PREV-INVESTOR-NO
+078400000000                                       PICTURE 9(9).
+078500000000               05  PREV-HOUSEHOLD-LINKAGE-CODE
+078600000000                                       PICTURE X(3).
+078700000000      /
+078800000000       PROCEDURE DIVISION.
+078900000000
+079000000000      ******************************************************************
+079100000000      *                                                                *
+079200000000      *    P R O C E D U R E   D I V I S I O N                         *
+079300000000      *                                                                *
+079400000000      ******************************************************************
+079500000000      /
+079600000000       MAINLINE.
+079700000000
+079800000000      ******************************************************************
+079900000000      *                                                                *
+080000000000      *    M A I N L I N E                                             *
+080100000000      *                                                                *
+080200000000      ******************************************************************
+080300000000
+080400000000           PERFORM INITIAL-LOGIC-RTN  THRU ILR-EXIT.
+080500000000           IF  CURR-CONTROLS  IS EQUAL TO  HIGH-VALUES
+080600000000               GO TO MLR-0050.
+080700000000
+080800000000       MLR-0010.
+080900000000           PERFORM GET-CURRENT-RECORD THRU GCR-EXIT.
+081000000000           IF  PREV-LEVEL1    IS EQUAL TO  CURR-LEVEL1
+081100000000               GO TO MLR-0040.
+081200000000
+081300000000           IF  PREV-CONTROLS  IS EQUAL TO  LOW-VALUES
+081400000000               GO TO MLR-0020.
+081500000000
+081600000000           PERFORM LEVEL-SUMMARY-1    THRU LS1-EXIT.
+081700000000
+081800000000           IF  PREV-LEVEL2    IS EQUAL TO  CURR-LEVEL2
+081900000000               GO TO MLR-0030.
+082000000000
+082100000000           PERFORM LEVEL-SUMMARY-2    THRU LS2-EXIT.
+082200000000
+082300000000       MLR-0020.
+082400000000           IF  CURR-CONTROLS  IS EQUAL TO  HIGH-VALUES
+082500000000               GO TO MLR-0050.
+082600000000
+082700000000           PERFORM LEVEL-REINIT-2     THRU LR2-EXIT.
+082800000000
+082900000000       MLR-0030.
+083000000000           PERFORM LEVEL-REINIT-1     THRU LR1-EXIT.
+083100000000
+083200000000       MLR-0040.
+083300000000           PERFORM DETAIL-PROCESS-RTN THRU DPR-EXIT.
+083400000000           IF  CURR-CONTROLS  IS EQUAL TO  HIGH-VALUES
+083500000000               GO TO MLR-0050.
+083600000000
+083700000000           MOVE CURR-CONTROLS          TO  PREV-CONTROLS.
+083800000000           GO TO MLR-0010.
+083900000000
+084000000000       MLR-0050.
+084100000000           PERFORM END-JOB-RTN        THRU EJR-EXIT.
+084200000000           STOP RUN.
+084300000000      /
+084400000000       GET-CURRENT-RECORD.
+084500000000
+084600000000      ******************************************************************
+084700000000      *                                                                *
+084800000000      *    G E T   C U R R E N T   R E C O R D   R O U T I N E         *
+084900000000      *                                                                *
+085000000000      ******************************************************************
+085100000000
+085200000000           CONTINUE.
+085300000000
+085400000000      *****
+085500000000      *****    Read through the Investor Household Detail records.
+085600000000      *****
+085700000000
+085800000000       GCR-0010.
+085900000000           READ INVESTOR-HOUSEHOLD-DETAILS
+086000000000                                       AT  END
+086100000000               MOVE HIGH-VALUES        TO  CURR-CONTROLS
+086200000000               GO TO GCR-EXIT.
+086300000000
+086400000000           ADD 1                       TO  WS-MFAIVRHDP-RCNT.
+086500000000
+086600000000      *****
+086700000000      *****    If the investor number is zeroes, an error message will
+086800000000      *****    be printed and the record bypassed.
+086900000000      *****
+087000000000
+087100000000           IF  INVESTOR-NO
+087200000000               OF IVR-HOUSEHOLD-DTL-RECD
+087300000000                              IS EQUAL TO  ZEROES
+087400000000           OR  INVESTOR-NO-2
+087500000000               OF IVR-HOUSEHOLD-DTL-RECD
+087600000000                              IS EQUAL TO  ZEROES
+087700000000               SET MSG                 TO  1
+087800000000               PERFORM PRINT-ERR-LINE THRU PEL-EXIT
+087900000000               ADD 1                   TO  WS-MFAIVRHDP-BCNT
+088000000000               GO TO GCR-0010.
+088100980608
+088200980608      *****
+088300980608      *****    If this run is for GGF and the household linkage code is
+088400980608      *****    not for statements, the record is to be bypassed.
+088500980608      *****
+088600980608
+088700980608           IF  WS-LDA-MGMT-COM-CDE
+088800980608                              IS EQUAL TO  "GGF"
+088900980608           AND HOUSEHOLD-LINKAGE-CODE
+089000980608               OF IVR-HOUSEHOLD-DTL-RECD
+089100980608                          IS NOT EQUAL TO  "STM"
+089200980608               ADD 1                   TO  WS-MFAIVRHDP-LCNT
+089300980608               GO TO GCR-0010.
+089400000000
+089500000000      *****
+089600000000      *****    The record has been selected and is to be processed.
+089700000000      *****    Format the current controls.
+089800000000      *****
+089900000000
+090000000000           MOVE INVESTOR-NO
+090100000000                OF IVR-HOUSEHOLD-DTL-RECD
+090200000000                                       TO  CURR-INVESTOR-NO.
+090300000000           MOVE HOUSEHOLD-LINKAGE-CODE
+090400000000                OF IVR-HOUSEHOLD-DTL-RECD
+090500000000                                       TO  CURR-HOUSEHOLD-LINKAGE-CODE.
+090600000000
+090700180620179223     MOVE HOUSEHOLD-ID
+090800180620179223          OF IVR-HOUSEHOLD-DTL-RECD
+090900180620179223                                 TO  WS-HOUSEHOLD-ID.
+091000180620
+091100000000       GCR-EXIT.
+091200000000           EXIT.
+091300000000      /
+091400000000       DETAIL-PROCESS-RTN.
+091500000000
+091600000000      ******************************************************************
+091700000000      *                                                                *
+091800000000      *    D E T A I L   P R O C E S S   R O U T I N E                 *
+091900000000      *                                                                *
+092000000000      ******************************************************************
+092100000000
+092200000000      *****
+092300000000      *****    If an error was detected in a re-initialization routine,
+092400000000      *****    an error message will be printed and the record bypassed.
+092500000000      *****
+092600000000
+092700000000           IF  WS-L02BYP-SW   IS EQUAL TO  "Y"
+092800971024           AND WS-LDA-REQUEST-SCOPE
+092900000000                              IS EQUAL TO  "A"
+093000000000               SET MSG                 TO  10
+093100000000               PERFORM PRINT-ERR-LINE THRU PEL-EXIT.
+093200000000           IF  WS-L02BYP-SW   IS EQUAL TO  "Y"
+093300000000               ADD 1                   TO  WS-MFAIVRHDP-ECNT
+093400000000               GO TO DPR-EXIT.
+093500000000
+093600000000           IF  WS-L01BYP-SW   IS EQUAL TO  "Y"
+093700971024           AND WS-LDA-REQUEST-SCOPE
+093800000000                              IS EQUAL TO  "A"
+093900000000               SET MSG                 TO  2
+094000000000               PERFORM PRINT-ERR-LINE THRU PEL-EXIT.
+094100000000           IF  WS-L01BYP-SW   IS EQUAL TO  "Y"
+094200000000               ADD 1                   TO  WS-MFAIVRHDP-ECNT
+094300000000               GO TO DPR-EXIT.
+094400000000
+094500000000      *****
+094600000000      *****    For each record found on the Statement Extract, for the
+094700000000      *****    investor, create a Statement Household Mailing Detail.
+094800000000      *****    If no records are found, an error message will be printed
+094900000000      *****    and the record bypassed.
+095000000000      *****
+095100000000
+095200000000           MOVE ZEROES                 TO  WS-HD-SECTION-SEQUENCE.
+095300981104
+095400981104           IF WS-LDA-MGMT-COM-CDE IS NOT EQUAL TO "GGF"
+095500981104           OR WS-LDA-REQUEST-SCOPE IS NOT EQUAL TO "B"
+095600981104              GO TO DPR-0005.
+095700981104
+095800981104           MOVE INVESTOR-NO-2 OF IVR-HOUSEHOLD-DTL-RECD
+095900981104                TO INVESTOR-NO OF INVESTOR-EXTRACT-RECD.
+096000981104
+096100981104           START INVESTOR-FILE
+096200981104                 KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+096300981104                 INVALID KEY
+096400981104                 GO TO DPR-0180.
+096500981104
+096600981104       DPR-0000-0001.
+096700981104           READ  INVESTOR-FILE NEXT AT END
+096800981104               GO TO DPR-0180.
+096900981104
+097000981104           IF INVESTOR-NO OF INVESTOR-EXTRACT-RECD IS
+097100981104              NOT EQUAL TO INVESTOR-NO-2 OF IVR-HOUSEHOLD-DTL-RECD
+097200981104              GO TO DPR-0180.
+097300981104
+097400981104           INITIALIZE MFASTMEXP OF STATEMENT-EXTRACT-RECD.
+097500981104           MOVE START-DATE OF INVESTOR-EXTRACT-RECD TO
+097600981104                STMEX-START-DATE OF STATEMENT-EXTRACT-RECD.
+097700981104
+097800981104           MOVE END-DATE OF INVESTOR-EXTRACT-RECD TO
+097900981104                STMEX-START-DATE OF STATEMENT-EXTRACT-RECD.
+098000981104
+098100981104           MOVE INVESTOR-NO-2
+098200981104                OF IVR-HOUSEHOLD-DTL-RECD
+098300981104                                       TO  STMEX-INVESTOR-NO
+098400981104                                           OF STATEMENT-EXTRACT-RECD.
+098500981116           MOVE ACCOUNT-NO OF INVESTOR-EXTRACT-RECD
+098600981116                                       TO  STMEX-ACCOUNT-NO
+098700981116                                           OF STATEMENT-EXTRACT-RECD.
+098800981116
+098900981104           START STATEMENT-EXTRACT
+099000981104               KEY       IS NOT LESS THAN  EXTERNALLY-DESCRIBED-KEY
+099100981104               INVALID KEY
+099200981105                   GO TO DPR-0175.
+099300981104
+099400981104           GO TO DPR-0010.
+099500981104
+099600981104       DPR-0005.
+099700980529           INITIALIZE MFASTMEXP OF STATEMENT-EXTRACT-RECD.
+099800980128           MOVE WS-LDA-STRDTE          TO  STMEX-START-DATE
+099900980128                                           OF STATEMENT-EXTRACT-RECD.
+100000980128           MOVE WS-LDA-ENDDTE          TO  STMEX-END-DATE
+100100980128                                           OF STATEMENT-EXTRACT-RECD.
+100200000000           MOVE INVESTOR-NO-2
+100300000000                OF IVR-HOUSEHOLD-DTL-RECD
+100400000000                                       TO  STMEX-INVESTOR-NO
+100500000000                                           OF STATEMENT-EXTRACT-RECD.
+100600000000           START STATEMENT-EXTRACT
+100700000000               KEY       IS NOT LESS THAN  EXTERNALLY-DESCRIBED-KEY
+100800000000               INVALID KEY
+100900000000                   GO TO DPR-0180.
+101000000000
+101100000000       DPR-0010.
+101200981104           IF WS-LDA-MGMT-COM-CDE IS NOT EQUAL TO "GGF"
+101300981104           OR WS-LDA-REQUEST-SCOPE IS NOT EQUAL TO "B"
+101400981104              GO TO DPR-0010-0001.
+101500981104
+101600981104           READ STATEMENT-EXTRACT NEXT AT  END
+101700981104               GO TO DPR-0175.
+101800981104
+101900981104           GO TO DPR-0010-0002.
+102000981104
+102100981104       DPR-0010-0001.
+102200000000           READ STATEMENT-EXTRACT NEXT AT  END
+102300000000               GO TO DPR-0180.
+102400000000
+102500981104       DPR-0010-0002.
+102600980824           IF  STMEX-INVESTOR-NO
+102700980824               OF STATEMENT-EXTRACT-RECD
+102800980824                          IS NOT EQUAL TO  INVESTOR-NO-2
+102900980824                                           OF IVR-HOUSEHOLD-DTL-RECD
+103000980824               GO TO DPR-0180.
+103100980609
+103200981104           IF WS-LDA-MGMT-COM-CDE IS EQUAL TO "GGF"
+103300981104           AND WS-LDA-REQUEST-SCOPE IS EQUAL TO "B"
+103400981104           AND STMEX-ACCOUNT-NO OF STATEMENT-EXTRACT-RECD
+103500981104               IS NOT EQUAL TO ACCOUNT-NO OF INVESTOR-EXTRACT-RECD
+103600981116               GO TO DPR-0175.
+103700981104
+103800980609      *****
+103900980609      *****    If the summary generation flag is not requested, only the
+104000980609      *****    Investment Information record requires processing.
+104100980609      *****
+104200980609
+104300980609           IF  WS-LDA-HHMSUM-GEN EQUAL TO  "N"
+104400980609           AND STMEX-SECTION-NO
+104500980609               OF STATEMENT-EXTRACT-RECD
+104600980609                          IS NOT EQUAL TO  1
+104700980609                GO TO DPR-0170.
+104800000000
+104900000000           ADD 1                       TO  WS-MFASTMEXP-RCNT.
+105000000000
+105100000000      *****
+105200000000      *****    Format and create the Statement Household Mail Detail
+105300000000      *****    record.
+105400000000      *****
+105500000000
+105600000000           ADD 1                       TO  WS-HD-SECTION-SEQUENCE.
+105700000000
+105800000000           INITIALIZE MFASTMHFP-DETAIL-SECTION.
+105900000000           MOVE HH-HOUSEHOLD-INVESTOR-NO
+106000000000                                       TO  HD-HOUSEHOLD-INVESTOR-NO.
+106100000000           MOVE HH-HOUSEHOLD-LINKAGE-CODE
+106200000000                                       TO  HD-HOUSEHOLD-LINKAGE-CODE.
+106300000000           MOVE HH-LANGUAGE-CODE       TO  HD-LANGUAGE-CODE.
+106400000000           MOVE HH-INVESTOR-NO         TO  HD-INVESTOR-NO.
+106500000000           MOVE HH-ACCOUNT             TO  HD-ACCOUNT.
+106600000000           MOVE 20                     TO  HD-SECTION-NO.
+106700000000           MOVE WS-HD-SECTION-SEQUENCE TO  HD-SECTION-SEQUENCE.
+106800000000           MOVE STMEX-INVESTOR-NO
+106900000000                OF STATEMENT-EXTRACT-RECD
+107000000000                                       TO  HD-KEY-INVESTOR-NO.
+107100000000           MOVE STMEX-ACCOUNT-NO
+107200000000                OF STATEMENT-EXTRACT-RECD
+107300000000                                       TO  HD-KEY-ACCOUNT-NO.
+107400000000           MOVE STMEX-SECTION-NO
+107500000000                OF STATEMENT-EXTRACT-RECD
+107600000000                                       TO  HD-KEY-SECTION-NO.
+107700000000           MOVE STMEX-SECTION-SEQ
+107800000000                OF STATEMENT-EXTRACT-RECD
+107900000000                                       TO  HD-KEY-SECTION-SEQUENCE.
+108000000000
+108100000803RF7485     MOVE "X"                    TO  HD-EOR-INDICATOR.
+108200000803
+108300000000           MOVE MFASTMHFP-DETAIL-SECTION
+108400000000                                       TO  STMT-HOUSEHOLD-MAIL-RECD.
+108500000000           WRITE STMT-HOUSEHOLD-MAIL-RECD.
+108600000000           ADD 1                       TO  WS-STMT-HHM-WCNT-20.
+108700000000           MOVE "Y"                    TO  WS-MFASTMHFP-WSW.
+108800980609
+108900980609      *****
+109000980609      *****    If the summary generation flag is not requested, no
+109100980609      *****    further processing is required.
+109200980609      *****
+109300980609
+109400980609           IF  WS-LDA-HHMSUM-GEN EQUAL TO  "N"
+109500980609                GO TO DPR-0170.
+109600000000
+109700000000      *****
+109800000000      *****    Using the Statement Extract Section Number, determine if
+109900000000      *****    special logic is required.
+110000000000      *****
+110100000000
+110200000000           IF  STMEX-SECTION-NO
+110300000000               OF STATEMENT-EXTRACT-RECD
+110400000000                              IS EQUAL TO  1
+110500000000               GO TO DPR-0020.
+110600160216
+110700160615      *RFS158417-STARTS
+110800160615148326*    IF  STMEX-SECTION-NO
+110900160615148326*        OF STATEMENT-EXTRACT-RECD
+111000160615148326*                       IS EQUAL TO  10
+111100160615148326*        GO TO DPR-0021.
+111200160615      *RFS158417-ENDS
+111300160615
+111400000000           IF  STMEX-SECTION-NO
+111500000000               OF STATEMENT-EXTRACT-RECD
+111600000000                              IS EQUAL TO  15
+111700000000               GO TO DPR-0030.
+111800000000
+111900000000           IF  STMEX-SECTION-NO
+112000000000               OF STATEMENT-EXTRACT-RECD
+112100000000                              IS EQUAL TO  20
+112200000000               GO TO DPR-0110.
+112300000000
+112400000000           GO TO DPR-0170.
+112500000000
+112600000000       DPR-0020.
+112700000000
+112800000000      *****
+112900000000      *****    Processing a Statement Extract Investor Information
+113000000000      *****    record, save it.
+113100000000      *****
+113200000000
+113300000000           MOVE STATEMENT-EXTRACT-RECD TO  INVESTOR-INFO-SECTION.
+113400000000           GO TO DPR-0170.
+113500000000
+113600160216      *RFS148326-STARTS
+113700160615158417*DPR-0021.
+113800160615158417*    MOVE STATEMENT-EXTRACT-RECD TO  INVESTOR-SUMMARY-SECTION.
+113900160615158417*
+114000160615158417*    MOVE IS-INVESTOR-NO TO WS-SEC10-INVESTOR-NO (SEC10ACCIDX).
+114100160615158417*    MOVE IS-ACCOUNT2    TO WS-SEC10-ACCOUNT-NO (SEC10ACCIDX).
+114200160615158417*    MOVE IS-OPENING-MARKET-VALUE
+114300160615158417*                        TO WS-SEC10-OPENING-VALUE   (SEC10ACCIDX).
+114400160615158417*    SET SEC10ACCIDX UP BY  1.
+114500160615158417*
+114600160615158417*    GO TO DPR-0170.
+114700160216      *RFS148326-ENDS
+114800160216
+114900000000       DPR-0030.
+115000980529
+115100000000      *****
+115200000000      *****    Processing a Statement Extract Account Asset Class
+115300000000      *****    Summary record.  If this is a total record, it will be
+115400000000      *****    bypassed.  Update the Asset Class table.  If the table is
+115500000000      *****    full, an error message will be printed and the program
+115600000000      *****    aborted.
+115700000000      *****
+115800000000
+115900000000           MOVE STATEMENT-EXTRACT-RECD TO  ACCOUNT-ASSET-CLASS-SECTION.
+116000000000           MOVE AC-ASSET-CLASS-DESCRIPTION
+116100000000                                       TO  WS-ASTDESC.
+116200161205      *RFS164113 STARTS
+116300161205      *    IF  WS-ASTDESC-6   IS EQUAL TO  "TOTAL "
+116400161205      *        GO TO DPR-0100.
+116500161205             IF FIRST-ACCOUNT-TO-PROCESS = "Y"
+116600161205                MOVE "TOTAL "  TO PREV-WS-ASTDESC-6
+116700161205             END-IF.
+116800161205             IF LB-STMHSDYES
+116900161205                IF PREV-AC-ACCOUNT NOT EQUAL TO AC-ACCOUNT AND
+117000161205                  (PREV-WS-ASTDESC-6   IS EQUAL TO  "TOTAL " AND
+117100161205                   WS-ASTDESC-6   IS EQUAL TO  "TOTAL ")
+117200161205                   MOVE AC-PERCENTAGE   TO WS-40-AC-PER
+117300161205                   MOVE AC-MARKET-VALUE TO WS-40-AC-MKTVAL
+117400161205                   MOVE "Y" TO WS-GENERATE-SECTION-40-SPECIAL
+117500161205                   CONTINUE
+117600161205                ELSE
+117700161205                  MOVE "N" TO WS-GENERATE-SECTION-40-SPECIAL
+117800161205                  IF  WS-ASTDESC-6   IS EQUAL TO  "TOTAL "
+117900161205                      GO TO DPR-0100
+118000161205                END-IF
+118100161205             ELSE
+118200161205                 MOVE "N" TO WS-GENERATE-SECTION-40-SPECIAL
+118300161205                 IF  WS-ASTDESC-6   IS EQUAL TO  "TOTAL "
+118400161205                     GO TO DPR-0100
+118500161205             END-IF.
+118600161205             MOVE  AC-ACCOUNT            TO PREV-AC-ACCOUNT.
+118700161205             MOVE  WS-ASTDESC-6          TO PREV-WS-ASTDESC-6.
+118800161205             MOVE  "N"                   TO FIRST-ACCOUNT-TO-PROCESS.
+118900161205      *RFS164113 ENDS
+119000000000
+119100000000           SET AC                      TO  1.
+119200000000
+119300000000       DPR-0040.
+119400000000           IF  AC         IS GREATER THAN  WS-AC-LST
+119500000000               GO TO DPR-0050.
+119600000000
+119700000000           IF  WS-AC-CODE (AC)   EQUAL TO  AC-ASSET-CLASS-CODE
+119800000000               GO TO DPR-0060.
+119900000000
+120000000000           SET AC                   UP BY  1.
+120100000000           GO TO DPR-0040.
+120200000000
+120300000000       DPR-0050.
+120400000000           IF  WS-AC-LST IS NOT LESS THAN  WS-AC-MAX
+120500000000               SET MSG                 TO  3
+120600000000               PERFORM PRINT-ERR-LINE THRU PEL-EXIT
+120700000000               DISPLAY "ASSET CLASSES EXCEED PGM MAX, ABORT"
+120800000000               MOVE HIGH-VALUES        TO  CURR-CONTROLS
+120900000000               GO TO DPR-EXIT.
+121000000000
+121100000000           ADD 1                       TO  WS-AC-LST.
+121200000000           SET AC                      TO  WS-AC-LST.
+121300000000
+121400000000           MOVE ZEROES                 TO  WS-AC-ACSH (AC).
+121500000000           MOVE AC-ASSET-CLASS-CODE    TO  WS-AC-CODE (AC).
+121600000000           MOVE AC-ASSET-CLASS-DESCRIPTION
+121700000000                                       TO  WS-AC-DESC (AC).
+121800000000           MOVE ZEROES                 TO  WS-AC-PCT (AC).
+121900000000           MOVE ZEROES                 TO  WS-AC-VAL (AC).
+122000000000           MOVE ZEROES                 TO  WS-AC-SLST (AC).
+122100000000
+122200000000       DPR-0060.
+122300000000           IF  AC-ASSET-SUBCLASS-CODE
+122400000000                              IS EQUAL TO  SPACES
+122500000000               ADD AC-MARKET-VALUE     TO  WS-AC-VAL (AC)
+122600000000               ADD AC-MARKET-VALUE     TO  WS-AC-VALTOT
+122700161205      *RFS164113 STARTS
+122800161205      *        GO TO DPR-0100.
+122900161205               IF WS-GENERATE-SECTION-40-SPECIAL = "Y"
+123000161205                  CONTINUE
+123100161205               ELSE
+123200161205                  GO TO DPR-0100
+123300161205               END-IF
+123400161205               CONTINUE
+123500161205           END-IF.
+123600161205      *RFS164113 ENDS
+123700000000
+123800000000      *****
+123900000000      *****    Processing a Statement Extract Account Asset Sub-class
+124000000000      *****    Summary record, update the Asset Sub-class table.  If the
+124100000000      *****    table is full, an error message will be printed and the
+124200000000      *****    program aborted.
+124300000000      *****
+124400000000
+124500000000           SET ACS                     TO  1.
+124600000000
+124700000000       DPR-0070.
+124800000000           IF  ACS        IS GREATER THAN  WS-AC-SLST (AC)
+124900000000               GO TO DPR-0080.
+125000000000
+125100000000           IF  WS-ACS-CODE (AC, ACS)
+125200000000                              IS EQUAL TO  AC-ASSET-SUBCLASS-CODE
+125300000000               GO TO DPR-0090.
+125400000000
+125500000000           SET ACS                  UP BY  1.
+125600000000           GO TO DPR-0070.
+125700000000
+125800000000       DPR-0080.
+125900000000           IF  WS-AC-SLST (AC)
+126000000000                         IS NOT LESS THAN  WS-AC-SMAX
+126100000000               SET MSG                 TO  4
+126200000000               PERFORM PRINT-ERR-LINE THRU PEL-EXIT
+126300000000               DISPLAY "ASSET SUB-CLASSES EXCEED PGM MAX, ABORT"
+126400000000               MOVE HIGH-VALUES        TO  CURR-CONTROLS
+126500000000               GO TO DPR-EXIT.
+126600000000
+126700000000           ADD 1                       TO  WS-AC-SLST (AC).
+126800000000           SET ACS                     TO  WS-AC-SLST (AC).
+126900000000
+127000000000           MOVE AC-ASSET-SUBCLASS-CODE TO  WS-ACS-CODE (AC, ACS).
+127100000000           MOVE AC-ASSET-SUBCLASS-DESCRIPTION
+127200000000                                       TO  WS-ACS-DESC (AC, ACS).
+127300000000           MOVE ZEROES                 TO  WS-ACS-PCT (AC, ACS).
+127400000000           MOVE ZEROES                 TO  WS-ACS-VAL (AC, ACS).
+127500000000
+127600000000       DPR-0090.
+127700000000           ADD AC-MARKET-VALUE         TO  WS-ACS-VAL (AC, ACS).
+127800000000
+127900000000       DPR-0100.
+128000161205      *RFS164113 STARTS
+128100161205            MOVE  AC-ACCOUNT   TO PREV-AC-ACCOUNT.
+128200161205            MOVE  WS-ASTDESC-6 TO PREV-WS-ASTDESC-6.
+128300161205            MOVE  "N"          TO FIRST-ACCOUNT-TO-PROCESS.
+128400161205      *RFS164113 ENDS
+128500000000           GO TO DPR-0170.
+128600000000
+128700000000       DPR-0110.
+128800980529
+128900000000      *****
+129000000000      *****    Processing a Statement Extract Account Details record.
+129100000000      *****    Determine the type of Account Detail record being
+129200000000      *****    processed (detail, currency total, total).
+129300000000      *****
+129400000000
+129500000000           MOVE STATEMENT-EXTRACT-RECD TO  ACCOUNT-DETAILS-SECTION.
+129600000000           IF  AD-SECTION-SEQUENCE
+129700000000                              IS EQUAL TO  999999
+129800000000               GO TO DPR-0150.
+129900000000
+130000000000           IF  AD-SECTION-SEQUENCE
+130100000000                              IS EQUAL TO  199999
+130200000000           OR  AD-SECTION-SEQUENCE
+130300000000                              IS EQUAL TO  299999
+130400000000               GO TO DPR-0160.
+130500000000
+130600000000      *****
+130700000000      *****    Processing a Statement Extract Account Details detail,
+130800000000      *****    update the Fund Summary table.  If the table is full, an
+130900000000      *****    error message will be printed and the program aborted.
+131000000000      *****
+131100000000
+131200000000           SET FS                      TO  1.
+131300000000
+131400000000       DPR-0120.
+131500000000           IF  FS         IS GREATER THAN  WS-FS-LST
+131600000000               GO TO DPR-0130.
+131700000000
+131800000000           IF  WS-FS-FNDNO (FS)  EQUAL TO  AD-FUND-NO
+131900000000               GO TO DPR-0140.
+132000000000
+132100000000           SET FS                   UP BY  1.
+132200000000           GO TO DPR-0120.
+132300000000
+132400000000       DPR-0130.
+132500000000           IF  WS-FS-LST IS NOT LESS THAN  WS-FS-MAX
+132600000000               SET MSG                 TO  5
+132700000000               PERFORM PRINT-ERR-LINE THRU PEL-EXIT
+132800000000               DISPLAY "HOUSEHOLD FUNDS EXCEED PROGRAM MAXIMUM, ABORT"
+132900000000               MOVE HIGH-VALUES        TO  CURR-CONTROLS
+133000000000               GO TO DPR-EXIT.
+133100000000
+133200000000           ADD 1                       TO  WS-FS-LST.
+133300000000           SET FS                      TO  WS-FS-LST.
+133400000000
+133500000000           MOVE ZEROES                 TO  WS-FS-BKVAL (FS).
+133600000000           MOVE AD-CURRENCY            TO  WS-FS-CURRCD (FS).
+133700000000           MOVE AD-EXCHANGE-RATE       TO  WS-FS-EXGRTE (FS).
+133800000000           MOVE AD-FUND-NO             TO  WS-FS-FNDNO (FS).
+133900000000           MOVE AD-INVESTMENT-NAME     TO  WS-FS-INVNM (FS).
+134000000000           MOVE ZEROES                 TO  WS-FS-MKTVAL (FS).
+134100000000           MOVE ZEROES                 TO  WS-FS-MKTVALBSE (FS).
+134200000000           MOVE ZEROES                 TO  WS-FS-PCT (FS).
+134300000000           MOVE ZEROES                 TO  WS-FS-UNITS (FS).
+134400000000           MOVE AD-LAST-UNIT-PRICE     TO  WS-FS-UNTPRC (FS).
+134500000000           MOVE AD-LAST-UNIT-PRICE-BASE
+134600000000                                       TO  WS-FS-UNTPRCBSE (FS).
+134700000000
+134800000000       DPR-0140.
+134900001011      *    ADD AD-BOOK-VALUE           TO  WS-FS-BKVAL (FS).
+135000001011RF7776     ADD AD-BOOK-VALUE-BASE      TO  WS-FS-BKVAL (FS).
+135100000000           ADD AD-MARKET-VALUE         TO  WS-FS-MKTVAL (FS).
+135200000000           ADD AD-MARKET-VALUE-BASE    TO  WS-FS-MKTVALBSE (FS).
+135300000000           ADD AD-NO-OF-UNITS          TO  WS-FS-UNITS (FS).
+135400000000           ADD AD-MARKET-VALUE-BASE    TO  WS-FS-MKTVALBSETOT.
+135500000000           GO TO DPR-0160.
+135600000000
+135700000000       DPR-0150.
+135800000000
+135900000000      *****
+136000000000      *****    Processing a Statement Extract Account Details total
+136100000000      *****    record, add it to the Investor Summary table.  If the
+136200000000      *****    table is full, an error message will be printed and the
+136300000000      *****    program aborted.
+136400000000      *****
+136500000000
+136600000000           MOVE STATEMENT-EXTRACT-RECD TO  ACCOUNT-DETAILS-SECTION.
+136700000000
+136800000000           IF  WS-IS-LST IS NOT LESS THAN  WS-IS-MAX
+136900000000               SET MSG                 TO  6
+137000000000               PERFORM PRINT-ERR-LINE THRU PEL-EXIT
+137100000000               DISPLAY "HOUSEHOLD ACCOUNTS EXCEED PGM MAX, ABORT"
+137200000000               MOVE HIGH-VALUES        TO  CURR-CONTROLS
+137300000000               GO TO DPR-EXIT.
+137400000000
+137500000000           ADD 1                       TO  WS-IS-LST.
+137600000000           SET IS1                     TO  WS-IS-LST.
+137700000000
+137800000000           MOVE AD-ACCOUNT             TO  WS-IS-ACTNO (IS1).
+137900000000           MOVE AD-ACCOUNT-TYPE        TO  WS-IS-ACTTYP (IS1).
+138000000000           MOVE AD-INVESTOR-NO         TO  WS-IS-IVRNO (IS1).
+138100000000           MOVE II-INVESTOR-NAME       TO  WS-IS-LGLNM (IS1).
+138200980724           MOVE II-INVESTOR-NAME-2     TO  WS-IS-LGLNM2(IS1).
+138300000000           MOVE AD-MARKET-VALUE-BASE   TO  WS-IS-MKTVAL (IS1).
+138400000000           MOVE ZEROES                 TO  WS-IS-PCT (IS1).
+138500000000           ADD AD-MARKET-VALUE-BASE    TO  WS-IS-MKTVALTOT.
+138600160615158417     MOVE AD-MARKET-VALUE-PRIOR-Q1
+138700160615158417                                 TO  WS-IS-MKTVAL-PRIORQ1 (IS1).
+138800160615158417     ADD  AD-MARKET-VALUE-PRIOR-Q1
+138900160615158417                                 TO  WS-IS-MKTVAL-PRIORQ1-TOT.
+139000000000
+139100000000       DPR-0160.
+139200000000           GO TO DPR-0170.
+139300000000
+139400000000       DPR-0170.
+139500000000           GO TO DPR-0010.
+139600000000
+139700981104       DPR-0175.
+139800160615      *RFS158417 - STARTS
+139900160615148326*    SET SEC10ACCIDX TO 1.
+140000160615148326*    INITIALIZE WS-SEC10-ACCOUNT-OPENING-BAL.
+140100160615      *RFS158417 - ENDS
+140200981104           GO TO DPR-0000-0001.
+140300981104
+140400000000       DPR-0180.
+140500000000
+140600000000      *****
+140700000000      *****    If no records were found for the investor, an error
+140800000000      *****    message will be printed and the record bypassed.
+140900000000      *****
+141000000000
+141100000000           IF  WS-HD-SECTION-SEQUENCE
+141200000000                      IS NOT GREATER THAN  ZEROES
+141300971024           AND WS-LDA-REQUEST-SCOPE
+141400000000                              IS EQUAL TO  "A"
+141500000000               SET MSG                 TO  7
+141600000000               PERFORM PRINT-ERR-LINE THRU PEL-EXIT.
+141700000000           IF  WS-HD-SECTION-SEQUENCE
+141800000000                      IS NOT GREATER THAN  ZEROES
+141900000000               ADD 1                   TO  WS-MFAIVRHDP-MCNT
+142000000000               GO TO DPR-EXIT.
+142100000000
+142200000000       DPR-EXIT.
+142300000000           EXIT.
+142400000000      /
+142500000000       LEVEL-SUMMARY-1.
+142600000000
+142700000000      ******************************************************************
+142800000000      *                                                                *
+142900000000      *    L E V E L   S U M M A R I Z A T I O N   1   R O U T I N E   *
+143000000000      *                                                                *
+143100000000      *        HOUSEHOLD-LINKAGE-CODE: Household Linkage Code          *
+143200000000      *                                                                *
+143300000000      ******************************************************************
+143400000000
+143500000000      *****
+143600000000      *****    If an error was detected in the re-initialization routine
+143700000000      *****    or if no Household Mail records have been produced,
+143800000000      *****    bypass this routine.
+143900000000      *****
+144000000000
+144100000000           IF  WS-L01BYP-SW   IS EQUAL TO  "Y"
+144200000000           OR  WS-MFASTMHFP-WSW  EQUAL TO  "N"
+144300000000               GO TO LS1-EXIT.
+144400000000
+144500000000      *****
+144600000000      *****    Create the formatted Statement Household Mail Header
+144700000000      *****    record.
+144800000000      *****
+144900000000
+145000000000           MOVE MFASTMHFP-HEADER-SECTION
+145100000000                                       TO  STMT-HOUSEHOLD-MAIL-RECD.
+145200000000           WRITE STMT-HOUSEHOLD-MAIL-RECD.
+145300000000           ADD 1                       TO  WS-STMT-HHM-WCNT-10.
+145400000000
+145500000000      *****
+145600000000      *****    Calculate the investor summary market value percentages.
+145700000000      *****
+145800161205      *RFS164113 STARTS
+145900000000
+146000161205      *    IF  WS-IS-LST NOT GREATER THAN  ZEROES
+146100161205      *    OR  WS-IS-MKTVALTOT   EQUAL TO  ZEROES
+146200161205      *        GO TO LS1-0030.
+146300161205           IF NOT LB-STMHSDYES
+146400161205              IF  WS-IS-LST NOT GREATER THAN  ZEROES
+146500161205              OR  WS-IS-MKTVALTOT   EQUAL TO  ZEROES
+146600161205                  GO TO LS1-0030
+146700161205           ELSE
+146800161205              IF  WS-IS-MKTVAL-PRIORQ1-TOT EQUAL TO  ZEROES
+146900161205              AND (WS-IS-LST NOT GREATER THAN    ZEROES
+147000161205              OR  WS-IS-MKTVALTOT     EQUAL TO  ZEROES)
+147100161205                  GO TO LS1-0030
+147200161205           END-IF.
+147300161205      *RFS164113 ENDS
+147400000000
+147500000000           SET IS1                     TO  1.
+147600190812      *RFS184258 STARTS
+147700190812           SET ISH                     TO  1.
+147800190812      *RFS185258 ENDS
+147900000000           MOVE ZEROES                 TO  WS-IS-MKTVALHGH.
+148000000000           MOVE ZEROES                 TO  WS-IS-PCTTOT.
+148100000000
+148200000000       LS1-0010.
+148300161205      *RFS164113 STARTS
+148400161205            IF (WS-IS-MKTVAL-PRIORQ1-TOT NOT EQUAL TO  ZEROES
+148500161205            AND WS-IS-MKTVALTOT   EQUAL TO  ZEROES)
+148600161205            AND LB-STMHSDYES
+148700161205                SET ISH                     TO  IS1
+148800161205            END-IF.
+148900161205      *RFS164113 ENDS
+149000000000           IF  WS-IS-MKTVAL (IS1)
+149100000000                          IS GREATER THAN  WS-IS-MKTVALHGH
+149200000000               MOVE WS-IS-MKTVAL (IS1) TO  WS-IS-MKTVALHGH
+149300000000               SET ISH                 TO  IS1.
+149400000000
+149500980818           IF WS-LDA-MGMT-COM-CDE IS NOT EQUAL TO "PHN"
+149600161205      *RFS164113 STARTS
+149700161205      *       COMPUTE WS-IS-PCT (IS1) ROUNDED
+149800161205      *                                 =  (WS-IS-MKTVAL (IS1)
+149900161205      *                                 *   100)
+150000161205      *                                 /  WS-IS-MKTVALTOT.
+150100980817
+150200161205              IF WS-IS-MKTVAL (IS1) IS EQUAL TO ZEROES
+150300161205              AND LB-STMHSDYES
+150400161205                 MOVE ZEROES TO WS-IS-PCT (IS1)
+150500161205              ELSE
+150600161205                 COMPUTE WS-IS-PCT (IS1) ROUNDED
+150700161205                                     =  (WS-IS-MKTVAL (IS1)
+150800161205                                      *   100)
+150900161205                                      /  WS-IS-MKTVALTOT
+151000161205              END-IF
+151100161205           END-IF.
+151200161205      *RFS164113 ENDS
+151300980818           IF WS-LDA-MGMT-COM-CDE IS EQUAL TO "PHN"
+151400161205      *RFS164113 STARTS
+151500161205      *       MOVE ZEROES           TO WS-IS-PCT-PHN
+151600161205      *       COMPUTE WS-IS-PCT-PHN ROUNDED
+151700161205      *                                 =  (WS-IS-MKTVAL (IS1)
+151800161205      *                                 *   100)
+151900161205      *                                 /  WS-IS-MKTVALTOT
+152000161205      *       MOVE ZEROES            TO WS-IS-PCT (IS1)
+152100161205      *       MOVE WS-IS-PCT-PHN     TO WS-IS-PCT (IS1).
+152200161205              IF WS-IS-MKTVAL (IS1) IS EQUAL TO ZEROES AND LB-STMHSDYES
+152300161205                 MOVE ZEROES TO WS-IS-PCT-PHN
+152400161205                                WS-IS-PCT (IS1)
+152500161205              ELSE
+152600161205                 MOVE ZEROES           TO WS-IS-PCT-PHN
+152700161205                 COMPUTE WS-IS-PCT-PHN ROUNDED
+152800161205                                      =  (WS-IS-MKTVAL (IS1)
+152900161205                                      *   100)
+153000161205                                      /  WS-IS-MKTVALTOT
+153100161205                 MOVE ZEROES            TO WS-IS-PCT (IS1)
+153200161205                 MOVE WS-IS-PCT-PHN     TO WS-IS-PCT (IS1)
+153300161205               END-IF
+153400161205           END-IF.
+153500161205      *RFS164113 ENDS
+153600980818
+153700980818           ADD WS-IS-PCT (IS1)         TO  WS-IS-PCTTOT.
+153800000000
+153900000000           IF  IS1           IS LESS THAN  WS-IS-LST
+154000000000               SET IS1              UP BY  1
+154100000000               GO TO LS1-0010.
+154200000000
+154300000000      *****
+154400000000      *****    If the total percentage is not 100, update the highest
+154500000000      *****    value with the difference.
+154600000000      *****
+154700000000
+154800000000           IF  WS-IS-PCTTOT  NOT EQUAL TO  100.0000
+154900000000               COMPUTE WS-IS-PCT (ISH)  =  WS-IS-PCT (ISH)
+155000000000                                        +  (100.0000
+155100000000                                        -   WS-IS-PCTTOT).
+155200000000
+155300000000      *****
+155400000000      *****    Format and create the Statement Household Mail
+155500000000      *****    Consolidated Investor Summary records.
+155600000000      *****
+155700000000
+155800000000           SET IS1                     TO  1.
+155900000000           MOVE ZEROES                 TO  WS-HIS-SECTION-SEQUENCE.
+156000000000
+156100000000       LS1-0020.
+156200000000           ADD 1                       TO  WS-HIS-SECTION-SEQUENCE.
+156300000000
+156400000000           INITIALIZE MFASTMHFP-INV-SUMM-SECTION.
+156500000000           MOVE HH-HOUSEHOLD-INVESTOR-NO
+156600000000                                       TO  HIS-HOUSEHOLD-INVESTOR-NO.
+156700000000           MOVE HH-HOUSEHOLD-LINKAGE-CODE
+156800000000                                       TO  HIS-HOUSEHOLD-LINKAGE-CODE.
+156900000000           MOVE HH-LANGUAGE-CODE       TO  HIS-LANGUAGE-CODE.
+157000000000           MOVE WS-IS-IVRNO (IS1)      TO  HIS-INVESTOR-NO.
+157100000000           MOVE WS-IS-ACTNO (IS1)      TO  HIS-ACCOUNT.
+157200000000           MOVE 30                     TO  HIS-SECTION-NO.
+157300000000           MOVE WS-HIS-SECTION-SEQUENCE
+157400000000                                       TO  HIS-SECTION-SEQUENCE.
+157500000000           MOVE WS-IS-LGLNM (IS1)      TO  HIS-LEGAL-NAME-1.
+157600000000           MOVE WS-IS-ACTTYP (IS1)     TO  HIS-ACCOUNT-TYPE-DESCRIPTION.
+157700000000           MOVE WS-IS-MKTVAL (IS1)     TO  HIS-MARKET-VALUE.
+157800000000           MOVE WS-IS-PCT (IS1)        TO  HIS-PERCENTAGE.
+157900980724           MOVE WS-IS-LGLNM2 (IS1)     TO  HIS-LEGAL-NAME-2.
+158000160615158417     MOVE WS-IS-MKTVAL-PRIORQ1 (IS1)
+158100160615158417                                 TO  HIS-OPENING-VALUE.
+158200160615158417     MOVE 0                      TO LN-HIS-CHANGE-IN-INV-VALUE.
+158300000803
+158400000803RF7485     MOVE "X"                    TO  HIS-EOR-INDICATOR.
+158500000803
+158600160216      *RFS148326 - STARTS
+158700160615158417*    SET SEC10ACCIDX TO 1.
+158800160615158417*    SEARCH WS-SEC10-ACCOUNT-OPEN-BAL-ARR VARYING SEC10ACCIDX
+158900160615158417*    AT END
+159000160615158417*           MOVE ZEROS TO HIS-OPENING-VALUE
+159100160615158417*    WHEN   WS-SEC10-INVESTOR-NO(SEC10ACCIDX) = HIS-INVESTOR-NO
+159200160615158417*    AND    WS-SEC10-ACCOUNT-NO(SEC10ACCIDX)  = HIS-ACCOUNT
+159300160615158417*           MOVE WS-SEC10-OPENING-VALUE (SEC10ACCIDX)
+159400160615158417*                      TO HIS-OPENING-VALUE
+159500160615158417*    END-SEARCH.
+159600160216
+159700160216           SUBTRACT HIS-OPENING-VALUE FROM HIS-MARKET-VALUE
+159800160226              GIVING HIS-CHANGE-IN-INVEST-VALUE,
+159900160226                     LN-HIS-CHANGE-IN-INV-VALUE.
+160000160216
+160100160615158417*    ADD HIS-OPENING-VALUE TO WS-HIS-OPENING-VALUE-TOT.
+160200160328           ADD LN-HIS-CHANGE-IN-INV-VALUE TO
+160300160216                               WS-HIS-CHANGE-IN-INV-VALUE-TOT
+160400160216
+160500160401           IF LN-HIS-CHANGE-IN-INV-VALUE < 0
+160600160216              MOVE "-" TO HIS-CHANGE-IN-INV-VALUE-SIGN
+160700160216           ELSE
+160800160216              MOVE " " TO HIS-CHANGE-IN-INV-VALUE-SIGN
+160900160216           END-IF.
+161000160216
+161100160216      *RFS148326 - ENDS
+161200000000           MOVE MFASTMHFP-INV-SUMM-SECTION
+161300000000                                       TO  STMT-HOUSEHOLD-MAIL-RECD.
+161400000000           WRITE STMT-HOUSEHOLD-MAIL-RECD.
+161500000000           ADD 1                       TO  WS-STMT-HHM-WCNT-30.
+161600000000
+161700000000           IF  IS1           IS LESS THAN  WS-IS-LST
+161800000000               SET IS1              UP BY  1
+161900000000               GO TO LS1-0020.
+162000000000
+162100000000      *****
+162200000000      *****    Format and create the Statement Household Mail
+162300000000      *****    Consolidated Investor Summary total record.
+162400000000      *****
+162500000000
+162600000000           INITIALIZE MFASTMHFP-INV-SUMM-SECTION.
+162700000000           MOVE HH-HOUSEHOLD-INVESTOR-NO
+162800000000                                       TO  HIS-HOUSEHOLD-INVESTOR-NO.
+162900000000           MOVE HH-HOUSEHOLD-LINKAGE-CODE
+163000000000                                       TO  HIS-HOUSEHOLD-LINKAGE-CODE.
+163100000000           MOVE HH-LANGUAGE-CODE       TO  HIS-LANGUAGE-CODE.
+163200000000           MOVE ZEROES                 TO  HIS-INVESTOR-NO.
+163300000000           MOVE ZEROES                 TO  HIS-ACCOUNT.
+163400000000           MOVE 30                     TO  HIS-SECTION-NO.
+163500000000           MOVE 999999                 TO  HIS-SECTION-SEQUENCE.
+163600000000           MOVE "TOTAL"                TO  HIS-LEGAL-NAME-1.
+163700000000           MOVE "TOTAL"                TO  HIS-ACCOUNT-TYPE-DESCRIPTION.
+163800000000           MOVE WS-IS-MKTVALTOT        TO  HIS-MARKET-VALUE.
+163900000000           MOVE 100.0000               TO  HIS-PERCENTAGE.
+164000980724           MOVE "TOTAL"                TO  HIS-LEGAL-NAME-2.
+164100160401      *RFS148326 - START
+164200160615158417*    MOVE WS-HIS-OPENING-VALUE-TOT TO HIS-OPENING-VALUE.
+164300160615158417     MOVE WS-IS-MKTVAL-PRIORQ1-TOT TO HIS-OPENING-VALUE.
+164400160401           MOVE WS-HIS-CHANGE-IN-INV-VALUE-TOT
+164500160401                                         TO HIS-CHANGE-IN-INVEST-VALUE.
+164600160401           IF WS-HIS-CHANGE-IN-INV-VALUE-TOT < 0
+164700160401              MOVE "-" TO HIS-CHANGE-IN-INV-VALUE-SIGN
+164800160401           ELSE
+164900160401              MOVE " " TO HIS-CHANGE-IN-INV-VALUE-SIGN
+165000160401           END-IF.
+165100160401
+165200160615158417*    INITIALIZE WS-HIS-OPENING-VALUE-TOT
+165300160615158417*               WS-HIS-CHANGE-IN-INV-VALUE-TOT.
+165400160615158417     INITIALIZE WS-HIS-CHANGE-IN-INV-VALUE-TOT.
+165500160401      *RFS148326 - END
+165600000000
+165700000803RF7485     MOVE "X"                    TO  HIS-EOR-INDICATOR.
+165800000803
+165900000000           MOVE MFASTMHFP-INV-SUMM-SECTION
+166000000000                                       TO  STMT-HOUSEHOLD-MAIL-RECD.
+166100000000           WRITE STMT-HOUSEHOLD-MAIL-RECD.
+166200000000           ADD 1                       TO  WS-STMT-HHM-WCNT-30.
+166300161205      *RFS164113 STARTS
+166400161205            IF  WS-AC-VALTOT   IS EQUAL TO  ZEROES
+166500161205            AND WS-GENERATE-SECTION-40-SPECIAL = "Y"
+166600161205                INITIALIZE MFASTMHFP-ASSET-CLASS-SECTION
+166700161205                MOVE HH-HOUSEHOLD-INVESTOR-NO
+166800161205                                         TO  HAS-HOUSEHOLD-INVESTOR-NO
+166900161205                MOVE HH-HOUSEHOLD-LINKAGE-CODE
+167000161205                                         TO  HAS-HOUSEHOLD-LINKAGE-CODE
+167100161205                MOVE HH-LANGUAGE-CODE    TO HAS-LANGUAGE-CODE
+167200161205                MOVE 40                  TO HAS-SECTION-NO
+167300161205                MOVE 999999              TO HAS-SECTION-SEQUENCE
+167400161205                MOVE AC-ASSET-CLASS-CODE TO HAS-ASSET-CLASS-CODE
+167500161205                MOVE AC-ASSET-CLASS-DESCRIPTION
+167600161205                                         TO HAS-ASSET-CLASS-DESCRIPTION
+167700161205                MOVE AC-ASSET-SUBCLASS-CODE
+167800161205                                         TO HAS-ASSET-SUBCLASS-CODE
+167900161205                MOVE AC-ASSET-SUBCLASS-DESCRIPTION
+168000161205                                   TO HAS-ASSET-SUBCLASS-DESCRIPTION
+168100161205                MOVE SPACES            TO HAS-ASSET-CLASS-CODE
+168200161205                MOVE "TOTAL"           TO HAS-ASSET-CLASS-DESCRIPTION
+168300161205                MOVE WS-40-AC-MKTVAL   TO HAS-MARKET-VALUE
+168400161205                MOVE WS-40-AC-PER      TO HAS-PERCENTAGE
+168500161205                MOVE "X"               TO HAS-EOR-INDICATOR
+168600161205                MOVE MFASTMHFP-ASSET-CLASS-SECTION
+168700161205                                       TO STMT-HOUSEHOLD-MAIL-RECD
+168800161205                WRITE STMT-HOUSEHOLD-MAIL-RECD
+168900161205                ADD 1                  TO WS-STMT-HHM-WCNT-40
+169000161205            END-IF.
+169100161205      *RFS164113 ENDS
+169200000000
+169300000000       LS1-0030.
+169400000000
+169500000000      *****
+169600000000      *****    Calculate the asset class market value percentages.
+169700000000      *****
+169800000000
+169900000000           IF  WS-AC-LST NOT GREATER THAN  ZEROES
+170000000000           OR  WS-AC-VALTOT   IS EQUAL TO  ZEROES
+170100980827               GO TO LS1-0100.
+170200000000
+170300000000           SET AC                      TO  1.
+170400000000           MOVE ZEROES                 TO  WS-AC-VALHGH.
+170500000000           MOVE ZEROES                 TO  WS-AC-PCTTOT.
+170600000000
+170700000000       LS1-0040.
+170800000000           IF  WS-AC-VAL (AC)
+170900000000                          IS GREATER THAN  WS-AC-VALHGH
+171000000000               MOVE WS-AC-VAL (AC)     TO  WS-AC-VALHGH
+171100000000               SET ACH                 TO  AC.
+171200000000
+171300980818           IF WS-LDA-MGMT-COM-CDE NOT EQUAL TO "PHN"
+171400980818              COMPUTE WS-AC-PCT (AC) ROUNDED
+171500000000                                        =  (WS-AC-VAL (AC)
+171600000000                                        *   100)
+171700980818                                        /  WS-AC-VALTOT.
+171800980817
+171900980817           IF WS-LDA-MGMT-COM-CDE EQUAL TO "PHN"
+172000980818              MOVE ZEROES              TO WS-AC-PCT-PHN
+172100980818              COMPUTE WS-AC-PCT-PHN ROUNDED
+172200980817                                        =  (WS-AC-VAL (AC)
+172300980817                                        *   100)
+172400980817                                        /  WS-AC-VALTOT
+172500980824              MOVE ZEROES              TO WS-AC-PCT (AC)
+172600980818              MOVE WS-AC-PCT-PHN       TO WS-AC-PCT (AC).
+172700980818
+172800980818           ADD WS-AC-PCT (AC)          TO  WS-AC-PCTTOT.
+172900000000
+173000000000      *****
+173100000000      *****    Calculate the asset sub-class market value percentages,
+173200000000      *****    if applicable.
+173300000000      *****
+173400000000
+173500000000           IF  WS-AC-SLST (AC)
+173600000000                      IS NOT GREATER THAN  ZEROES
+173700000000           OR  WS-AC-VAL (AC) IS EQUAL TO  ZEROES
+173800000000               GO TO LS1-0060.
+173900000000
+174000000000           SET ACS                     TO  1.
+174100000000           MOVE ZEROES                 TO  WS-ACS-VALHGH.
+174200000000           MOVE ZEROES                 TO  WS-ACS-PCTTOT.
+174300000000
+174400000000       LS1-0050.
+174500000000           IF  WS-ACS-VAL (AC, ACS)
+174600000000                          IS GREATER THAN  WS-ACS-VALHGH
+174700000000               MOVE WS-ACS-VAL (AC, ACS)
+174800000000                                       TO  WS-ACS-VALHGH
+174900000000               SET WS-AC-ACSH (AC)     TO  ACS
+175000000000               SET ACSH                TO  ACS.
+175100000000
+175200971024           IF  WS-LDA-MGMT-COM-CDE
+175300000000                          IS NOT EQUAL TO  "PHN"
+175400000000               GO TO LS1-0050-0010.
+175500980818
+175600980818           MOVE ZEROES                 TO WS-ACS-PCT-PHN.
+175700980818
+175800980818           COMPUTE WS-ACS-PCT-PHN ROUNDED
+175900980818                                      =  (WS-ACS-VAL (AC, ACS)
+176000980818                                      *   100)
+176100980818                                      /  WS-AC-VALTOT.
+176200980824           MOVE ZEROES         TO WS-ACS-PCT (AC, ACS).
+176300980818           MOVE WS-ACS-PCT-PHN TO WS-ACS-PCT (AC, ACS).
+176400980818
+176500000000           GO TO LS1-0050-0020.
+176600000000
+176700000000       LS1-0050-0010.
+176800000000           COMPUTE WS-ACS-PCT (AC, ACS) ROUNDED
+176900000000                                        =  (WS-ACS-VAL (AC, ACS)
+177000000000                                        *   100)
+177100000000                                        /  WS-AC-VAL (AC).
+177200000000
+177300000000       LS1-0050-0020.
+177400980818           ADD WS-ACS-PCT (AC, ACS)    TO  WS-ACS-PCTTOT.
+177500980818
+177600000000           IF  ACS           IS LESS THAN  WS-AC-SLST (AC)
+177700000000               SET ACS              UP BY  1
+177800000000               GO TO LS1-0050.
+177900000000
+178000000000      *****
+178100000000      *****    If the total asset sub-class percentage is not 100,
+178200000000      *****    update the highest value with the difference.
+178300000000      *****
+178400000000
+178500971024           IF  WS-LDA-MGMT-COM-CDE
+178600000000                          IS NOT EQUAL TO  "PHN"
+178700000000               GO TO LS1-0050-0030.
+178800000000
+178900980818           IF  WS-ACS-PCTTOT NOT EQUAL TO WS-AC-PCT (AC)
+179000980818               COMPUTE WS-ACS-PCT (AC, ACSH)
+179100980818                                      =  WS-ACS-PCT (AC, ACSH)
+179200980818                                      +  (WS-AC-PCT (AC)
+179300980818                                      -   WS-ACS-PCTTOT).
+179400000000           GO TO LS1-0060.
+179500000000
+179600000000       LS1-0050-0030.
+179700000000           IF  WS-ACS-PCTTOT NOT EQUAL TO  100.0000
+179800000000               COMPUTE WS-ACS-PCT (AC, ACSH)
+179900000000                                        =  WS-ACS-PCT (AC, ACSH)
+180000000000                                        +  (100.0000
+180100000000                                        -   WS-ACS-PCTTOT).
+180200000000
+180300000000       LS1-0060.
+180400000000           IF  AC            IS LESS THAN  WS-AC-LST
+180500000000               SET AC               UP BY  1
+180600000000               GO TO LS1-0040.
+180700000000
+180800000000      *****
+180900000000      *****    If the total percentage is not 100, update the highest
+181000000000      *****    value with the difference.
+181100000000      *****
+181200000000
+181300000000           IF  WS-AC-PCTTOT   IS EQUAL TO  100.0000
+181400000000               GO TO LS1-0060-0010.
+181500000000
+181600980817              COMPUTE WS-AC-PCT (ACH)   =  WS-AC-PCT (ACH)
+181700000000                                        +  (100.0000
+181800000000                                        -   WS-AC-PCTTOT).
+181900000000
+182000971024           IF  WS-LDA-MGMT-COM-CDE
+182100000000                          IS NOT EQUAL TO  "PHN"
+182200000000           OR  WS-AC-ACSH (ACH)  EQUAL TO  ZEROES
+182300000000               GO TO LS1-0060-0010.
+182400000000
+182500000000           SET ACSH                    TO  WS-AC-ACSH (ACH).
+182600980818           COMPUTE WS-ACS-PCT (ACH, ACSH)
+182700980818                                        =  WS-ACS-PCT (ACH, ACSH)
+182800980818                                        +  (100.0000
+182900980824                                        -  WS-AC-PCTTOT).
+183000000000
+183100000000       LS1-0060-0010.
+183200000000
+183300000000      *****
+183400000000      *****    Format and create the Statement Household Mail
+183500000000      *****    Consolidated Asset Class Summary records.
+183600000000      *****
+183700000000
+183800000000           SET AC                      TO  1.
+183900000000           MOVE ZEROES                 TO  WS-HAS-SECTION-SEQUENCE.
+184000000000
+184100160615159593*    IF  WS-LDA-MGMT-COM-CDE
+184200160615159593*                   IS NOT EQUAL TO  "PHN"
+184300160615               GO TO LS1-0070.
+184400000000
+184500000000      *****
+184600000000      *****    Format and create the records specifically for PHN.
+184700000000      *****
+184800000000
+184900000000       LS1-0060-0020.
+185000000000           IF  AC         IS GREATER THAN  WS-AC-LST
+185100000000               GO TO LS1-0060-0030.
+185200000000
+185300000000           IF  WS-AC-CODE (AC)
+185400000000                          IS NOT EQUAL TO  "MMKT  "
+185500000000               SET AC               UP BY  1
+185600000000               GO TO LS1-0060-0020.
+185700000000
+185800000000           IF  WS-AC-VAL (AC) IS EQUAL TO  ZEROES
+185900000000               GO TO LS1-0060-0030.
+186000000000
+186100000000           ADD 1                       TO  WS-HAS-SECTION-SEQUENCE.
+186200000000
+186300000000           INITIALIZE MFASTMHFP-ASSET-CLASS-SECTION.
+186400000000           MOVE HH-HOUSEHOLD-INVESTOR-NO
+186500000000                                       TO  HAS-HOUSEHOLD-INVESTOR-NO.
+186600000000           MOVE HH-HOUSEHOLD-LINKAGE-CODE
+186700000000                                       TO  HAS-HOUSEHOLD-LINKAGE-CODE.
+186800000000           MOVE HH-LANGUAGE-CODE       TO  HAS-LANGUAGE-CODE.
+186900000000           MOVE 40                     TO  HAS-SECTION-NO.
+187000000000           MOVE WS-HAS-SECTION-SEQUENCE
+187100000000                                       TO  HAS-SECTION-SEQUENCE.
+187200000000           MOVE WS-AC-CODE (AC)        TO  HAS-ASSET-CLASS-CODE.
+187300000000           MOVE WS-AC-DESC (AC)        TO  HAS-ASSET-CLASS-DESCRIPTION.
+187400000000           MOVE WS-AC-VAL (AC)         TO  HAS-MARKET-VALUE.
+187500000000           MOVE WS-AC-PCT (AC)         TO  HAS-PERCENTAGE.
+187600000803
+187700000803RF7485     MOVE "X"                    TO  HAS-EOR-INDICATOR.
+187800000803
+187900000000           MOVE MFASTMHFP-ASSET-CLASS-SECTION
+188000000000                                       TO  STMT-HOUSEHOLD-MAIL-RECD.
+188100000000           WRITE STMT-HOUSEHOLD-MAIL-RECD.
+188200000000           ADD 1                       TO  WS-STMT-HHM-WCNT-40.
+188300000000
+188400000000       LS1-0060-0030.
+188500000000           SET AC                      TO  1.
+188600000000
+188700000000       LS1-0060-0040.
+188800000000           IF  AC         IS GREATER THAN  WS-AC-LST
+188900000000               GO TO LS1-0060-0050.
+189000000000
+189100000000           IF  WS-AC-CODE (AC)
+189200000000                          IS NOT EQUAL TO  "BOND  "
+189300000000               SET AC               UP BY  1
+189400000000               GO TO LS1-0060-0040.
+189500000000
+189600000000           IF  WS-AC-VAL (AC) IS EQUAL TO  ZEROES
+189700000000               GO TO LS1-0060-0050.
+189800000000
+189900000000           ADD 1                       TO  WS-HAS-SECTION-SEQUENCE.
+190000000000
+190100000000           INITIALIZE MFASTMHFP-ASSET-CLASS-SECTION.
+190200000000           MOVE HH-HOUSEHOLD-INVESTOR-NO
+190300000000                                       TO  HAS-HOUSEHOLD-INVESTOR-NO.
+190400000000           MOVE HH-HOUSEHOLD-LINKAGE-CODE
+190500000000                                       TO  HAS-HOUSEHOLD-LINKAGE-CODE.
+190600000000           MOVE HH-LANGUAGE-CODE       TO  HAS-LANGUAGE-CODE.
+190700000000           MOVE 40                     TO  HAS-SECTION-NO.
+190800000000           MOVE WS-HAS-SECTION-SEQUENCE
+190900000000                                       TO  HAS-SECTION-SEQUENCE.
+191000000000           MOVE WS-AC-CODE (AC)        TO  HAS-ASSET-CLASS-CODE.
+191100000000           MOVE WS-AC-DESC (AC)        TO  HAS-ASSET-CLASS-DESCRIPTION.
+191200000000           MOVE WS-AC-VAL (AC)         TO  HAS-MARKET-VALUE.
+191300000000           MOVE WS-AC-PCT (AC)         TO  HAS-PERCENTAGE.
+191400000803
+191500000803RF7485     MOVE "X"                    TO  HAS-EOR-INDICATOR.
+191600000803
+191700000000           MOVE MFASTMHFP-ASSET-CLASS-SECTION
+191800000000                                       TO  STMT-HOUSEHOLD-MAIL-RECD.
+191900000000           WRITE STMT-HOUSEHOLD-MAIL-RECD.
+192000000000           ADD 1                       TO  WS-STMT-HHM-WCNT-40.
+192100000000
+192200000000       LS1-0060-0050.
+192300000000           SET AC                      TO  1.
+192400000000
+192500000000       LS1-0060-0060.
+192600000000           IF  AC         IS GREATER THAN  WS-AC-LST
+192700000000               GO TO LS1-0060-0130.
+192800000000
+192900000000           IF  WS-AC-CODE (AC)
+193000000000                          IS NOT EQUAL TO  "EQUITY"
+193100000000               SET AC               UP BY  1
+193200000000               GO TO LS1-0060-0060.
+193300000000
+193400000000           IF  WS-AC-VAL (AC) IS EQUAL TO  ZEROES
+193500000000               GO TO LS1-0060-0130.
+193600000000
+193700000000           ADD 1                       TO  WS-HAS-SECTION-SEQUENCE.
+193800000000
+193900000000           INITIALIZE MFASTMHFP-ASSET-CLASS-SECTION.
+194000000000           MOVE HH-HOUSEHOLD-INVESTOR-NO
+194100000000                                       TO  HAS-HOUSEHOLD-INVESTOR-NO.
+194200000000           MOVE HH-HOUSEHOLD-LINKAGE-CODE
+194300000000                                       TO  HAS-HOUSEHOLD-LINKAGE-CODE.
+194400000000           MOVE HH-LANGUAGE-CODE       TO  HAS-LANGUAGE-CODE.
+194500000000           MOVE 40                     TO  HAS-SECTION-NO.
+194600000000           MOVE WS-HAS-SECTION-SEQUENCE
+194700000000                                       TO  HAS-SECTION-SEQUENCE.
+194800000000           MOVE WS-AC-CODE (AC)        TO  HAS-ASSET-CLASS-CODE.
+194900000000           MOVE WS-AC-DESC (AC)        TO  HAS-ASSET-CLASS-DESCRIPTION.
+195000000000           MOVE WS-AC-VAL (AC)         TO  HAS-MARKET-VALUE.
+195100000000           MOVE WS-AC-PCT (AC)         TO  HAS-PERCENTAGE.
+195200000803
+195300000803RF7485     MOVE "X"                    TO  HAS-EOR-INDICATOR.
+195400000803
+195500000000           MOVE MFASTMHFP-ASSET-CLASS-SECTION
+195600000000                                       TO  STMT-HOUSEHOLD-MAIL-RECD.
+195700000000           WRITE STMT-HOUSEHOLD-MAIL-RECD.
+195800000000           ADD 1                       TO  WS-STMT-HHM-WCNT-40.
+195900000000
+196000000000           SET ACS                     TO  1.
+196100000000
+196200000000       LS1-0060-0070.
+196300000000           IF  ACS        IS GREATER THAN  WS-AC-SLST (AC)
+196400000000               GO TO LS1-0060-0080.
+196500000000
+196600000000           IF  WS-ACS-CODE (AC, ACS)
+196700000000                          IS NOT EQUAL TO  "CNEQ  "
+196800000000               SET ACS              UP BY  1
+196900000000               GO TO LS1-0060-0070.
+197000000000
+197100000000           IF  WS-ACS-VAL (AC, ACS)
+197200000000                              IS EQUAL TO  ZEROES
+197300000000               GO TO LS1-0060-0080.
+197400000000
+197500000000           ADD 1                       TO  WS-HAS-SECTION-SEQUENCE.
+197600000000
+197700000000           INITIALIZE MFASTMHFP-ASSET-CLASS-SECTION.
+197800000000           MOVE HH-HOUSEHOLD-INVESTOR-NO
+197900000000                                       TO  HAS-HOUSEHOLD-INVESTOR-NO.
+198000000000           MOVE HH-HOUSEHOLD-LINKAGE-CODE
+198100000000                                       TO  HAS-HOUSEHOLD-LINKAGE-CODE.
+198200000000           MOVE HH-LANGUAGE-CODE       TO  HAS-LANGUAGE-CODE.
+198300000000           MOVE 40                     TO  HAS-SECTION-NO.
+198400000000           MOVE WS-HAS-SECTION-SEQUENCE
+198500000000                                       TO  HAS-SECTION-SEQUENCE.
+198600000000           MOVE WS-AC-CODE (AC)        TO  HAS-ASSET-CLASS-CODE.
+198700000000           MOVE WS-AC-DESC (AC)        TO  HAS-ASSET-CLASS-DESCRIPTION.
+198800000000           MOVE WS-ACS-CODE (AC, ACS)  TO  HAS-ASSET-SUBCLASS-CODE.
+198900000000           MOVE WS-ACS-DESC (AC, ACS)  TO
+199000000000                                       HAS-ASSET-SUBCLASS-DESCRIPTION.
+199100000000           MOVE WS-ACS-VAL (AC, ACS)   TO  HAS-MARKET-VALUE.
+199200000000           MOVE WS-ACS-PCT (AC, ACS)   TO  HAS-PERCENTAGE.
+199300000803
+199400000803RF7485     MOVE "X"                    TO  HAS-EOR-INDICATOR.
+199500000803
+199600000000           MOVE MFASTMHFP-ASSET-CLASS-SECTION
+199700000000                                       TO  STMT-HOUSEHOLD-MAIL-RECD.
+199800000000           WRITE STMT-HOUSEHOLD-MAIL-RECD.
+199900000000           ADD 1                       TO  WS-STMT-HHM-WCNT-40.
+200000000000
+200100000000       LS1-0060-0080.
+200200000000           SET ACS                     TO  1.
+200300000000
+200400000000       LS1-0060-0090.
+200500000000           IF  ACS        IS GREATER THAN  WS-AC-SLST (AC)
+200600000000               GO TO LS1-0060-0100.
+200700000000
+200800000000           IF  WS-ACS-CODE (AC, ACS)
+200900000000                          IS NOT EQUAL TO  "USEQ  "
+201000000000               SET ACS              UP BY  1
+201100000000               GO TO LS1-0060-0090.
+201200000000
+201300000000           IF  WS-ACS-VAL (AC, ACS)
+201400000000                              IS EQUAL TO  ZEROES
+201500000000               GO TO LS1-0060-0100.
+201600000000
+201700000000           ADD 1                       TO  WS-HAS-SECTION-SEQUENCE.
+201800000000
+201900000000           INITIALIZE MFASTMHFP-ASSET-CLASS-SECTION.
+202000000000           MOVE HH-HOUSEHOLD-INVESTOR-NO
+202100000000                                       TO  HAS-HOUSEHOLD-INVESTOR-NO.
+202200000000           MOVE HH-HOUSEHOLD-LINKAGE-CODE
+202300000000                                       TO  HAS-HOUSEHOLD-LINKAGE-CODE.
+202400000000           MOVE HH-LANGUAGE-CODE       TO  HAS-LANGUAGE-CODE.
+202500000000           MOVE 40                     TO  HAS-SECTION-NO.
+202600000000           MOVE WS-HAS-SECTION-SEQUENCE
+202700000000                                       TO  HAS-SECTION-SEQUENCE.
+202800000000           MOVE WS-AC-CODE (AC)        TO  HAS-ASSET-CLASS-CODE.
+202900000000           MOVE WS-AC-DESC (AC)        TO  HAS-ASSET-CLASS-DESCRIPTION.
+203000000000           MOVE WS-ACS-CODE (AC, ACS)  TO  HAS-ASSET-SUBCLASS-CODE.
+203100000000           MOVE WS-ACS-DESC (AC, ACS)  TO
+203200000000                                       HAS-ASSET-SUBCLASS-DESCRIPTION.
+203300000000           MOVE WS-ACS-VAL (AC, ACS)   TO  HAS-MARKET-VALUE.
+203400000000           MOVE WS-ACS-PCT (AC, ACS)   TO  HAS-PERCENTAGE.
+203500000803
+203600000803RF7485     MOVE "X"                    TO  HAS-EOR-INDICATOR.
+203700000803
+203800000000           MOVE MFASTMHFP-ASSET-CLASS-SECTION
+203900000000                                       TO  STMT-HOUSEHOLD-MAIL-RECD.
+204000000000           WRITE STMT-HOUSEHOLD-MAIL-RECD.
+204100000000           ADD 1                       TO  WS-STMT-HHM-WCNT-40.
+204200000000
+204300000000       LS1-0060-0100.
+204400971004           SET ACS                     TO  1.
+204500971004
+204600971004       LS1-0060-0100-0010.
+204700971004           IF  ACS        IS GREATER THAN  WS-AC-SLST (AC)
+204800971004               GO TO LS1-0060-0100-0020.
+204900971004
+205000971004           IF  WS-ACS-CODE (AC, ACS)
+205100971004                          IS NOT EQUAL TO  "MXEQ  "
+205200971004               SET ACS              UP BY  1
+205300971004               GO TO LS1-0060-0100-0010.
+205400971004
+205500971004           IF  WS-ACS-VAL (AC, ACS)
+205600971004                              IS EQUAL TO  ZEROES
+205700971004               GO TO LS1-0060-0100-0020.
+205800971004
+205900971004           ADD 1                       TO  WS-HAS-SECTION-SEQUENCE.
+206000971004
+206100971004           INITIALIZE MFASTMHFP-ASSET-CLASS-SECTION.
+206200971004           MOVE HH-HOUSEHOLD-INVESTOR-NO
+206300971004                                       TO  HAS-HOUSEHOLD-INVESTOR-NO.
+206400971004           MOVE HH-HOUSEHOLD-LINKAGE-CODE
+206500971004                                       TO  HAS-HOUSEHOLD-LINKAGE-CODE.
+206600971004           MOVE HH-LANGUAGE-CODE       TO  HAS-LANGUAGE-CODE.
+206700971004           MOVE 40                     TO  HAS-SECTION-NO.
+206800971004           MOVE WS-HAS-SECTION-SEQUENCE
+206900971004                                       TO  HAS-SECTION-SEQUENCE.
+207000971004           MOVE WS-AC-CODE (AC)        TO  HAS-ASSET-CLASS-CODE.
+207100971004           MOVE WS-AC-DESC (AC)        TO  HAS-ASSET-CLASS-DESCRIPTION.
+207200971004           MOVE WS-ACS-CODE (AC, ACS)  TO  HAS-ASSET-SUBCLASS-CODE.
+207300971004           MOVE WS-ACS-DESC (AC, ACS)  TO
+207400971004                                       HAS-ASSET-SUBCLASS-DESCRIPTION.
+207500971004           MOVE WS-ACS-VAL (AC, ACS)   TO  HAS-MARKET-VALUE.
+207600971004           MOVE WS-ACS-PCT (AC, ACS)   TO  HAS-PERCENTAGE.
+207700000803
+207800000803RF7485     MOVE "X"                    TO  HAS-EOR-INDICATOR.
+207900000803
+208000971004           MOVE MFASTMHFP-ASSET-CLASS-SECTION
+208100971004                                       TO  STMT-HOUSEHOLD-MAIL-RECD.
+208200971004           WRITE STMT-HOUSEHOLD-MAIL-RECD.
+208300971004           ADD 1                       TO  WS-STMT-HHM-WCNT-40.
+208400971004
+208500971004       LS1-0060-0100-0020.
+208600000000           SET ACS                     TO  1.
+208700000000
+208800000000       LS1-0060-0110.
+208900000000           IF  ACS        IS GREATER THAN  WS-AC-SLST (AC)
+209000000000               GO TO LS1-0060-0120.
+209100000000
+209200000000           IF  WS-ACS-CODE (AC, ACS)
+209300000000                          IS NOT EQUAL TO  "INEQ  "
+209400000000               SET ACS              UP BY  1
+209500000000               GO TO LS1-0060-0110.
+209600000000
+209700000000           IF  WS-ACS-VAL (AC, ACS)
+209800000000                              IS EQUAL TO  ZEROES
+209900000000               GO TO LS1-0060-0120.
+210000000000
+210100000000           ADD 1                       TO  WS-HAS-SECTION-SEQUENCE.
+210200000000
+210300000000           INITIALIZE MFASTMHFP-ASSET-CLASS-SECTION.
+210400000000           MOVE HH-HOUSEHOLD-INVESTOR-NO
+210500000000                                       TO  HAS-HOUSEHOLD-INVESTOR-NO.
+210600000000           MOVE HH-HOUSEHOLD-LINKAGE-CODE
+210700000000                                       TO  HAS-HOUSEHOLD-LINKAGE-CODE.
+210800000000           MOVE HH-LANGUAGE-CODE       TO  HAS-LANGUAGE-CODE.
+210900000000           MOVE 40                     TO  HAS-SECTION-NO.
+211000000000           MOVE WS-HAS-SECTION-SEQUENCE
+211100000000                                       TO  HAS-SECTION-SEQUENCE.
+211200000000           MOVE WS-AC-CODE (AC)        TO  HAS-ASSET-CLASS-CODE.
+211300000000           MOVE WS-AC-DESC (AC)        TO  HAS-ASSET-CLASS-DESCRIPTION.
+211400000000           MOVE WS-ACS-CODE (AC, ACS)  TO  HAS-ASSET-SUBCLASS-CODE.
+211500000000           MOVE WS-ACS-DESC (AC, ACS)  TO
+211600000000                                       HAS-ASSET-SUBCLASS-DESCRIPTION.
+211700000000           MOVE WS-ACS-VAL (AC, ACS)   TO  HAS-MARKET-VALUE.
+211800000000           MOVE WS-ACS-PCT (AC, ACS)   TO  HAS-PERCENTAGE.
+211900000803
+212000000803RF7485     MOVE "X"                    TO  HAS-EOR-INDICATOR.
+212100000803
+212200000000           MOVE MFASTMHFP-ASSET-CLASS-SECTION
+212300000000                                       TO  STMT-HOUSEHOLD-MAIL-RECD.
+212400000000           WRITE STMT-HOUSEHOLD-MAIL-RECD.
+212500000000           ADD 1                       TO  WS-STMT-HHM-WCNT-40.
+212600000000
+212700000000       LS1-0060-0120.
+212800000000           ADD 1                       TO  WS-HAS-SECTION-SEQUENCE.
+212900000000
+213000000000           INITIALIZE MFASTMHFP-ASSET-CLASS-SECTION.
+213100000000           MOVE HH-HOUSEHOLD-INVESTOR-NO
+213200000000                                       TO  HAS-HOUSEHOLD-INVESTOR-NO.
+213300000000           MOVE HH-HOUSEHOLD-LINKAGE-CODE
+213400000000                                       TO  HAS-HOUSEHOLD-LINKAGE-CODE.
+213500000000           MOVE HH-LANGUAGE-CODE       TO  HAS-LANGUAGE-CODE.
+213600000000           MOVE 40                     TO  HAS-SECTION-NO.
+213700000000           MOVE WS-HAS-SECTION-SEQUENCE
+213800000000                                       TO  HAS-SECTION-SEQUENCE.
+213900000000           MOVE WS-AC-CODE (AC)        TO  HAS-ASSET-CLASS-CODE.
+214000000000           STRING "TOTAL "   DELIMITED BY  SIZE
+214100000000                  WS-AC-DESC (AC)
+214200000000                             DELIMITED BY  SIZE
+214300000000                                     INTO  HAS-ASSET-CLASS-DESCRIPTION.
+214400000000           MOVE WS-AC-VAL (AC)         TO  HAS-MARKET-VALUE.
+214500000000           MOVE WS-AC-PCT (AC)         TO  HAS-PERCENTAGE.
+214600000803
+214700000803RF7485     MOVE "X"                    TO  HAS-EOR-INDICATOR.
+214800000803
+214900000000           MOVE MFASTMHFP-ASSET-CLASS-SECTION
+215000000000                                       TO  STMT-HOUSEHOLD-MAIL-RECD.
+215100000000           WRITE STMT-HOUSEHOLD-MAIL-RECD.
+215200000000           ADD 1                       TO  WS-STMT-HHM-WCNT-40.
+215300000000
+215400000000       LS1-0060-0130.
+215500000000           GO TO LS1-0090-0010.
+215600000000
+215700000000       LS1-0070.
+215800000000           ADD 1                       TO  WS-HAS-SECTION-SEQUENCE.
+215900000000
+216000000000           INITIALIZE MFASTMHFP-ASSET-CLASS-SECTION.
+216100000000           MOVE HH-HOUSEHOLD-INVESTOR-NO
+216200000000                                       TO  HAS-HOUSEHOLD-INVESTOR-NO.
+216300000000           MOVE HH-HOUSEHOLD-LINKAGE-CODE
+216400000000                                       TO  HAS-HOUSEHOLD-LINKAGE-CODE.
+216500000000           MOVE HH-LANGUAGE-CODE       TO  HAS-LANGUAGE-CODE.
+216600000000           MOVE 40                     TO  HAS-SECTION-NO.
+216700000000           MOVE WS-HAS-SECTION-SEQUENCE
+216800000000                                       TO  HAS-SECTION-SEQUENCE.
+216900000000           MOVE WS-AC-CODE (AC)        TO  HAS-ASSET-CLASS-CODE.
+217000000000           MOVE WS-AC-DESC (AC)        TO  HAS-ASSET-CLASS-DESCRIPTION.
+217100000000           MOVE WS-AC-VAL (AC)         TO  HAS-MARKET-VALUE.
+217200000000           MOVE WS-AC-PCT (AC)         TO  HAS-PERCENTAGE.
+217300000000
+217400000803RF7485     MOVE "X"                    TO  HAS-EOR-INDICATOR.
+217500000803
+217600000000           MOVE MFASTMHFP-ASSET-CLASS-SECTION
+217700000000                                       TO  STMT-HOUSEHOLD-MAIL-RECD.
+217800000000           WRITE STMT-HOUSEHOLD-MAIL-RECD.
+217900000000           ADD 1                       TO  WS-STMT-HHM-WCNT-40.
+218000000000
+218100000000      *****
+218200000000      *****    Format and create the Statement Household Mail
+218300000000      *****    Consolidated Asset Sub-class Summary records, if
+218400000000      *****    applicable.
+218500000000      *****
+218600000000
+218700000000           IF  WS-AC-SLST (AC)
+218800000000                      IS NOT GREATER THAN  ZEROES
+218900000000               GO TO LS1-0090.
+219000000000
+219100000000           SET ACS                     TO  1.
+219200000000
+219300000000       LS1-0080.
+219400000000           ADD 1                       TO  WS-HAS-SECTION-SEQUENCE.
+219500000000
+219600000000           INITIALIZE MFASTMHFP-ASSET-CLASS-SECTION.
+219700000000           MOVE HH-HOUSEHOLD-INVESTOR-NO
+219800000000                                       TO  HAS-HOUSEHOLD-INVESTOR-NO.
+219900000000           MOVE HH-HOUSEHOLD-LINKAGE-CODE
+220000000000                                       TO  HAS-HOUSEHOLD-LINKAGE-CODE.
+220100000000           MOVE HH-LANGUAGE-CODE       TO  HAS-LANGUAGE-CODE.
+220200000000           MOVE 40                     TO  HAS-SECTION-NO.
+220300000000           MOVE WS-HAS-SECTION-SEQUENCE
+220400000000                                       TO  HAS-SECTION-SEQUENCE.
+220500000000           MOVE WS-AC-CODE (AC)        TO  HAS-ASSET-CLASS-CODE.
+220600000000           MOVE WS-AC-DESC (AC)        TO  HAS-ASSET-CLASS-DESCRIPTION.
+220700000000           MOVE WS-ACS-CODE (AC, ACS)  TO  HAS-ASSET-SUBCLASS-CODE.
+220800000000           MOVE WS-ACS-DESC (AC, ACS)  TO
+220900000000                                       HAS-ASSET-SUBCLASS-DESCRIPTION.
+221000000000           MOVE WS-ACS-VAL (AC, ACS)   TO  HAS-MARKET-VALUE.
+221100000000           MOVE WS-ACS-PCT (AC, ACS)   TO  HAS-PERCENTAGE.
+221200000000
+221300000803RF7485     MOVE "X"                    TO  HAS-EOR-INDICATOR.
+221400000803
+221500000000           MOVE MFASTMHFP-ASSET-CLASS-SECTION
+221600000000                                       TO  STMT-HOUSEHOLD-MAIL-RECD.
+221700000000           WRITE STMT-HOUSEHOLD-MAIL-RECD.
+221800000000           ADD 1                       TO  WS-STMT-HHM-WCNT-40.
+221900000000
+222000000000           IF  ACS           IS LESS THAN  WS-AC-SLST (AC)
+222100000000               SET ACS              UP BY  1
+222200000000               GO TO LS1-0080.
+222300000000
+222400000000       LS1-0090.
+222500000000           IF  AC            IS LESS THAN  WS-AC-LST
+222600000000               SET AC               UP BY  1
+222700000000               GO TO LS1-0070.
+222800000000
+222900000000       LS1-0090-0010.
+223000000000
+223100000000      *****
+223200000000      *****    Format and create the Statement Household Mail
+223300000000      *****    Consolidated Asset Class Summary total record.
+223400000000      *****
+223500000000
+223600000000           INITIALIZE MFASTMHFP-ASSET-CLASS-SECTION.
+223700000000           MOVE HH-HOUSEHOLD-INVESTOR-NO
+223800000000                                       TO  HAS-HOUSEHOLD-INVESTOR-NO.
+223900000000           MOVE HH-HOUSEHOLD-LINKAGE-CODE
+224000000000                                       TO  HAS-HOUSEHOLD-LINKAGE-CODE.
+224100000000           MOVE HH-LANGUAGE-CODE       TO  HAS-LANGUAGE-CODE.
+224200000000           MOVE 40                     TO  HAS-SECTION-NO.
+224300000000           MOVE 999999                 TO  HAS-SECTION-SEQUENCE.
+224400000000           MOVE "TOTAL"                TO  HAS-ASSET-CLASS-DESCRIPTION.
+224500000000           MOVE WS-AC-VALTOT           TO  HAS-MARKET-VALUE.
+224600000000           MOVE 100.0000               TO  HAS-PERCENTAGE.
+224700000000
+224800000803RF7485     MOVE "X"                    TO  HAS-EOR-INDICATOR.
+224900000803
+225000000000           MOVE MFASTMHFP-ASSET-CLASS-SECTION
+225100000000                                       TO  STMT-HOUSEHOLD-MAIL-RECD.
+225200000000           WRITE STMT-HOUSEHOLD-MAIL-RECD.
+225300000000           ADD 1                       TO  WS-STMT-HHM-WCNT-40.
+225400000000
+225500000000       LS1-0100.
+225600000000
+225700000000      *****
+225800000000      *****    Calculate the fund summary market value base percentages.
+225900000000      *****
+226000000000
+226100000000           IF  WS-FS-LST NOT GREATER THAN  ZEROES
+226200000000           OR  WS-FS-MKTVALBSETOT
+226300000000                              IS EQUAL TO  ZEROES
+226400000000               GO TO LS1-0130.
+226500000000
+226600000000           SET FS                      TO  1.
+226700000000           MOVE ZEROES                 TO  WS-FS-BKVALTOT.
+226800000000           MOVE ZEROES                 TO  WS-FS-MKTVALBSEHGH.
+226900000000           MOVE ZEROES                 TO  WS-FS-MKTVALTOT.
+227000000000           MOVE ZEROES                 TO  WS-FS-PCTTOT.
+227100000000           MOVE ZEROES                 TO  WS-FS-UNITSTOT.
+227200000000
+227300000000       LS1-0110.
+227400000000           IF  WS-FS-MKTVALBSE (FS)
+227500000000                          IS GREATER THAN  WS-FS-MKTVALBSEHGH
+227600000000               MOVE WS-FS-MKTVALBSE (FS)
+227700000000                                       TO  WS-FS-MKTVALBSEHGH
+227800000000               SET FSH                 TO  FS.
+227900000000
+228000980818           IF WS-LDA-MGMT-COM-CDE IS NOT EQUAL TO "PHN"
+228100980818              COMPUTE WS-FS-PCT (FS) ROUNDED
+228200980818                                       =  (WS-FS-MKTVALBSE (FS)
+228300980818                                       *   100)
+228400980818                                       /  WS-FS-MKTVALBSETOT.
+228500980817
+228600980817           IF WS-LDA-MGMT-COM-CDE EQUAL TO "PHN"
+228700980818              MOVE ZEROES           TO WS-FS-PCT-PHN
+228800980818              COMPUTE WS-FS-PCT-PHN ROUNDED
+228900980818                                       =  (WS-FS-MKTVALBSE (FS)
+229000980818                                       *   100)
+229100980818                                       /  WS-FS-MKTVALBSETOT
+229200980824              MOVE ZEROES              TO  WS-FS-PCT (FS)
+229300980818              MOVE WS-FS-PCT-PHN       TO  WS-FS-PCT (FS).
+229400980818
+229500980818           ADD WS-FS-PCT (FS)          TO  WS-FS-PCTTOT.
+229600980818           ADD WS-FS-BKVAL (FS)        TO  WS-FS-BKVALTOT.
+229700980818           ADD WS-FS-MKTVAL (FS)       TO  WS-FS-MKTVALTOT.
+229800980818           ADD WS-FS-UNITS (FS)        TO  WS-FS-UNITSTOT.
+229900000000
+230000000000           IF  FS            IS LESS THAN  WS-FS-LST
+230100000000               SET FS               UP BY  1
+230200000000               GO TO LS1-0110.
+230300000000
+230400000000      *****
+230500000000      *****    If the total percentage is not 100, update the highest
+230600000000      *****    value with the difference.
+230700000000      *****
+230800000000
+230900000000           IF  WS-FS-PCTTOT  NOT EQUAL TO  100.0000
+231000000000               COMPUTE WS-FS-PCT (FSH)  =  WS-FS-PCT (FSH)
+231100000000                                        +  (100.0000
+231200000000                                        -   WS-FS-PCTTOT).
+231300000000
+231400000000      *****
+231500000000      *****    Format and create the Statement Household Mail
+231600000000      *****    Consolidated Fund Summary records.
+231700000000      *****
+231800000000
+231900000000           SET FS                      TO  1.
+232000000000           MOVE ZEROES                 TO  WS-HFS-SECTION-SEQUENCE.
+232100000000
+232200000000       LS1-0120.
+232300000000           ADD 1                       TO  WS-HFS-SECTION-SEQUENCE.
+232400000000
+232500000000           INITIALIZE MFASTMHFP-FUND-SUMMARY-SECTION.
+232600000000           MOVE HH-HOUSEHOLD-INVESTOR-NO
+232700000000                                       TO  HFS-HOUSEHOLD-INVESTOR-NO.
+232800000000           MOVE HH-HOUSEHOLD-LINKAGE-CODE
+232900000000                                       TO  HFS-HOUSEHOLD-LINKAGE-CODE.
+233000000000           MOVE HH-LANGUAGE-CODE       TO  HFS-LANGUAGE-CODE.
+233100000000           MOVE 50                     TO  HFS-SECTION-NO.
+233200000000           MOVE WS-HFS-SECTION-SEQUENCE
+233300000000                                       TO  HFS-SECTION-SEQUENCE.
+233400980724           MOVE WS-FS-FNDNO (FS)       TO  HFS-INVESTMENT-NUMBER.
+233500000000           MOVE WS-FS-INVNM (FS)       TO  HFS-INVESTMENT-NAME.
+233600000000           MOVE WS-FS-CURRCD (FS)      TO  HFS-CURRENCY.
+233700000000           IF  WS-FS-UNITS (FS) LESS THAN  ZEROES
+233800000000               MOVE WS-FS-UNITS (FS)   TO  HFS-NO-OF-UNITS
+233900000000               MOVE "-"                TO  HFS-NO-OF-UNITS-SIGN
+234000000000             ELSE
+234100000000               MOVE WS-FS-UNITS (FS)   TO  HFS-NO-OF-UNITS.
+234200000000           IF  WS-FS-BKVAL (FS) LESS THAN  ZEROES
+234300000000               MOVE WS-FS-BKVAL (FS)   TO  HFS-BOOK-VALUE
+234400000000               MOVE "-"                TO  HFS-BOOK-VALUE-SIGN
+234500000000             ELSE
+234600000000               MOVE WS-FS-BKVAL (FS)   TO  HFS-BOOK-VALUE.
+234700000000           IF  WS-FS-MKTVAL (FS)
+234800000000                             IS LESS THAN  ZEROES
+234900000000               MOVE WS-FS-MKTVAL (FS)  TO  HFS-MARKET-VALUE
+235000000000               MOVE "-"                TO  HFS-MARKET-VALUE-SIGN
+235100000000             ELSE
+235200000000               MOVE WS-FS-MKTVAL (FS)  TO  HFS-MARKET-VALUE.
+235300000000           IF  WS-FS-MKTVALBSE (FS)
+235400000000                             IS LESS THAN  ZEROES
+235500000000               MOVE WS-FS-MKTVALBSE (FS)
+235600000000                                       TO  HFS-MARKET-VALUE-BASE
+235700000000               MOVE "-"                TO  HFS-MARKET-VALUE-BASE-SIGN
+235800000000             ELSE
+235900000000               MOVE WS-FS-MKTVALBSE (FS)
+236000000000                                       TO  HFS-MARKET-VALUE-BASE.
+236100000000           IF  WS-FS-UNTPRC (FS)
+236200000000                             IS LESS THAN  ZEROES
+236300000000               MOVE WS-FS-UNTPRC (FS)  TO  HFS-ACB-UNIT-PRICE
+236400000000               MOVE "-"                TO  HFS-ACB-UNIT-PRICE-SIGN
+236500000000             ELSE
+236600000000               MOVE WS-FS-UNTPRC (FS)  TO  HFS-ACB-UNIT-PRICE.
+236700000000           IF  WS-FS-UNTPRCBSE (FS)
+236800000000                             IS LESS THAN  ZEROES
+236900000000               MOVE WS-FS-UNTPRCBSE (FS)
+237000000000                                       TO  HFS-ACB-UNIT-PRICE-BASE
+237100000000               MOVE "-"                TO  HFS-ACB-UNIT-PRICE-BASE-SIGN
+237200000000             ELSE
+237300000000               MOVE WS-FS-UNTPRCBSE (FS)
+237400000000                                       TO  HFS-ACB-UNIT-PRICE-BASE.
+237500000000           MOVE WS-FS-EXGRTE (FS)      TO  HFS-EXCHANGE-RATE.
+237600000000           MOVE WS-FS-PCT (FS)         TO  HFS-PERCENTAGE.
+237700000803
+237800000803RF7485     MOVE "X"                    TO  HFS-EOR-INDICATOR.
+237900000803
+238000000000           MOVE MFASTMHFP-FUND-SUMMARY-SECTION
+238100000000                                       TO  STMT-HOUSEHOLD-MAIL-RECD.
+238200000000           WRITE STMT-HOUSEHOLD-MAIL-RECD.
+238300000000           ADD 1                       TO  WS-STMT-HHM-WCNT-50.
+238400000000
+238500000000           IF  FS            IS LESS THAN  WS-FS-LST
+238600000000               SET FS               UP BY  1
+238700000000               GO TO LS1-0120.
+238800000000
+238900000000      *****
+239000000000      *****    Format and create the Statement Household Mail
+239100000000      *****    Consolidated Fund Summary total record.
+239200000000      *****
+239300000000
+239400000000           INITIALIZE MFASTMHFP-FUND-SUMMARY-SECTION.
+239500000000           MOVE HH-HOUSEHOLD-INVESTOR-NO
+239600000000                                       TO  HFS-HOUSEHOLD-INVESTOR-NO.
+239700000000           MOVE HH-HOUSEHOLD-LINKAGE-CODE
+239800000000                                       TO  HFS-HOUSEHOLD-LINKAGE-CODE.
+239900000000           MOVE HH-LANGUAGE-CODE       TO  HFS-LANGUAGE-CODE.
+240000000000           MOVE 50                     TO  HFS-SECTION-NO.
+240100000000           MOVE 999999                 TO  HFS-SECTION-SEQUENCE.
+240200980724           MOVE "TOTAL"                TO  HFS-INVESTMENT-NUMBER.
+240300000000           MOVE "TOTAL"                TO  HFS-INVESTMENT-NAME.
+240400000000           IF  WS-FS-UNITSTOT   LESS THAN  ZEROES
+240500000000               MOVE WS-FS-UNITSTOT     TO  HFS-NO-OF-UNITS
+240600000000               MOVE "-"                TO  HFS-NO-OF-UNITS-SIGN
+240700000000             ELSE
+240800000000               MOVE WS-FS-UNITSTOT     TO  HFS-NO-OF-UNITS.
+240900000000           IF  WS-FS-BKVALTOT   LESS THAN  ZEROES
+241000000000               MOVE WS-FS-BKVALTOT     TO  HFS-BOOK-VALUE
+241100000000               MOVE "-"                TO  HFS-BOOK-VALUE-SIGN
+241200000000             ELSE
+241300000000               MOVE WS-FS-BKVALTOT     TO  HFS-BOOK-VALUE.
+241400000000           IF  WS-FS-MKTVALTOT  LESS THAN  ZEROES
+241500000000               MOVE WS-FS-MKTVALTOT    TO  HFS-MARKET-VALUE
+241600000000               MOVE "-"                TO  HFS-MARKET-VALUE-SIGN
+241700000000             ELSE
+241800000000               MOVE WS-FS-MKTVALTOT    TO  HFS-MARKET-VALUE.
+241900000000           IF  WS-FS-MKTVALBSETOT
+242000000000                             IS LESS THAN  ZEROES
+242100000000               MOVE WS-FS-MKTVALBSETOT TO  HFS-MARKET-VALUE-BASE
+242200000000               MOVE "-"                TO  HFS-MARKET-VALUE-BASE-SIGN
+242300000000             ELSE
+242400000000               MOVE WS-FS-MKTVALBSETOT TO  HFS-MARKET-VALUE-BASE.
+242500000000           MOVE 1                      TO  HFS-EXCHANGE-RATE.
+242600000000           MOVE 100.00                 TO  HFS-PERCENTAGE.
+242700000000
+242800000803RF7485     MOVE "X"                    TO  HFS-EOR-INDICATOR.
+242900000803
+243000000000           MOVE MFASTMHFP-FUND-SUMMARY-SECTION
+243100000000                                       TO  STMT-HOUSEHOLD-MAIL-RECD.
+243200000000           WRITE STMT-HOUSEHOLD-MAIL-RECD.
+243300000000           ADD 1                       TO  WS-STMT-HHM-WCNT-50.
+243400000000
+243500000000       LS1-0130.
+243600000000           CONTINUE.
+243700000000
+243800000000       LS1-EXIT.
+243900000000           EXIT.
+244000000000      /
+244100000000       LEVEL-SUMMARY-2.
+244200000000
+244300000000      ******************************************************************
+244400000000      *                                                                *
+244500000000      *    L E V E L   S U M M A R I Z A T I O N   2   R O U T I N E   *
+244600000000      *                                                                *
+244700000000      *        INVESTOR-NO:            Household Investor Number       *
+244800000000      *                                                                *
+244900000000      ******************************************************************
+245000000000
+245100000000      *****
+245200000000      *****    If an error was detected in the re-initialization
+245300000000      *****    routine, bypass this routine.
+245400000000      *****
+245500000000
+245600000000           IF  WS-L02BYP-SW   IS EQUAL TO  "Y"
+245700000000               GO TO LS2-EXIT.
+245800000000
+245900000000      *****
+246000000000      *****    Null routine.
+246100000000      *****
+246200000000
+246300000000           CONTINUE.
+246400000000
+246500000000       LS2-EXIT.
+246600000000           EXIT.
+246700000000      /
+246800000000       LEVEL-REINIT-2.
+246900000000
+247000000000      ******************************************************************
+247100000000      *                                                                *
+247200000000      *    L E V E L   R E I N I T I A L I Z A T I O N   2   R T N .   *
+247300000000      *                                                                *
+247400000000      *        INVESTOR-NO:            Household Investor Number       *
+247500000000      *                                                                *
+247600000000      ******************************************************************
+247700000000
+247800000000           MOVE "Y"                    TO  WS-L02BYP-SW.
+247900000000
+248000981112      ***                                               ***
+248100981112      ***   GGF Special Routine                         ***
+248200981112      ***                                               ***
+248300981112
+248400981112           IF WS-LDA-MGMT-COM-CDE IS NOT EQUAL TO "GGF"
+248500981112           OR WS-LDA-REQUEST-SCOPE IS NOT EQUAL TO "B"
+248600981112              GO TO LR2-0005.
+248700981112
+248800981112           MOVE CURR-INVESTOR-NO TO INVESTOR-NO
+248900981112                                    OF INVESTOR-EXTRACT-RECD.
+249000981112           START INVESTOR-FILE
+249100981112                 KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+249200981112                 INVALID KEY
+249300981112                 GO TO LR2-0010.
+249400981112
+249500981112       LR2-0001.
+249600981112           READ  INVESTOR-FILE NEXT AT END
+249700981112               GO TO LR2-0010.
+249800981112
+249900981112           IF INVESTOR-NO OF INVESTOR-EXTRACT-RECD IS
+250000981112              NOT EQUAL TO CURR-INVESTOR-NO
+250100981112              GO TO LR2-0010.
+250200981112
+250300981112           INITIALIZE MFASTMEXP OF STATEMENT-EXTRACT-RECD.
+250400981112           MOVE START-DATE OF INVESTOR-EXTRACT-RECD TO
+250500981112                STMEX-START-DATE OF STATEMENT-EXTRACT-RECD.
+250600981112
+250700981112           MOVE END-DATE OF INVESTOR-EXTRACT-RECD TO
+250800981112                STMEX-START-DATE OF STATEMENT-EXTRACT-RECD.
+250900981112
+251000981112           MOVE CURR-INVESTOR-NO
+251100981112                                       TO  STMEX-INVESTOR-NO
+251200981112                                           OF STATEMENT-EXTRACT-RECD.
+251300981112           MOVE ZEROES                 TO  STMEX-ACCOUNT-NO
+251400981112                                           OF STATEMENT-EXTRACT-RECD.
+251500981112           MOVE 1                      TO  STMEX-SECTION-NO
+251600981112                                           OF STATEMENT-EXTRACT-RECD.
+251700981112           START STATEMENT-EXTRACT
+251800981112               KEY       IS NOT LESS THAN  EXTERNALLY-DESCRIBED-KEY
+251900981112               INVALID KEY
+252000981112                   GO TO LR2-0001.
+252100981112
+252200981112           GO TO LR2-0006.
+252300981112
+252400981112       LR2-0005.
+252500000000      *****
+252600000000      *****    Retrieve the Statement Extract Investor Information
+252700000000      *****    record.  If it is not found, an error message will be
+252800000000      *****    printed and the record bypassed.
+252900000000      *****
+253000000000
+253100980529           INITIALIZE MFASTMEXP OF STATEMENT-EXTRACT-RECD.
+253200980128           MOVE WS-LDA-STRDTE          TO  STMEX-START-DATE
+253300980128                                           OF STATEMENT-EXTRACT-RECD.
+253400980128           MOVE WS-LDA-ENDDTE          TO  STMEX-END-DATE
+253500980128                                           OF STATEMENT-EXTRACT-RECD.
+253600000000           MOVE CURR-INVESTOR-NO       TO  STMEX-INVESTOR-NO
+253700000000                                           OF STATEMENT-EXTRACT-RECD.
+253800000000           MOVE ZEROES                 TO  STMEX-ACCOUNT-NO
+253900000000                                           OF STATEMENT-EXTRACT-RECD.
+254000000000           MOVE 1                      TO  STMEX-SECTION-NO
+254100000000                                           OF STATEMENT-EXTRACT-RECD.
+254200000000           START STATEMENT-EXTRACT
+254300000000               KEY       IS NOT LESS THAN  EXTERNALLY-DESCRIBED-KEY
+254400000000               INVALID KEY
+254500000000                   GO TO LR2-0010.
+254600000000
+254700981112       LR2-0006.
+254800000000           READ STATEMENT-EXTRACT NEXT AT  END
+254900000000               GO TO LR2-0010.
+255000981116
+255100000000           IF  STMEX-SECTION-NO
+255200000000               OF STATEMENT-EXTRACT-RECD
+255300000000                          IS NOT EQUAL TO  1
+255400000000           OR  STMEX-ACCOUNT-NO
+255500000000               OF STATEMENT-EXTRACT-RECD
+255600000000                          IS NOT EQUAL TO  ZEROES
+255700000000           OR  STMEX-INVESTOR-NO
+255800000000               OF STATEMENT-EXTRACT-RECD
+255900000000                          IS NOT EQUAL TO  CURR-INVESTOR-NO
+256000980128               GO TO LR2-0010.
+256100000000
+256200000000           MOVE STATEMENT-EXTRACT-RECD TO  INVESTOR-INFO-SECTION.
+256300000000           MOVE "N"                    TO  WS-L02BYP-SW.
+256400000000
+256500000000      *****
+256600000000      *****    Initialize the Statement Household Mail Header record.
+256700000000      *****
+256800000000
+256900000000           INITIALIZE MFASTMHFP-HEADER-SECTION.
+257000000000           MOVE CURR-INVESTOR-NO       TO  HH-HOUSEHOLD-INVESTOR-NO.
+257100000000           MOVE II-LANGUAGE-CODE       TO  HH-LANGUAGE-CODE.
+257200000000           MOVE 10                     TO  HH-SECTION-NO.
+257300980128           MOVE II-START-DATE-D        TO  HH-START-DATE.
+257400980128           MOVE II-END-DATE-D          TO  HH-END-DATE.
+257500000000           MOVE II-INVESTOR-NAME       TO  HH-INVESTOR-NAME.
+257600000000           MOVE II-INVESTOR-NAME-2     TO  HH-INVESTOR-NAME-2.
+257700000000           MOVE II-INVESTOR-ADDRESS1   TO  HH-INVESTOR-ADDRESS1.
+257800000000           MOVE II-INVESTOR-ADDRESS2   TO  HH-INVESTOR-ADDRESS2.
+257900000000           MOVE II-INVESTOR-ADDRESS3   TO  HH-INVESTOR-ADDRESS3.
+258000000000           MOVE II-INVESTOR-ADDRESS4   TO  HH-INVESTOR-ADDRESS4.
+258100000000           MOVE II-INVESTOR-ADDRESS5   TO  HH-INVESTOR-ADDRESS5.
+258200000000           MOVE II-POSTAL-CODE         TO  HH-POSTAL-CODE.
+258300000000           MOVE II-COUNTRY-CODE        TO  HH-COUNTRY-CODE.
+258400000000           MOVE II-HOLD-MAIL           TO  HH-HOLD-MAIL.
+258500000803
+258600000803RF7485     MOVE "X"                    TO  HH-EOR-INDICATOR.
+258700000803
+258800000000           GO TO LR2-EXIT.
+258900000000
+259000000000       LR2-0010.
+259100000000
+259200000000      *****
+259300000000      *****    The household investor was not found on the Statement
+259400000000      *****    Extract file, an error message will be printed and all
+259500000000      *****    associated Investor Household Details will be bypassed.
+259600000000      *****
+259700000000
+259800971024           IF  WS-LDA-REQUEST-SCOPE
+259900000000                              IS EQUAL TO  "A"
+260000000000               SET MSG                 TO  8
+260100000000               PERFORM PRINT-ERR-LINE THRU PEL-EXIT.
+260200000000
+260300000000           ADD 1                       TO  WS-MFAIVRHHP-MCNT.
+260400000000
+260500000000       LR2-EXIT.
+260600000000           EXIT.
+260700000000      /
+260800000000       LEVEL-REINIT-1.
+260900000000
+261000000000      ******************************************************************
+261100000000      *                                                                *
+261200000000      *    L E V E L   R E I N I T I A L I Z A T I O N   1   R T N .   *
+261300000000      *                                                                *
+261400000000      *        HOUSEHOLD-LINKAGE-CODE: Household Linkage Code          *
+261500000000      *                                                                *
+261600000000      ******************************************************************
+261700000000
+261800000000           MOVE "Y"                    TO  WS-L01BYP-SW.
+261900000000           MOVE "N"                    TO  WS-MFASTMHFP-WSW.
+262000000000
+262100000000      *****
+262200000000      *****    If an error was detected in a previous re-initialization
+262300000000      *****    routine, bypass this routine and any subsequent routines.
+262400000000      *****
+262500000000
+262600000000           IF  WS-L02BYP-SW   IS EQUAL TO  "Y"
+262700000000               GO TO LR1-EXIT.
+262800000000
+262900000000      *****
+263000000000      *****    Read the Investor Household Header record.  If it is not
+263100000000      *****    found, an error message will be printed and all
+263200000000      *****    associated Investor Household Details will be bypassed.
+263300000000      *****
+263400000000
+263500180620      *RFS179223 Starts
+263600180618           INITIALIZE MFAIVRHHP.
+263700180620           MOVE CURR-INVESTOR-NO       TO  WS-INVESTOR-NO
+263800180620           EXEC SQL
+263900180620                SELECT
+264000180620                    HOUSEHOLD_LINKAGE_CODE
+264100180620                   ,LEGAL_LAST_NAME
+264200180620                INTO
+264300180620                    :WS-HOUSEHOLD-LINK-CODE
+264400180620                   ,:WS-IVR-LGL-LAST-NAME
+264500180620                FROM MFAIVRHHP
+264600180620                WHERE HOUSEHOLD_ID = :WS-HOUSEHOLD-ID
+264700180620                AND INVESTOR_NO = :WS-INVESTOR-NO
+264800180620                AND  HOUSEHOLD_LINKAGE_CODE =
+264900180620                         :CURR-HOUSEHOLD-LINKAGE-CODE
+265000180620           END-EXEC
+265100180620
+265200180620           IF SQLCODE IS NOT EQUAL TO 0
+265300180620
+265400180620      *    MOVE CURR-INVESTOR-NO       TO  INVESTOR-NO
+265500180620      *                                    OF IVR-HOUSEHOLD-HDR-RECD.
+265600180620      *    MOVE CURR-HOUSEHOLD-LINKAGE-CODE
+265700180620      *                                TO  HOUSEHOLD-LINKAGE-CODE
+265800180620      *                                    OF IVR-HOUSEHOLD-HDR-RECD.
+265900180620      *    READ INVESTOR-HOUSEHOLD-HEADER
+266000180620      *        INVALID KEY
+266100180620      *RFS179223 ENDS
+266200180620                   SET MSG             TO  9
+266300180620                   PERFORM PRINT-ERR-LINE
+266400180620                                      THRU PEL-EXIT
+266500180620                   ADD 1               TO  WS-MFAIVRHHP-MCNT
+266600180620                   GO TO LR1-EXIT.
+266700000000
+266800000000           MOVE "N"                    TO  WS-L01BYP-SW.
+266900980529
+267000980529      *****
+267100980529      *****    If Guardian, update the IS-RECORD and REWRITE MFASTMEXP.
+267200980529      *****
+267300980529
+267400980529           IF WS-LDA-HHMIS-UPD
+267500980529              IS NOT EQUAL             TO  "Y"
+267600980529              GO TO LR1-0100.
+267700980529              MOVE  STATEMENT-EXTRACT-RECD
+267800980529                                       TO  STATEMENT-EXTRACT-UPD-RECD
+267900980529              READ STATEMENT-EXTRACT-UPD
+268000980529                   INVALID KEY
+268100980529                   DISPLAY "ERROR READING STATEMENT-EXTRACT-UPD"
+268200980529                   GO TO LR1-0100.
+268300980529              MOVE STATEMENT-EXTRACT-UPD-RECD
+268400980529                                       TO  INVESTOR-SUMMARY-SECTION.
+268500980529              MOVE "N"                 TO  IS-PRINT-STATEMENT
+268600980529                                           OF INVESTOR-SUMMARY-SECTION.
+268700980529              MOVE INVESTOR-SUMMARY-SECTION
+268800980529                                       TO  STATEMENT-EXTRACT-UPD-RECD.
+268900980529              REWRITE STATEMENT-EXTRACT-UPD-RECD
+269000980529                  INVALID KEY
+269100980529                  DISPLAY "PROBLEM REWRITING RECORD".
+269200000000
+269300000000      *****
+269400000000      *****    Format the Statement Household Mail Header record using
+269500000000      *****    the Investor Household Header data.
+269600000000      *****
+269700000000
+269800980529       LR1-0100.
+269900180620      *RFS179223 Starts
+270000180620      *    MOVE HOUSEHOLD-LINKAGE-CODE
+270100180620      *         OF IVR-HOUSEHOLD-HDR-RECD
+270200180620      *                                TO  HH-HOUSEHOLD-LINKAGE-CODE.
+270300180620      *    MOVE LEGAL-LAST-NAME
+270400180620      *         OF IVR-HOUSEHOLD-HDR-RECD
+270500180620      *                                TO  HH-HOUSEHOLD-NAME.
+270600180620           MOVE WS-HOUSEHOLD-LINK-CODE TO  HH-HOUSEHOLD-LINKAGE-CODE.
+270700180620           MOVE WS-IVR-LGL-LAST-NAME   TO  HH-HOUSEHOLD-NAME.
+270800180620      *RFS179223 Ends
+270900000000
+271000000000      *****
+271100000000      *****    Initialize the Investor Summary table.
+271200000000      *****
+271300000000
+271400000000           MOVE SPACES                 TO  WS-IVRSUM-TBL.
+271500000000           MOVE ZEROES                 TO  WS-IS-LST.
+271600000000           MOVE ZEROES                 TO  WS-IS-MKTVALTOT.
+271700160615158417     MOVE ZEROES                 TO  WS-IS-MKTVAL-PRIORQ1-TOT.
+271800160615158417     MOVE ZEROES                 TO
+271900160615158417                                 WS-HIS-CHANGE-IN-INV-VALUE-TOT.
+272000000000
+272100000000      *****
+272200000000      *****    Initialize the Asset Class table.
+272300000000      *****
+272400000000
+272500000000           MOVE SPACES                 TO  WS-ASTCLS-TBL.
+272600000000           MOVE ZEROES                 TO  WS-AC-LST.
+272700000000           MOVE ZEROES                 TO  WS-AC-VALTOT.
+272800000000
+272900000000      *****
+273000000000      *****    Initialize the Fund Summary table.
+273100000000      *****
+273200000000
+273300000000           MOVE SPACES                 TO  WS-FNDSUM-TBL.
+273400000000           MOVE ZEROES                 TO  WS-FS-LST.
+273500000000           MOVE ZEROES                 TO  WS-FS-MKTVALBSETOT.
+273600000000
+273700000000       LR1-EXIT.
+273800000000           EXIT.
+273900000000      /
+274000000000       PRINT-ERR-LINE.
+274100000000
+274200000000      ******************************************************************
+274300000000      *                                                                *
+274400000000      *    P R I N T   E R R O R   L I N E   R O U T I N E             *
+274500000000      *                                                                *
+274600000000      ******************************************************************
+274700000000
+274800000000      *****
+274900000000      *****    Format the error line.
+275000000000      *****
+275100000000
+275200000000           MOVE SPACES                 TO  ERROR-LINE-1.
+275300000000           MOVE INVESTOR-NO
+275400000000                OF IVR-HOUSEHOLD-DTL-RECD
+275500000000                                       TO  EL1-INVESTOR-NO.
+275600000000           MOVE HOUSEHOLD-LINKAGE-CODE
+275700000000                OF IVR-HOUSEHOLD-DTL-RECD
+275800000000                                       TO  EL1-HOUSEHOLD-LINKAGE-CODE.
+275900000000           MOVE INVESTOR-NO-2
+276000000000                OF IVR-HOUSEHOLD-DTL-RECD
+276100000000                                       TO  EL1-INVESTOR-NO-2.
+276200000000           MOVE WS-MSG (MSG)           TO  EL1-MSG.
+276300000000
+276400000000      *****
+276500000000      *****    If the page is full, start a new page and print the
+276600000000      *****    Heading lines.
+276700000000      *****
+276800000000
+276900000000           IF  WS-LNECNT  IS GREATER THAN  WS-LNEMAX
+277000000000               PERFORM PRINT-HDG-LINE THRU PHL-EXIT.
+277100000000
+277200000000      *****
+277300000000      *****    Print the error line.
+277400000000      *****
+277500000000
+277600000000           WRITE PRINT-RECD          FROM  ERROR-LINE-1
+277700000000                         AFTER  ADVANCING  1.
+277800000000           ADD 1                       TO  WS-LNECNT.
+277900000000
+278000000000       PEL-EXIT.
+278100000000           EXIT.
+278200000000      /
+278300000000       INITIAL-LOGIC-RTN.
+278400000000
+278500000000      ******************************************************************
+278600000000      *                                                                *
+278700000000      *    I N I T I A L   L O G I C   R O U T I N E                   *
+278800000000      *                                                                *
+278900000000      ******************************************************************
+279000000000
+279100000000      *****
+279200000000      *****    Retrieve the local data area parameters.
+279300000000      *****
+279400000000
+279500161205      *RFS164113 STARTS
+279600161205              INITIALIZE MFAEDTSCP OF SCREEN-EDITS-ALLOWED-REC.
+279700161205              MOVE LNC-STMHSD-SCREEN-CODE TO
+279800161205                   SCREEN-CODE OF SCREEN-EDITS-ALLOWED-REC.
+279900161205
+280000161205              MOVE LNC-STMHSD-EDIT-CODE TO
+280100161205                   EDIT-CODE OF SCREEN-EDITS-ALLOWED-REC.
+280200161205
+280300161205              MOVE LNC-STMHSD-LEVEL-CODE TO
+280400161205                   LEVEL-CODE OF SCREEN-EDITS-ALLOWED-REC.
+280500161205
+280600161205              CALL  "FXSCEDTALW" USING SCREEN-EDITS-ALLOWED-REC,
+280700161205                                       LNC-EDIT-SQLLOG,
+280800161205                                       LNC-RETURN-CODE.
+280900161205              IF LNC-RETURN-CODE = "00"
+281000161205                 SET LB-STMHSDYES  TO TRUE
+281100161205              ELSE
+281200161205                 SET LB-STMHSDNO   TO TRUE
+281300161205              END-IF.
+281400161205
+281500161205      *RFS164113 END
+281600160615      *RFS158417 - STARTS
+281700160615148326*    INITIALIZE WS-SEC10-ACCOUNT-OPENING-BAL.
+281800160615      *RFS158417 - ENDS
+281900000000           ACCEPT WS-LOCAL-DATA-AREA FROM  WS-LOCAL.
+282000000000
+282100981112           IF WS-LDA-MGMT-COM-CDE IS EQUAL TO "GGF"
+282200981112           AND WS-LDA-REQUEST-SCOPE IS EQUAL TO "B"
+282300981112               MOVE ZEROES TO WS-LDA-STRDTE
+282400981112               MOVE ZEROES TO WS-LDA-ENDDTE.
+282500981112
+282600000000      *****
+282700000000      *****    Initialize the program defined work items.
+282800000000      *****
+282900000000
+283000000000           MOVE ZEROES                 TO  WS-MFAIVRHDP-BCNT.
+283100000000           MOVE ZEROES                 TO  WS-MFAIVRHDP-ECNT.
+283200980608           MOVE ZEROES                 TO  WS-MFAIVRHDP-LCNT.
+283300000000           MOVE ZEROES                 TO  WS-MFAIVRHDP-MCNT.
+283400000000           MOVE ZEROES                 TO  WS-MFAIVRHDP-RCNT.
+283500000000           MOVE ZEROES                 TO  WS-MFAIVRHHP-MCNT.
+283600000000           MOVE ZEROES                 TO  WS-MFASTMEXP-RCNT.
+283700000000           MOVE ZEROES                 TO  WS-STMT-HHM-WCNT-10.
+283800000000           MOVE ZEROES                 TO  WS-STMT-HHM-WCNT-20.
+283900000000           MOVE ZEROES                 TO  WS-STMT-HHM-WCNT-30.
+284000000000           MOVE ZEROES                 TO  WS-STMT-HHM-WCNT-40.
+284100000000           MOVE ZEROES                 TO  WS-STMT-HHM-WCNT-50.
+284200000000
+284300000000           MOVE 99                     TO  WS-LNECNT.
+284400000000           MOVE 60                     TO  WS-LNEMAX.
+284500000000           MOVE ZEROES                 TO  WS-PGECNT.
+284600000000
+284700000000           MOVE "N"                    TO  WS-EOJHDG-SW.
+284800000000
+284900000000           MOVE LOW-VALUES             TO  CURR-CONTROLS.
+285000000000           MOVE LOW-VALUES             TO  PREV-CONTROLS.
+285100000000
+285200000000      *****
+285300000000      *****    Format the heading literals.
+285400000000      *****
+285500000000
+285600000000           ACCEPT WS-DATE            FROM  DATE.
+285700000000           MOVE WS-DATE-YY             TO  HL1-YY.
+285800000000           MOVE WS-DATE-MM             TO  HL1-MM.
+285900000000           MOVE WS-DATE-DD             TO  HL1-DD.
+286000000000
+286100000000           ACCEPT HL1-TIME           FROM  TIME.
+286200000000           INSPECT HL1-TIME REPLACING ALL  SPACE
+286300000000                                       BY  ":".
+286400000000           MOVE "."                    TO  HL1-TIME-DOT.
+286500000000
+286600980529      *****TROY
+286700980529      *****    Open the Input-Output files.
+286800980529      *****
+286900980529           IF  WS-LDA-HHMIS-UPD
+287000980529                  IS EQUAL             TO  "Y"
+287100980529           OPEN    I-O     STATEMENT-EXTRACT-UPD.
+287200981104
+287300981104      *****
+287400981104      *****    Open the Input file for GGF
+287500981104      *****
+287600981104           IF WS-LDA-MGMT-COM-CDE IS EQUAL TO "GGF"
+287700981104           OPEN   INPUT    INVESTOR-FILE.
+287800981104
+287900000000      *****
+288000000000      *****    Open the Input files.
+288100000000      *****
+288200000000
+288300000000           OPEN    INPUT   INVESTOR-HOUSEHOLD-DETAILS
+288400000000                           INVESTOR-HOUSEHOLD-HEADER
+288500000000                           STATEMENT-EXTRACT.
+288600000000
+288700000000      *****
+288800000000      *****    Open the Output files.
+288900000000      *****
+289000000000
+289100000000           OPEN    OUTPUT  STMT-HOUSEHOLD-MAIL
+289200000000                           PRINT-FILE.
+289300000000
+289400000000       ILR-EXIT.
+289500000000           EXIT.
+289600000000      /
+289700000000       END-JOB-RTN.
+289800000000
+289900000000      ******************************************************************
+290000000000      *                                                                *
+290100000000      *    E N D   J O B   R O U T I N E                               *
+290200000000      *                                                                *
+290300000000      ******************************************************************
+290400000000
+290500000000      *****
+290600000000      *****    Print the Control Report on a separate page.
+290700000000      *****
+290800000000
+290900000000           MOVE 99                     TO  WS-LNECNT.
+291000000000           MOVE "Y"                    TO  WS-EOJHDG-SW.
+291100000000
+291200000000           MOVE SPACES                 TO  CONTROL-LINE-1.
+291300000000           PERFORM PRINT-CTL-LINE     THRU PCL-EXIT.
+291400000000
+291500000000           MOVE SPACES                 TO  CONTROL-LINE-1.
+291600000000           PERFORM PRINT-CTL-LINE     THRU PCL-EXIT.
+291700000000
+291800000000           MOVE SPACES                 TO  CONTROL-LINE-1.
+291900000000           MOVE WS-MFAIVRHDP-RLIT      TO  CL1-LIT.
+292000000000           MOVE WS-MFAIVRHDP-RCNT      TO  CL1-CNT.
+292100000000           PERFORM PRINT-CTL-LINE     THRU PCL-EXIT.
+292200000000
+292300000000           MOVE SPACES                 TO  CONTROL-LINE-1.
+292400000000           MOVE WS-MFAIVRHDP-BLIT      TO  CL1-LIT.
+292500000000           MOVE WS-MFAIVRHDP-BCNT      TO  CL1-CNT.
+292600000000           PERFORM PRINT-CTL-LINE     THRU PCL-EXIT.
+292700980608
+292800980609           IF  WS-MFAIVRHDP-LCNT
+292900980608                          IS NOT EQUAL TO  ZEROES
+293000980608               MOVE SPACES             TO  CONTROL-LINE-1
+293100980609               MOVE WS-MFAIVRHDP-LLIT  TO  CL1-LIT
+293200980609               MOVE WS-MFAIVRHDP-LCNT  TO  CL1-CNT
+293300980608               PERFORM PRINT-CTL-LINE THRU PCL-EXIT.
+293400000000
+293500000000           IF  WS-MFAIVRHDP-ECNT
+293600000000                          IS NOT EQUAL TO  ZEROES
+293700000000               MOVE SPACES             TO  CONTROL-LINE-1
+293800000000               MOVE WS-MFAIVRHDP-ELIT  TO  CL1-LIT
+293900000000               MOVE WS-MFAIVRHDP-ECNT  TO  CL1-CNT
+294000000000               PERFORM PRINT-CTL-LINE THRU PCL-EXIT.
+294100000000
+294200000000           IF  WS-MFAIVRHDP-MCNT
+294300000000                          IS NOT EQUAL TO  ZEROES
+294400000000               MOVE SPACES             TO  CONTROL-LINE-1
+294500000000               MOVE WS-MFAIVRHDP-MLIT  TO  CL1-LIT
+294600000000               MOVE WS-MFAIVRHDP-MCNT  TO  CL1-CNT
+294700000000               PERFORM PRINT-CTL-LINE THRU PCL-EXIT.
+294800000000
+294900000000           MOVE SPACES                 TO  CONTROL-LINE-1.
+295000000000           PERFORM PRINT-CTL-LINE     THRU PCL-EXIT.
+295100000000
+295200000000           IF  WS-MFAIVRHHP-MCNT
+295300000000                          IS NOT EQUAL TO  ZEROES
+295400000000               MOVE SPACES             TO  CONTROL-LINE-1
+295500000000               MOVE WS-MFAIVRHHP-MLIT  TO  CL1-LIT
+295600000000               MOVE WS-MFAIVRHHP-MCNT  TO  CL1-CNT
+295700000000               PERFORM PRINT-CTL-LINE THRU PCL-EXIT.
+295800000000
+295900000000           IF  WS-MFAIVRHHP-MCNT
+296000000000                          IS NOT EQUAL TO  ZEROES
+296100000000               MOVE SPACES             TO  CONTROL-LINE-1
+296200000000               PERFORM PRINT-CTL-LINE THRU PCL-EXIT.
+296300000000
+296400000000           MOVE SPACES                 TO  CONTROL-LINE-1.
+296500000000           MOVE WS-MFASTMEXP-RLIT      TO  CL1-LIT.
+296600000000           MOVE WS-MFASTMEXP-RCNT      TO  CL1-CNT.
+296700000000           PERFORM PRINT-CTL-LINE     THRU PCL-EXIT.
+296800000000
+296900000000           MOVE SPACES                 TO  CONTROL-LINE-1.
+297000000000           PERFORM PRINT-CTL-LINE     THRU PCL-EXIT.
+297100000000
+297200000000           MOVE SPACES                 TO  CONTROL-LINE-1.
+297300000000           MOVE WS-STMT-HHM-WLIT-10    TO  CL1-LIT.
+297400000000           MOVE WS-STMT-HHM-WCNT-10    TO  CL1-CNT.
+297500000000           PERFORM PRINT-CTL-LINE     THRU PCL-EXIT.
+297600000000
+297700000000           MOVE SPACES                 TO  CONTROL-LINE-1.
+297800000000           MOVE WS-STMT-HHM-WLIT-20    TO  CL1-LIT.
+297900000000           MOVE WS-STMT-HHM-WCNT-20    TO  CL1-CNT.
+298000000000           PERFORM PRINT-CTL-LINE     THRU PCL-EXIT.
+298100000000
+298200000000           MOVE SPACES                 TO  CONTROL-LINE-1.
+298300000000           MOVE WS-STMT-HHM-WLIT-30    TO  CL1-LIT.
+298400000000           MOVE WS-STMT-HHM-WCNT-30    TO  CL1-CNT.
+298500000000           PERFORM PRINT-CTL-LINE     THRU PCL-EXIT.
+298600000000
+298700000000           MOVE SPACES                 TO  CONTROL-LINE-1.
+298800000000           MOVE WS-STMT-HHM-WLIT-40    TO  CL1-LIT.
+298900000000           MOVE WS-STMT-HHM-WCNT-40    TO  CL1-CNT.
+299000000000           PERFORM PRINT-CTL-LINE     THRU PCL-EXIT.
+299100000000
+299200000000           MOVE SPACES                 TO  CONTROL-LINE-1.
+299300000000           MOVE WS-STMT-HHM-WLIT-50    TO  CL1-LIT.
+299400000000           MOVE WS-STMT-HHM-WCNT-50    TO  CL1-CNT.
+299500000000           PERFORM PRINT-CTL-LINE     THRU PCL-EXIT.
+299600000000
+299700000000      *****
+299800000000      *****    Close all the files.
+299900000000      *****
+300000000000
+300100981104           IF WS-LDA-MGMT-COM-CDE IS EQUAL TO "GGF"
+300200981104                  CLOSE    INVESTOR-FILE.
+300300981104
+300400980529           IF  WS-LDA-HHMIS-UPD
+300500980529                  IS EQUAL             TO  "N"
+300600980529                  CLOSE    STATEMENT-EXTRACT-UPD.
+300700980529
+300800000000           CLOSE           INVESTOR-HOUSEHOLD-DETAILS
+300900000000                           INVESTOR-HOUSEHOLD-HEADER
+301000000000                           STATEMENT-EXTRACT
+301100000000                           STMT-HOUSEHOLD-MAIL
+301200000000                           PRINT-FILE.
+301300000000
+301400000000       EJR-EXIT.
+301500000000           EXIT.
+301600000000      /
+301700000000       PRINT-CTL-LINE.
+301800000000
+301900000000      ******************************************************************
+302000000000      *                                                                *
+302100000000      *    P R I N T   C O N T R O L   L I N E   R O U T I N E         *
+302200000000      *                                                                *
+302300000000      ******************************************************************
+302400000000
+302500000000      *****
+302600000000      *****    If the page is full, start a new page and print the
+302700000000      *****    Heading lines.
+302800000000      *****
+302900000000
+303000000000           IF  WS-LNECNT  IS GREATER THAN  WS-LNEMAX
+303100000000               PERFORM PRINT-HDG-LINE THRU PHL-EXIT.
+303200000000
+303300000000      *****
+303400000000      *****    Print the Control line.
+303500000000      *****
+303600000000
+303700000000           WRITE PRINT-RECD          FROM  CONTROL-LINE-1
+303800000000                         AFTER  ADVANCING  1.
+303900000000           ADD 1                       TO  WS-LNECNT.
+304000000000
+304100000000       PCL-EXIT.
+304200000000           EXIT.
+304300000000      /
+304400000000       PRINT-HDG-LINE.
+304500000000
+304600000000      ******************************************************************
+304700000000      *                                                                *
+304800000000      *    P R I N T   H E A D I N G   L I N E   R O U T I N E         *
+304900000000      *                                                                *
+305000000000      ******************************************************************
+305100000000
+305200000000      *****
+305300000000      *****    Print Heading line 1 on a new page.
+305400000000      *****
+305500000000
+305600000000           WRITE PRINT-RECD          FROM  HEADING-LINE-1
+305700000000                          AFTER ADVANCING  PAGE.
+305800000000           ADD 1                       TO  WS-PGECNT.
+305900000000           MOVE 1                      TO  WS-LNECNT.
+306000000000
+306100000000      *****
+306200000000      *****    Format and print Heading line 2.
+306300000000      *****
+306400000000
+306500000000           MOVE WS-PGECNT              TO  HL2-PGECNT.
+306600000000
+306700000000           WRITE PRINT-RECD          FROM  HEADING-LINE-2
+306800000000                          AFTER ADVANCING  1.
+306900000000           ADD 1                       TO  WS-LNECNT.
+307000000000
+307100000000      *****
+307200000000      *****    Print Heading line 3, if required.
+307300000000      *****
+307400000000
+307500000000           IF  WS-EOJHDG-SW   IS EQUAL TO  "Y"
+307600000000               GO TO PHL-0010.
+307700000000
+307800000000           WRITE PRINT-RECD          FROM  HEADING-LINE-3
+307900000000                          AFTER ADVANCING  2.
+308000000000           ADD 2                       TO  WS-LNECNT.
+308100000000
+308200000000       PHL-0010.
+308300000000
+308400000000      *****
+308500000000      *****    Format and print a blank line.
+308600000000      *****
+308700000000
+308800000000           MOVE SPACES                 TO  PRINT-RECD.
+308900000000           WRITE PRINT-RECD
+309000000000                          AFTER ADVANCING  1.
+309100000000           ADD 1                       TO  WS-LNECNT.
+309200000000
+309300000000       PHL-EXIT.
+309400000000           EXIT.
+309500000000      /
+309600000000       DUMP-ROUTINE.
+309700000000
+309800000000      ******************************************************************
+309900000000      *                                                                *
+310000000000      *    D U M P   R O U T I N E                                     *
+310100000000      *                                                                *
+310200000000      ******************************************************************
+310300000000
+310400000000      *****
+310500000000      *****    Produce a program dump for analysis.
+310600000000      *****
+310700000000
+310800000000           CALL    "QLREXHAN"       USING  DUMP-ARGUMENTS.
+310900000000
+311000000000       DR-EXIT.
+311100000000           EXIT.

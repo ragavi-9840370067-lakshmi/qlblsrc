@@ -1,0 +1,2778 @@
+000100180625      * %ATTR DBGVIEW(*SOURCE)
+000200070306       IDENTIFICATION DIVISION.
+000300090820       PROGRAM-ID.    TFSXMLPRE.
+000400090723       AUTHOR.        Pawel Anielski.
+000500070306       INSTALLATION.  Citigroup Fund Services Canada.
+000600190125       DATE-WRITTEN.  July 23, 2009.
+000700181108       DATE-COMPILED.
+000800171030      *****************************************************************
+000900090723      **   RFS-NUMBER : RFS-65466                                      *
+001000070306      **                                                               *
+001100070306      **   DESCRIPTION: This program is used to select qualified       *
+001200180627      **                TFSA transactions and create work file         *
+001300210710      **                for XML file.                                  *
+001400070306      **                                                               *
+001500180625      **   CALLED BY:   JOBTFSXML                                     *
+001600070306      **                                                               *
+001700070306      **   PARAMETERS:  N/A                                            *
+001800180702      **                                                               *
+001900171030      *****************************************************************
+002000171030      *****************************************************************
+002100171030      *    C H A N G E   H I S T O R Y
+002200180625      *****************************************************************
+002300171030      ******************************************************************
+002400171030      * PROGRAMMER  *DATE OF CHANGE* DESCRIPTION OF CHANGE             *
+002500171030      ******************************************************************
+002600090818      * Pawel A  * 2009/07/23 * RFS 65466 - New.                       *
+002700091104      * Pawel A  * 2009/11/04 * RFS 75392 - distribution paid in cash  *
+002800091104      *          *            * not reported                           *
+002900091113      * Geeta S. * 2009/11/12 * RFS 73998 - Include all TFSA accounts  *
+003000091112      *          *            * that did not have any trades in the    *
+003100091112      *          *            * reporting period with Account info only*
+003200091201      * Sanjeev P* 2009/11/17 * RFS 75665 - TFSA XML updates for FMV   *
+003300091201      *          *            * at Death and Address Tag correction.   *
+003400100201      * Pawel A  * 2010/01/25 * RFS 78540 - TFSA XML warranty defects  *
+003500091202      * Geeta S. * 2009/12/01 * RFS 73997 - Include Non Financial chan-*
+003600091201      *          *            * ges for amendment.                     *
+003700171030      * Geeta S. * 2010/03/12 * RFS 80431 - Fix testing defect         *
+003800171030      *          *            * in GET_MKV_T                           *
+003900100202      * Sanjeev P* 2009/12/31 * RFS 77792 - TFSA issue with addresses  *
+004000171030      * Geeta S. * 2010/03/26 * RFS 80429 - Amendment defects          *
+004100171030      * Daniel M.* 2010/06/16 * RFS 68035 - Changes to GET_MKV_T       *
+004200171030      * Geeta S. * 2010/07/07 * RFS 84157 - Run time issue.            *
+004300101025      * Goran Z. * 2010/08/25 * RFS 80370 - Changes to display prev.   *
+004400101025      *          *            * owner info in case death > tax year.   *
+004500101201      * Gajen C. * 2010/11/26 * RFS 83842 & RFS83840                   *
+004600101201      *          *            *  YE10 Tax-Amended TFSA not             *
+004700101130      *          *            * generated contr-redeem code of TFSA    *
+004800101130      *          *            * is modified.                           *
+004900171030      * Andy C.  * 2011/01/06 * RFS 90854 - V6R1 issue on Receiver Type*
+005000171030      *Emmanuel Y* 2011/11/24 * RFS 91737 - Main Cursor should pickup  *
+005100171030      *          *            * TFSA accounts only                     *
+005200171030      * Geeta S. * 2011/02/15 * RFS 92676 - Read mfatrnp for first trade*
+005300171030      * Geeta S. * 2011/02/23 * RFS 92963 - For SWI/SWO, include trades *
+005400171030      *Thilaga K.* 2011/04/11 * RFS 63488 - GLWB AND GDV Resets         *
+005500171030      *                       * Expanding list of parameters on call    *
+005600171030      *                       * to program FXGETFMV                     *
+005700171030      * Waye M . * 2011/09/29 * RFS 100693 modify selection code to     *
+005800171030      *                       * include Reversed Trades.                *
+005900171030      * Naveen K.* 2011/09/14 * RFS 98403 - To fix FMV reported in the  *
+006000171030      *                       * TFSA XML File                           *
+006100171030      * Alan A.  * 2011/10/03 * RFS 93316 - recompile                   *
+006200171030      * Alan A . * 2011/10/26 * RFS 92786 For SWO/SWI check do not      *
+006300171030      *                       * check Relationship Types.               *
+006400171030      * Naveen K.* 2011/10/24 * RFS100925 - To fix TFSA Amended Filing  *
+006500171030      *            103424     *             for XML File.               *
+006600171030      * Geeta S. * 2012/02/07 * RFS 105745- Fix Amendment filing for XML*
+006700171030      * NAGA     * 2012/03/12 * RFS 103424- YE11-Future year original   *
+006800171030      *          *            * file generated for an account that was *
+006900171030      *          *            * closed in 2009 and trade was modified  *
+007000171030      * Brian L. * 2012/05/24 * RFS 97177 - Process Coversion scenariors*
+007100171030      * Vinsfy J * 2012/09/13 * RFS 108348 - Accounts reported on       *
+007200171030      *                         amended TFSA xml file when successor    *
+007300171030      *                         information changed.                    *
+007400171030      * Michael  * 2012/10/02 * RFS 112767- FMV at death calculation    *
+007500171030      * Fan      *            * change. Use Date of Death as Trade date*
+007600171030      *          *            * to get total unit bal for the first red*
+007700171030      *          *            * transactions for that trade date of    *
+007800171030      *          *            * the account as FMV at death.           *
+007900171030      * Geeta S. * 2012/08/08 * RFS 111173- Allow Contr Redem Code change*
+008000171030      *          *            * to generate Cancellation.               *
+008100171030      * Geeta S. * 2013/03/12 * RFS 120171- rollback 112767            *
+008200171030      *          *            * RFS 111173/117940 include lost code.   *
+008300171030      * Geeta S. * 2013/05/31 * RFS 120548- Extract 'ZZ' for investor province
+008400171030      *          *            * if resident of outside of CAN & USA.
+008500171030      * Daphne D.* 2013/07/17 * RFS 124681- Modified code to include   *
+008600171030      *          *            * Addr Type Code of "IVR" in MFAIVRADP   *
+008700171030      * Bathuu L * 2014/01/06 * RFS 131692 - To set new accounts flag  *
+008800171030      *          *            * to 'N' for conversion accounts         *
+008900171030      *          *            * created prior to tax year.             *
+009000171030      * Abhishek * 2014/01/27 * TFASEL TRANSACTION WAS NOT APPEARING IN*
+009100171030      *          *            * REPORT-TFSADRPT                        *
+009200171030      * Amruta A * 2015/07/29 * RFS 145379 - YE15 - TFSA               *
+009300171030      *          *            * <tfsa_new_ctrct_ind>  Flag in XML      *
+009400210710      * Thilaga    * 2014/05/15   * RFS133150 - Recompile              *
+009500140613      * Vinsfy J   * 2014/06/13   * RFS136634 - Recompile for MFAACCATP*
+009600171030      * Geeta S. * 2015/12/07 * RFS 143967- correct amendment logic for *
+009700171030      *          *            * death reporting in the reporting year  *
+009800171030      * Geeta S. * 2016/03/31 * RFS 157039- Long Runtime               *
+009900171030      * Ragavi S * 2017/07/14 * RFS174729 -RFS170241 -YE17 -TFSA amend *
+010000171030      *          *            * generated without the closing date of  *
+010100171030      *          *            * the account                            *
+010200180625      * kiruthika* 2018/06/25 * RFS1003680 - YE18 - Unitrax TFSA withdrawal amou
+010300180702      *          *            * in XML file is reporting gross amount
+010400180808      *Digvijay S* 201/08/08  * RFS179718 - TFSA GIC reporting issues
+010500181108      * Gomathi S* 2018/11/08 * RFS1006722-To exclude interest distribution as
+010600181108      *          *            * repurchase to DII fund in the xml proces
+010700190125      * Swathi J * 2019/01/25 * RFS1007400- YE18 - TAXEFIL TFSA records
+010800190125      *          *            * being missing for GI funds
+010900190807      * Jason    * 2019/08/07 * RFS1017433- TAXEFIL - TFSA in report
+011000190807      * Joshua   *            * mode the job is going to MSGW
+011100200124      * Gomathi S* 2020/01/24 * RFS1028230 - YE19 - TFSA account        *
+011200200124      *          *            *  is missing from TFSA Filing            *
+011300200526      * Poojasri * 2020/05/26 * RFS1099562 - Date of death &fair market *
+011400200526      *          *            * value at the date of death not reported *
+011500200526      *          *            * in TFSA file                            *
+011600200818      * Poojasri * 2020/08/18 * RFS1101020 - YE20 TFSA Amendment filing *
+011700200818      *          *            * Modified to create amended slips for the*
+011800200818      *          *            * year when Date of Death occurred and for*
+011900200818      *          *            * subsequent years                        *
+012000201120      * Jason    * 2020/11/20 * RFS1107365 - YE20 - TFSA Filing-Account *
+012100201120      *   Joshua *            *              is missing in XML filing   *
+012200210105      * Bathuu L * 2021/01/05 * RFS1109635 - Fix parameter for          *
+012300210105      *          *            * FXGETFMV pgm call.                      *
+012400210115      * Bathuu L * 2021/01/14 * RFS1109949 - Include trades for         *
+012500210124      *          *            * market value calculation for SEG env.   *
+012600210218      * Gomathi S* 2021/02/17 * RFS1111749-TFSA XML including marriage  *
+012700210311      *          *            * breakdown amounts in the incorrect tag. *
+012800210330      * Gomathi  * 2021/03/27 * RFS1113237-YE20-TFSA Tax Forms were     *
+012900210330      *          *            * issued for Non-TFSA accounts during     *
+013000210401      *          *            * amendment process                       *
+013100210629      * B Vergara* 2021/06/29 * RFS1116965-Performance Improvement      *
+013200210629      *          *            * (all changes tag with 116965)           *
+013300210902      * Jason    * 2021/08/23 * RFS1119457 - TFSA XML Issue - Missing   *
+013400210902      *   Joshua *            * Amendment Filing after DOD entered.     *
+013401211012      * Gomathi  * 2021/10/11 * RFS1121890-YE21-tfsa_new_ctrct_ind      *
+013402211012      *          *            * flagged as Y for prev reported accounts *
+013500190807     ********************************************************************
+013600070306
+013700181115       ENVIRONMENT DIVISION.
+013800070306       CONFIGURATION SECTION.
+013900070306       SOURCE-COMPUTER. IBM-AS400.
+014000070306       OBJECT-COMPUTER. IBM-AS400.
+014100070306       SPECIAL-NAMES.
+014200101210           LINKAGE TYPE IS PROCEDURE FOR "FXGETFMV".
+014300190806
+014400070306       INPUT-OUTPUT SECTION.
+014500070306       FILE-CONTROL.
+014600070306
+014700070306       DATA DIVISION.
+014800070312       FILE SECTION.
+014900070306
+015000070306       WORKING-STORAGE SECTION.
+015100070306      *
+015200070306           Copy Cpysqlfld
+015300090820               REPLACING == "CURRENT_PROGRAM" == BY == "TFSXMLPRE" ==.
+015400070306      *
+015500070306           EXEC SQL
+015600070306             INCLUDE SQLCA
+015700070306           END-EXEC.
+015800070306      *
+015900171030      * Error Codes, Uniquely Identify where the error happened
+016000070306       01  Ws-Err-Code                     PIC X(02) VALUE SPACES.
+016100070308           88  lncc_Err_Ok                           VALUE SPACES.
+016200070308           88  lncc_Err_10                           VALUE "10".
+016300070308           88  lncc_Err_11                           VALUE "11".
+016400070308           88  lncc_Err_12                           VALUE "12".
+016500070308           88  lncc_Err_13                           VALUE "13".
+016600070308           88  lncc_Err_14                           VALUE "14".
+016700070308           88  lncc_Err_15                           VALUE "15".
+016800070308           88  lncc_Err_16                           VALUE "16".
+016900070308           88  lncc_Err_17                           VALUE "17".
+017000070308           88  lncc_Err_18                           VALUE "18".
+017100090818           88  lncc_Err_19                           VALUE "19".
+017200090818           88  lncc_Err_20                           VALUE "20".
+017300090818           88  lncc_Err_21                           VALUE "21".
+017400090903           88  lncc_Err_22                           VALUE "22".
+017500090903           88  lncc_Err_23                           VALUE "23".
+017600091001           88  lncc_Err_24                           VALUE "24".
+017700091001           88  lncc_Err_25                           VALUE "25".
+017800091202           88  lncc_Err_26                           VALUE "26".
+017900091202           88  lncc_Err_27                           VALUE "27".
+018000091202           88  lncc_Err_28                           VALUE "28".
+018100091218           88  lncc_Err_29                           VALUE "29".
+018200120503R97177     88  lncc_Err_30                           VALUE "30".
+018300120503R97177     88  lncc_Err_31                           VALUE "31".
+018400140106131692     88  lncc_Err_32                           VALUE "32".
+018500160331157039     88  lncc_Err_33                           VALUE "33".
+018600090819
+018700090807       01  lc_WRKTFSPRERec.
+018800090818           COPY DDR-ALL-FORMATS OF WRKTFSPRE.
+018900070306
+019000070306       01  Flags.
+019100090902           03  lb_EndOfFileFlag            PIC 1.
+019200090902               88  lb_EndOfFileTrue        VALUE B"1".
+019300090902               88  lb_EndOfFileFalse       VALUE B"0".
+019400070308           03  lb_EndOfCursorFlag          PIC 1.
+019500070308               88  lb_EndOfCursorTrue      VALUE B"1".
+019600070308               88  lb_EndOfCursorFalse     VALUE B"0".
+019700090819           03  lb_GoodTransactionFlag        PIC 1.
+019800090819               88  lb_GoodTransactionYes     VALUE B"1".
+019900090819               88  lb_GoodTransactionNo      VALUE B"0".
+020000070306
+020100070306       01  Constants.
+020200070312           03  lncc_FileStatusOK           PIC X(02) VALUE "00".
+020300090817           03  lncc_C                      PIC X(01) VALUE "C".
+02040010020178540      03  lncc_X                      PIC X(01) VALUE "X".
+020500090817           03  lncc_Y                      PIC X(01) VALUE "Y".
+020600090817           03  lncc_1                      PIC X(02) VALUE "1".
+020700090817           03  lncc_2                      PIC X(02) VALUE "2".
+020800090817           03  lncc_9                      PIC X(02) VALUE "9".
+020900090817           03  lncc_43                     PIC X(02) VALUE "43".
+021000210629116965*    03  lnci_MaxFetchRec            PIC S9(03) VALUE 300.
+021100210709116965     03  lnci_MaxFetchRec            PIC S9(05) VALUE 150.
+021200070312           03  lncc_HST                    PIC X(03) VALUE "HST".
+021300070312           03  lncc_HSC                    PIC X(03) VALUE "HSC".
+021400070312           03  lncc_RVS                    PIC X(03) VALUE "RVS".
+021500070319           03  lncc_SEL                    PIC X(03) VALUE "SEL".
+021600210614           03  lncc_SWO                    PIC X(03) VALUE "SWO".
+021700070319           03  lncc_TRO                    PIC X(03) VALUE "TRO".
+021800090818           03  lncc_BUY                    PIC X(03) VALUE "BUY".
+021900090818           03  lncc_SWI                    PIC X(03) VALUE "SWI".
+022000090818           03  lncc_TRI                    PIC X(03) VALUE "TRI".
+022100090728           03  lncc_IVR                    PIC X(03) VALUE "IVR".
+022200090729           03  lncc_DIST                   PIC X(04) VALUE "DIST".
+022300090812           03  lncc_TFSA                   PIC X(04) VALUE "TFSA".
+022400090813           03  lncc_ACCCL                PIC X(12) VALUE "ACCT. CLOSED".
+022500120503R97177     03  lncc_4AFXMLC        PIC X(18) VALUE "TFSA Closed 4AFXML".
+022600120503R97177     03  lncc_4AFXMLN        PIC X(15) VALUE "TFSA New 4AFXML".
+022700090728           03  lncc_O                      PIC X(01) VALUE "O".
+022800090728           03  lncc_A                      PIC X(01) VALUE "A".
+022900090729           03  lncc_R                      PIC X(01) VALUE "R".
+023000090729           03  lncc_N                      PIC X(01) VALUE "N".
+023100120928112767     03  lncc_D                      PIC X(01) VALUE "D".
+023200090817           03  lncc_SPTFSA                 PIC X(10) VALUE "SPTFSA".
+023300090817           03  lncc_DEF                    PIC X(10) VALUE "DEFAULT".
+023400090817           03  lncc_USD                    PIC X(03) VALUE "USD".
+023500090817           03  lncc_CAD                    PIC X(03) VALUE "CAD".
+023600090901           03  lncc_FOR                    PIC X(03) VALUE "FOR".
+023700090901           03  lncc_PRE                    PIC X(03) VALUE "PRE".
+023800091002           03  lncc_DSB                    PIC X(03) VALUE "DSB".
+023900091002           03  lncc_DSR                    PIC X(03) VALUE "DSR".
+024000180808179718     03  lncc_GIR                    PIC X(03) VALUE "GIR".
+02410009110975392      03  lncc_WSB                    PIC X(03) VALUE "WSB".
+02420010120183842      03  lncc_P                      PIC X(01) VALUE "P".
+02430010120183842      03  li_MAX_SEQ_NO               PIC S9(18) VALUE ZEROS.
+024400070306
+024500070409           03  lncc_Space                  PIC X(10) VALUE " ".
+024600070307           03  lncc_S01                    PIC X(03) VALUE "S01".
+024700140108131692     03  lncc_INGCV                  PIC X(05) VALUE "INGCV".
+024800140108131692     03  lncc_CONV_ATTR              PIC X(05) VALUE "CVACC".
+024900210114      *RFS1109949 - Start
+025000210114           03  lncc_99                     PIC X(02) VALUE "99".
+025100210114           03  lncc_DTH                    PIC X(03) VALUE "DTH".
+025200210114      *RFS1109949 - End
+025300070306
+025400090820           03  lncc_ErrorOpeningCursor               PIC X(80)
+025500090820               VALUE "Error while opening cursor ".
+025600090729
+025700091202           03  lncc_ErrorOpeningCursor2              PIC X(80)
+025800091202               VALUE "Error while opening cursor2 ".
+025900090729
+026000090818           03  lncc_ErrorInsertingTRNTMP             PIC X(80)
+026100090812               VALUE "Error while inserting TRNTMP".
+02620009120273997      03  lncc_ErrorInsertingTRNTMP2            PIC X(80)
+02630009120273997          VALUE "Error while inserting TRNTMP2".
+02640010121083842      03  lncc_ErrorInsertingTRNTMP3            PIC X(80)
+02650010121083842          VALUE "Error while inserting TRNTMP3".
+026600090812           03  lncc_ErrorReadingMFAACFORP            PIC X(80)
+026700090812               VALUE "Error while reading MFAACFORP".
+026800090812           03  lncc_ErrorReadingMFAACSUCP            PIC X(80)
+026900090812               VALUE "Error while reading MFAACSUCP".
+02700009121873998      03  lncc_ErrorReadingMFAFORQP             PIC X(80)
+02710009121873998          VALUE "Error while reading MFAFORQP".
+027200090813           03  lncc_ErrorReadPREInvestor             PIC X(80)
+027300090813               VALUE "Error while reading Previous Investor".
+02740010102580370      03  lncc_ErrorReadPRETempInvestor         PIC X(80)
+027500101025               VALUE "Error while reading Previous Temp Investor".
+027600090813           03  lncc_ErrorReadingMFAIVRCLP            PIC X(80)
+027700090813               VALUE "Error while reading MFAIVRCLP".
+027800090817           03  lncc_ErrorGetExchangeRate             PIC X(80)
+027900090817               VALUE "Error while gettig Exchange Rate".
+028000090818           03  lncc_ErrorFetchingCursor              PIC X(80)
+028100090818               VALUE "Error while fetching Cursor".
+02820009120273997      03  lncc_ErrorFetchingCursor2             PIC X(80)
+02830009120273997          VALUE "Error while fetching Cursor2".
+028400090818           03  lncc_ErrorClosingCursor               PIC X(80)
+028500090818               VALUE "Error while closing Cursor".
+02860009120273997      03  lncc_ErrorClosingCursor2              PIC X(80)
+02870009120273997          VALUE "Error while closing Cursor2".
+028800090818           03  lncc_ErrorInsertWRKTFSPRE             PIC X(80)
+028900090818               VALUE "Error while Inserting into WRKTFSPRE".
+029000090824           03  lncc_ErrorGettingFitstTD              PIC X(80)
+029100090824               VALUE "Error while Getting First Trade Date".
+029200091001           03  lncc_ErrorReadingMFATRNTGP            PIC X(80)
+029300091001               VALUE "Error in DetermineSameInvestorSWI routine".
+029400091001           03  lncc_ErrorReadingMFATRNTGP2           PIC X(80)
+029500091001               VALUE "Error in DetermineSameInvestorSWO routine".
+029600120503R97177     03  lncc_ErrorReadingMFAIVRCLPC           PIC X(80)
+029700120503  |            VALUE "Error while reading MFAIVRCLP Close".
+029800120503  V        03  lncc_ErrorReadingMFAIVRCLPN           PIC X(80)
+029900120503R97177         VALUE "Error while reading MFAIVRCLP New".
+030000140106131692     03  lncc_ErrorReadingMFAACCATP            PIC X(80)
+030100140106131692         VALUE "Error while reading MFAACCATP".
+030200160331157039     03  lncc_ErrorInsertingTMPACFORP          PIC X(80)
+030300160331157039         VALUE "Error while inserting TMPACFORP".
+030400180808
+030500070308       01  WorkingStorageFields.
+030600090817           03  lc_CompanyCode              PIC X(03) VALUE SPACES.
+030700070312           03  lc_FileStatus               PIC X(02) VALUE SPACES.
+030800070306           03  lc_ReturnCode               PIC X(02) VALUE SPACE.
+030900210629116965*    03  li_Counter                  PIC S9(03) VALUE 0.
+031000210629116965     03  li_Counter                  PIC S9(05) VALUE 0.
+031100070309           03  li_NoOfRecordsFetched       PIC S9(09) VALUE 0.
+031200090818           03  li_NoOfRowsFetched          PIC S9(09) VALUE 0.
+031300070308           03  li_SaveAccountNo            PIC S9(09).
+031400091001           03  li_OffAccountNo             PIC S9(09).
+031500090817           03  li_SavePlacementDate        PIC S9(08).
+031600090817           03  li_SaveTransNo              PIC S9(09).
+031700090813           03  li_SaveInvestorNo           PIC S9(09).
+031800090817           03  li_SaveTradeDate            PIC S9(08).
+031900091001           03  lc_SaveTransTypeCode        PIC X(03).
+03200009110675392      03  ln_SaveGrossAmount          PIC S9(13)V9(02).
+032100090824           03  li_FirstTradeDate           PIC S9(09).
+032200090824           03  li_FirstTradeYMD REDEFINES li_FirstTradeDate.
+032300090824               05 li_FirstTD0              PIC S9(01).
+032400090824               05 li_FirstTDYY             PIC S9(04).
+032500090824               05 li_FirstTDMM             PIC S9(02).
+032600090824               05 li_FirstTDDD             PIC S9(02).
+032700090819           03  lc_SaveTransStatusCode      PIC X(03).
+032800090903           03  lc_SaveReversed             PIC X(01).
+032900090903             88 lb_SaveReversedYes         VALUE "Y".
+033000210609           03  li_FromDate                 PIC S9(08).
+033100210609           03  li_ToDate                   PIC S9(08).
+033200210609           03  li_TaxPeriod                PIC S9(08).
+033300090824           03  li_TaxPeriodYMD REDEFINES li_TaxPeriod.
+033400090824               05 li_TaxPeriodYY           PIC S9(04).
+033500090824               05 li_TaxPeriodMM           PIC S9(02).
+033600090824               05 li_TaxPeriodDD           PIC S9(02).
+033700090817           03  li_SaveInvestmentCode       PIC X(05).
+033800090817           03  li_LastXMLDate              PIC S9(08).
+033900090817           03  li_AsAtDate                 PIC S9(08).
+034000090817           03  lc_FirstRun                 PIC X(01).
+034100090817           03  ln_ExchangeRate             PIC S9(02)V9(07).
+034200090812           03  lc_FORSpouseLastName        PIC X(20).
+034300090812           03  lc_FORSpouseFirstName       PIC X(20).
+034400090812           03  lc_FORSpouseInitials        PIC X(03).
+034500090813           03  li_FORSpouseSIN             PIC S9(09).
+03460011102778540 *    03  ln_MVAtDeath                PIC S9(13)V9(2).
+034700111027R98403     03  ln_MVAtDeath                PIC S9(09)V9(2).
+034800200527      * RFS1099562 - Starts
+034900200526           03  ln_GDVAmount                PIC S9(09)V9(2).
+035000200527      * RFS1099562 - Ends
+035100090813           03  li_PREInvestorNo            PIC S9(09).
+03520010102580370      03  li_PRETempInvestorNo        PIC S9(09).
+035300090813           03  lc_PREInvestorLastName      PIC X(20).
+03540010102580370      03  lc_PRETempInvestorLastName  PIC X(20).
+035500090813           03  lc_PREInvestorFirstName     PIC X(20).
+03560010102580370      03  lc_PRETempInvestorFirstName PIC X(20).
+035700090813           03  lc_PREInvestorInitials      PIC X(03).
+03580010102580370      03  lc_PRETempInvestorInitials  PIC X(03).
+035900090813           03  li_PREInvestorSIN           PIC S9(09).
+03600010102580370      03  li_PRETempInvestorSIN       PIC S9(09).
+03610010102580370      03  li_PRETempInvestorDeathDate    PIC S9(09).
+036200101025  |        03  li_PRETempInvestorDOB          PIC S9(09).
+036300101025  |        03  lc_PRETempInvestorAddressNo    PIC S9(07).
+036400101025  |        03  lc_PRETempInvestorAddress      PIC X(47).
+036500101025  |        03  lc_PRETempInvestorCity         PIC X(30).
+036600101025  |        03  lc_PRETempInvestorProvinceCd   PIC X(3).
+036700101025  |        03  lc_PRETempInvestorCountryCd    PIC X(3).
+036800101025  |        03  lc_PRETempInvestorPostalCd     PIC X(12).
+036900101025  |        03  lc_PRETempInvestorMisc1AddLine PIC X(35).
+037000101025  |        03  lc_PRETempInvestorMisc2AddLine PIC X(35).
+037100101025  |        03  li_PRETempInvDthYY             PIC S9(04).
+03720010102580370      03  li_PRETempInvestorDocDate      PIC S9(9).
+037300090813           03  li_PREInvestorDeathDate     PIC S9(09).
+03740010020178540      03  li_PREInvDthYMD REDEFINES li_PREInvestorDeathDate.
+03750010020178540          05 li_PREInvDth0            PIC S9(01).
+037600100201  |            05 li_PREInvDthYY           PIC S9(04).
+037700100201  |            05 li_PREInvDthMM           PIC S9(02).
+03780010020178540          05 li_PREInvDthDD           PIC S9(02).
+037900090813           03  li_ACCCloseDate             PIC S9(09).
+03800010020178540      03  li_ACCCloseYMD REDEFINES li_ACCCloseDate.
+03810010020178540          05 li_ACCClose0             PIC S9(01).
+038200100201  |            05 li_ACCCloseYY            PIC S9(04).
+038300100201  |            05 li_ACCCloseMM            PIC S9(02).
+03840010020178540          05 li_ACCCloseDD            PIC S9(02).
+038500120504R97177     03  li_ACCNewDate               PIC S9(09).
+038600120524R97177     03  lc_ACCConvertInd            PIC X(01).
+038700090818           03  lc_FormCode                 PIC X(10).
+038800090818           03  lc_RequestCode              PIC X(10).
+038900090818           03  lc_RecordType               PIC X(01).
+039000090824           03  lc_NewAccount               PIC X(01).
+039100090925           03  lc_SaveAddress.
+039200090925               05  lc_SaveAddress1         PIC X(30).
+039300091201R75665*        05  lc_SaveAddress2         PIC X(17).
+039400091201R75665         05  lc_SaveAddress2         PIC X(30).
+039500091201R75665     03 li_HolderDTHDate             PIC S9(09).
+03960010020178540      03 li_HolderDTHYMD REDEFINES li_HolderDTHDate.
+039700100201  |            05 li_DTHDate0              PIC S9(01).
+039800100201  |            05 li_DTHDateYY             PIC S9(04).
+039900100201  |            05 li_DTHDateMM             PIC S9(02).
+04000010020178540          05 li_DTHDateDD             PIC S9(02).
+040100091201R75665     03 ld_lastWorkingDay            PIC S9(08).
+040200091201R75665     03 ln_fmv_amt                   PIC S9(09)V99  VALUE ZEROES.
+040300120928112767     03 ld_DeathTradeDay             PIC S9(08).
+04040009111073998      03  li_CutOffDate               PIC S9(08).
+04050009111373998      03  ld_SaveCreationDte          PIC S9(08).
+04060010032680429      03  ld_PREInvestorDeathDate     PIC S9(09).
+040700100326  |        03  ld_PREInvDthYMD REDEFINES ld_PREInvestorDeathDate.
+040800100326  |            05 ld_PREInvDth0            PIC S9(01).
+040900100326  |            05 ld_PREInvDthYY           PIC S9(04).
+041000100326  |            05 ld_PREInvDthMM           PIC S9(02).
+04110010032680429          05 ld_PREInvDthDD           PIC S9(02).
+04120010121283842      03  ln_SaveSeqNo                PIC S9(18).
+041300110411      *RFS63488 - Start
+041400110411           03  lc_Mode                     PIC X(1)       VALUE SPACES.
+041500110411           03  li_Contract_no              PIC S9(9)      VALUE ZEROES.
+041600110411           03  lc_Investment_code          PIC X(5)       VALUE SPACES.
+041700110504           03  li_Unit_amount              PIC S9(09)V9999
+041800110504                                                          VALUE ZEROES.
+041900110411      *RFS63488 - End
+042000140106      *RFS131692 - Start
+042100140106           03  li_CntConvertedAcct         PIC S9(09) VALUE 0.
+042200140106           03  lc_ConvertedAcct            PIC X(01).
+042300140106      *RFS131692 - End
+042400180808179718     03  lc_SaveTransOriginCode      PIC X(03).
+042500200526
+042600200526
+042700070308       01  Tables.
+042800090727           03  ltb_FetchTFSATransTable.
+042900210629116965*         05  ltb_FetchTFSATrans OCCURS 300 TIMES.
+043000210709116965          05  ltb_FetchTFSATrans OCCURS 150 TIMES.
+043100070314                   07  ltb_AccountNo        PIC S9(09).
+043200090724                   07  ltb_AccountType      PIC X(05).
+043300090813                   07  ltb_AccountStatus    PIC X(01).
+04340009111373998              07  ltb_AcctCreation     PIC S9(09).
+043500090724                   07  ltb_InvestorNo       PIC S9(09).
+043600090724                   07  ltb_IvrLastName      PIC X(20).
+043700090724                   07  ltb_IvrFirstName     PIC X(20).
+043800090724                   07  ltb_IvrInitials      PIC X(03).
+043900090724                   07  ltb_InvestorSIN      PIC S9(09).
+044000090724                   07  ltb_InvestorDOB      PIC S9(09).
+044100090820                   07  ltb_IvrAddressNo     PIC S9(07).
+044200090924                   07  ltb_IvrAddress       PIC X(47).
+044300090924                   07  ltb_IvrCity          PIC X(30).
+044400090925                   07  ltb_IvrProvince      PIC X(03).
+044500090821                   07  ltb_IvrCountry       PIC X(03).
+044600090924                   07  ltb_IvrPostal        PIC X(12).
+044700091201R75665             07  ltb_IvrMiscFstAddr   PIC X(35).
+044800100202R77792             07  ltb_IvrMiscSndAddr   PIC X(35).
+044900090724                   07  ltb_HolderDTHDate    PIC S9(09).
+045000090724                   07  ltb_PlacementDate    PIC S9(09).
+045100090724                   07  ltb_TransNo          PIC S9(09).
+045200090724                   07  ltb_TradeDate        PIC S9(09).
+045300090820                   07  ltb_GrossAmt         PIC S9(13)V9(02).
+045400090817                   07  ltb_InvestmentCode   PIC X(05).
+045500090820                   07  ltb_TransTypeCode    PIC X(03).
+045600090728                   07  ltb_ContRedemCode    PIC X(06).
+045700090728                   07  ltb_ContRedemRule    PIC X(02).
+045800090729                   07  ltb_DistrOptionCode  PIC X(01).
+045900090819                   07  ltb_TransStatusCode  PIC X(03).
+046000090903                   07  ltb_Reversed         PIC X(01).
+046100101212                   07  ltb_FrmSeqNo         PIC S9(18).
+046200180625      *RFS1003680 begins
+046300180625                   07  ltb_NetAmt           PIC S9(13)V9(2).
+046400180625      *RFS1003680 ends
+046500180808179718             07  ltb_TransOriginCode  PIC X(03).
+046600090724
+04670010113083842      03  lt_FetchTRNPTransTable.
+046800101130  |            05  lt_FetchTRNPTrans.
+046900101130  |                07  lt_Placement-DT      PIC S9(09).
+047000101130  |                07  lt_Trans-no          PIC S9(09).
+047100101130  |                07  lt_Account-no        PIC S9(09).
+047200101130  |                07  lt_Cont-redem-cd     PIC X(02).
+047300101130  |
+047400101130  |    01 LT-LITERALS.
+047500140127132210    03  lnc_Int                PIC X(03) VALUE "INT".
+047600101130  |       03  lncc_ErrorcreatingTRNP               PIC X(80)
+047700101130  |            VALUE "Error while creating TRNP".
+047800101130  |       03  lncc_ErrorInsertingTRNP              PIC X(80)
+047900101130  |            VALUE "Error while inserting records in TRNP".
+048000160331157039    03  lncc_ErrorcreatingACFORP             PIC X(80)
+048100160331157039         VALUE "Error while creating ACFORP".
+048200101206  |       03 lt_PRVACC_NO            PIC S9(09) VALUE ZEROS.
+048300101130  |       03 lt_LstTrnsFSeq          PIC S9(18).
+048400101130  |       03 lt_LstFormSeq           PIC S9(18).
+048500101130  |       03 PASS-DUPTB-FROM-TABLE   PIC X(10) VALUE "MFATRNP".
+048600160331157039    03 PASS-DUPTB-FROM-TABL2   PIC X(10) VALUE "MFAACFORP".
+048700101130  |       03 PASS-DUPTB-FROM-LIB     PIC X(10) VALUE SPACES.
+048800101130  |       03 PASS-DUPTB-TO-TABLE     PIC X(10) VALUE "TRNP".
+048900160331157039    03 PASS-DUPTB-TO-TABL2     PIC X(10) VALUE "TMPACFORP".
+049000101130  |       03 PASS-DUPTB-TO-LIB       PIC X(10) VALUE "QTEMP".
+049100101130  |       03 RETN-DUPTB-CODE               PIC X(02).
+049200101130  |          88 RETN-DUPTB-OK               VALUE SPACES.
+049300101130  |   * Drop the table failed
+049400101130  |          88 RETN-DUPTB-ERR-DROP-TABLE    VALUE "10".
+049500101130  |   * Duplicate the table failed
+049600101130  |          88 RETN-DUPTB-ERR-DUP-TABLE     VALUE "11".
+049700101130  |   * Same target in passed parameters => table will not be
+049800101130  |   * created.
+04990010113083842        88 RETN-DUPTB-SAME-TARGET       VALUE "12".
+050000070308
+050100200526      *RFS1099562 - Starts
+050200200526       01 lc_ModuleSegFUND           PIC X(10) VALUE "SEGFUND".
+050300200526       01 lc_SegFUND                 PIC X(01).
+050400200526           88  lc_SegFUNDYes          VALUE "Y".
+050500200526           88  lc_SegFUNDNo           VALUE "N".
+050600200526      *RFS1099562 - Ends
+050700210629
+050800210629      * 116965 - begin
+050900210707        01 CurrentTime.
+051000210707           05 CurrentHour     PIC 99.
+051100210707           05 CurrentMinute   PIC 99.
+051200210707           05 FILLER          PIC 9(4).
+051300210629      * 116995 - end
+051400210629
+051500070308       LINKAGE SECTION.
+051600090817       COPY CPYTFSPRE.
+051700070308
+051800090819       PROCEDURE DIVISION USING pi_TFSAXMLFromDate
+051900090819                                pi_TFSAXMLToDate
+052000090819                                pi_TFSAXMLTaxPeriod
+052100090818                                pc_TFSAXMLFirstRun
+05220009111373998 *                         pi_TFSAXMLAsAtDate.
+052300091110                                pi_TFSAXMLAsAtDate
+05240009111273998                           pi_TFSAXMLCutOffDate.
+052500071030       MAINLINE.
+052600090723           PERFORM InitialLogic.
+052700090902           If lb_EndOfFileFalse
+052800090902             PERFORM DetailProcess
+05290009120173997        PERFORM DetailProcess2
+053000090902           End-If.
+053100090723           PERFORM EndOfProgram.
+053200090723
+053300070306      * ---------------------------------
+053400070306       InitialLogic.
+053500070306      * ---------------------------------
+053600210531
+053700070306           PERFORM InitializeWorkingStorage.
+05380010113083842      PERFORM CreateTRNPFile.
+053900090817           PERFORM GetCompanyCode.
+054000090819           If pb_TFSAXMLFirstRunNo
+054100210604             PERFORM GetLastXMLRunDate
+054200090902             If lb_EndOfFileFalse
+054300090902               PERFORM CreateTempFile
+05440009120173997          PERFORM CreateTempFile2
+05450010113083842          PERFORM CreateTempFile3
+05460010121283842          PERFORM SelectDistinctAccounts
+054700090902             End-If
+054800090819           End-If.
+054900090902           If lb_EndOfFileFalse
+055000090902             PERFORM CreateCursor
+05510009120173997        PERFORM CreateCursor2
+055200090902           End-If.
+055300200603      * RFS1099562 - Starts
+055400200526           CALL "RTVMODAUTH"  USING
+055500210813                            lc_ModuleSegFUND   lc_SegFUND.
+055600200603      * RFS1099562 - Ends
+055700200526
+05580010113083842 * ---------------------------------
+055900101130  |    CreateTRNPFile.
+056000101130  |   * ---------------------------------
+056100101130  |   *  For RFS83842 - TFSA for TFSA amendmends.
+056200101130  |
+056300101130  |        CALL "FXDUPTB"  USING PASS-DUPTB-FROM-TABLE
+056400101130  |                              PASS-DUPTB-FROM-LIB
+056500101130  |                              PASS-DUPTB-TO-TABLE
+056600101130  |                              PASS-DUPTB-TO-LIB
+056700101130  |                              RETN-DUPTB-CODE
+056800101130  |        IF NOT RETN-DUPTB-OK
+056900101130  |          DISPLAY "Not able to duplicate "
+057000101130  |          PASS-DUPTB-FROM-TABLE " to " PASS-DUPTB-TO-TABLE
+057100101130  |                 SET lncc_Err_11 TO TRUE
+057200101130  |                 MOVE lncc_ErrorcreatingTRNP
+057300101130  |                   TO lc_sqlErrShortDESCR
+057400101130  |                 PERFORM SQLFailProcess
+057500101130  |        END-IF.
+057600101130  |
+057700101130  |   * Insert records in QTEMP/TRNP file for TFSA accounts.
+057800101130  |
+057900101130  |        EXEC SQL
+058000101130  |          INSERT INTO QTEMP/TRNP
+058100101130  |          SELECT mfatrnp.* FROM MFATRNP
+058200101130  |
+058300101130  |           INNER JOIN mfaaccntp
+058400101130  |             ON mfaaccntp.account_no
+058500101130  |             = MFATRNP.ACCOunt_NO
+058600101212  |
+058700101130  |           INNER JOIN mfaaccTYP ON
+058800101130  |             mfaacctyp.account_type_code =
+058900101130  |             mfaaccntp.account_type_code
+059000101130  |
+059100101130  |           WHERE
+059200101130  |             MFATRNP.TRADE_DATE BETWEEN :li_FromDate
+059300101130  |             AND :li_ToDate
+059400101130  |             AND MFAACCTYP.ACCOUNT_TYPE_RULE = :lncc_9
+059500101130  |           ORDER BY  MFATRNP.ACCOUNT_NO
+059600101130  |
+059700101130  |          End-exec.
+059800101130  |        MOVE SQLSTATE TO lc_sqlStates.
+059900101130  |        EVALUATE TRUE
+060000101130  |            WHEN lncc_sqlSuccessful
+060100101130  |                 DISPLAY "Created QTEMP/TRNP for ACC rule = 9"
+060200101130  |                 CONTINUE
+060300101130  |            WHEN lncc_sqlEnd
+060400101130  |                 CONTINUE
+060500101130  |            WHEN OTHER
+060600101130  |                 SET lncc_Err_11 TO TRUE
+060700101130  |                 MOVE lncc_ErrorInsertingTRNP
+060800101130  |                   TO lc_sqlErrShortDESCR
+060900101130  |                 PERFORM SQLFailProcess
+061000101130  |        END-EVALUATE.
+061100101130  |
+06120010113083842
+061300101130
+061400160729157039****** begins
+061500160331           EXEC SQL
+061600160331             DROP INDEX QTEMP/IDXTRNP
+061700160331           END-EXEC.
+061800160331
+061900160331           EXEC SQL
+062000160331             CREATE INDEX QTEMP/IDXTRNP ON QTEMP/TRNP
+062100160331             (Placement_Date Asc, Trans_No Asc)
+062200160331           END-EXEC.
+062300160331
+062400160331157039***  ## TMPACFORP ##
+062500160331           CALL "FXDUPTB"  USING PASS-DUPTB-FROM-TABL2
+062600160331                                 PASS-DUPTB-FROM-LIB
+062700160331                                 PASS-DUPTB-TO-TABL2
+062800160331                                 PASS-DUPTB-TO-LIB
+062900160331                                 RETN-DUPTB-CODE
+063000160331           IF NOT RETN-DUPTB-OK
+063100160331             DISPLAY "Not able to duplicate MFAACFORP"
+063200160331             PASS-DUPTB-FROM-TABL2 " to " PASS-DUPTB-TO-TABL2
+063300160331                    SET lncc_Err_33 TO TRUE
+063400160331                    MOVE lncc_ErrorcreatingACFORP
+063500160331                      TO lc_sqlErrShortDESCR
+063600160331                    PERFORM SQLFailProcess
+063700160331           END-IF.
+063800160331
+063900160331      * Insert records in QTEMP/TMPACFORP file for TFSA accounts.
+064000210531
+064100160331           EXEC SQL
+064200160331             INSERT INTO QTEMP/TMPACFORP
+064300160331             SELECT * FROM MFAACFORP
+064400160331              WHERE
+064500160331                FORM_CODE = "TFSA"
+064600210629116965        AND TAX_PERIOD = :li_TaxPeriod
+064700160331              ORDER BY  ACCOUNT_NO
+064800160331
+064900160331             End-exec.
+065000160331           MOVE SQLSTATE TO lc_sqlStates.
+065100160331           EVALUATE TRUE
+065200160331               WHEN lncc_sqlSuccessful
+065300160331                    DISPLAY "Created QTEMP/TMPACFORP "
+065400160331                    CONTINUE
+065500160331               WHEN lncc_sqlEnd
+065600160331                    CONTINUE
+065700160331               WHEN OTHER
+065800160331                    SET lncc_Err_33 TO TRUE
+065900160331                    MOVE lncc_ErrorInsertingTMPACFORP
+066000160331                      TO lc_sqlErrShortDESCR
+066100160331                    PERFORM SQLFailProcess
+066200160331           END-EVALUATE.
+066300160331
+066400160331           EXEC SQL
+066500160331             DROP INDEX QTEMP/IDXACF
+066600160331           END-EXEC.
+066700160331
+066800160331           EXEC SQL
+066900160331             CREATE INDEX QTEMP/IDXACF ON QTEMP/TMPACFORP
+067000160331             (Form_Seq_No Asc)
+067100160331           END-EXEC.
+067200210629
+067300160331157039*****
+067400070306      * ---------------------------------
+067500070306       InitializeWorkingStorage.
+067600070306      * ---------------------------------
+067700070313           EXEC SQL
+067800070313             WHENEVER SQLERROR CONTINUE
+067900070313           END-EXEC.
+068000070313
+068100070313           EXEC SQL
+068200070313             WHENEVER NOT FOUND CONTINUE
+068300070313           END-EXEC.
+068400210615
+068500210615           EXEC SQL
+068600210615             DROP TABLE QTEMP/TMPTRN
+068700210615           END-EXEC.
+068800090901
+068900210615           EXEC SQL
+069000210615           CREATE TABLE QTEMP/TMPTRN(
+069100210615             ACCOUNT_NO      NUMERIC (9)      NOT NULL WITH DEFAULT,
+06920021061583842        FORM_SEQ_NO     NUMERIC (18)     NOT NULL WITH DEFAULT)
+069300210615           END-EXEC.
+069400090901
+06950010121383842      EXEC SQL
+069600101212             DROP TABLE QTEMP/TMPTRN2
+069700101212           END-EXEC.
+069800101212
+06990010121383842      EXEC SQL
+070000210615            CREATE TABLE QTEMP/TMPTRN2 LIKE QTEMP/TMPTRN
+070100101212           END-EXEC.
+070200101212
+070300090728           INITIALIZE li_FromDate,
+070400090820                      li_ToDate,
+070500090820                      li_TaxPeriod,
+070600210604                      li_AsAtDate,
+070700090820                      lc_FirstRun.
+070800090902           SET lb_EndOfFileFalse      TO TRUE.
+070900090728
+071000090819           MOVE pi_TFSAXMLTaxPeriod     TO li_TaxPeriod.
+071100210609           MOVE pc_TFSAXMLFirstRun      TO lc_FirstRun.
+071200090731           MOVE pi_TFSAXMLAsAtDate      TO li_AsAtDate.
+071300090819           MOVE pi_TFSAXMLFromDate      TO li_FromDate.
+071400090819           MOVE pi_TFSAXMLToDate        TO li_ToDate.
+071500090824           MOVE li_TaxPeriod            TO li_TaxPeriodYMD.
+07160009111073998      MOVE pi_TFSAXMLCutOffDate    TO li_CutOffDate.
+071700090817
+071800090817      * ---------------------------------
+071900090817       GetCompanycode.
+072000090817      * ---------------------------------
+072100090817      * Retrieve Company Code.
+072200090817           CALL "RTVCMPCD" USING lc_CompanyCode.
+072300090819      * ---------------------------------
+072400090819       GetLastXMLRunDate.
+072500090819      * ---------------------------------
+072600090819           INITIALIZE   li_LastXMLDate.
+072700090819
+072800090819           EXEC SQL
+072900090902             SELECT COALESCE(MAX(XML_Creation_Date), 0)
+073000090819               INTO :li_LastXMLDate
+073100090819               FROM Mfatxmlvp
+073200090819              WHERE Form_Code         = :lncc_TFSA         AND
+073300090819                    Tax_Period        = :li_TaxPeriod
+073400090928              FETCH FIRST ROW ONLY
+073500090819           END-EXEC.
+073600090819
+073700090819           MOVE SQLSTATE TO lc_sqlStates.
+073800090819           IF lncc_sqlSuccessful or lncc_sqlEnd
+073900090902              If li_LastXMLDate = 0
+074000090902               SET lb_EndOfFileTrue     TO TRUE
+074100090902              End-If
+074200090819           ELSE
+074300090819              SET lncc_Err_13 TO TRUE
+074400090819              MOVE lncc_ErrorReadingMFAACSUCP TO lc_sqlErrShortDESCR
+074500090819              PERFORM SQLFailProcess
+074600090819           END-IF.
+074700090731
+074800100108      * ---------------------------------
+074900090817       CreateTempFile.
+075000090731      * ---------------------------------
+075100210629
+075200090731           EXEC SQL
+075300090903             INSERT INTO QTEMP/TMPTRN
+075400101206 83842*      SELECT DISTINCT TrnTmp.Account_No
+075500210629116965*      SELECT DISTINCT TrnTmp.Account_No , 0
+075600210629116965       SELECT TrnTmp.Account_No , 0
+075700101206   |  *        FROM MfaTrnp TrnTmp,
+075800110216 83842*        FROM Trnp TrnTmp,
+075900110218 92676         FROM QTEMP/Trnp TrnTmp
+076000110218 92676*             Mfaaccntp Accntp,
+076100210629116965*          JOIN Mfaaccntp Accntp
+076200210629116965           INNER JOIN Mfaaccntp Accntp
+076300210605                     ON TrnTmp.Account_No = Accntp.Account_No
+07640021060592676 *             Mfaacctyp Acctyp
+076500210629116965*               JOIN Mfaacctyp Acctyp  ON
+076600210629116965*              Accntp.Account_Type_Code
+076700210629116965*                               = Acctyp.Account_Type_Code
+076800090902                    LEFT OUTER JOIN Mfatrnddp Trnddp1
+076900090902                      ON TrnTmp.Placement_Date
+077000090902                                        = Trnddp1.Placement_Date    AND
+077100090902                         TrnTmp.Trans_No = Trnddp1.Trans_No
+07720009110475392               LEFT OUTER JOIN Mfatrnidp Trnidp1
+077300091104  |                   ON TrnTmp.Placement_Date
+077400091104  |                                     = Trnidp1.Placement_Date    AND
+07750009110475392                    TrnTmp.Trans_No = Trnidp1.Trans_No
+077600090904                    LEFT OUTER JOIN Mfacntrrp Cntrrp1
+077700090904                      ON Accntp.Account_Type_Code
+077800090904                                      = Cntrrp1.Account_Type_Code   AND
+077900090904                        Trntmp.Contr_Redem_Code
+078000090904                                        = Cntrrp1.Contr_Redem_Code
+078100090819              WHERE TrnTmp.Process_Date > :li_LastXMLDate           AND
+078200090731                    TrnTmp.Process_Date <= :li_AsAtDate             AND
+078300090901                    TrnTmp.Trade_Date   >= :li_FromDate             AND
+078400090901                    TrnTmp.Trade_Date   <= :li_ToDate               AND
+078500090901                  ((TrnTmp.Contr_Redem_Code = :lncc_DIST            AND
+078600090902                   TrnTmp.Payment_Type_Code NOT IN
+078700181113006722*                                          (:lncc_N, :lncc_R) AND
+078800181113006722                                  (:lncc_N, :lncc_R,:lncc_D)  AND
+078900090902                   Trnddp1.Distr_Option_Code = :lncc_C)              OR
+07900009110475392              (TrnTmp.Contr_Redem_Code = :lncc_DIST            AND
+079100091104  |                TrnTmp.Payment_Type_Code NOT IN
+079200181108006722*                                          (:lncc_N, :lncc_R) AND
+079300181108006722                                   (:lncc_N, :lncc_R,:lncc_D) AND
+07940009110475392              Trnidp1.Distr_Option_Code = :lncc_C)              OR
+079500190125      *RFS1007400 Begins
+079600190125      *           (Cntrrp1.Contr_Redem_Code_Rule IN
+079700190125      *                             (:lncc_1, :lncc_2, :lncc_43)    AND
+079800190125      *             TrnTmp.Contr_Redem_Code <> :lncc_DIST))         AND
+079900190125                ((Cntrrp1.Contr_Redem_Code_Rule IN
+080000190125                                   ( :lncc_2, :lncc_43)    OR
+080100190125                (Cntrrp1.Contr_Redem_Code_Rule = :lncc_1  AND
+080200190125                TrnTmp.Trans_Origin_Code NOT IN ("GIR", "GIA"))) AND
+080300190125                   TrnTmp.Contr_Redem_Code <> :lncc_DIST))         AND
+080400190125      *RFS1007400 Ends
+080500090731                    TrnTmp.Trans_Status_Code IN
+080600210605                                 (:lncc_HST, :lncc_HSC, :lncc_RVS)  AND
+08070011021892676 *             TrnTmp.Account_No = Accntp.Account_No           AND
+080800210615                    Trntmp.Account_No = Accntp.Account_No
+08090011021892676 *             Accntp.Account_Type_Code
+08100010113083842 *                              = Acctyp.Account_Type_Code     AND
+08110011021892676 *                              = Acctyp.Account_Type_Code
+08120010113083842 *             Acctyp.Account_Type_Rule = :lncc_9
+081300110218              ORDER BY TrnTmp.Account_No
+081400090731           END-EXEC.
+081500090731
+081600090731           MOVE SQLSTATE TO lc_sqlStates.
+081700090731           EVALUATE TRUE
+081800090731               WHEN lncc_sqlSuccessful
+081900101210                    DISPLAY "Created QTEMP/TMPTRN for Amended Trans"
+082000090731                    CONTINUE
+082100090731               WHEN lncc_sqlEnd
+082200100105                    CONTINUE
+082300090731               WHEN OTHER
+082400090812                    SET lncc_Err_11 TO TRUE
+082500090812                    MOVE lncc_ErrorInsertingTRNTMP
+082600090731                      TO lc_sqlErrShortDESCR
+082700090731                    PERFORM SQLFailProcess
+082800090731           END-EVALUATE.
+082900070308
+08300021081383842 *---------------------------------
+083100210813        SelectDistinctAccounts.
+08320021081383842 *---------------------------------
+083300101212           EXEC SQL
+083400101212             INSERT INTO QTEMP/TMPTRN2
+083500101212             SELECT Account_No, MAX(Form_Seq_No)
+083600101212             FROM QTEMP/TMPTRN
+083700101212             GROUP BY Account_No
+083800101212           END-EXEC.
+083900101212
+08400009120173997 * ---------------------------------
+084100091201       CreateTempFile2.
+08420009120173997 * ---------------------------------
+084300210615
+084400210615           EXEC SQL
+084500210615             INSERT INTO QTEMP/TMPTRN
+084600210615             SELECT DISTINCT Accntp.Account_No ,
+08470021061583842         MAX(CASE
+084800210615  |              WHEN (ACFORP.TAX_PERIOD = :li_TaxPeriod AND
+084900210615  |                    Acforp.Form_Original_Or_Duplicate = :lncc_A
+085000210615  |                    AND ACFORP.Form_Status = :lncc_P )
+085100210615  |                  THEN  ACFORP.FORM_SEQ_NO
+085200210615  |              ELSE  0
+08530021061583842         END  )
+085400210615               FROM MfaAccntp Accntp
+085500210813116965*        JOIN  Mfaacctyp Acctyp ON
+085600210629116965         inner JOIN  Mfaacctyp Acctyp ON
+085700210813                Accntp.Account_Type_Code = Acctyp.Account_Type_Code
+085800210615      *RFS1113237-Start
+085900210615                    AND Acctyp.Account_type_Rule = :lncc_9
+086000210615      *RFS1113237-End
+086100210615
+086200210629116965*              JOIN  MfaAcforp   Acforp ON
+086300210629116965         inner JOIN  MfaAcforp   Acforp ON
+086400210615                    Accntp.Account_No = Acforp.Account_No
+086500210615      *RFS1113237-Start
+086600210615                    AND Acforp.form_code = :lncc_TFSA
+086700210615      *RFS1113237-End
+086800210830      *RFS1119457 - Start
+086900210830               inner JOIN  MfaAcfmdp   Acfmdp ON
+087000210830                    Acforp.Form_seq_no = Acfmdp.Form_seq_no
+087100210830      *RFS1119457 - End
+087200210629116965*              JOIN MfaIvrp  Ivrp ON
+087300210629116965         inner JOIN MfaIvrp  Ivrp ON
+087400210615                    Accntp.Investor_No = Ivrp.Investor_No
+087500210615
+08760021061583842 *             JOIN MfaIvrClp  IvrClp ON
+08770021061583842               LEFT OUTER JOIN MfaIvrClp  IvrClp ON
+087800210615                    Ivrp.Investor_No = IvrClp.Investor_No
+087900210615100925*             AND Accntp.Account_No = IvrClp.Account_No
+088000210615105745              AND (Accntp.Account_No = IvrClp.Account_No
+088100210615105745              OR   IvrClp.Account_No = 0)
+088200210615      * 80429 start
+088300210615                    LEFT OUTER JOIN MFAACSUCP Acsucp ON
+088400210615                    Accntp.Account_No = Acsucp.Account_No   AND
+088500210615                    Acsucp.Relationship_Type = :lncc_PRE      AND
+088600210615                    Acsucp.Status            = :lncc_A
+088700210615
+088800210615                    LEFT OUTER JOIN MfaIvrClp  IvrClp2 ON
+088900210615                    Acsucp.Investor_No2 = IvrClp2.Investor_No
+089000210615100925*             AND Acsucp.Account_No = IvrClp2.Account_No
+089100210615105745              AND IvrClp2.Account_No = 0
+089200210615
+089300210615      * 80429 end
+089400210615      * 143967 start
+089500210615                    LEFT OUTER JOIN MfaIvretp  IvrEtp  ON
+089600210615                    IvrClp.Investor_No = IvrEtp.Investor_No
+089700210615
+089800210615                    LEFT OUTER JOIN MfaIvrEtp  IvrEtp2 ON
+089900210615                    IvrClp2.Investor_No = IvrEtp2.Investor_No
+090000210615      * 143967 end
+090100210615
+090200210615
+090300210615              WHERE
+090400210615      *83842 - Begin - Rewrite Where condition
+09050021061583842 *             Acforp.Tax_Period = :li_TaxPeriod   AND
+090600210615|     *             Acforp.Form_Code = "TFSA" AND
+090700210615|     *            (
+09080021061580429 *            (IvrClp.Change_Category IN("NAME", "BIRTH DATE",
+090900210615| |   *                   "S.I.N. CHANGE" )                OR
+091000210615| |   *            ((IvrClp.Change_Category IN("NAME", "BIRTH DATE",
+091100210615| |   *             "S.I.N. CHANGE", "DATE CHANGE", "TENANT SETUP",
+09120021061580429 *             "CHG LAST NAME", "CHG FIRST NAME", "CHG SIN")  OR
+091300210615|     *             SUBSTR(IvrClp.Change_Category, 1, 6) =
+091400210615|     *             "FR IVR" )                                   AND
+09150021061580429 *             IvrClp.Audit_Date >  :li_LastXMLDate      AND
+09160021061584157 *             IvrClp.Audit_Date >  :li_LastXMLDate ))      OR
+09170021061584157 *             IvrClp.Audit_Date >  :li_LastXMLDate )       OR
+091800210615| |   *           (IvrClp2.Change_Category IN("NAME", "BIRTH DATE",
+091900210615| |   *             "S.I.N. CHANGE", "DATE CHANGE", "TENANT SETUP") AND
+09200021061584157 *             IvrClp2.Audit_Date >  :li_LastXMLDate
+09210021061584157 *             IvrClp2.Audit_Date >  :li_LastXMLDate)
+09220021061580429 *             ) AND
+092300210615|     *             Acctyp.Account_Type_Rule = :lncc_9
+092400210813      *116965 - comment out as checking is already in JOIN Statement
+09250021061683842 *             Acctyp.Account_Type_Rule = :lncc_9   AND
+092600210616|     *            Acforp.Form_Code = "TFSA" AND
+092700210813      *116965 - end
+092800210615|                    (Acforp.Tax_Period = :li_TaxPeriod   AND
+092900210615|                    (
+093000210615143967*              ((IvrClp.Change_Category IN( "BIRTH DATE",
+093100210615      * RFS1101020 - Starts
+093200210615143967*              (IvrClp.Change_Category IN( "BIRTH DATE",
+093300210615143967               ((IvrClp.Change_Category IN( "BIRTH DATE",
+093400210615      * RFS1101020 - Ends
+093500210615143967*             "S.I.N. CHANGE", "DATE CHANGE", "TENANT SETUP",
+093600210615      * RFS1101020 - Starts
+093700210615143967*             "S.I.N. CHANGE", "DATE CHANGE",
+093800210615143967              "S.I.N. CHANGE",
+093900210615      * RFS1101020 - Ends
+094000210615      *RFS108348 - begin
+094100210615|     *             "CHG LAST NAME", "CHG FIRST NAME", "CHG SIN")  OR
+094200210615|                   "FOR CHG LAST NAME", "FOR CHG FIRST NAME",
+094300210615      *143967       "FOR CHG SIN")  OR
+094400210615                    "FOR CHG SIN")
+094500210615      *RFS108348 - end
+094600210615      * RFS1101020 - Starts
+094700210615                    OR (IvrClp.Change_Category IN( "DATE CHANGE") AND
+094800210830      *RFS1119457 - Start
+094900210830      *             SUBSTR(IVRETP.Documentation_Date, 1,4) <=
+095000210830      *                                      :li_TaxPeriodYY
+095100210830                   (SUBSTR(IVRETP.Documentation_Date, 1,4) =
+095200210830                                                :li_TaxPeriodYY
+095300210830                   OR (SUBSTR(IVRETP.Documentation_Date, 1,4) >
+095400210830                                          :li_TaxPeriodYY AND
+095500210830                   IVRETP.Documentation_Date <> 0 AND
+095600210830                   Acfmdp.DATE_OF_DEATH <> 0 AND
+095700210830                   Acfmdp.DATE_OF_DEATH <> IVRETP.Documentation_Date ))
+095800210830      *RFS1119457 - End
+095900210615                    ))
+096000210615      * RFS1101020 - Ends
+096100210615|     *143967       SUBSTR(IvrClp.Change_Category, 1, 6) =  "FR IVR" )
+096200210615|
+096300210615|                   AND
+096400210615|                    IvrClp.Audit_Date >  :li_LastXMLDate )       OR
+096500210615      * RFS1101020 - Starts
+096600210615|     *              IvrClp2.Change_Category IN( "BIRTH DATE",
+096700210615                     (IvrClp2.Change_Category IN( "BIRTH DATE",
+096800210615      * RFS1101020 - Ends
+096900210615143967*              "S.I.N. CHANGE", "DATE CHANGE", "TENANT SETUP")
+097000210615      * RFS1101020 - Starts
+097100210615143967*              "S.I.N. CHANGE", "DATE CHANGE")
+097200210615                     "S.I.N. CHANGE")
+097300210615                     OR (IvrClp2.Change_Category IN( "DATE CHANGE") AND
+097400210830      *RFS1119457 - Start
+097500210830      *             SUBSTR(IVRETP2.Documentation_Date, 1,4) <=
+097600210830      *                                      :li_TaxPeriodYY
+097700210830                   (SUBSTR(IVRETP2.Documentation_Date, 1,4) =
+097800210830                                                :li_TaxPeriodYY
+097900210830                   OR (SUBSTR(IVRETP2.Documentation_Date, 1,4) >
+098000210830                                          :li_TaxPeriodYY AND
+098100210830                   IVRETP2.Documentation_Date <> 0 AND
+098200210830                   Acfmdp.DATE_OF_DEATH <> 0 AND
+098300210830                   Acfmdp.DATE_OF_DEATH <> IVRETP2.Documentation_Date ))
+098400210830      *RFS1119457 - End
+098500210615                     ))
+098600210615      * RFS1101020 - Ends
+098700210615|                   AND
+098800210615|                    IvrClp2.Audit_Date >  :li_LastXMLDate)  OR
+098900210615|                    (Acforp.FORM_ORIGINAL_OR_DUPLICATE = :lncc_A AND
+099000210615|                        Acforp.Tax_Period = :li_TaxPeriod   AND
+099100210615|                        Acforp.Form_Status = :lncc_P)
+099200210615      *RFS143967 - START
+099300210824      *RFS1119457 - Start
+099400210824      *            OR (SUBSTR(IVRETP.Documentation_Date, 1,4) =
+099500210830      *                                         :li_TaxPeriodYY AND
+099600210830                   OR ((SUBSTR(IVRETP.Documentation_Date, 1,4) =
+099700210830                                                :li_TaxPeriodYY
+099800210830                   OR (SUBSTR(IVRETP.Documentation_Date, 1,4) >
+099900210830                                          :li_TaxPeriodYY AND
+100000210830                   IVRETP.Documentation_Date <> 0 AND
+100100210830                   Acfmdp.DATE_OF_DEATH <> 0 AND
+100200210830                   Acfmdp.DATE_OF_DEATH <> IVRETP.Documentation_Date ))
+100300210830                   AND Acforp.Tax_Period = :li_TaxPeriod  AND
+100400210830      *RFS1119457 - End
+100500210615                   IvrClp.Audit_Date >  :li_LastXMLDate         AND
+100600210615                   (IvrClp.Change_Category = "TENANT SETUP" OR
+100700210615                   SUBSTR(IvrClp.Change_Category, 1, 6) =  "FR IVR" ))
+100800210615
+100900210824      *RFS1119457 - Start
+101000210824      *            OR (SUBSTR(IVRETP2.Documentation_Date, 1,4) =
+101100210830      *                                         :li_TaxPeriodYY AND
+101200210830                   OR ((SUBSTR(IVRETP2.Documentation_Date, 1,4) =
+101300210830                                                :li_TaxPeriodYY
+101400210830                   OR (SUBSTR(IVRETP2.Documentation_Date, 1,4) >
+101500210830                                          :li_TaxPeriodYY AND
+101600210830                   IVRETP2.Documentation_Date <> 0 AND
+101700210830                   Acfmdp.DATE_OF_DEATH <> 0 AND
+101800210830                   Acfmdp.DATE_OF_DEATH <> IVRETP2.Documentation_Date))
+101900210830                   AND Acforp.Tax_Period = :li_TaxPeriod  AND
+102000210824      *RFS1119457 - End
+102100210615                   IvrClp2.Audit_Date >  :li_LastXMLDate        AND
+102200210615                   IvrClp2.Change_Category = "TENANT SETUP"     )
+102300210615      *RFS143967 - END
+102400210615
+102500210615|                       )  OR
+102600210615|
+102700210615|                      (Acforp.Tax_Period < :li_TaxPeriod   AND
+102800210615|                       Acforp.Issue_Date =  :li_AsAtDate   AND
+102900210615                        Acforp.Form_Status = "I"            AND
+103000210615|                       Acforp.FORM_ORIGINAL_OR_DUPLICATE = :lncc_A )
+103100210615|              GROUP BY Accntp.Account_No
+10320021061583842
+103300210615      *83842 - End   - Rewrite Where condition
+103400210615              ORDER BY Accntp.Account_No
+103500210615            END-EXEC.
+103600091201
+103700091201           MOVE SQLSTATE TO lc_sqlStates.
+103800091201           EVALUATE TRUE
+103900091201               WHEN lncc_sqlSuccessful
+104000100709                    DISPLAY "Created QTEMP/TMPTRN for Amended NFU "
+104100091201                    CONTINUE
+104200091201               WHEN lncc_sqlEnd
+104300100105                    CONTINUE
+104400091201               WHEN OTHER
+104500091201                    SET lncc_Err_11 TO TRUE
+104600091202                    MOVE lncc_ErrorInsertingTRNTMP2
+104700091201                      TO lc_sqlErrShortDESCR
+104800091201                    PERFORM SQLFailProcess
+104900091201           END-EVALUATE.
+105000091201
+10510010113083842 * ---------------------------------
+105200101130  |    CreateTempFile3.
+105300101130  |   * ---------------------------------
+105400101130  |
+105500101130  |        EXEC SQL
+105600101130  |          DECLARE RedemCodeChg CURSOR FOR
+105700101130  |           SELECT Trnp.PLACEMENT_DATE, TRNP.TRANS_NO,
+105800120802      * RFS 103424 - Start
+105900120802      *         TRNP.ACCOUNT_NO, MFACNTRRP.CONTR_REDEM_CODE_RULE
+106000120802                TRNP.ACCOUNT_NO,
+106100120802                COALESCE(MFACNTRRP.CONTR_REDEM_CODE_RULE, " ")
+106200120802      * RFS 103424 - End
+106300110216  |           FROM QTEMP/TRNP TRNP
+106400101130  |
+106500101130  |           INNER JOIN MFAACCNTP ON mfaaccntp.ACCOUNT_NO =
+106600101130  |               TRNP.ACCOUNT_NO
+106700101130  |
+106800101130  |           LEFT OUTER JOIN MFACNTRRP ON
+106900101130  |           mfacntrrp.Account_Type_Code = MFAACCNTP.Account_Type_Code
+107000120802103424        AND
+107100120802103424        MFACNTRRP.Contr_Redem_Code  = TRNP.Contr_Redem_Code
+107200120802103424        WHERE trnp.CHANGED_DATE     > :li_LastXMLDate   AND
+107300120802103424        TRNP.Trans_Status_Code     LIKE "HS%"           AND
+107400120802103424        TRNP.Reverse              <>    "Y"             AND
+107500120802103424        TRNP.Trade_Date    BETWEEN  :li_FromDate  AND :li_ToDate
+107600101130  |
+107700101130  |         End-exec.
+107800101130  |
+107900101130  |        EXEC SQL
+108000101130  |          OPEN RedemCodeChg
+108100101130  |        END-EXEC.
+108200101130  |
+108300101130  |        MOVE SQLSTATE TO lc_sqlStates.
+108400101130  |        IF NOT lncc_sqlSuccessful
+108500101130  |           SET lncc_Err_10 TO TRUE
+108600101130  |           MOVE  lncc_ErrorOpeningCursor  TO lc_sqlErrShortDESCR
+108700101130  |           PERFORM SQLFailProcess
+108800101130  |        END-IF.
+108900101130  |
+109000101130  |        SET lb_EndOfCursorFalse TO TRUE.
+109100101206  |        MOVE ZEROS TO lt_PRVACC_NO.
+109200101130  |        PERFORM ProcessCursor3
+109300101130  |          UNTIL lb_EndOfCursorTrue.
+109400101130  |        INITIALIZE lt_FetchTRNPTransTable.
+109500101130  |
+109600101130  |   * ---------------------------------
+109700101130  |    ProcessCursor3.
+109800101130  |   * ---------------------------------
+109900101130  |
+110000101130  |        INITIALIZE lt_FetchTRNPTransTable.
+110100101130  |        EXEC SQL
+110200101130  |          FETCH NEXT FROM RedemCodeChg
+110300101130  |           INTO :lt_FetchTRNPTrans
+110400101130  |        END-EXEC.
+110500101130  |
+110600101130  |        MOVE SQLSTATE TO lc_sqlStates.
+110700101130  |        EVALUATE TRUE
+110800101206  |            WHEN lncc_sqlSuccessful
+110900101206  |                 CONTINUE
+111000101130  |            WHEN lncc_sqlEnd
+111100101130  |                 SET lb_EndOfCursorTrue TO TRUE
+111200101130  |            WHEN OTHER
+111300101130  |                 SET lncc_Err_20 TO TRUE
+111400101130  |                 MOVE lncc_ErrorFetchingCursor
+111500101130  |                   TO lc_sqlErrShortDESCR
+111600101130  |                 PERFORM SQLFailProcess
+111700101130  |        END-EVALUATE.
+111800101210  |          MOVE ZEROS TO lt_LstTrnsFSeq.
+111900101210  |          MOVE ZEROS TO lt_LstFormSeq.
+112000101210  |
+112100101207  |
+112200101130  |        EXEC SQL
+112300101210  |        SELECT COALESCE(MAX(FRMTRP.FORM_SEQ_NO),0)
+112400101210  |               INTO :lt_LstTrnsFSeq
+112500101130  |        FROM MFAFRMTRP  FRMTRP
+112600120802           LEFT OUTER JOIN MFAACFORP ACFORP ON
+112700120802103424     FRMTRP.Form_Seq_No = ACFORP.Form_Seq_No AND
+112800120802103424     ACFORP.Form_Code = "TFSA"
+112900101130  |        WHERE  FRMTRP.PLACEMENT_DATE = :lt_Placement-DT AND
+113000120802  |               FRMTRP.TRANS_NO = :lt_Trans-no           AND
+113100120802103424     ACFORP.Form_Code = "TFSA"
+113200101130  |        END-EXEC.
+113300101130  |
+113400101130  |        EXEC SQL
+113500101210  |        SELECT COALESCE(MAX(ACFORP.FORM_SEQ_NO),0)
+113600101210  |               INTO :lt_LstFormSeq
+113700101130  |        FROM MFAACFORP  ACFORP
+113800120802  |        WHERE  ACFORP.Account_no  = :lt_Account-no   AND
+113900120802103424            Form_Code = "TFSA"
+114000130312111173            AND ACFORP.TAX_PERIOD= :li_TaxPeriod
+114100101130  |        END-EXEC.
+114200101130  |
+114300101130  |        Perform Add-TempFile3.
+114400101130  |
+114500101130  |   * ---------------------------------
+114600101130  |    Add-TempFile3.
+114700101130  |   * ---------------------------------
+114800101130  |
+114900101130  |         IF  lt_PRVACC_NO IS NOT EQUAL TO lt_Account-no
+115000101130  |            IF (lt_LstTrnsFSeq = lt_LstFormSeq       AND
+115100101130  |                 lt_LstTrnsFSeq > 0                  AND
+115200101130  |               lt_Cont-redem-cd IS NOT EQUAL TO
+115300101130  |                  lncc_1 OR lncc_2 OR lncc_43  )     OR
+115400101130  |
+115500101130  |               (lt_LstFormSeq >  lt_LstTrnsFSeq      AND
+115600101130  |                  lt_Cont-redem-cd IS EQUAL TO
+115700101130  |                   lncc_1 OR lncc_2 OR lncc_43 )
+115800101130  |               EXEC SQL
+115900101130  |                  INSERT INTO QTEMP/TMPTRN VALUES(
+116000101130  |                  :lt_Account-no , 0)
+116100101130  |               End-EXEC
+116200101210  |              MOVE SQLSTATE TO lc_sqlStates
+116300101210  |              EVALUATE TRUE
+116400101210  |                  WHEN lncc_sqlSuccessful
+116500101210  |                       CONTINUE
+116600101210  |                  WHEN lncc_sqlEnd
+116700101210  |                       CONTINUE
+116800101210  |                  WHEN OTHER
+116900101210  |                       SET lncc_Err_11 TO TRUE
+117000101210  |                       MOVE lncc_ErrorInsertingTRNTMP3
+117100101210  |                         TO lc_sqlErrShortDESCR
+117200101210  |                       PERFORM SQLFailProcess
+117300101210  |              END-EVALUATE
+117400101130  |            MOVE lt_Account-no  TO  lt_PRVACC_NO
+117500101130  |            END-IF
+11760010113083842       END-IF.
+117700101130
+117800070306      * ---------------------------------
+117900090807       CreateCursor.
+118000070306      * ---------------------------------
+118100210629      *116965 - begin
+118200210609           EXEC SQL
+118300210615            CALL SPTFSACUR1 (:lc_FirstRun, :li_FromDate, :li_ToDate)
+118400210609           END-EXEC.
+118500210813      *Above stored procedure replace the below SQL code commented out
+118600210615      *      WITH TFSATrades AS (
+118700210615      * 73998
+118800210615      *      SELECT Distinct Accntp.Account_No,
+118900210615      *             COALESCE(Accntp.Account_Type_Code, " "),
+119000210615      *             COALESCE(Accntp.Account_Status, " "),
+11910021061573998 *             COALESCE(Accntp.Creation_Date, 0),
+119200210615      *             Ivrp.Investor_No,
+119300210615      *             COALESCE(Ivrp.Last_Name, " "),
+119400210615      *             COALESCE(Ivrp.First_Name, " "),
+119500210615      *             COALESCE(Ivrp.Initials, " "),
+119600210615      *             COALESCE(Ivrp.Social_Insurance_No, 0),
+119700210615      *             COALESCE(Ivrp.Date_of_Birth, 0),
+119800210615      *             COALESCE(Ivradp.Addr_No, 0),
+119900210615      *             COALESCE(CHAR(TRIM(Addp.Street_No) || " " ||
+120000210615      *             TRIM(Addp.Street_Name) || " " ||
+120100210615      *             TRIM(Addp.Street_Type_Code) || " " ||
+120200210615      *             TRIM(Addp.Street_Dirct_Code), 47), " "),
+120300210615      *             COALESCE(Addp.City, " "),
+120400210615120548*             COALESCE(Addp.Province_Code, " "),
+120500210615120548*             CASE WHEN
+120600210615120548*             COALESCE(Addp.Country_Code, " ") IN("CAN", "USA")
+120700210615120548*             THEN COALESCE(Addp.Province_Code, " ")
+120800210615120548*             ELSE "ZZ" END,
+120900210615      *             COALESCE(Addp.Country_Code, " "),
+121000210615      *             COALESCE(Addp.Postal_Code, " "),
+121100210615R75665*             COALESCE(Addp.Misc_First_Addr_Line, " "),
+121200210615R77792*             COALESCE(Addp.Misc_Second_Addr_Line, " "),
+121300210615      *             COALESCE(IvrEtp.Documentation_Date,0),
+121400210615      *             Trnp.Placement_Date,
+121500210615      *             Trnp.Trans_No,
+121600210615      *             Trnp.Trade_Date,
+121700210615      *             Trnp.Gross_Amt,
+121800210615      *             Trnp.Investment_Code,
+121900210615      *             Trnp.Trans_Type_Code,
+122000210615      *             Trnp.Contr_Redem_Code,
+122100210615      *             COALESCE(Cntrrp.Contr_Redem_Code_Rule, " "),
+122200210615      *             COALESCE(Trnddp.Distr_Option_Code, " "),
+122300210615      *             Trnp.Trans_Status_Code,
+122400210615      *             Trnp.Reverse,
+122500210615      *             COALESCE(Trnt.Form_Seq_No, 0) as Seq
+122600210615      *RFS1003680 begins
+122700210615      *             ,Trnp.Net_Amt
+122800210615      *RFS1003680 ends
+122900210615179718*             ,Trnp.Trans_Origin_Code
+123000210615      *       FROM
+12310021061583842 *             Mfatrnp Trnp,
+123200210615  |   *             TRNP    Trnp
+12330021061592676 *             QTEMP/TRNP    Trnp
+123400210615  |   *             JOIN Mfaaccntp Accntp ON
+123500210615  |   *             Trnp.Account_No = Accntp.Account_No
+123600210615  |   *             JOIN Mfaacctyp Acctyp ON
+123700210615  |   *             Accntp.Account_Type_Code = Acctyp.Account_Type_Code
+123800210615  |   *             JOIN Mfaivrp  Ivrp    ON
+123900210615  |   *             Accntp.Investor_No = Ivrp.Investor_No
+124000210615  |   *             Mfaaccntp Accntp,
+124100210615  |   *             Mfaacctyp Acctyp,
+12420021061583842 *             Mfaivrp  Ivrp
+124300210615      *             LEFT OUTER JOIN Mfaivradp Ivradp
+124400210615      *               ON Ivrp.Investor_No = Ivradp.Investor_No      AND
+124500210615      *                  Ivradp.Addr_Type_Code = :lncc_IVR
+124600210615      *             LEFT OUTER JOIN Mfaivretp IvrEtp
+124700210615      *               ON Ivrp.Investor_No = IvrEtp.Investor_No
+124800210615      *             LEFT OUTER JOIN Mfaaddp  Addp
+124900210615      *               ON Ivradp.Addr_No = Addp.Addr_No
+125000210615      *             LEFT OUTER JOIN Mfatrnddp Trnddp
+125100210615      *               ON Trnp.Placement_Date
+125200210615      *                                 = Trnddp.Placement_Date     AND
+125300210615      *                  Trnp.Trans_No = Trnddp.Trans_No
+12540021061575392 *             LEFT OUTER JOIN Mfatrnidp Trnidp
+125500210615  |   *               ON Trnp.Placement_Date
+125600210615  |   *                                 = Trnidp.Placement_Date     AND
+12570021061575392 *                  Trnp.Trans_No = Trnidp.Trans_No
+125800210615      *             LEFT OUTER JOIN Mfacntrrp Cntrrp
+125900210615      *               ON Accntp.Account_Type_Code
+126000210615      *                               = Cntrrp.Account_Type_Code    AND
+126100210615      *                 Trnp.Contr_Redem_Code
+126200210615      *                                 = Cntrrp.Contr_Redem_Code
+126300210615      *             LEFT OUTER JOIN Tmptrn2 Trnt
+126400210615      *               ON Trnt.Account_No = Trnp.Account_No
+126500210615      *       WHERE
+12660021061583842 *           Trnp.Account_No = Accntp.Account_No               AND
+126700210615  |   *           Accntp.Investor_No = Ivrp.Investor_No             AND
+126800210615  |   *           Accntp.Account_Type_Code
+126900210615  |   *                              = Acctyp.Account_Type_Code     AND
+12700021061583842 *           Acctyp.Account_Type_Rule = :lncc_9                AND
+127100210615      *           Trnp.Trans_Status_Code IN
+127200210615      *                          (:lncc_HST, :lncc_HSC, :lncc_RVS)  AND
+127300210615      *           ((EXISTS (Select Trnt.Account_No FROM
+127400210615      *            TMPTRN Trnt WHERE Trnt.Account_No =
+127500210615      *            Trnp.Account_No) AND  :lc_FirstRun = :lncc_N)    OR
+127600210615      *            :lc_FirstRun = :lncc_Y)                          AND
+127700210615      *            ((Trnt.Account_No =
+127800210615      *            Trnp.Account_No  AND  :lc_FirstRun = :lncc_N)    OR
+127900210615      *            :lc_FirstRun = :lncc_Y)                          AND
+128000210615      *           (Trnp.Trade_Date >= :li_FromDate                  AND
+128100210615      *                         Trnp.Trade_Date <= :li_ToDate)      AND
+128200210615      *           ((Trnp.Contr_Redem_Code = :lncc_DIST              AND
+128300210615      *            Trnp.Payment_Type_Code NOT IN
+128400210615006722*                              (:lncc_N, :lncc_R)             AND
+128500210615006722*                              (:lncc_N, :lncc_R,:lncc_D)     AND
+128600210615      *            Trnddp.Distr_Option_Code = :lncc_C)              OR
+12870021061575392 *            (Trnp.Contr_Redem_Code = :lncc_DIST              AND
+128800210615  |   *            Trnp.Payment_Type_Code NOT IN
+128900210615006722*                              (:lncc_N, :lncc_R)             AND
+129000210615006722*                              (:lncc_N, :lncc_R,:lncc_D)     AND
+12910021061575392 *            Trnidp.Distr_Option_Code = :lncc_C)              OR
+129200210615      *RFS1007400 Begins
+129300210615      *            (Cntrrp.Contr_Redem_Code_Rule IN
+129400210615      *                              (:lncc_1, :lncc_2, :lncc_43)    AND
+129500210615      *              Trnp.Contr_Redem_Code <> :lncc_DIST))
+129600210615      *           ((Cntrrp.Contr_Redem_Code_Rule IN
+129700210615      *                             ( :lncc_2, :lncc_43)    OR
+129800210615      *          (Cntrrp.Contr_Redem_Code_Rule = :lncc_1  AND
+129900210615      *          Trnp.Trans_Origin_Code NOT IN ("GIR", "GIA"))) AND
+130000210615      *             Trnp.Contr_Redem_Code <> :lncc_DIST))
+130100210615      *RFS1007400 Ends
+130200210615      *** RFS 73998 starts ****
+130300210615      *      )
+130400210615      *** RFS RFS1017433 starts ****
+130500210615      *      (
+130600210615      *** RFS RFS1017433 Ends ****
+130700210615      *      SELECT * FROM TFSATrades
+130800210615
+130900210615           EXEC SQL
+131000210615             DECLARE C_TFSATrans  CURSOR FOR (
+131100210608             SELECT * FROM SFTFSACUR1
+131200210629      *116965 - end
+131300091111             UNION
+131400091110             SELECT Accntp.Account_No,
+131500091110                    COALESCE(Accntp.Account_Type_Code, " "),
+131600091110                    COALESCE(Accntp.Account_Status, " "),
+131700091113                    Accntp.Creation_Date,
+131800091110                    Ivrp.Investor_No,
+131900091110                    COALESCE(Ivrp.Last_Name, " "),
+132000091110                    COALESCE(Ivrp.First_Name, " "),
+132100091110                    COALESCE(Ivrp.Initials, " "),
+132200091110                    COALESCE(Ivrp.Social_Insurance_No, 0),
+132300091110                    COALESCE(Ivrp.Date_of_Birth, 0),
+132400091110                    COALESCE(Ivradp.Addr_No, 0),
+132500091110                    COALESCE(CHAR(TRIM(Addp.Street_No) || " " ||
+132600091110                    TRIM(Addp.Street_Name) || " " ||
+132700091110                    TRIM(Addp.Street_Type_Code) || " " ||
+132800091110                    TRIM(Addp.Street_Dirct_Code), 47), " "),
+132900091110                    COALESCE(Addp.City, " "),
+133000130527120548*             COALESCE(Addp.Province_Code, " "),
+133100130527120548              CASE WHEN
+133200130527120548              COALESCE(Addp.Country_Code, " ") IN("CAN", "USA")
+133300130527120548              THEN COALESCE(Addp.Province_Code, " ")
+133400130527120548              ELSE "ZZ" END,
+133500091110                    COALESCE(Addp.Country_Code, " "),
+133600091110                    COALESCE(Addp.Postal_Code, " "),
+133700091204R75665              COALESCE(Addp.Misc_First_Addr_Line, " "),
+133800100202R77792              COALESCE(Addp.Misc_Second_Addr_Line, " "),
+133900091110                    COALESCE(IvrEtp.Documentation_Date,0),
+134000091110                    0,
+134100091110                    0,
+134200091110                    0,
+134300091110                    0,
+134400091111                    " ",
+134500091111                    " ",
+134600091111                    " ",
+134700091110                    " ",
+134800091110                    " ",
+134900091110                    " ",
+135000101212                    " ",
+135100210629116965              0
+13520021061083842 *             0  AS Seq
+135300210615      *RFS1003680 begins
+135400180625                   ,0
+135500180625      *RFS1003680 ends
+135600180808179718             ," "
+135700091110              FROM
+13580010113083842               Mfaaccntp Accntp
+135900210629116965*             JOIN Mfaacctyp Acctyp ON
+136000210629116965              inner JOIN Mfaacctyp Acctyp ON
+136100101130  |                 Accntp.Account_Type_Code
+136200101130  |                                  = Acctyp.Account_Type_Code
+136300210629116965              AND Acctyp.Account_type_Rule = :lncc_9
+136400210629116965*              JOIN Mfaivrp  Ivrp    ON
+136500210629116965              inner JOIN Mfaivrp  Ivrp    ON
+136600101130  |                 Accntp.Investor_No = Ivrp.Investor_No
+136700101130  |   *             Mfaaccntp Accntp,
+136800101130  |   *             Mfaacctyp Acctyp,
+13690010113083842 *             Mfaivrp  Ivrp
+137000091110                    LEFT OUTER JOIN Mfaivradp Ivradp
+137100091110                      ON Ivrp.Investor_No = Ivradp.Investor_No      AND
+137200091110                         Ivradp.Addr_Type_Code = :lncc_IVR
+137300091110                    LEFT OUTER JOIN Mfaivretp IvrEtp
+137400091110                      ON Ivrp.Investor_No = IvrEtp.Investor_No
+137500091110                    LEFT OUTER JOIN Mfaaddp  Addp
+137600091110                      ON Ivradp.Addr_No = Addp.Addr_No
+137700210629116965              EXCEPTION JOIN SFTFSACUR1 Trades
+137800210629116965                ON Trades.Account_No = Accntp.Account_No
+137900091110
+138000091110              WHERE
+138100091112                  :lc_FirstRun = :lncc_Y                            AND
+13820010113083842 *           Accntp.Investor_No = Ivrp.Investor_No             AND
+138300101130  |   *           Accntp.Account_Type_Code
+138400101130  |   *                              = Acctyp.Account_Type_Code     AND
+13850010113083842 *           Acctyp.Account_Type_Rule = :lncc_9                AND
+138600210629116965*           Acctyp.Account_Type_Rule = :lncc_9                AND
+138700190807                  Accntp.Creation_Date <= :li_CutOffDate
+138800091111
+138900091118      *** RFS 73998 starts ****
+139000190807      *** RFS RFS1017433 starts ****
+139100091118
+139200190807      *      ORDER BY Account_No
+139300190807             )
+139400190807             ORDER BY Accntp.Account_No
+139500190807
+139600190807      *** RFS RFS1017433 ends ****
+139700210615             FOR FETCH ONLY
+139800210624             OPTIMIZE FOR ALL ROWS
+139900070306           END-EXEC.
+140000070308
+140100070308           EXEC SQL
+140200090817             OPEN C_TFSATrans
+140300070308           END-EXEC.
+140400070308
+140500070308           MOVE SQLSTATE TO lc_sqlStates.
+140600070308           IF NOT lncc_sqlSuccessful
+140700090729              SET lncc_Err_10 TO TRUE
+140800090820              MOVE lncc_ErrorOpeningCursor  TO lc_sqlErrShortDESCR
+140900070308              PERFORM SQLFailProcess
+141000070308           END-IF.
+141100070306
+14120009120173997 * ---------------------------------
+141300091201       CreateCursor2.
+14140009120173997 * ---------------------------------
+141500091201           EXEC SQL
+141600091201             DECLARE C_TFSAAcct   CURSOR FOR
+141700210629116965*       SELECT Distinct Tmptrn2.Account_No,
+141800210629116965        SELECT Tmptrn2.Account_No,
+141900091201                    COALESCE(Accntp.Account_Type_Code, " "),
+142000091201                    COALESCE(Accntp.Account_Status, " "),
+142100091201                    Accntp.Creation_Date,
+142200091201                    Ivrp.Investor_No,
+142300091201                    COALESCE(Ivrp.Last_Name, " "),
+142400091201                    COALESCE(Ivrp.First_Name, " "),
+142500091201                    COALESCE(Ivrp.Initials, " "),
+142600091201                    COALESCE(Ivrp.Social_Insurance_No, 0),
+142700091201                    COALESCE(Ivrp.Date_of_Birth, 0),
+142800091201                    COALESCE(Ivradp.Addr_No, 0),
+142900091201                    COALESCE(CHAR(TRIM(Addp.Street_No) || " " ||
+143000091201                    TRIM(Addp.Street_Name) || " " ||
+143100091201                    TRIM(Addp.Street_Type_Code) || " " ||
+143200091201                    TRIM(Addp.Street_Dirct_Code), 47), " "),
+143300091201                    COALESCE(Addp.City, " "),
+143400130527120548*             COALESCE(Addp.Province_Code, " "),
+143500130527120548              CASE WHEN
+143600130527120548              COALESCE(Addp.Country_Code, " ") IN("CAN", "USA")
+143700130527120548              THEN COALESCE(Addp.Province_Code, " ")
+143800130527120548              ELSE "ZZ" END,
+143900091201                    COALESCE(Addp.Country_Code, " "),
+144000091201                    COALESCE(Addp.Postal_Code, " "),
+144100091204                    COALESCE(Addp.Misc_First_Addr_Line, " "),
+144200100324R77792              COALESCE(Addp.Misc_Second_Addr_Line, " "),
+144300091201                    COALESCE(IvrEtp.Documentation_Date,0),
+144400091201                    0,
+144500091201                    0,
+144600091201                    0,
+144700091201                    0,
+144800091201                    " ",
+144900091201                    " ",
+145000091201                    " ",
+145100091201                    " ",
+145200091201                    " ",
+145300091201                    " ",
+145400101212                    " ",
+14550010121383842               COALESCE(Tmptrn2.Form_Seq_No, 0)
+145600180625      *rfs1003680 begins
+145700180625                    ,0
+145800180625      *rfs1003680 ends
+145900180808179718              ," "
+146000091201              FROM
+146100101212                    QTEMP/TMPTRN2
+146200091202                    EXCEPTION JOIN  WRKTFSPRE  TFSPRE  ON
+146300101212                    TMPTRN2.Account_No = TFSPRE.Account_No
+146400091202
+146500210629116965*              JOIN Mfaaccntp Accntp ON
+146600210629116965              inner JOIN Mfaaccntp Accntp ON
+146700101212                    Accntp.Account_No = TMPTRN2.Account_No
+146800091202
+146900210629116965*              JOIN MfaIvrp  Ivrp ON
+147000210629116965              inner JOIN MfaIvrp  Ivrp ON
+147100091201                    Accntp.Investor_No = Ivrp.Investor_No
+147200091201
+147300130312111173*             JOIN MfaIvrClp  IvrClp ON
+147400130312      *             Ivrp.Investor_No = IvrClp.Investor_No
+147500130312100925*             AND TMPTRN2.Account_No = IvrClp.Account_No
+147600091201
+147700091201                    LEFT OUTER JOIN Mfaivradp Ivradp
+147800091201                      ON Ivrp.Investor_No = Ivradp.Investor_No      AND
+147900091201                         Ivradp.Addr_Type_Code = :lncc_IVR
+148000091201                    LEFT OUTER JOIN Mfaivretp IvrEtp
+148100091201                      ON Ivrp.Investor_No = IvrEtp.Investor_No
+148200091201                    LEFT OUTER JOIN Mfaaddp  Addp
+148300091201                      ON Ivradp.Addr_No = Addp.Addr_No
+148400091201
+148500091201              WHERE
+148600091202                  :lc_FirstRun <>  :lncc_Y
+148700091201
+148800101212             ORDER BY TMPTRN2.Account_No
+148900091201             FOR FETCH ONLY
+149000091201             OPTIMIZE FOR ALL ROWS
+149100091201           END-EXEC.
+149200091201
+149300091201           EXEC SQL
+149400091201             OPEN C_TFSAAcct
+149500091201           END-EXEC.
+149600091201
+149700091201           MOVE SQLSTATE TO lc_sqlStates.
+149800091201           IF NOT lncc_sqlSuccessful
+149900091202              SET lncc_Err_26  TO TRUE
+150000091202              MOVE lncc_ErrorOpeningCursor2  TO lc_sqlErrShortDESCR
+150100091201              PERFORM SQLFailProcess
+150200091201           END-IF.
+150300091201
+150400070306      * ---------------------------------
+150500070306       DetailProcess.
+150600070306      * ---------------------------------
+150700070314           SET lb_EndOfCursorFalse TO TRUE.
+150800070308           PERFORM ProcessCursor
+150900070308             UNTIL lb_EndOfCursorTrue.
+151000070308
+15110009120173997 * ---------------------------------
+151200091201       DetailProcess2.
+15130009120173997 * ---------------------------------
+151400091201           SET lb_EndOfCursorFalse TO TRUE.
+151500091201           PERFORM ProcessCursor2
+151600091201             UNTIL lb_EndOfCursorTrue.
+151700091201
+151800070308      * ---------------------------------
+151900070308       ProcessCursor.
+152000070308      * ---------------------------------
+152100090807           INITIALIZE ltb_FetchTFSATransTable.
+152200070308
+152300070308           EXEC SQL
+152400090807             FETCH NEXT FROM C_TFSATrans
+152500070308               FOR :lnci_MaxFetchRec ROWS
+152600090817              INTO :ltb_FetchTFSATrans
+152700070308           END-EXEC.
+152800070308
+152900070308           MOVE SQLSTATE TO lc_sqlStates.
+153000210603           EVALUATE TRUE
+153100070308               WHEN lncc_sqlSuccessful
+153200070308                    COMPUTE li_NoOfRowsFetched = SQLERRD(3)
+153300070308               WHEN lncc_sqlEnd
+153400070308                    SET lb_EndOfCursorTrue TO TRUE
+153500070308                    COMPUTE li_NoOfRowsFetched = SQLERRD(3)
+153600070308               WHEN OTHER
+153700070315                    SET lncc_Err_20 TO TRUE
+153800070308                    MOVE lncc_ErrorFetchingCursor
+153900070308                      TO lc_sqlErrShortDESCR
+154000070308                    PERFORM SQLFailProcess
+154100070308           END-EVALUATE.
+154200070308
+154300070308           COMPUTE li_Counter = 1.
+154400210614           PERFORM ProcessTFSATrans   TEST BEFORE
+154500070308             UNTIL li_Counter > li_NoOfRowsFetched.
+154600070308
+154700091201      * ---------------------------------
+154800091201       ProcessCursor2.
+154900091201      * ---------------------------------
+155000091201           INITIALIZE ltb_FetchTFSATransTable.
+155100091201
+155200091201           EXEC SQL
+155300091201             FETCH NEXT FROM C_TFSAAcct
+155400091201               FOR :lnci_MaxFetchRec ROWS
+155500091201              INTO :ltb_FetchTFSATrans
+155600091201           END-EXEC.
+155700091201
+155800091201           MOVE SQLSTATE TO lc_sqlStates.
+155900091201           EVALUATE TRUE
+156000091201               WHEN lncc_sqlSuccessful
+156100091201                    COMPUTE li_NoOfRowsFetched = SQLERRD(3)
+156200091201               WHEN lncc_sqlEnd
+156300091201                    SET lb_EndOfCursorTrue TO TRUE
+156400091201                    COMPUTE li_NoOfRowsFetched = SQLERRD(3)
+156500091201               WHEN OTHER
+156600091202                    SET lncc_Err_27  TO TRUE
+156700091202                    MOVE lncc_ErrorFetchingCursor2
+156800091201                      TO lc_sqlErrShortDESCR
+156900091201                    PERFORM SQLFailProcess
+157000091201           END-EVALUATE.
+157100091201
+157200091201           COMPUTE li_Counter = 1.
+157300210614           PERFORM ProcessTFSATrans   TEST BEFORE
+157400091201             UNTIL li_Counter > li_NoOfRowsFetched.
+157500091201
+157600070306      * ---------------------------------
+157700090807       ProcessTFSATrans.
+157800070308      * ---------------------------------
+157900090807           PERFORM SaveArrayFields.
+158000090820           PERFORM PopulateWRKTFSPRE.
+158100070309           COMPUTE li_Counter = li_Counter + 1.
+158200070308
+158300070308      * ---------------------------------
+158400070309       SaveArrayFields.
+158500070309      * ---------------------------------
+158600070607
+158700070309           MOVE ltb_AccountNo (li_Counter) TO li_SaveAccountNo.
+15880009111373998      MOVE ltb_AcctCreation (li_Counter) TO ld_SaveCreationDte.
+158900090807           MOVE ltb_PlacementDate (li_Counter)
+159000090807                                TO li_SavePlacementDate.
+159100090807           MOVE ltb_TransNo (li_Counter) TO li_SaveTransNo.
+159200090813           MOVE ltb_InvestorNo(li_Counter) TO li_SaveInvestorNo.
+159300090817           MOVE ltb_TradeDate(li_Counter) TO li_SaveTradeDate.
+159400090817           MOVE ltb_InvestmentCode(li_Counter)
+159500090817                                   TO li_SaveInvestmentCode.
+159600090819           MOVE ltb_TransStatusCode(li_Counter)
+159700090819                                   TO lc_SaveTransStatusCode.
+159800090903           MOVE ltb_Reversed(li_Counter)
+159900090903                                   TO lc_SaveReversed.
+160000091001           MOVE ltb_TransTypeCode(li_Counter)
+160100091001                                   TO lc_SaveTransTypeCode.
+16020009110675392      MOVE ltb_GrossAmt(li_Counter)
+16030009110675392                              TO ln_SaveGrossAmount.
+16040010121283842      MOVE ltb_FrmSeqNo(li_Counter)
+16050010121283842                              TO ln_SaveSeqNo.
+160600180808179718     MOVE ltb_TransOriginCode(li_Counter)
+160700180808179718                             TO lc_SaveTransOriginCode.
+160800180808
+160900090807
+161000090807      * ---------------------------------
+161100090807       PopulateWRKTFSPRE.
+161200090807      * ---------------------------------
+161300090807           INITIALIZE WRKTFSPRE OF lc_WRKTFSPRERec.
+16140009110575392      INITIALIZE   li_ACCCloseDate,
+161500091105  |                     lc_SaveAddress,
+161600091105  |                     li_FORSpouseSIN,
+161700091105  |                     lc_FORSpouseLastName,
+161800091105  |                     lc_FORSpouseFirstName,
+16190010020175392                   lc_FORSpouseInitials,
+16200010020178540                   ln_MVAtDeath.
+162100091105
+162200090819           SET lb_GoodTransactionYes  TO TRUE.
+162300090819
+16240010020178540 *    If lc_FirstRun = lncc_Y and
+162500100201  |   *                    lb_SaveReversedYes
+16260010020173997**       SET lb_GoodTransactionNo   TO TRUE
+16270010020173997 *       MOVE 0 TO  li_SaveTradeDate
+16280010020178540 *    End-If.
+162900091106
+16300009110975392      If ln_SaveGrossAmount = 0 and li_SaveTradeDate not = 0
+16310010020178540 *       SET lb_GoodTransactionNo   TO TRUE
+16320010020178540         Move 0         To  li_SaveTradeDate
+16330009110675392      End-If.
+163400090807
+16350010020178540 *    If lc_FirstRun = lncc_N   and
+16360010020178540      If lc_SaveTransStatusCode not= lncc_RVS
+163700090903              and lb_SaveReversedYes
+163800110929100693*       SET lb_GoodTransactionNo   TO TRUE
+163900110929100693        MOVE 0 TO  li_SaveTradeDate
+164000090903           End-If.
+164100100201
+16420010020178540        If ltb_AccountStatus(li_Counter) = lncc_X
+164300100201  |             SET lb_GoodTransactionNo   TO TRUE
+16440010020178540        End-If.
+164500091001
+16460010020178540      If lb_GoodTransactionYes      AND
+164700100201              (lc_SaveTransTypeCode = lncc_SWI OR
+164800091002              lc_SaveTransTypeCode = lncc_TRI OR
+164900100201              lc_SaveTransTypeCode = lncc_BUY)
+165000091002                 PERFORM DetermineSameAccountSWI
+165100091001           End-If.
+165200180808      *RFS179718 - Starts
+165300180814           If lc_SaveTransTypeCode    = lncc_BUY  AND
+165400180814               lc_SaveTransOriginCode = lncc_GIR
+165500180814           SET lb_GoodTransactionNo   TO TRUE
+165600180808           End-If.
+165700180808      *RFS179718 - Ends
+165800091001
+16590010020178540      If lb_GoodTransactionYes      AND
+166000100201              (lc_SaveTransTypeCode = lncc_SWO OR
+166100100201              lc_SaveTransTypeCode = lncc_TRO)
+166200091002                 PERFORM DetermineSameAccountSWO
+166300091001           End-If.
+166400090903
+16650009111273998        If ltb_AccountStatus(li_Counter) = lncc_C
+166600091112  |             PERFORM GetAccountClosigDate
+16670009111373998        End-If.
+166800120504
+166900120503R97177***** For Conversion In and Out: For Annual Filing XML
+167000120504  |
+167100120503  |          If ltb_AccountStatus(li_Counter) = lncc_A
+167200120503  V             PERFORM GetAccountTFSAClose4AFXML
+167300120503R97177       End-If.
+167400091113
+167500171030      *RFS174729 Starts
+16760017103073998 *    If lc_FirstRun = lncc_Y AND
+167700171030  |   *       ltb_AccountStatus(li_Counter) = lncc_C  AND
+167800171030174729     IF ltb_AccountStatus(li_Counter) = lncc_C  AND
+167900171030      *RFS174729 End
+168000091113  |           li_ACCCloseDate < li_FromDate
+168100091112  |           SET lb_GoodTransactionNo   TO TRUE
+16820009111373998      End-If.
+168300100201
+16840010020178540        If li_ACCCloseYY not = li_TaxPeriodYY
+168500100201  |             Move Zeros    To   li_ACCCloseDate
+16860010020178540        End-If.
+168700091112
+16880009111373998      PERFORM DetermineNewAcct
+168900091113  |
+169000091113  |        If lc_FirstRun = lncc_Y AND
+169100100113  |           li_FirstTradeDate > li_ToDate   AND
+169200100113  |           ld_SaveCreationDte > li_ToDate
+169300091113  |           SET lb_GoodTransactionNo   TO TRUE
+16940009111373998      End-If.
+169500091113
+16960010032580429      Move ltb_HolderDTHDate(li_Counter) To li_HolderDTHDate
+16970010032580429      PERFORM GetPreviousAccHolderInfo
+169800151207
+169900151218      * RFS143967 - START
+17000015120780429***   If lc_FirstRun NOT = lncc_Y AND
+170100151207  |  ***     ((ld_PREInvDthYY = 0 AND li_DTHDateYY > li_TaxPeriodYY) OR
+170200151207  |  ***      ld_PREInvDthYY >  li_TaxPeriodYY)
+170300151207  |  ***      SET lb_GoodTransactionNo   TO TRUE
+17040015120780429***   End-If.
+170500151218      * RFS143967 - END
+170600100325
+170700090819           If lb_GoodTransactionYes
+170800090819             If lc_FirstRun = lncc_Y
+170900090819                Move lncc_O   TO    lc_RecordType
+171000090819             Else
+171100090807              PERFORM DetermineRecType
+171200090819             End-If
+171300090807
+17140009110575392 * Report former spouse info only if there is marriage breakdown trans
+17150009110575392 * perform routine moved to the place where MBKD amount is populated
+17160009110575392 *      PERFORM GetFormerSpouseInfo
+17170010032580429 *      Move ltb_HolderDTHDate(li_Counter) To li_HolderDTHDate
+17180021082778540        If li_DTHDateYY not = li_TaxPeriodYY
+171900210827  |             Move 0        To   li_HolderDTHDate
+17200021082778540        End-If
+17210010020178540        If li_HolderDTHDate > 0
+172200100201  |            PERFORM GetFmvAtTimeofDeath
+17230010020178540        End-If
+17240010032580429 *      PERFORM GetPreviousAccHolderInfo
+172500090819             PERFORM GetExchangeRate
+17260010020178540        If lb_SaveReversedYes
+172700100201  |            Move 0         To  li_SaveTradeDate
+17280010020178540        End-If
+172900091112
+173000120612R97177*    If lc_FirstRun = lncc_Y AND
+173100120612  |        IF li_SaveTradeDate <= li_ACCNewDate
+173200120507  V            Move 0         To  li_SaveTradeDate
+173300120507R97177     End-If
+173400120507
+173500090819             PERFORM PopulateWRKTFSPRECont
+173600090819           End-If.
+173700070319
+173800090807      * ---------------------------------
+173900090807       PopulateWRKTFSPRECont.
+174000090807      * ---------------------------------
+174100090818           MOVE lc_RecordType  TO Record-Type OF lc_WRKTFSPRERec.
+174200090818           MOVE li_SaveAccountNo TO Account-No OF lc_WRKTFSPRERec.
+174300090807           MOVE li_SavePlacementDate
+174400090818                TO Placement-Date  OF lc_WRKTFSPRERec.
+174500090818           MOVE li_SaveTransNo  TO Trans-No  OF lc_WRKTFSPRERec.
+174600090820           MOVE li_SaveTradeDate
+174700090818                                 TO Trade-Date  OF lc_WRKTFSPRERec.
+17480010102580370      If li_PRETempInvDthYY > li_TaxPeriodYY
+17490010102580370        MOVE li_PRETempInvestorNo
+175000101025               TO Investor-No  OF lc_WRKTFSPRERec
+17510010102580370      else
+175200101025             MOVE li_SaveInvestorNo
+175300101025               TO Investor-No  OF lc_WRKTFSPRERec
+17540010102580370      End-If.
+175500090807           MOVE ltb_ContRedemCode(li_Counter)
+175600090818             TO Contr-Redem-Code OF lc_WRKTFSPRERec.
+175700090807           MOVE ltb_ContRedemRule(li_Counter)
+175800090818             TO Contr-Redem-Code-Rule OF lc_WRKTFSPRERec.
+175900090807           EVALUATE TRUE
+176000090819               WHEN ltb_ContRedemRule(li_Counter) = lncc_1 and
+176100090819                    lc_SaveTransStatusCode not = lncc_RVS
+176200180709
+176300180709                    MOVE ltb_GrossAmt(li_Counter)
+176400090818                      TO Contribution-Amt OF lc_WRKTFSPRERec
+176500090819               WHEN (ltb_ContRedemRule(li_Counter) = lncc_2  OR
+176600090819                    ltb_ContRedemCode(li_Counter) = lncc_DIST) AND
+176700090819                    lc_SaveTransStatusCode not = lncc_RVS
+176800180625      * RFS1003680 begins
+176900180625      *              MOVE ltb_GrossAmt(li_Counter)
+177000180625      *                TO Withdrawal-Amt OF lc_WRKTFSPRERec
+177100180625                     MOVE ltb_NetAmt(li_Counter)
+177200180625                       TO Withdrawal-Amt OF lc_WRKTFSPRERec
+177300180625      * RFS1003680 ends
+177400090807               WHEN ltb_ContRedemRule(li_Counter) = lncc_43  AND
+177500090807                    (ltb_TransTypeCode(li_Counter) = lncc_BUY OR
+177600180709                     ltb_TransTypeCode(li_Counter) = lncc_TRI OR
+177700090819                     ltb_TransTypeCode(li_Counter) = lncc_SWI) AND
+177800090819                     lc_SaveTransStatusCode not = lncc_RVS
+177900180627                    MOVE ltb_GrossAmt(li_Counter)
+178000180627                      TO Marriage-Bkdwn-In OF lc_WRKTFSPRERec
+17810009110575392               PERFORM GetFormerSpouseInfo
+178200090807               WHEN ltb_ContRedemRule(li_Counter) = lncc_43  AND
+178300090807                    (ltb_TransTypeCode(li_Counter) = lncc_SEL OR
+178400090807                     ltb_TransTypeCode(li_Counter) = lncc_TRO OR
+178500090819                     ltb_TransTypeCode(li_Counter) = lncc_SWO) AND
+178600090819                     lc_SaveTransStatusCode not = lncc_RVS
+178700180627      *RFS1003680 begins
+178800180627      *             MOVE ltb_GrossAmt(li_Counter)
+178900180627      *               TO Marriage-Bkdwn-Out OF lc_WRKTFSPRERec
+179000210218      *RFS1111749 Starts
+179100210218      *             MOVE ltb_NetAmt(li_Counter)
+179200210218      *               TO Withdrawal-Amt OF lc_WRKTFSPRERec
+179300210218                    MOVE ltb_NetAmt(li_Counter)
+179400210218                      TO Marriage-Bkdwn-Out OF lc_WRKTFSPRERec
+179500210218      *RFS1111749 Ends
+179600180627      *RFS1003680 ends
+17970009110575392               PERFORM GetFormerSpouseInfo
+179800090819               WHEN lc_SaveTransStatusCode = lncc_RVS
+179900090819                    MOVE 0
+180000090819                      TO Marriage-Bkdwn-Out OF lc_WRKTFSPRERec
+180100090819                         Marriage-Bkdwn-In OF lc_WRKTFSPRERec
+180200090819                         Withdrawal-Amt OF lc_WRKTFSPRERec
+180300180625                         Contribution-Amt OF lc_WRKTFSPRERec
+180400090807           END-EVALUATE.
+180500090807           MOVE ltb_InvestorSIN(li_Counter)
+180600090818             TO Investor-SIN OF lc_WRKTFSPRERec.
+180700090821           MOVE ltb_InvestorDOB(li_Counter)
+180800090821             TO Investor-DOB OF lc_WRKTFSPRERec.
+180900090807           MOVE ltb_IvrLastName(li_Counter)
+181000090818             TO Last-Name OF lc_WRKTFSPRERec.
+181100090807           MOVE ltb_IvrFirstName(li_Counter)
+181200090818             TO First-Name OF lc_WRKTFSPRERec.
+181300090807           MOVE ltb_IvrInitials(li_Counter)
+181400090807             TO Initials OF lc_WRKTFSPRERec.
+181500091201R75665*    MOVE ltb_HolderDTHDate(li_Counter)
+181600091201R75665     MOVE li_HolderDTHDate
+181700090818             TO Acct-Hold-Dth-Date OF lc_WRKTFSPRERec.
+181800101025goran
+181900101025      *RFS 80370 - Begins
+182000101025           If li_PRETempInvDthYY > li_TaxPeriodYY
+182100101025             MOVE li_PRETempInvestorSIN
+182200101025               TO Investor-SIN OF lc_WRKTFSPRERec
+182300101025             MOVE li_PRETempInvestorDOB
+182400101025               TO Investor-DOB OF lc_WRKTFSPRERec
+182500101025             MOVE lc_PRETempInvestorLastName
+182600101025               TO Last-Name OF lc_WRKTFSPRERec
+182700101025             MOVE lc_PRETempInvestorFirstName
+182800101025               TO First-Name OF lc_WRKTFSPRERec
+182900101025             MOVE lc_PRETempInvestorInitials
+183000101025               TO Initials OF lc_WRKTFSPRERec
+183100101025             MOVE lc_PRETempInvestorAddressNo
+183200101025               TO IVR-Addr-No OF lc_WRKTFSPRERec
+183300101025             MOVE lc_PRETempInvestorAddress
+183400101025               TO lc_SaveAddress
+183500101025             IF lc_SaveAddress2 = " "
+183600101025             MOVE lc_SaveAddress1
+183700101025               TO Investor-Addr1 OF lc_WRKTFSPRERec
+183800101025             MOVE lc_PRETempInvestorMisc1AddLine
+183900101025               TO lc_SaveAddress2
+184000101025               IF lc_SaveAddress2 = " "
+184100101025                 MOVE lc_PRETempInvestorMisc2AddLine
+184200101025                   TO lc_SaveAddress2
+184300101025               END-IF
+184400101025             END-IF
+184500101025             IF lc_SaveAddress1 = " "
+184600101025               MOVE lc_PRETempInvestorMisc1AddLine
+184700101025                 TO lc_SaveAddress1
+184800101025               MOVE lc_PRETempInvestorMisc2AddLine
+184900101025                 TO lc_SaveAddress2
+185000101025               IF lc_SaveAddress1 = " "
+185100101025                 MOVE lc_PRETempInvestorMisc2AddLine
+185200101025                   TO lc_SaveAddress1
+185300101025                 MOVE lncc_Space
+185400101025                   TO lc_SaveAddress2
+185500101025                  END-IF
+185600101025                END-IF
+185700101025                MOVE lc_SaveAddress1
+185800101025                  TO Investor-Addr1 OF lc_WRKTFSPRERec
+185900101025                MOVE lc_SaveAddress2
+186000101025                  TO Investor-Addr2 OF lc_WRKTFSPRERec
+186100101025                MOVE lc_PRETempInvestorCity
+186200101025                  TO Investor-City OF lc_WRKTFSPRERec
+186300101025                MOVE lc_PRETempInvestorProvinceCd
+186400101025                  TO Investor-Prv OF lc_WRKTFSPRERec
+186500101025                MOVE lc_PRETempInvestorCountryCd
+186600101025                  TO Investor-Cntry OF lc_WRKTFSPRERec
+186700101025                MOVE lc_PRETempInvestorPostalCd
+186800101027                  TO Investor-Postal OF lc_WRKTFSPRERec
+186900101027               MOVE ln_ExchangeRate
+187000101027                 TO Exchange-Rate  OF lc_WRKTFSPRERec
+187100101025           Else
+187200101025      *RFS 80370 - Ends
+187300101025             MOVE ltb_InvestorSIN(li_Counter)
+187400101025               TO Investor-SIN OF lc_WRKTFSPRERec
+187500101025             MOVE ltb_InvestorDOB(li_Counter)
+187600101025               TO Investor-DOB OF lc_WRKTFSPRERec
+187700101025             MOVE ltb_IvrLastName(li_Counter)
+187800101025               TO Last-Name OF lc_WRKTFSPRERec
+187900101025             MOVE ltb_IvrFirstName(li_Counter)
+188000101025               TO First-Name OF lc_WRKTFSPRERec
+188100101025             MOVE ltb_IvrInitials(li_Counter)
+188200101025               TO Initials OF lc_WRKTFSPRERec
+188300101025             MOVE ltb_IvrAddressNo(li_Counter)
+188400101025               TO IVR-Addr-No OF lc_WRKTFSPRERec
+188500101025             MOVE ltb_IvrAddress(li_Counter)
+188600101025               TO lc_SaveAddress
+188700101025R77792     IF lc_SaveAddress2 = " "
+188800101025|     *    MOVE lc_SaveAddress1
+188900101025|     *      TO Investor-Addr1 OF lc_WRKTFSPRERec
+189000101025R75665     MOVE ltb_IvrMiscFstAddr(li_Counter)
+189100101025R75665       TO lc_SaveAddress2
+189200101025|            IF lc_SaveAddress2 = " "
+189300101025|              MOVE ltb_IvrMiscSndAddr(li_Counter)
+189400101025|                TO lc_SaveAddress2
+189500101025|            END-IF
+189600101025|          END-IF
+189700101025|          IF lc_SaveAddress1 = " "
+189800101025|            MOVE ltb_IvrMiscFstAddr(li_Counter)
+189900101025|              TO lc_SaveAddress1
+190000101025|            MOVE ltb_IvrMiscSndAddr(li_Counter)
+190100101025|              TO lc_SaveAddress2
+190200101025|            IF lc_SaveAddress1 = " "
+190300101025|              MOVE ltb_IvrMiscSndAddr(li_Counter)
+190400101025|                TO lc_SaveAddress1
+190500101025|              MOVE lncc_Space
+190600101025|                TO lc_SaveAddress2
+190700101025|            END-IF
+190800101025|          END-IF
+190900101025|          MOVE lc_SaveAddress1
+191000101025R77792       TO Investor-Addr1 OF lc_WRKTFSPRERec
+191100101025           MOVE lc_SaveAddress2
+191200101025             TO Investor-Addr2 OF lc_WRKTFSPRERec
+191300101025           MOVE ltb_IvrCity(li_Counter)
+191400101025             TO Investor-City OF lc_WRKTFSPRERec
+191500101025           MOVE ltb_IvrProvince(li_Counter)
+191600101025             TO Investor-Prv OF lc_WRKTFSPRERec
+191700101025           MOVE ltb_IvrCountry(li_Counter)
+191800101025             TO Investor-Cntry OF lc_WRKTFSPRERec
+191900101025           MOVE ltb_IvrPostal(li_Counter)
+192000101025             TO Investor-Postal OF lc_WRKTFSPRERec
+192100101025           MOVE lc_FORSpouseLastName
+192200101025             TO Spouse-Last-Name OF lc_WRKTFSPRERec
+192300101025           MOVE lc_FORSpouseFirstName
+192400101025             TO Spouse-First-Name OF lc_WRKTFSPRERec
+192500101025           MOVE lc_FORSpouseInitials
+192600101025             TO Spouse-Initials   OF lc_WRKTFSPRERec
+192700101025           MOVE li_FORSpouseSIN
+192800101025             TO Spouse-SIN   OF lc_WRKTFSPRERec
+192900101025           MOVE lc_PREInvestorLastName
+193000101025             TO Prv-Acct-Hold-LName OF lc_WRKTFSPRERec
+193100101025           MOVE lc_PREInvestorFirstName
+193200101025             TO Prv-Acct-Hold-FName OF lc_WRKTFSPRERec
+193300101025           MOVE lc_PREInvestorInitials
+193400101025             TO Prv-Acct-Hold-Initials  OF lc_WRKTFSPRERec
+193500101025           MOVE li_PREInvestorSIN
+193600101025             TO Prv-Acct-Hold-SIN   OF lc_WRKTFSPRERec
+193700101025           MOVE li_PREInvestorDeathDate
+193800101025             TO Prv-Acct-Hold-Dth-Date  OF lc_WRKTFSPRERec
+193900101025           MOVE li_ACCCloseDate
+194000101025             TO Acct-Closing-Date  OF lc_WRKTFSPRERec
+194100101025           MOVE ln_ExchangeRate
+194200101025             TO Exchange-Rate  OF lc_WRKTFSPRERec
+194300150805145379*    MOVE lc_NewAccount
+194400150729145379*      TO New-Account-Ind OF lc_WRKTFSPRERec
+19450010102580370      End-If.
+194600101025
+194700150729145379     MOVE lc_NewAccount
+194800150729145379       TO New-Account-Ind OF lc_WRKTFSPRERec
+19490010102578540 *    MOVE ln_PREOwnerMV
+19500010102578540      MOVE ln_MVAtDeath
+195100101025             TO FMV-At-DTH   OF lc_WRKTFSPRERec.
+19520010121283842      MOVE ln_SaveSeqNo TO FORM-SEQ-NO   OF lc_WRKTFSPRERec.
+195300120524R97177     MOVE lc_ACCConvertInd
+195400120524R97177       TO CONV-ACCOUNT-IND OF lc_WRKTFSPRERec.
+195500101212
+195600101025
+195700090807           EXEC SQL
+195800090813             INSERT INTO WRKTFSPRE
+195900090813             VALUES :WRKTFSPRE
+196000090807           END-EXEC.
+196100090807
+196200090807           MOVE SQLSTATE TO lc_sqlStates.
+196300090807           IF NOT lncc_sqlSuccessful
+196400090807              SET lncc_Err_19 TO TRUE
+196500090818              MOVE lncc_ErrorInsertWRKTFSPRE TO lc_sqlErrShortDESCR
+196600090807              PERFORM SQLFailProcess
+196700090807           END-IF.
+196800090812      * ---------------------------------
+196900090812       DetermineRecType.
+197000090812      * ---------------------------------
+197100090812           INITIALIZE   li_NoOfRecordsFetched.
+197200090812
+197300090812           EXEC SQL
+197400090812             SELECT COUNT(1)
+197500090812               INTO :li_NoOfRecordsFetched
+197600160503157039         FROM QTEMP/TMPACFORP
+197700160401157039*        FROM Mfaacforp
+197800090812              WHERE Account_No = :li_SaveAccountNo          AND
+197900090812                    Form_Code  = :lncc_TFSA                 AND
+198000090812                    Tax_Period = :li_TaxPeriod
+198100090812           END-EXEC.
+198200090812
+198300090812           MOVE SQLSTATE TO lc_sqlStates.
+198400090812           EVALUATE TRUE
+198500090812               WHEN li_NoOfRecordsFetched > 0
+198600090812                    Move lncc_A     TO   lc_RecordType
+198700090902               WHEN lncc_sqlEnd OR li_NoOfRecordsFetched = 0
+198800090812                    Move lncc_O     TO   lc_RecordType
+198900090812               WHEN OTHER
+199000090812                    SET lncc_Err_12 TO TRUE
+199100090812                    MOVE lncc_ErrorreadingMFAACFORP
+199200090812                      TO lc_sqlErrShortDESCR
+199300090812                    PERFORM SQLFailProcess
+199400090812           END-EVALUATE.
+199500090812      * ---------------------------------
+199600090812       GetFormerSpouseInfo.
+199700090812      * ---------------------------------
+199800090812           INITIALIZE   li_FORSpouseSIN,
+199900090812                        lc_FORSpouseLastName,
+200000090812                        lc_FORSpouseFirstName,
+200100090812                        lc_FORSpouseInitials.
+200200090812
+200300090812           EXEC SQL
+20040009110975392        SELECT COALESCE(Last_Name, " "),
+200500091109  |                 COALESCE(First_Name, " "),
+200600091109  |                 COALESCE(Initials, " "),
+20070011011775392 * 90854       COALESCE(Social_Insurance_No, " ")
+20080011011790854               COALESCE(Social_Insurance_No, 0)
+200900090812               INTO :lc_FORSpouseLastName,
+201000090812                    :lc_FORSpouseFirstName,
+201100090812                    :lc_FORSpouseInitials,
+201200090928                    :li_FORSpouseSIN
+201300090812               FROM Mfaacsucp
+201400090812              WHERE Account_No        = :li_SaveAccountNo   AND
+201500090812                    Relationship_Type = :lncc_FOR           AND
+201600090812                    Status            = :lncc_A
+201700090928               FETCH FIRST ROW ONLY
+201800090812           END-EXEC.
+201900090812
+202000090812           MOVE SQLSTATE TO lc_sqlStates.
+202100090812           IF lncc_sqlSuccessful or lncc_sqlEnd
+202200090812              CONTINUE
+202300090812           ELSE
+202400090812              SET lncc_Err_13 TO TRUE
+202500090812              MOVE lncc_ErrorReadingMFAACSUCP TO lc_sqlErrShortDESCR
+202600090812              PERFORM SQLFailProcess
+202700090812           END-IF.
+202800090813      * ---------------------------------
+202900090813       GetPreviousAccHolderInfo.
+203000090813      * ---------------------------------
+203100090813           INITIALIZE   li_PREInvestorNo,
+203200090813                        lc_PREInvestorLastName,
+203300090813                        lc_PREInvestorFirstName,
+203400090813                        lc_PREInvestorInitials,
+203500090813                        li_PREInvestorSIN,
+203600101025                        li_PREInvestorDeathDate,
+20370010102580370                   li_PRETempInvestorNo,
+20380010102580370                   li_PRETempInvDthYY.
+20390010020178540 *                 ln_PREOwnerMV.
+204000090813
+204100090813           EXEC SQL
+20420010020178540        SELECT COALESCE(Investor_No2, 0),
+20430010020178540               COALESCE(Ivretp2.Documentation_Date, 0)
+204400090928               INTO :li_PREInvestorNo,
+20450010020178540 *             :ln_PREOwnerMv,
+20460010020178540               :li_PREInvestorDeathDate
+20470010020178540          FROM Mfaacsucp Acsucp
+204800100201  |            LEFT OUTER JOIN Mfaivretp Ivretp2
+204900100201  |              ON Acsucp.Investor_No2 = Ivretp2.Investor_No
+205000100201  |           WHERE Acsucp.Account_No        = :li_SaveAccountNo   AND
+205100100201  |                 Acsucp.Relationship_Type = :lncc_PRE           AND
+20520010020178540               Acsucp.Status            = :lncc_A
+205300090928               FETCH FIRST ROW ONLY
+205400090813           END-EXEC.
+205500090813
+205600090813           MOVE SQLSTATE TO lc_sqlStates.
+205700090813           IF lncc_sqlSuccessful or lncc_sqlEnd
+205800090813              CONTINUE
+205900090813           ELSE
+206000090813              SET lncc_Err_14 TO TRUE
+206100090813              MOVE lncc_ErrorReadingMFAACSUCP TO lc_sqlErrShortDESCR
+206200090813              PERFORM SQLFailProcess
+206300090813           END-IF.
+20640010102580370      Move li_PREInvestorNo To li_PRETempInvestorNo.
+20650010032680429      MOVE li_PREInvestorDeathDate TO ld_PREInvestorDeathDate.
+20660010102580370      MOVE li_PREInvDthYY TO li_PRETempInvDthYY.
+20670010020178540      If li_PREInvDthYY not = li_TaxPeriodYY
+206800100201  |           Move 0         TO    li_PREInvestorDeathDate
+206900100201  |                                li_PREInvestorNo
+20700010020178540      End-If.
+207100090813
+207200101025      *RFS 80370 - Begins
+207300101025           If li_PRETempInvDthYY > li_TaxPeriodYY
+207400101025              AND li_PRETempInvestorNo not = 0
+207500101025
+207600101025              EXEC SQL
+207700101025                SELECT COALESCE(Ivrp.Last_Name, " "),
+207800101025                       COALESCE(Ivrp.First_Name, " "),
+207900101025                       COALESCE(Ivrp.Initials, " "),
+208000101025                       COALESCE(Ivrp.Social_Insurance_No, 0),
+208100101025                       COALESCE(Ivrp.Date_of_Birth, 0),
+208200101025                       COALESCE(Ivradp.Addr_No, 0),
+208300101025                       COALESCE(CHAR(TRIM(Addp.Street_No) || " " ||
+208400101025                       TRIM(Addp.Street_Name) || " " ||
+208500101025                       TRIM(Addp.Street_Type_Code) || " " ||
+208600101025                       TRIM(Addp.Street_Dirct_Code), 47), " "),
+208700101025                       COALESCE(Addp.City, " "),
+208800101025                       COALESCE(Addp.Province_Code, " "),
+208900101025                       COALESCE(Addp.Country_Code, " "),
+209000101025                       COALESCE(Addp.Postal_Code, " "),
+209100101025                       COALESCE(Addp.Misc_First_Addr_Line, " "),
+209200101025                      COALESCE(Addp.Misc_Second_Addr_Line, " "),
+209300101025                      COALESCE(Ivretp.Documentation_Date,0)
+209400101025                 INTO :lc_PRETempInvestorLastName,
+209500101025                      :lc_PRETempInvestorFirstName,
+209600101025                      :lc_PRETempInvestorInitials,
+209700101025                      :li_PRETempInvestorSIN,
+209800101025                      :li_PRETempInvestorDOB,
+209900101025                      :lc_PRETempInvestorAddressNo,
+210000101025                      :lc_PRETempInvestorAddress,
+210100101025                      :lc_PRETempInvestorCity,
+210200101025                      :lc_PRETempInvestorProvinceCd,
+210300101025                      :lc_PRETempInvestorCountryCd,
+210400101025                      :lc_PRETempInvestorPostalCd,
+210500101025                      :lc_PRETempInvestorMisc1AddLine,
+210600101025                      :lc_PRETempInvestorMisc2AddLine,
+210700101025                      :li_PRETempInvestorDocDate
+210800101025                 FROM Mfaivrp Ivrp
+210900101025                 LEFT OUTER JOIN Mfaivretp Ivretp
+211000101025                   ON Ivrp.Investor_No = Ivretp.Investor_No
+211100101025                 LEFT OUTER JOIN Mfaivradp Ivradp
+211200101025                   ON Ivrp.Investor_No = Ivradp.Investor_No
+211300101025                 LEFT OUTER JOIN Mfaaddp  Addp
+211400101025                   ON Ivradp.Addr_No = Addp.Addr_No
+211500101025                WHERE Ivrp.Investor_No = :li_PRETempInvestorNo
+211600130814124681            AND Ivradp.Addr_Type_Code = :lncc_IVR
+211700101025             END-EXEC
+211800101025              MOVE SQLSTATE TO lc_sqlStates
+211900101025              IF lncc_sqlSuccessful or lncc_sqlEnd
+212000101025                 CONTINUE
+212100101025              ELSE
+212200101025                 SET lncc_Err_15 TO TRUE
+212300101025                   MOVE lncc_ErrorReadPRETempInvestor
+212400101025                     TO lc_sqlErrShortDESCR
+212500101025                   PERFORM SQLFailProcess
+212600101025                END-IF
+212700101025            END-IF.
+212800101025      *RFS 80370 - Ends
+212900101025
+213000100201      *RFS 78540 -Begins
+213100091201R75665*RFS 75665 -Begins
+213200100201      *    If li_PREInvestorNo      = 0    AND
+213300100201      *       li_HolderDTHDate  Not = 0
+213400100201      *
+213500100201      *        EXEC SQL
+213600100201      *           SELECT SUM(Get_Mkv_T
+213700100201      *              (:li_HolderDTHDate, ACCIVP.Account_No,
+213800100201      *               ACCIVP.Investment_Code, INVP.Currency))
+213900100201      *           INTO   :ln_fmv_amt
+214000100201      *
+214100100201      *           FROM    MFAACCIVP ACCIVP, MFAINVP INVP
+214200100201      *           WHERE   ACCIVP.Account_No = :li_SaveAccountNo   AND
+214300100201      *                   ACCIVP.Investment_Code = INVP.Investment_Code
+214400100201      *        END-EXEC
+214500100201      *
+214600100201      *        MOVE ln_fmv_amt    TO ln_PREOwnerMv
+214700100201      *
+214800100201      *    END-IF.
+214900100201      *RFS 78540 -End
+215000091201
+215100091201R75665*RFS 75665 -Ends
+215200091201           If li_PREInvestorNo Not= 0
+215300091201
+215400090813             EXEC SQL
+215500090813               SELECT Ivrp2.Last_Name,
+215600090813                      Ivrp2.First_Name,
+215700090813                      Ivrp2.Initials,
+215800090817                      Ivrp2.Social_Insurance_No,
+215900090813                      Ivretp.Documentation_Date
+216000090813                 INTO :lc_PREInvestorLastName,
+216100090813                      :lc_PREInvestorFirstName,
+216200090813                      :lc_PREInvestorInitials,
+216300090813                      :li_PREInvestorSIN,
+216400090813                      :li_PREInvestorDeathDate
+216500090813                 FROM Mfaivrp Ivrp2
+216600090813                 LEFT OUTER JOIN Mfaivretp Ivretp
+216700090813                   ON Ivrp2.Investor_No = Ivretp.Investor_No
+216800090813                WHERE Ivrp2.Investor_No = :li_PREInvestorNo
+216900090813             END-EXEC
+217000090813
+217100100201      *RFS 78540 - Begin
+217200091201      *RFS 75665 - Begin
+217300100201      *      MOVE Zero TO ln_PREOwnerMv
+217400100201      *      MOVE Zero TO li_HolderDTHDate
+217500091201      *RFS 75665 - End
+217600100201      *RFS 78540 - End
+217700091201
+217800090813             MOVE SQLSTATE TO lc_sqlStates
+217900090813             IF lncc_sqlSuccessful or lncc_sqlEnd
+218000090813                CONTINUE
+218100090813             ELSE
+218200090813                SET lncc_Err_15 TO TRUE
+218300090813                MOVE lncc_ErrorReadPREInvestor TO lc_sqlErrShortDESCR
+218400090813                PERFORM SQLFailProcess
+218500090813             END-IF
+218600090813           END-IF.
+218700100201
+218800100201      * RFS 78540 Begin
+218900100201      * ---------------------------------
+219000100201       GetFmvAtTimeofDeath.
+219100100201      * ---------------------------------
+219200100201           INITIALIZE   ln_MVAtDeath.
+219300100201
+219400101207      *        EXEC SQL
+219500100323      *    SELECT (SUM(Get_Mkv_T          (RFS 80431)
+219600101207      *    SELECT COALESCE(SUM(Get_Mkv_T
+219700100616      *              RFS68035 - Begins - Add PriceDate (Use same as TradeDate)
+219800100616      *              (:li_HolderDTHDate, ACCIVP.Account_No,
+219900101207      *              (:li_HolderDTHDate,
+220000101207      *               :li_HolderDTHDate, ACCIVP.Account_No,
+220100100616      *              RFS68035 - Ends
+220200100323      *            ACCIVP.Investment_Code, INVP.Currency))
+220300101207      *            ACCIVP.Investment_Code, INVP.Currency)),0)
+220400101207      *           INTO   :ln_MVAtDeath
+220500100201
+220600101207      *           FROM    MFAACCIVP ACCIVP, MFAINVP INVP
+220700101207      *           WHERE   ACCIVP.Account_No = :li_SaveAccountNo   AND
+220800101207      *                   ACCIVP.Investment_Code = INVP.Investment_Code
+220900101207      *        END-EXEC.
+221000100201
+221100171030      * FMV at the time of Death
+221200171030      * will now be calculated from COBOL/SQL module FXGETFMV  (RFS 88949)
+221300110411      * RFS63488 - Start
+221400110411           INITIALIZE lc_Mode
+221500110411                      lc_Investment_code
+221600110411                      li_Contract_no
+221700110411                      li_Unit_amount.
+221800111027R98403      MOVE li_HolderDTHDate  TO ld_lastWorkingDay
+221900110411      * RFS63488 - End
+222000120928      * RFS112767 - Begin - Determine if Date of Death is a trade date
+222100120928      *                    If not use next business day
+222200130312120171*   MOVE  lncc_D  TO lc_Mode
+222300130312      *    EXEC SQL
+222400130312      *      SELECT MIN(BUSINESS_DAY)
+222500130312      *      INTO   :ld_DeathTradeDay
+222600130312      *      FROM   MFABUSDAP
+222700130312      *      WHERE  ALLOW_TRADING = "Y" AND
+222800130312      *             BUSINESS_DAY  >= :ld_lastWorkingDay
+222900130312      *    END-EXEC.
+223000120928
+223100130312      *    MOVE SQLSTATE TO lc_sqlStates
+223200130312      *    EVALUATE TRUE
+223300130312      *        WHEN lncc_sqlSuccessful
+223400130312      *              MOVE ld_DeathTradeDay TO ld_lastWorkingDay
+223500130312      *        WHEN lncc_sqlEnd
+223600130312      *              CONTINUE
+223700130312      *        WHEN OTHER
+223800130312      *              CONTINUE
+223900130312      *        END-EVALUATE
+224000120928      * RFS112767 - End
+224100130312
+224200130312120171     MOVE  " "     TO lc_Mode
+224300200526      * RFS1099562 - Starts
+224400200526      *    CALL "FXGETFMV" USING
+224500200526      *         li_SaveAccountNo,
+224600111027R98403*         li_HolderDTHDate,
+224700200526R98403*         ld_lastWorkingDay,
+224800110411      * RFS63488 - Start
+224900110411      *         ln_MVAtDeath
+225000200526      *         ln_MVAtDeath,
+225100200526      *         lc_Mode,
+225200200526      *         lc_Investment_code,
+225300200526      *         li_Contract_no,
+225400200526      *         li_Unit_amount
+225500110411      * RFS63488 - End
+225600200526      *    END-CALL.
+225700100201      * RFS 78540 End
+225800200526           IF lc_SegFUNDYes
+225900200526              PERFORM Get-Seg-DOD-Value
+226000200526           ELSE
+226100200526              CALL "FXGETFMV" USING
+226200200526                   li_SaveAccountNo,
+226300210105      *RFS1109635 - Start
+226400210105      *            li_HolderDTHDate,
+226500210105      *RFS1109635 - End
+226600200526                   ld_lastWorkingDay,
+226700200526                   ln_MVAtDeath,
+226800200526                   lc_Mode,
+226900210105      *RFS1109635 - Start
+227000210105      *            lc_Investment_code,
+227100210105      *            li_Contract_no,
+227200210105                   li_Contract_no,
+227300210105                   lc_Investment_code,
+227400210105      *RFS1109635 - End
+227500200526                   li_Unit_amount
+227600200526              END-CALL
+227700200526           END-IF.
+227800200526      * ---------------------------------
+227900200526       Get-Seg-DOD-Value.
+228000200526      * ---------------------------------
+228100200526
+228200200602           INITIALIZE ln_GDVAmount.
+228300200602
+228400200526           EXEC SQL
+228500200527             SELECT MAX(BUSINESS_DAY)
+228600200526             INTO   :ld_DeathTradeDay
+228700200526             FROM   MFABUSDAP
+228800200526             WHERE  ALLOW_TRADING = "Y" AND
+228900200527                    BUSINESS_DAY  <= :li_HolderDTHDate
+229000200526           END-EXEC.
+229100200526
+229200200526           MOVE SQLSTATE TO lc_sqlStates
+229300200526           EVALUATE TRUE
+229400200526               WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+229500200526                     CONTINUE
+229600200526               WHEN OTHER
+229700200526                     CONTINUE
+229800200526           END-EVALUATE
+229900200526
+230000200526           EXEC SQL
+230100200527             SELECT  COALESCE(MAX(TRNP.PROCESS_DATE),
+230200200527                                         :ld_DeathTradeDay)
+230300200526             INTO    :ld_lastWorkingDay
+230400200526                FROM MFATRNP TRNP
+230500210114      *RFS1109949 - Start
+230600210114                INNER JOIN MFAACCNTP ACCNTP ON
+230700210114                  TRNP.ACCOUNT_NO = ACCNTP.ACCOUNT_NO
+230800210114                LEFT OUTER JOIN MFACNTRRP CNTRRP ON
+230900210114                  ACCNTP.ACCOUNT_TYPE_CODE = CNTRRP.ACCOUNT_TYPE_CODE
+231000210114                  AND TRNP.CONTR_REDEM_CODE = CNTRRP.CONTR_REDEM_CODE
+231100210114      *RFS1109949 - End
+231200210114      *RFS1109949 - Start
+231300210114      *      WHERE ACCOUNT_NO        = :li_SaveAccountNo
+231400210114      *            AND TRADE_DATE   <= : ld_DeathTradeDay
+231500210114      *            AND PROCESS_DATE >= :li_HolderDTHDate
+231600210114             WHERE TRNP.ACCOUNT_NO = :li_SaveAccountNo
+231700210114               AND TRNP.TRADE_DATE <= :ld_DeathTradeDay
+231800210114               AND TRNP.PROCESS_DATE >= :li_HolderDTHDate
+231900210114               AND TRNP.TRANS_STATUS_CODE IN ("HST","HSC","RVS")
+232000210114               AND COALESCE(CNTRRP.CONTR_REDEM_CODE_RULE, " ") <>
+232100210114                                   :lncc_99
+232200210114               AND TRNP.TRANS_ORIGIN_CODE <> :lncc_DTH
+232300210114      *RFS1109949 - End
+232400200526
+232500200526           END-EXEC.
+232600200526
+232700200527           MOVE SQLSTATE TO lc_sqlStates
+232800200527           EVALUATE TRUE
+232900200527               WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+233000200527                     CONTINUE
+233100200527               WHEN OTHER
+233200200527                     CONTINUE
+233300200527           END-EVALUATE
+233400200526
+233500200527           EXEC SQL
+233600200527             SELECT
+233700200527                  COALESCE(SUM(MARKET_VALUE),0)
+233800200527                 ,COALESCE(
+233900200527                            SUM(CASE WHEN CONTRACT_NO = 0
+234000200527                                 THEN MARKET_VALUE
+234100200527                                 ELSE GUARANTEED_DEATH_VALUE
+234200200527                                 END), 0)
+234300200527               INTO
+234400200527                    :ln_MVAtDeath
+234500200527                   ,:ln_GDVAmount
+234600200527               FROM MFAACCMVP
+234700200527              WHERE ACCOUNT_NO   = :li_SaveAccountNo
+234800200527                AND PROCESS_DATE = :ld_lastWorkingDay
+234900200527           END-EXEC.
+235000200526
+235100200527           MOVE SQLSTATE TO lc_sqlStates
+235200200527           EVALUATE TRUE
+235300200527               WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+235400200527                     CONTINUE
+235500200527               WHEN OTHER
+235600200527                     CONTINUE
+235700200527           END-EVALUATE.
+235800200527
+235900200527           IF ln_GDVAmount  > ln_MVAtDeath
+236000200527                MOVE ln_GDVAmount to ln_MVAtDeath
+236100200527           END-IF.
+236200200527      * RFS1099562 - Ends
+236300200526
+236400090813      * ---------------------------------
+236500090813       GetAccountClosigDate.
+236600090813      * ---------------------------------
+236700090813           INITIALIZE   li_ACCCloseDate.
+236800090813
+236900090813           EXEC SQL
+237000200124      *RFS1028230-Starts.
+23710020012475392 *      SELECT COALESCE(MAX(Audit_Date), 0)
+237200200124             SELECT COALESCE((Audit_Date), 0)
+237300200124      *RFS1028230-Ends.
+237400090813               INTO :li_ACCCloseDate
+237500090813               FROM Mfaivrclp
+237600200124      *RFS1028230-Starts.
+237700200124      *       WHERE Investor_No       = :li_SaveInvestorNo  AND
+237800200124              WHERE
+237900200124      *RFS1028230-Ends.
+238000090813                    Account_No        = :li_SaveAccountNo   AND
+238100090813                    Change_Category   = :lncc_ACCCL
+238200200124      *RFS1028230-Starts.
+238300201120      *RFS1107365 - Starts
+238400201120      *       ORDER BY AUDIT_DATE ,
+238500201120              ORDER BY AUDIT_DATE DESC,
+238600201120      *RFS1107365 - Starts
+238700200124                       LOG_TIME  DESC
+238800200124      *RFS1028230-Ends.
+238900090928              FETCH FIRST ROW ONLY
+239000090813           END-EXEC.
+239100090813
+239200090813           MOVE SQLSTATE TO lc_sqlStates.
+239300090813           IF lncc_sqlSuccessful or lncc_sqlEnd
+239400090813              CONTINUE
+239500090813           ELSE
+239600090813              SET lncc_Err_16 TO TRUE
+239700090813              MOVE lncc_ErrorReadingMFAIVRCLP TO lc_sqlErrShortDESCR
+239800090813              PERFORM SQLFailProcess
+239900090813           END-IF.
+240000090817
+240100120503R97177* ---------------------------------
+240200120503  |    GetAccountTFSAClose4AFXML.
+240300120503  |   * ---------------------------------
+240400120524  |        INITIALIZE   li_ACCCloseDate,
+240500120524  |                     lc_ACCConvertInd.
+240600120503  |
+240700120503  |        EXEC SQL
+240800120503  |          SELECT COALESCE(MAX(Audit_Date), 0)
+240900120503  |            INTO :li_ACCCloseDate
+241000120503  |            FROM Mfaivrclp
+241100120504  |            WHERE Investor_No   = :li_SaveInvestorNo AND
+241200120504  |                  Account_No    = :li_SaveAccountNo  AND
+241300120504  |                  Audit_date BETWEEN :li_FromDate AND
+241400120504  |                                     :li_ToDate     AND
+241500120503  |                  Change_Category  = :lncc_4AFXMLC
+241600120503  |           FETCH FIRST ROW ONLY
+241700120503  |        END-EXEC.
+241800120503  |
+241900120503  |        MOVE SQLSTATE TO lc_sqlStates.
+242000120503  |        IF lncc_sqlSuccessful or lncc_sqlEnd
+242100120524  |           IF li_ACCCloseDate > 0
+242200120524  |               MOVE lncc_Y      TO   lc_ACCConvertInd
+242300120524  |           END-IF
+242400120503  |           CONTINUE
+242500120503  |        ELSE
+242600120503  |           SET lncc_Err_29 TO TRUE
+242700120503  |           MOVE lncc_ErrorReadingMFAIVRCLPC TO lc_sqlErrShortDESCR
+242800120503  V           PERFORM SQLFailProcess
+242900120503R97177     END-IF.
+243000090817      * ---------------------------------
+243100090817       GetExchangeRate.
+243200090817      * ---------------------------------
+243300090817           INITIALIZE   ln_ExchangeRate.
+243400090817
+243500090817           EXEC SQL
+243600090820              SELECT  COALESCE(CASE
+243700090817                         WHEN TREXRP.Exchange_Rate IS NOT NULL
+243800090817                              THEN TREXRP.Exchange_Rate
+243900090817                         WHEN EXRHMP.Exchange_Rate IS NOT NULL
+244000090817                              THEN EXRHMP.Exchange_Rate
+244100090817                         WHEN EXRHMP1.Exchange_Rate IS NOT NULL
+244200090817                              THEN
+244300090817                              ZONED((1 / EXRHMP1.Exchange_Rate),9,7)
+244400090820                        END, 1)
+244500090817               INTO  :ln_ExchangeRate
+244600090817
+244700090817             FROM  MFAINVP   INVP
+244800090817
+244900171030      * --  Trans Exchange Rate
+245000090817             LEFT OUTER JOIN MFATREXRP TREXRP ON
+245100090817             TREXRP.Placement_Date  = :li_SavePlacementDate  AND
+245200090817             TREXRP.Trans_No        = :li_SaveTransNo
+245300090817
+245400171030      * --  Program Exchange Rate
+245500090817             LEFT OUTER JOIN MFAPRGERP PRGERP ON
+245600090817             PRGERP.Program_Action     = :lncc_DEF            AND
+245700090817             PRGERP.Program_Code       = :lncc_SPTFSA
+245800090817
+245900171030      * --  Currency Code file
+246000090817
+246100090817            LEFT OUTER JOIN MFACURP CURP      ON
+246200090817            INVP.Currency             = CURP.Currency
+246300090817
+246400171030      * --  Exchange-Rate-M
+246500090817             LEFT OUTER JOIN MFAEXRHMP EXRHMP ON
+246600090817             EXRHMP.Trade_Date         = :li_SaveTradeDate    AND
+246700090817             INVP.Currency             = EXRHMP.Currency      AND
+246800090817             PRGERP.Exchange_Rate_Type = EXRHMP.Exchange_Rate_Type
+246900090817
+247000171030      * --  Exchange-Rate-M  for US Funds when base Currency is USD
+247100171030      *     get the exchange rate from "USD" to "CAD" and convert
+247200171030      *     the exchange rate from "CAD" to "USD".
+247300090817
+247400090817             LEFT OUTER JOIN MFAEXRHMP EXRHMP1 ON
+247500090817             EXRHMP1.Trade_Date        = :li_SaveTradeDate     AND
+247600090817             EXRHMP1.Currency          = :lncc_CAD             AND
+247700090817             PRGERP.Exchange_Rate_Type = EXRHMP1.Exchange_Rate_Type  AND
+247800090817             INVP.Currency             = :lncc_USD             AND
+247900090817             CURP.Base_Currency        = :lncc_Y
+248000090817          WHERE
+248100090817             INVP.Investment_Code = :li_SaveInvestmentCode
+248200090817
+248300090817            END-EXEC.
+248400090817
+248500090817           MOVE SQLSTATE TO lc_sqlStates.
+248600090817           IF lncc_sqlSuccessful or lncc_sqlEnd
+248700090817              CONTINUE
+248800090817           ELSE
+248900090817              SET lncc_Err_17 TO TRUE
+249000090817              MOVE lncc_ErrorGetExchangeRate  TO lc_sqlErrShortDESCR
+249100090817              PERFORM SQLFailProcess
+249200090817           END-IF.
+249300090824
+249400090824      * ---------------------------------
+249500090824       DetermineNewAcct.
+249600090824      * ---------------------------------
+249700090824           INITIALIZE   lc_NewAccount,
+249800090824                        li_FirstTradeDate,
+249900100108                        li_FirstTradeYMD,
+25000014010673997                   li_NoOfRecordsFetched.
+250100090824           MOVE "N"    TO  lc_NewAccount.
+250200090824
+250300090824           EXEC SQL
+250400090903             SELECT COALESCE(MIN(Trade_Date), 0)
+250500090824               INTO :li_FirstTradeDate
+25060010113083842 *        FROM Mfatrnp
+25070011021583842 *        FROM TRNP
+25080011021592676          FROM Mfatrnp
+250900090824              WHERE Account_No        = :li_SaveAccountNo   AND
+251000090824                    Trans_Status_Code IN (:lncc_HST, :lncc_HSC)  AND
+251100090824                    Trans_Type_Code IN
+251200090903                              (:lncc_BUY, :lncc_TRI, :lncc_SWI)  AND
+251300090903                    Reverse <> :lncc_Y
+251400090824           END-EXEC.
+251500090824
+251600090824           MOVE SQLSTATE TO lc_sqlStates.
+251700090824           IF lncc_sqlSuccessful or lncc_sqlEnd
+251800090824              MOVE li_FirstTradeDate TO li_FirstTradeYMD
+251900090824           ELSE
+252000090824              SET lncc_Err_22 TO TRUE
+252100090824              MOVE lncc_ErrorGettingFitstTD   TO lc_sqlErrShortDESCR
+252200090824              PERFORM SQLFailProcess
+252300090824           END-IF.
+252400090903
+252500090903      * In case all transactions have been reversed check first trans
+252600090903      * that was processed in account to determine if it is new
+252700090903           If li_FirstTradeDate = 0
+252800090903            EXEC SQL
+252900090903              SELECT COALESCE(MIN(Trade_Date), 0)
+253000090903                INTO :li_FirstTradeDate
+25310010113083842 *         FROM Mfatrnp
+25320011021683842 *         FROM TRNP
+25330011021792676           FROM  Mfatrnp
+253400090903               WHERE Account_No        = :li_SaveAccountNo   AND
+253500090903                     Trans_Status_Code IN (:lncc_HST, :lncc_HSC)  AND
+253600090903                     Trans_Type_Code IN
+253700090903                               (:lncc_BUY, :lncc_TRI, :lncc_SWI)
+253800090903            END-EXEC
+253900090903
+254000090903            MOVE SQLSTATE TO lc_sqlStates
+254100090903            IF lncc_sqlSuccessful or lncc_sqlEnd
+254200090903              MOVE li_FirstTradeDate TO li_FirstTradeYMD
+254300090903            ELSE
+254400090903              SET lncc_Err_23 TO TRUE
+254500090903              MOVE lncc_ErrorGettingFitstTD   TO lc_sqlErrShortDESCR
+254600090903              PERFORM SQLFailProcess
+254700090903            END-IF
+254800090903           End-If.
+254900090824
+255000100108      ** 73997 STARTS
+255100100108           EXEC SQL
+255200100108             SELECT COUNT(1)
+255300100108               INTO :li_NoOfRecordsFetched
+255400160331157039*        FROM Mfaacforp
+255401211012      *RFS1121890 - starts.
+255500211012157039*        FROM QTEMP/TMPACFORP
+255501211012               FROM MFAACFORP
+255502211012      *RFS1121890 - Ends.
+255600100108              WHERE Account_No = :li_SaveAccountNo          AND
+255700100325                    Form_Code  = :lncc_TFSA    AND
+25580010032580429               SUBSTR(Tax_Period,1,4) <
+25590010032580429               SUBSTR(:li_TaxPeriod,1,4)
+256000100108           END-EXEC.
+256100100108
+256200100108           MOVE SQLSTATE TO lc_sqlStates.
+256300100108            IF lncc_sqlSuccessful or lncc_sqlEnd
+256400100108              CONTINUE
+256500100108            ELSE
+256600100108              SET lncc_Err_23 TO TRUE
+256700100108              MOVE lncc_ErrorreadingMFAACFORP
+256800100108                      TO lc_sqlErrShortDESCR
+256900100108              PERFORM SQLFailProcess
+257000100108            END-IF.
+25710010010873997 **
+25720010010873997 **   IF li_FirstTDYY = li_TaxPeriodYY
+25730010010873997 **   IF (li_FirstTDYY = li_TaxPeriodYY
+25740010010873998 **   AND ld_SaveCreationDte >  li_FromDate)
+25750010010873997 **   AND ld_SaveCreationDte <= li_CutOffDate
+25760010010873998 **   AND lc_FirstRun = lncc_Y)
+257700140106
+257800140106      *RFS131692 - Start
+257900140106           INITIALIZE li_CntConvertedAcct,
+258000140106                      lc_ConvertedAcct.
+258100140106
+258200140106           MOVE "N" TO lc_ConvertedAcct.
+258300140106
+258400140106           EXEC SQL
+258500140106             SELECT COUNT(*)
+258600140106             INTO :li_CntConvertedAcct
+258700140106             FROM Mfaaccatp
+258800140106             WHERE Account_No = :li_SaveAccountNo
+258900140108               AND Account_Attribute_Code
+259000140108                       IN (:lncc_INGCV, :lncc_CONV_ATTR)
+259100140106           END-EXEC.
+259200140106
+259300140106           MOVE SQLSTATE TO lc_sqlStates.
+259400140106           IF lncc_sqlSuccessful or lncc_sqlEnd
+259500140106              IF li_CntConvertedAcct > 0
+259600140106                 MOVE "Y" TO lc_ConvertedAcct
+259700140106              END-IF
+259800140106              CONTINUE
+259900140106           ELSE
+260000140106              SET lncc_Err_32 TO TRUE
+260100140106              MOVE lncc_ErrorReadingMFAACCATP
+260200140106                TO lc_sqlErrShortDESCR
+260300140106              PERFORM SQLFailProcess
+260400140106           END-IF.
+260500140106      *RFS131692 - End
+260600140106
+260700211012      *RFS131692 - Start
+260800140106      *    IF  li_NoOfRecordsFetched = 0
+260900140106           IF  li_NoOfRecordsFetched = 0 AND
+261000140106               (lc_ConvertedAcct NOT = "Y" OR
+261100140106                   ld_SaveCreationDte >= li_FromDate)
+261200140106      *RFS131692 - End
+261300090824              MOVE "Y"  to lc_NewAccount
+261400090824           End-If.
+261500091001
+261600120504R97177* ---------------------------------
+261700120504  |   *****GetAccountTFSACNew4AFXML.
+261800120504  |   * ---------------------------------
+261900120504  |        INITIALIZE   li_ACCNewDate.
+262000120504  |
+262100120504  |        EXEC SQL
+262200120504  |          SELECT COALESCE(MAX(Audit_Date), 0)
+262300120504  |            INTO :li_ACCNewDate
+262400120504  |            FROM Mfaivrclp
+262500120504  |            WHERE Investor_No   = :li_SaveInvestorNo AND
+262600120504  |                  Account_No    = :li_SaveAccountNo  AND
+262700120504  |                  Change_Category  = :lncc_4AFXMLN
+262800120504  |           FETCH FIRST ROW ONLY
+262900120504  |        END-EXEC.
+263000120504  |
+263100120504  |        MOVE SQLSTATE TO lc_sqlStates.
+263200120504  |        IF lncc_sqlSuccessful or lncc_sqlEnd
+263300120507  |           IF li_ACCNewDate > li_FromDate
+263400120504  |              MOVE "Y"  to lc_NewAccount
+263500120504  |           END-IF
+263600120504  |           CONTINUE
+263700120504  |        ELSE
+263800120504  |           SET lncc_Err_30 TO TRUE
+263900120504  |           MOVE lncc_ErrorReadingMFAIVRCLPC TO lc_sqlErrShortDESCR
+264000120504  V           PERFORM SQLFailProcess
+264100120504R97177     END-IF.
+264200091001      * ---------------------------------
+264300091001       DetermineSameAccountSWI.
+264400091001      * ---------------------------------
+264500091001           INITIALIZE   li_OffAccountNo.
+264600091001
+264700091001           EXEC SQL
+264800091001             SELECT TrnTo.Account_No
+264900091001               INTO :li_OffAccountNo
+26500010113083842 *        FROM Mfatrnp Trnto,
+265100101130  |   *             Mfatrntgp Trntgp
+265200110216  |            FROM QTEMP/TRNP    Trnto
+265300210629116965*                 JOIN Mfatrntgp Trntgp ON
+265400210629116965         inner JOIN Mfatrntgp Trntgp ON
+265500101130  |                 TrnTgp.Placement_Date = TrnTo.Placement_Date  AND
+265600101130  |                 TrnTgp.Trans_No = TrnTo.Trans_No
+265700101130  |   *       WHERE TrnTgp.Placement_Date = TrnTo.Placement_Date  AND
+265800101130  |   *             TrnTgp.Trans_No = TrnTo.Trans_No              AND
+265900101130  |   *             Trntgp.Placement_Date_2 = :li_SavePlacementDate  AND
+26600010113083842         WHERE Trntgp.Placement_Date_2 = :li_SavePlacementDate  AND
+266100111027                    Trntgp.Trans_No_2     = :li_SaveTransNo
+266200140127132210        AND   Trnto.TRANS_TYPE_CODE <> :lnc_Int
+26630011102775392 * R92786      Trntgp.Relationship_Type IN
+26640011102775392 * R92786                     (:lncc_DSB, :lncc_DSR, :lncc_WSB)
+266500091001              FETCH FIRST ROW ONLY
+266600091001           END-EXEC.
+266700091001
+266800091001           MOVE SQLSTATE TO lc_sqlStates.
+266900091001           IF lncc_sqlSuccessful or lncc_sqlEnd
+267000091001              CONTINUE
+267100091001           ELSE
+267200091001              SET lncc_Err_24 TO TRUE
+267300091001              MOVE lncc_ErrorReadingMFATRNTGP TO lc_sqlErrShortDESCR
+267400091001              PERFORM SQLFailProcess
+267500091001           END-IF.
+267600091001
+267700091001           If li_OffAccountNo = li_SaveAccountNo
+26780011022492963**       SET lb_GoodTransactionNo   TO TRUE
+267900110223  |           IF  lc_FirstRun = lncc_Y
+268000110223  |               MOVE 0 TO  li_SaveTradeDate
+268100110223  |           ELSE
+268200110223  |               SET lb_GoodTransactionNo   TO TRUE
+26830011022492963         END-IF
+268400091001           End-If.
+268500091001
+268600180808
+268700180808
+268800091001      * ---------------------------------
+268900091001       DetermineSameAccountSWO.
+269000091001      * ---------------------------------
+269100091001           INITIALIZE   li_OffAccountNo.
+269200091001
+269300091001           EXEC SQL
+269400091001             SELECT TrnTo.Account_No
+269500091001               INTO :li_OffAccountNo
+26960010113083842 *        FROM Mfatrnp Trnto,
+26970011021683842 *        FROM TRNP    Trnto,
+26980011021692676          FROM QTEMP/TRNP    Trnto,
+269900091001                    Mfatrntgp Trntgp
+270000091001              WHERE TrnTgp.Placement_Date_2 = TrnTo.Placement_Date  AND
+270100091001                    TrnTgp.Trans_No_2 = TrnTo.Trans_No              AND
+270200091001                    Trntgp.Placement_Date = :li_SavePlacementDate  AND
+270300111027                    Trntgp.Trans_No         = :li_SaveTransNo
+27040011102775392 * R92786      Trntgp.Relationship_Type IN (:lncc_DSB, :lncc_WSB)
+270500140127132210        AND   Trnto.TRANS_TYPE_CODE <> :lnc_Int
+270600091001              FETCH FIRST ROW ONLY
+270700091001           END-EXEC.
+270800091001
+270900091001           MOVE SQLSTATE TO lc_sqlStates.
+271000091001           IF lncc_sqlSuccessful or lncc_sqlEnd
+271100091001              CONTINUE
+271200091001           ELSE
+271300091001              SET lncc_Err_25 TO TRUE
+271400091001              MOVE lncc_ErrorReadingMFATRNTGP2 TO lc_sqlErrShortDESCR
+271500091001              PERFORM SQLFailProcess
+271600091001           END-IF.
+271700091001
+271800091001           If li_OffAccountNo = li_SaveAccountNo
+27190011022492963**       SET lb_GoodTransactionNo   TO TRUE
+272000110223  |           IF  lc_FirstRun = lncc_Y
+272100110223  |               MOVE 0 TO  li_SaveTradeDate
+272200110223  |           ELSE
+272300110223  |               SET lb_GoodTransactionNo   TO TRUE
+27240011022392963         END-IF
+272500091001           End-If.
+272600090813
+272700070308      * ---------------------------------
+272800070306       SQLFailProcess.
+272900070306      * ---------------------------------
+273000070306           PERFORM Dsp-Error.
+273100070306           PERFORM Force-Msgw.
+273200070306
+273300070306      * ---------------------------------
+273400070306       EndOfProgram.
+273500070306      * ---------------------------------
+273600090902           If lb_EndofFileFalse
+273700090902              PERFORM CloseCursor
+273800090902           End-If.
+273900070306           PERFORM Termination.
+274000070314
+274100070314      * ---------------------------------
+274200070315       CloseCursor.
+274300070314      * ---------------------------------
+274400070314      *Close cursor.
+274500070314           EXEC SQL
+274600090813             CLOSE C_TFSATrans
+274700070314           END-EXEC.
+274800070314
+274900070323           MOVE SQLSTATE TO lc_sqlStates.
+275000070314           IF NOT lncc_sqlSuccessful
+275100090818              SET lncc_Err_21 TO TRUE
+275200070314              MOVE lncc_ErrorClosingCursor TO lc_sqlErrShortDESCR
+275300070314              PERFORM SQLFailProcess
+275400070314           END-IF.
+275500070306
+275600091202           EXEC SQL
+275700091202             CLOSE C_TFSAAcct
+275800091202           END-EXEC.
+275900091202
+276000091202           MOVE SQLSTATE TO lc_sqlStates.
+276100091202           IF NOT lncc_sqlSuccessful
+276200091202              SET lncc_Err_28  TO TRUE
+276300091202              MOVE lncc_ErrorClosingCursor2 TO lc_sqlErrShortDESCR
+276400091202              PERFORM SQLFailProcess
+276500091202           END-IF.
+276600091202
+276700070306      * ---------------------------------
+276800070306       Termination.
+276900070306      * ---------------------------------
+277000070306           GOBACK.
+277100070306
+277200070306      * DSP-ERROR and FORCE-MSGW Routines
+277300070306          COPY CPYSQLRTN.

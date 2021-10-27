@@ -1,0 +1,1308 @@
+000100110912       IDENTIFICATION DIVISION.
+000200110809       PROGRAM-ID.    OAMODSETUP.
+000300110912       AUTHOR.        Jeyarajan venkatesan.
+000400110804       INSTALLATION.  L&T Financial Services Technology Inc.
+000500210102       DATE-WRITTEN.  August 2011.
+000600101111       DATE-COMPILED.
+000700101111      ******************************************************************
+000800110809      * Description -  This program is to setup OA for account purchase*
+000900110809      *                holding fund (AAH) with use OA method (AA Method*
+001000110809      *                = 3) and no active OA existing in the account.  *
+001100110808      * Called by:   - JOBDAILY.                                       *
+001200101111      *                                                                *
+001300101111      ******************************************************************
+001400101111      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE              *
+001500101111      ******************************************************************
+001600110908      * Jeyarajan  * 2011/08/12   * RFS91768 - Initial Creation.
+001700140327      * Lev O      * 2014/03/27   * RFS135089 - fix new model creation.
+001800140423      *            * 2014/04/23   * RFS135089.1 - fix logic for Custom
+001900140423      *            *              *   model: purchase could be done on
+002000140423      *            *              *   subset of existing Model.
+002100140425      *            * 2014/04/25   * RFS135089.2 - added generation of
+002200140505      *            *              *   0% if structure not in purch list
+002300140515      *            * 2014/05/15   * RFS135089.3 - added validation of
+002400140515      *            *              *   future models.
+002500141030      * Waldi R.   * 2014/10/30   * 141966 - defect fix for 91768.     *
+002600141030      *                           * Replace MFAFNCTP with MFAISTFNP.   *
+002700150206      * Muthu      * 2015/02/06   * RFS143694 - Recompiles for
+002800150206      * Lakshmi M  *              * MFAACAADP
+002900201231      * Ragavi S   * 2020/10/21   * RFS186018  Recompile for MFAACAADP
+003000210913      * Vignesh    * 2021/09/02   *  RFS187304 - Enhancement to        *
+003100210913      *            *              *  rebalancing                       *
+003200101126      ******************************************************************
+003300101126
+003400101111       ENVIRONMENT DIVISION.
+003500101111       CONFIGURATION SECTION.
+003600101111       SOURCE-COMPUTER. IBM-AS400.
+003700101111       OBJECT-COMPUTER. IBM-AS400.
+003800210914       SPECIAL-NAMES.
+003900210914187304               DATA-AREA IS WS-DTAARA-MFAAAPARM.
+004000101111      *
+004100110829       INPUT-OUTPUT SECTION.
+004200101111       FILE-CONTROL.
+004300110829            SELECT  Struct-Asset-Alloc-Mod-SCH-DT
+004400110829                    ASSIGN          TO  DATABASE-MFASAMSDP
+004500110817                    ORGANIZATION    IS  INDEXED
+004600110817                    ACCESS          IS  DYNAMIC
+004700110817                    RECORD KEY      IS  EXTERNALLY-DESCRIBED-KEY
+004800110902                    FILE STATUS     IS  lc_File_Status.
+004900110503      *
+005000101111       DATA DIVISION.
+005100110430       FILE SECTION.
+005200110829       FD  Struct-Asset-Alloc-Mod-SCH-DT
+005300110817           LABEL RECORDS ARE STANDARD.
+005400110817       01  Struct-Asset-Alloc-Mod-SCH-DTR.
+005500110829                                 COPY DD-ALL-FORMATS OF MFASAMSDP.
+005600101111
+005700101111       WORKING-STORAGE SECTION.
+005800101111          COPY CPYSQLFLD
+005900110809             REPLACING == "CURRENT_PROGRAM" == BY == "OAMODSETUP" ==.
+006000110829       01 lc-Sqlerr-Statement           PIC X(25) VALUE SPACES.
+006100101111
+006200101111           EXEC SQL
+006300101111             INCLUDE SQLCA
+006400101111           END-EXEC.
+006500110502
+006600110916      * Error Codes, Uniquely Identify where the error happened
+006700110916       01 WS-ERR-CODE                      PIC X(02) VALUE SPACES.
+006800110916          88 WS-ERR-OK                               VALUE SPACES.
+006900110916          88 lnc_Err10                               VALUE "10".
+007000110916          88 lnc_Err11                               VALUE "11".
+007100110916          88 lnc_Err12                               VALUE "12".
+007200110916          88 lnc_Err13                               VALUE "13".
+007300110916          88 lnc_Err14                               VALUE "14".
+007400110916          88 lnc_Err15                               VALUE "15".
+007500110916          88 lnc_Err16                               VALUE "16".
+007600110916          88 lnc_Err17                               VALUE "17".
+007700110916          88 lnc_Err18                               VALUE "18".
+007800110916          88 lnc_Err19                               VALUE "19".
+007900110916          88 lnc_Err20                               VALUE "20".
+008000110916          88 lnc_Err21                               VALUE "21".
+008100110916          88 lnc_Err22                               VALUE "22".
+008200110916          88 lnc_Err23                               VALUE "23".
+008300110916          88 lnc_Err24                               VALUE "24".
+008400110916          88 lnc_Err25                               VALUE "25".
+008500110916
+008600110809       01 lc_Variables.
+008700110902          03 ld_Parm_SysDate            PIC S9(08) VALUE 0.
+008800110902          03 ld_SysDate                 PIC S9(09) COMP-3 VALUE 0.
+008900110907          03 li_Parm_SysTime            PIC S9(09) COMP-3 VALUE 0.
+009000110907          03 li_SysTime                 PIC S9(09) COMP-3 VALUE 0.
+009100110902          03 lc_File_Status             PIC  X(02) VALUE "0".
+009200110914
+009300110906          03 li_BuyMax                  PIC S9(03) COMP-3 VALUE 0.
+009400110809          03 li_TradeDate               PIC S9(08).
+009500110809          03 lc_Model                   PIC  X(10).
+009600110909          03 ld_StartDate               PIC S9(08).
+009700110914
+009800110809          03 lc_AAModelType             PIC  X(01).
+009900110909          03 ld_EndDate                 PIC S9(08).
+010000110908          03 ln_Threshold               PIC S9(03)V99.
+010100110914          03 ln_RebalToPercent          PIC S9(03)V99.
+010200110914
+010300110908          03 ln_ThresholdRate           PIC S9(03)V99.
+010400110908          03 ln_SetupThreshold          PIC S9(03)V99.
+010500110809          03 li_MiniTradeDate           PIC S9(08).
+010600140423      * RFS135089.1 - Start
+010700140423          03 li_MaxTradeDate            PIC S9(08).
+010800140423      * RFS135089.1 - End
+010900140425      * RFS135089.2 - Start
+011000140425          03 li_saveModelidx            PIC S9(05).
+011100140425      * RFS135089.2 - End
+011200140507
+011300140507
+011400110809          03 li_Cnt                     PIC S9(08).
+011500110829          03 li_Cnt1                    PIC S9(08).
+011600110809          03 lc_Structure               PIC  X(05).
+011700110908          03 ln_Percent                 PIC S9(03)V99.
+011800110809          03 li_Seq                     PIC S9(03).
+011900150206      * RFS143694 - START
+012000150206          03 lc_custum_ind              PIC X(01)
+012100150206                                        VALUE " ".
+012200150206          03 li_minthres_rate           PIC S9(05)V9(02)
+012300150206                                        VALUE ZEROS.
+012400150206          03 li_maxthres_rate           PIC S9(05)V9(02)
+012500150206                                        VALUE ZEROS.
+012600201231          03 lc_IncludeRbal             PIC X(01) VALUE "N".
+012700150206      * RFS143694 - END
+012800110908          03 ln_Difference              PIC S9(03)V99.
+012900110909          03 ld_AsAtDate                PIC S9(08).
+013000110809          03 li_AccountNo               PIC S9(09).
+013100110818          03 li_InvestorNo              PIC S9(09).
+013200110908          03 lc_ModType                 PIC  X(01).
+013300110908             88 lncc_StandardModel      VALUE "S".
+013400110908             88 lncc_CustomModel        VALUE "C".
+013500110809          03 lb_ModelFound              PIC  X(01).
+013600110908             88 lb_ModelFoundYes        VALUE "Y".
+013700110908             88 lb_ModelFoundNo         VALUE "N".
+013800110914          03 lb_ModelMatch              PIC  X(01).
+013900110914             88 lb_ModelMatchYes        VALUE "Y".
+014000110914             88 lb_ModelMatchNo         VALUE "N".
+014100110809          03 lb_SkipModel               PIC  X(01).
+014200110908             88 lb_SkipModelYes         VALUE "Y".
+014300110908             88 lb_SkipModelNo          VALUE "N".
+014400110906          03 lb_SAMSDPRead              PIC  X(01).
+014500110908             88 lb_SAMSDPFoundYes       VALUE "Y".
+014600110908             88 lb_SAMSDPFoundNo        VALUE "N".
+014700110817          03 lb_MODFetch                PIC  X(01).
+014800110908             88 lb_MODFetchEnd          VALUE "Y".
+014900110908             88 lb_MODFetchNotEnd       VALUE "N".
+015000110817          03 lb_ACTCURFetch             PIC  X(01).
+015100110908             88 lb_ACTCURFetchEnd       VALUE "Y".
+015200110908             88 lb_ACTCURFetchNotEnd    VALUE "N".
+015300110829          03 lb_INVFetch                PIC  X(01).
+015400110908             88 lb_INVFetchEnd          VALUE "Y".
+015500110908             88 lb_INVFetchNotEnd       VALUE "N".
+015600110906
+015700110809      *Constants
+015800110809       01 lc_Constant.
+015900110809          03 lncc_OAMODSETUP            PIC  X(10) VALUE "OAMODSETUP".
+016000110906          03 lncc_Chg_Category          PIC  X(20)
+016100110906                                        VALUE "OA model & AAP setup".
+016200110906          03 lncc_ACCAAMDS              PIC  X(08) VALUE "ACCAAMDS".
+016300110809          03 lncc_ROOT                  PIC  X(10) VALUE "ROOT".
+016400110909          03 lnci_200                   PIC S9(03) VALUE 200.
+016500110809          03 lnci_3                     PIC S9(01) VALUE 3.
+016600110809          03 lnci_4                     PIC S9(01) VALUE 4.
+016700110809          03 lncc_C                     PIC  X(01) VALUE "C".
+016800110829          03 lncc_S                     PIC  X(01) VALUE "S".
+016900140402
+017000140402      * RFS135089 - Start
+017100140402          03 lncc_100                   PIC S9(05) COMP-3 VALUE 100.
+017200140403
+017300140403       01 lc_startSearchModelFlag       PIC X(01) VALUE SPACE.
+017400140403         88 lncc_startSearchModel         VALUE SPACE.
+017500140403         88 lncc_endSearchModel           VALUE "Y".
+017600140402      * RFS135089 - End
+017700140425
+017800140425
+017900110809       01 ltb_Model_Array.
+018000140425      * RFS135089.2 - Start - increased size of the array and added
+018100140425      *  COMP-3
+018200140425      *  03 ltb_Model OCCURS 5000 INDEXED BY li_Modelidx, li_Modelmax.
+018300140425         03 ltb_Model OCCURS 12000 INDEXED BY li_Modelidx, li_Modelmax.
+018400140425      * RFS135089.2 - end
+018500110908             05 lc_ModelType            PIC  X(01).
+018600110908             05 li_ModelStartDate       PIC S9(08).
+018700110908             05 li_ModelEndDate         PIC S9(08).
+018800110908             05 lc_ModelCd              PIC  X(10).
+018900140425      * RFS135089.2 - Start
+019000140425      *      05 ln_ModelThresholdRate   PIC S9(03)V9(02).
+019100140425      *      05 ln_ModelRebaltoPercent  PIC S9(03)V9(02).
+019200140425      *      05 ln_ModelSetupThreshold  PIC S9(03)V9(02).
+019300140425             05 ln_ModelThresholdRate   PIC S9(03)V9(02) COMP-3.
+019400140425             05 ln_ModelRebaltoPercent  PIC S9(03)V9(02) COMP-3.
+019500140425             05 ln_ModelSetupThreshold  PIC S9(03)V9(02) COMP-3.
+019600140425      * RFS135089.2 - end
+019700110915             05 ltb_Structure OCCURS 100 INDEXED BY li_Structidx.
+019800110908                07 lc_StructCd          PIC  X(05).
+019900140425      * RFS135089.2 - Start
+020000140425      *         07 ln_StructPercent     PIC S9(03)V9(02).
+020100140425                07 ln_StructPercent     PIC S9(03)V9(02) COMP-3.
+020200140425      * RFS135089.2 - end
+020300110908                07 lc_StructTradeExist  PIC  X(01).
+020400140425      * RFS135089.2 - Start: calculated new percent
+020500140425                07 ln_StructPercentClc  PIC S9(03)V9(02) COMP-3.
+020600140425      * RFS135089.2 - End
+020700110809
+020800110809       01 ltb_Buy_Array.
+020900110914          03 ltb_Buy OCCURS 200 INDEXED BY li_Buyidx.
+021000110908             05 lc_BuyStruct            PIC  X(05).
+021100110908             05 ln_BuyPercent           PIC S9(03)V9(02).
+021200110809
+021300210914187304 COPY CPYAASPARM.
+021400101111       LINKAGE SECTION.
+021500110808
+021600110916       01 pd_Process_Date               PIC  X(08).
+021700110916       01 pc_Retn_Code                  PIC  X(02).
+021800110805
+021900101111      * =================================
+022000110916       PROCEDURE DIVISION USING pd_Process_Date
+022100110916                                pc_Retn_Code.
+022200110808
+022300101111      * ---------------------------------
+022400110808       Mainline.
+022500101111      * ---------------------------------
+022600110809           PERFORM Initial-Logic.
+022700110908           IF  li_Cnt > ZEROES
+022800110908               SET lb_ACTCURFetchNotEnd  TO TRUE
+022900110908               PERFORM Detail-Process UNTIL lb_ACTCURFetchEnd
+023000110809           END-IF.
+023100110808           PERFORM End-Job.
+023200110804
+023300101111      * ---------------------------------
+023400110808       Initial-Logic.
+023500101111      * ---------------------------------
+023600110804      *****************************************************************
+023700110809      * DESCRIPTION: This process will select accounts that need to   *
+023800110809      *              create OA in a temporary file and load the       *
+023900110809      *              standard and custom model in the temporary array.*
+024000110804      *****************************************************************
+024100110905           INITIALIZE lc_Variables.
+024200110916           MOVE SPACES             TO pc_Retn_Code.
+024300110916           MOVE pd_Process_date    TO ld_AsAtDate.
+024400210929187304     ACCEPT LC-MFAAAPARM-DTAARA FROM WS-DTAARA-MFAAAPARM
+024500210914187304                          FOR "MFAAAPARM".
+024600210929187304     MOVE LC-REBAL-DEFAULT        TO lc_IncludeRbal.
+024700110908           PERFORM Open-File.
+024800110908           PERFORM Select-MFAAAMP.
+024900110809
+025000110908           IF  li_Cnt > ZEROES
+025100110908               PERFORM Prepare-SQACTINV
+025200110908               PERFORM Load-SQACTINV-Model
+025300110908               PERFORM Prepare-SQACTINV2
+025400110908               PERFORM Load-SQACTINV2-Model
+025500110908               PERFORM Update-SQACTINV2
+025600110908               PERFORM Update-SQACTINV2-Inv
+025700110908               PERFORM Update-SQACTINV2-Last-Inv
+025800110908               PERFORM Declare-Cursor
+025900110908               PERFORM Load-Model
+026000110908               PERFORM Open-ACTCUR-Cursor
+026100110809           END-IF.
+026200110809
+026300110809      * ---------------------------------
+026400110908       Open-File.
+026500110809      * ---------------------------------
+026600110908           OPEN INPUT Struct-Asset-Alloc-Mod-SCH-DT.
+026700110908
+026800110908      * ---------------------------------
+026900110908       Select-MFAAAMP.
+027000110908      * ---------------------------------
+027100110809      *****************************************************************
+027200110809      * DESCRIPTION: To check if any phantom setup with AA_Rule =3    *
+027300110809      *****************************************************************
+027400110809           INITIALIZE li_Cnt.
+027500110809           MOVE SPACES             TO lc-Sqlerr-Statement.
+027600110809           MOVE "Select-MFAAAMP"   TO lc-Sqlerr-Statement.
+027700110809           MOVE ZEROES             TO SQLCODE.
+027800110804
+027900110425           EXEC SQL
+028000110809              SELECT  COUNT(*)
+028100110829              INTO   :li_Cnt
+028200110809              FROM    MFAAAMP AAMP
+028300110809              INNER   JOIN MFAINVMTP INVMTP
+028400110809              ON      INVMTP.AA_METHOD = AAMP.AA_METHOD
+028500110809              INNER   JOIN MFAINVP INVP
+028600110809              ON      INVP.INVESTMENT_CODE = INVMTP.INVESTMENT_CODE
+028700110809              AND     INVP.INVESTMENT_STATUS_CODE <> :lncc_C
+028800110816              WHERE   AAMP.AA_RULE = :lnci_3
+028900110809           END-EXEC.
+029000110809
+029100110908           IF  SQLCODE NOT = 0 AND SQLCODE NOT = 100
+029200110916               SET lnc_Err10       TO TRUE
+029300110908               PERFORM SQL_ErrorLog
+029400110809           END-IF.
+029500110817
+029600110809      * ---------------------------------
+029700110809       Prepare-SQACTINV.
+029800110809      * ---------------------------------
+029900110809      *****************************************************************
+030000110809      * DESCRIPTION: To create a temporary file(SQACTINV) to store    *
+030100110809      *              accounts that need to create OA Model today.     *
+030200110809      *****************************************************************
+030300110809           EXEC SQL
+030400110912              CREATE TABLE QTEMP/SQACTINV
+030500110912                    (ACCOUNT_NO                NUMERIC (9,0),
+030600110809                     INVESTMENT_CODE           CHARACTER (5),
+030700110912                     TRADE_DATE                NUMERIC (8,0),
+030800110912                     NET_AMT                   NUMERIC (13,2),
+030900110809                     INVESTMENT_STRUCTURE_CODE CHARACTER (5),
+031000110909                     PHANTOM_FUND              CHARACTER (5))
+031100110809           END-EXEC.
+031200140403      * RFS135089 - Start: clear the file
+031300140403           EXEC SQL
+031400140403              DELETE FROM QTEMP/SQACTINV
+031500140403           END-EXEC.
+031600140403      * RFS135089 - End
+031700110809      * ---------------------------------
+031800110809       Load-SQACTINV-Model.
+031900110809      * ---------------------------------
+032000110809      *****************************************************************
+032100110809      * DESCRIPTION: To load the account need to create OA model today*
+032200110809      *              in temporary file (SQACTINV).                    *
+032300110809      *****************************************************************
+032400110907           MOVE SPACES                 TO lc-Sqlerr-Statement.
+032500110907           MOVE "Load-SQACTINV-Model"  TO lc-Sqlerr-Statement.
+032600110907           MOVE ZEROES                 TO SQLCODE.
+032700110809
+032800110809           EXEC SQL
+032900110912              INSERT INTO QTEMP/SQACTINV
+033000110912              (SELECT TRNP.ACCOUNT_NO,
+033100110809                     TRNP.INVESTMENT_CODE,
+033200110809                     TRNP.TRADE_DATE,
+033300110809                     SUM(TRNP.NET_AMT),
+033400110909                     MIN(DERIVED.INVESTMENT_STRUCTURE_CODE),
+033500110902                     " "
+033600110809               FROM  MFATRNP TRNP
+033700110809               INNER JOIN MFAINVP INVP
+033800110809               ON    INVP.INVESTMENT_CODE = TRNP.INVESTMENT_CODE
+033900110809               INNER JOIN MFAPRTCDP PRTCDP
+034000110818               ON    PRTCDP.PRODUCT_TYPE_CODE  = INVP.PRODUCT_TYPE_CODE
+034100110816               AND   PRTCDP.PRODUCT_TYPE_RULE = :lnci_4
+034200110809               INNER JOIN MFAINVMTP INVMTP
+034300110809               ON    INVMTP.INVESTMENT_CODE = INVP.INVESTMENT_CODE
+034400110809               INNER JOIN  MFAAAMP AAMP
+034500110809               ON    INVMTP.AA_METHOD = AAMP.AA_METHOD
+034600110816               AND   AAMP.AA_RULE = :lnci_3
+034700110809               INNER JOIN
+034800141030      *RFS 141966 - begins.
+034900141030      *              (SELECT INVSXP.INVESTMENT_CODE,
+035000141030      *                      MIN(INVSXP.INVESTMENT_STRUCTURE_CODE) AS
+035100141030      *                      INVESTMENT_STRUCTURE_CODE
+035200141030      *               FROM   MFAINVSXP INVSXP
+035300141030      *               INNER  JOIN MFAFNCTP FNCTP
+035400141030      *               ON     FNCTP.INVESTMENT_STRUCTURE_CODE =
+035500141030      *                      INVSXP.INVESTMENT_STRUCTURE_CODE
+035600141030      *               AND    FNCTP.FUNCTION_CODE = :lncc_ROOT
+035700141030      *               GROUP  BY INVESTMENT_CODE) AS DERIVED ON
+035800141030      *                      DERIVED.INVESTMENT_CODE
+035900141030      *                                          = TRNP.INVESTMENT_CODE
+036000141030
+036100141030                     (SELECT ISTFNP.INVESTMENT_CODE,
+036200141030                             MIN(ISTFNP.INVESTMENT_STRUCTURE_CODE) AS
+036300141030                             INVESTMENT_STRUCTURE_CODE
+036400141030                      FROM   MFAISTFNP ISTFNP
+036500141030                      WHERE  ISTFNP.FUNCTION_CODE = :lncc_ROOT
+036600141030                      GROUP  BY INVESTMENT_CODE) AS DERIVED ON
+036700141030                             DERIVED.INVESTMENT_CODE
+036800141030                                                 = TRNP.INVESTMENT_CODE
+036900141030      *RFS 141966 - ends.
+037000141030
+037100110909                      WHERE  TRNP.PROCESS_DATE = :ld_AsAtDate
+037200110809                      AND    TRNP.TRANS_TYPE_CODE IN
+037300110809                            (SELECT MAX(EXTCDP.TRANS_TYPE_CODE)
+037400110809                             FROM   MFAEXTCDP EXTCDP
+037500110809                             WHERE  EXTCDP.EXTERNAL_ID =
+037600110906                                                       :lncc_OAModSetUp
+037700110809                             AND   (EXTCDP.TRANS_STATUS_CODE = " "
+037800110809                                    OR EXTCDP.TRANS_STATUS_CODE =
+037900110912                                                TRNP.TRANS_STATUS_CODE)
+038000110809                             AND   (EXTCDP.TRANS_TYPE_CODE = " "
+038100110809                                    OR EXTCDP.TRANS_TYPE_CODE =
+038200110809                                                  TRNP.TRANS_TYPE_CODE)
+038300110809                             AND   (EXTCDP.TRANS_ORIGIN_CODE = " "
+038400110809                                    OR  EXTCDP.TRANS_ORIGIN_CODE =
+038500110809                                                TRNP.TRANS_ORIGIN_CODE)
+038600110809                             AND   (EXTCDP.INDUSTRY_FUND_CODE  = " "
+038700110809                                    OR   EXTCDP.INDUSTRY_FUND_CODE =
+038800110809                                              TRNP.INDUSTRY_FUND_CODE))
+038900110809                             GROUP  BY TRNP.ACCOUNT_NO,
+039000110809                                       TRNP.INVESTMENT_CODE,
+039100110912                                       TRNP.TRADE_DATE)
+039200110809           END-EXEC.
+039300110809
+039400110908           IF  SQLCODE NOT = 0
+039500110916               SET lnc_Err11       TO TRUE
+039600110908               PERFORM SQL_ErrorLog
+039700110809           END-IF.
+039800110809
+039900110809      * ---------------------------------
+040000110809       Prepare-SQACTINV2.
+040100110809      * ---------------------------------
+040200110809      *****************************************************************
+040300110809      * DESCRIPTION: To create a temporary file(SQACTINV2) to store   *
+040400110809      *              the trades per account/investment structure code *
+040500110809      *****************************************************************
+040600110809           EXEC SQL
+040700110912              CREATE TABLE QTEMP/SQACTINV2
+040800110912                    (INVESTOR_NO               NUMERIC (9,0),
+040900110912                     ACCOUNT_NO                NUMERIC (9,0),
+041000110809                     INVESTMENT_STRUCTURE_CODE CHARACTER (5),
+041100110912                     NET_AMT                   NUMERIC (13,2),
+041200110912                     TRADE_DATE                NUMERIC (8,0),
+041300110912                     TOTAL_NET                 NUMERIC (13,2),
+041400110912                     PERCENT                   NUMERIC (5,2),
+041500110809                     ADJ_STRUCTURE             CHARACTER (5))
+041600110809           END-EXEC.
+041700110809
+041800140403      * RFS135089 - Start: Cleart the file
+041900140403           EXEC SQL
+042000140403              DELETE FROM QTEMP/SQACTINV2
+042100140403           END-EXEC.
+042200140403      * RFS135089 - End
+042300110809      * ---------------------------------
+042400110809       Load-SQACTINV2-Model.
+042500110809      * ---------------------------------
+042600110809      *****************************************************************
+042700110809      * DESCRIPTION: To load the temporary file(SQACTINV2) to store   *
+042800110809      *              the trades per account/investment structure code *
+042900110809      *****************************************************************
+043000110907           MOVE SPACES                 TO lc-Sqlerr-Statement.
+043100110907           MOVE "Load-SQACTINV2-Model" TO lc-Sqlerr-Statement.
+043200110907           MOVE ZEROES                 TO SQLCODE.
+043300110809
+043400110809           EXEC SQL
+043500110912              INSERT  INTO QTEMP/SQACTINV2
+043600110809              (SELECT ACCNTP.INVESTOR_NO,
+043700110906                      ACTINV.ACCOUNT_NO,
+043800110913                      ACTINV.INVESTMENT_STRUCTURE_CODE,
+043900110905                      SUM(ACTINV.NET_AMT),
+044000110905                      MIN(DERIVED.TRADE_DATE),
+044100110905                      0,
+044200110905                      0,
+044300110905                      " "
+044400110912               FROM   QTEMP/SQACTINV ACTINV
+044500110809               INNER  JOIN MFAACCNTP ACCNTP
+044600110809               ON     ACCNTP.ACCOUNT_NO = ACTINV.ACCOUNT_NO
+044700110809               INNER  JOIN
+044800110809                     (SELECT ACCOUNT_NO,
+044900110905                             MIN(TRADE_DATE) AS TRADE_DATE
+045000110912                      FROM   QTEMP/SQACTINV
+045100110829                      GROUP  BY ACCOUNT_NO)  AS DERIVED
+045200110809                      ON     DERIVED.ACCOUNT_NO = ACTINV.ACCOUNT_NO
+045300110905                      AND    DERIVED.TRADE_DATE = ACTINV.TRADE_DATE
+045400110905                      GROUP  BY ACTINV.ACCOUNT_NO,
+045500110909                                ACTINV.INVESTMENT_STRUCTURE_CODE,
+045600110909                                ACCNTP.INVESTOR_NO)
+045700110809           END-EXEC.
+045800110809
+045900110908           IF  SQLCODE NOT = 0
+046000110916               SET lnc_Err12           TO TRUE
+046100110916               PERFORM SQL_ErrorLog
+046200110809           END-IF.
+046300110809
+046400110809      * ---------------------------------
+046500110809       Update-SQACTINV2.
+046600110809      * ---------------------------------
+046700110809      *****************************************************************
+046800110809      * DESCRIPTION: To update the adjusted investment structure code *
+046900110809      *              and total net.                                   *
+047000110809      *****************************************************************
+047100110809           MOVE SPACES             TO lc-Sqlerr-Statement.
+047200110809           MOVE "Update-SQACTINV2" TO lc-Sqlerr-Statement.
+047300110809           MOVE ZEROES             TO SQLCODE.
+047400110809
+047500110809           EXEC SQL
+047600110912              UPDATE QTEMP/SQACTINV2 ACTINV
+047700110809              SET   (TOTAL_NET, ADJ_STRUCTURE) =
+047800110809                     (SELECT SUM(NET_AMT),
+047900110809                             MAX(INVESTMENT_STRUCTURE_CODE)
+048000110912                      FROM   QTEMP/SQACTINV2 ACTINV2
+048100110809                      WHERE  ACTINV.ACCOUNT_NO = ACTINV2.ACCOUNT_NO)
+048200110809           END-EXEC.
+048300110809
+048400110908           IF  SQLCODE NOT = 0 AND SQLCODE NOT = 100
+048500110916               SET lnc_Err13       TO TRUE
+048600110916               PERFORM SQL_ErrorLog
+048700110809           END-IF.
+048800110809
+048900110809      * ---------------------------------
+049000110908       Update-SQACTINV2-Inv.
+049100110809      * ---------------------------------
+049200110809      *****************************************************************
+049300110809      * DESCRIPTION: To update the investment structure percent.      *
+049400110809      *****************************************************************
+049500110907           MOVE SPACES                 TO lc-Sqlerr-Statement.
+049600110908           MOVE "Update-SQACTINV2-Inv" TO lc-Sqlerr-Statement.
+049700110907           MOVE ZEROES                 TO SQLCODE.
+049800110809
+049900110809           EXEC SQL
+050000110912              UPDATE QTEMP/SQACTINV2
+050100140402      * RFS135089 - Start: fix Percent - convert to %
+050200140402      *       SET  PERCENT = DECIMAL(ROUND((NET_AMT/TOTAL_NET),2),5,2)
+050300140402              SET  PERCENT = ROUND(NET_AMT/TOTAL_NET * :lncc_100, 2)
+050400140402      * RFS135089 - End
+050500110809              WHERE  TOTAL_NET > 0
+050600110809              AND    INVESTMENT_STRUCTURE_CODE <> ADJ_STRUCTURE
+050700110809           END-EXEC.
+050800110809
+050900110908           IF  SQLCODE NOT = 0 AND SQLCODE NOT = 100
+051000110916               SET lnc_Err14           TO TRUE
+051100110916               PERFORM SQL_ErrorLog
+051200110809           END-IF.
+051300110809
+051400110809      * ---------------------------------
+051500110809       Update-SQACTINV2-Last-Inv.
+051600110809      * ---------------------------------
+051700110809      *****************************************************************
+051800110809      * DESCRIPTION: To update the investment structure percent.      *
+051900110809      *****************************************************************
+052000110907           MOVE SPACES                      TO lc-Sqlerr-Statement.
+052100110907           MOVE "Update-SQACTINV2-Last-Inv" TO lc-Sqlerr-Statement.
+052200110907           MOVE ZEROES                      TO SQLCODE.
+052300110809
+052400110809           EXEC SQL
+052500110912              UPDATE QTEMP/SQACTINV2 ACTINV
+052600110905              SET PERCENT = (SELECT 100 - SUM(PERCENT)
+052700110912                             FROM QTEMP/SQACTINV2 ACTINV2
+052800110905                             WHERE ACTINV2.ACCOUNT_NO =
+052900110905                                   ACTINV.ACCOUNT_NO)
+053000110905                             WHERE ACTINV.ADJ_STRUCTURE =
+053100110905                                   ACTINV.INVESTMENT_STRUCTURE_CODE
+053200110809           END-EXEC.
+053300110809
+053400110908           IF  SQLCODE NOT = 0 AND SQLCODE NOT = 100
+053500110916               SET lnc_Err15                TO TRUE
+053600110916               PERFORM SQL_ErrorLog
+053700110809           END-IF.
+053800110809
+053900110809      * ---------------------------------
+054000110809       Declare-Cursor.
+054100110809      * ---------------------------------
+054200110809      *****************************************************************
+054300110809      * DESCRIPTION: Declaration of ACTCUR Cursor.                    *
+054400110809      *****************************************************************
+054500110809           EXEC SQL
+054600110818              DECLARE lcu_ACTCUR CURSOR FOR
+054700110906              SELECT  ACCOUNT_NO,TRADE_DATE
+054800110912              FROM    QTEMP/SQACTINV2
+054900110906              GROUP   BY ACCOUNT_NO,
+055000110906                         TRADE_DATE
+055100140403      * RFS135089 - Start: added order by for consistency
+055200140403              ORDER BY ACCOUNT_NO, TRADE_DATE
+055300140403      * RFS135089 - End
+055400110809           END-EXEC.
+055500110809
+055600110809      *****************************************************************
+055700110809      * DESCRIPTION: Declaration of ACTINVCUR Cursor.                 *
+055800110809      *****************************************************************
+055900110809           EXEC SQL
+056000110818              DECLARE lcu_ACTINVCUR CURSOR FOR
+056100110809              SELECT  INVESTMENT_STRUCTURE_CODE,
+056200110809                      PERCENT
+056300110912              FROM    QTEMP/SQACTINV2
+056400110809              WHERE   ACCOUNT_NO = :li_AccountNo
+056500140403      * RFS135089 - Start: added order by for consistency
+056600140403              ORDER BY INVESTMENT_STRUCTURE_CODE,
+056700140403                       PERCENT
+056800140403      * RFS135089 - End
+056900110809           END-EXEC.
+057000110809
+057100110809      *****************************************************************
+057200110809      * DESCRIPTION: Declaration of MODELCUR Cursor.                  *
+057300110809      *****************************************************************
+057400110809           EXEC SQL
+057500110818              DECLARE lcu_MODELCUR CURSOR FOR
+057600110913              SELECT SAMSHP.OA_MODEL_TYPE,
+057700110809                     SAMSHP.START_DATE,
+057800110913                     SAMSHP.OA_MODEL_CODE,
+057900110809                     SAMSHP.END_DATE,
+058000110809                     SAMSHP.THRESHOLD_RATE,
+058100110809                     SAMSHP.REBAL_TO_PERCENT,
+058200110809                     SAMSHP.SETUP_THRESHOLD
+058300110809              FROM   MFASAMSHP SAMSHP
+058400140327      * RFS135089 - Start: fix the compare statement
+058500140327      *       WHERE  SAMSHP.START_DATE >= :li_MiniTradeDate
+058600140514              WHERE (SAMSHP.START_DATE <= :li_MiniTradeDate  AND
+058700140514                      (SAMSHP.END_DATE = 0  OR
+058800140514                             SAMSHP.END_DATE > :li_MiniTradeDate) ) OR
+058900140514                    (SAMSHP.START_DATE >= :li_MiniTradeDate  AND
+059000140514                          SAMSHP.START_DATE <= :li_MaxTradeDate)
+059100140507      * RFS135089 - End
+059200110809              AND    SAMSHP.FUNCTION_CODE = :lncc_ROOT
+059300110809              ORDER  BY SAMSHP.OA_MODEL_TYPE,
+059400110809                        SAMSHP.START_DATE,
+059500110809                        SAMSHP.OA_MODEL_CODE
+059600110809           END-EXEC.
+059700110809
+059800110809      * ---------------------------------
+059900110809       Load-Model.
+060000110809      * ---------------------------------
+060100110809      *****************************************************************
+060200110809      * DESCRIPTION: This process will load the standard and custom   *
+060300110809      *              model.                                           *
+060400110809      *****************************************************************
+060500110914           PERFORM Get-MinTradeDate.
+060600110810
+060700110810           INITIALIZE ltb_Model_Array.
+060800110908           SET li_modelidx        TO ZEROES.
+060900110908           SET li_modelmax        TO ZEROES.
+061000110906           SET lb_MODFetchNotEnd  TO TRUE.
+061100110810
+061200110810           PERFORM Open-MODELCUR-Cursor.
+061300110906           PERFORM Fetch-MODELCUR-Cursor UNTIL lb_MODFetchEnd.
+061400110908           SET li_modelmax        TO li_modelidx.
+061500110810
+061600110914      * ---------------------------------
+061700110914       Get-MinTradeDate.
+061800110914      * ---------------------------------
+061900110914      *****************************************************************
+062000110914      * DESCRIPTION: This process is to retrieve the minimum trade    *
+062100110914      *              date from SQACTINV2 and save in a temporary field*
+062200110914      *              li_MiniTradeDate.                                *
+062300110914      *****************************************************************
+062400110914           INITIALIZE li_MiniTradeDate.
+062500140423      * RFS135089.1 - Start: added Max trade date
+062600140423           INITIALIZE li_MaxTradeDate.
+062700140423      * RFS135089.1 - End
+062800110914           MOVE SPACES             TO lc-Sqlerr-Statement.
+062900110914           MOVE "Get-MinTradeDate" TO lc-Sqlerr-Statement.
+063000110914           MOVE ZEROES             TO SQLCODE.
+063100140423      * RFS135089.1 - added Max trade date
+063200110914           EXEC SQL
+063300140423              SELECT MIN(TRADE_DATE), MAX(TRADE_DATE)
+063400140423              INTO  :li_MiniTradeDate, :li_MaxTradeDate
+063500110914              FROM   QTEMP/SQACTINV2
+063600110914           END-EXEC.
+063700110914
+063800110914           IF  SQLCODE NOT = 0
+063900110916               SET lnc_Err16       TO TRUE
+064000110916               PERFORM SQL_ErrorLog
+064100110914           END-IF.
+064200110914
+064300110914      * ---------------------------------
+064400110914       Open-MODELCUR-Cursor.
+064500110914      * ---------------------------------
+064600110914           MOVE SPACES               TO lc-Sqlerr-Statement.
+064700110914           MOVE "Open-MODELCUR"      TO lc-Sqlerr-Statement.
+064800110914           MOVE ZEROES               TO SQLCODE.
+064900110914
+065000110914           EXEC SQL
+065100110914              OPEN lcu_MODELCUR
+065200110914           END-EXEC.
+065300110914
+065400110914           IF  SQLCODE NOT = 0
+065500110916               SET lnc_Err17         TO TRUE
+065600110916               PERFORM SQL_ErrorLog
+065700110914           END-IF.
+065800110914
+065900110914      * ---------------------------------
+066000110914       Fetch-MODELCUR-Cursor.
+066100110914      * ---------------------------------
+066200110914           MOVE SPACES               TO lc-Sqlerr-Statement.
+066300110914           MOVE "Fetch-MODELCUR"     TO lc-Sqlerr-Statement.
+066400110914           MOVE ZEROES               TO SQLCODE.
+066500110914
+066600110914           EXEC SQL
+066700110914              FETCH lcu_MODELCUR
+066800110914              INTO :lc_AAModelType,
+066900110914                   :ld_Startdate,
+067000110914                   :lc_Model,
+067100110914                   :ld_EndDate,
+067200110914                   :ln_ThresholdRate,
+067300110914                   :ln_RebalToPercent,
+067400110914                   :ln_SetupThreshold
+067500110914           END-EXEC.
+067600110914
+067700110914           IF  SQLCODE = 100
+067800110914               SET lb_MODFetchEnd    TO TRUE
+067900110914           ELSE IF  SQLCODE NOT = 0 AND NOT = 100
+068000110914               SET lb_MODFetchEnd    TO TRUE
+068100110916               SET lnc_Err18         TO TRUE
+068200110916               PERFORM SQL_ErrorLog
+068300110914           END-IF.
+068400110914
+068500110914           IF  lb_MODFetchNotEnd
+068600110914               SET li_Modelidx UP BY 1
+068700110914               INITIALIZE   MFASAMSDP
+068800110914
+068900110914               MOVE lc_Model       TO lc_ModelCd(li_modelidx)
+069000110914                                      OA-MODEL-CODE OF
+069100110914                                          Struct-Asset-Alloc-Mod-SCH-DT
+069200110914               MOVE ld_Startdate   TO li_ModelStartdate(li_modelidx)
+069300110914                                      START-DATE OF
+069400110914                                          Struct-Asset-Alloc-Mod-SCH-DT
+069500110914               MOVE ld_Enddate     TO li_ModelEnddate(li_modelidx)
+069600110914               MOVE lc_AAModelType TO lc_ModelType(li_modelidx)
+069700110914               MOVE ln_ThresholdRate
+069800110914                               TO ln_ModelThresholdRate(li_modelidx)
+069900110914               MOVE ln_RebalToPercent
+070000110914                               TO ln_ModelRebalToPercent(li_modelidx)
+070100110914               MOVE ln_SetupThreshold
+070200110914                               TO ln_ModelSetupThreshold(li_modelidx)
+070300110914               MOVE SPACES     TO INVESTMENT-STRUCTURE-CODE OF
+070400110914                                          Struct-Asset-Alloc-Mod-SCH-DT
+070500110914
+070600110914               SET li_Structidx        TO ZEROES
+070700110914               SET lb_SAMSDPFoundYes   TO TRUE
+070800110914               PERFORM Start-MFASAMSDP
+070900110914               PERFORM Read-MFASAMSDP UNTIL lb_SAMSDPFoundNo
+071000110914           END-IF.
+071100110914
+071200110914      * ---------------------------------
+071300110914       Start-MFASAMSDP.
+071400110914      * ---------------------------------
+071500110914           START Struct-Asset-Alloc-Mod-SCH-DT
+071600110914             KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+071700110914             INVALID KEY
+071800110914               INITIALIZE   MFASAMSDP
+071900110914           END-START.
+072000110914
+072100110914      * ---------------------------------
+072200110914       Read-MFASAMSDP.
+072300110914      * ---------------------------------
+072400110914           READ Struct-Asset-Alloc-Mod-SCH-DT NEXT RECORD
+072500110914             AT END
+072600110914                SET lb_SAMSDPFoundNo  TO TRUE
+072700110914                INITIALIZE   MFASAMSDP
+072800110914           END-READ.
+072900110914           IF  OA-MODEL-CODE OF Struct-Asset-Alloc-Mod-SCH-DT
+073000110914               = lc_Model
+073100110914               AND
+073200110914               START-DATE OF Struct-Asset-Alloc-Mod-SCH-DT
+073300110914               = ld_Startdate
+073400110914                 SET li_Structidx UP BY 1
+073500110914                 PERFORM Store-MFASAMSDP
+073600110914           ELSE
+073700110914                 INITIALIZE   MFASAMSDP
+073800110914                 SET lb_SAMSDPFoundNo TO TRUE
+073900110914           END-IF.
+074000110914
+074100110914      * ---------------------------------
+074200110914       Store-MFASAMSDP.
+074300110914      * ---------------------------------
+074400110914           MOVE Investment-Structure-Code
+074500110914                                      OF  Struct-Asset-Alloc-Mod-SCH-DT
+074600110914                       TO lc_StructCd(li_modelidx, li_structidx).
+074700110914           MOVE Percent-Allocation    OF  Struct-Asset-Alloc-Mod-SCH-DT
+074800110914                       TO ln_StructPercent(li_modelidx, li_structidx).
+074900110914
+075000110914      * ---------------------------------
+075100110914       Open-ACTCUR-Cursor.
+075200110914      * ---------------------------------
+075300110914           MOVE SPACES               TO lc-Sqlerr-Statement.
+075400110914           MOVE "Open-ACTCUR"        TO lc-Sqlerr-Statement.
+075500110914           MOVE ZEROES               TO SQLCODE.
+075600110914
+075700110914           EXEC SQL
+075800110914              OPEN lcu_ACTCUR
+075900110914           END-EXEC.
+076000110914
+076100110914           IF  SQLCODE NOT = 0
+076200110916               SET lnc_Err19         TO TRUE
+076300110916               PERFORM SQL_ErrorLog
+076400110914           END-IF.
+076500110914
+076600110810      * ---------------------------------
+076700110810       Detail-Process.
+076800110810      * ---------------------------------
+076900110810      *****************************************************************
+077000110810      * DESCRIPTION: This process accounts that need to create OA     *
+077100110810      *              model.                                           *
+077200110810      *****************************************************************
+077300110810           PERFORM Fetch-ACTCUR-Cursor.
+077400140327      * RFS135089 - Start: check for the data end
+077500140403           SET lb_ModelFoundNo           TO TRUE
+077600140327           IF NOT Lb_ACTCURFetchEnd
+077700140327      * RFS135089 - End
+077800140327             PERFORM Check-OASetup
+077900140327             IF  li_Cnt1 = ZEROES
+078000110908               PERFORM Open-ACTINVCUR-Cursor
+078100110908               PERFORM Fetch-ACTINVCUR-Cursor
+078200110908               PERFORM Close-ACTINVCUR-Cursor
+078300110810
+078400110908               MOVE lncc_S TO lc_ModType
+078500140403      * RFS135089 - Start: Changed find model routine
+078600140403      *        PERFORM Find-Model
+078700140403               PERFORM Find-Model-main
+078800140403      * RFS135089 - End
+078900110810
+079000110908               IF  lb_ModelFoundNo
+079100110908                   MOVE lncc_C TO lc_ModType
+079200140403      * RFS135089 - Start: Changed find model routine
+079300140403      *            PERFORM Find-Model
+079400140403                   PERFORM Find-Model-main
+079500140403      * RFS135089 - End
+079600110908               END-IF
+079700110810
+079800110908               IF  lb_ModelFoundYes
+079900110908                   PERFORM Create-OA-Model
+080000110908                   PERFORM Write-Audit-Log
+080100110908               END-IF
+080200140327      * RFS135089 - Start
+080300140327             END-IF
+080400140327           END-IF.
+080500140327      * RFS135089 - End
+080600110810
+080700110914      * ---------------------------------
+080800110914       Fetch-ACTCUR-Cursor.
+080900110914      * ---------------------------------
+081000110914           MOVE SPACES               TO lc-Sqlerr-Statement.
+081100110914           MOVE "Fetch-ACTCUR"       TO lc-Sqlerr-Statement.
+081200110914           MOVE ZEROES               TO SQLCODE.
+081300110914
+081400110914           EXEC SQL
+081500110914              FETCH lcu_ACTCUR
+081600110914              INTO :li_AccountNo,
+081700110914                   :li_TradeDate
+081800110914           END-EXEC.
+081900110914
+082000110914           IF  SQLCODE = 100
+082100110914               SET lb_ACTCURFetchEnd TO TRUE
+082200110914           ELSE
+082300110914             IF  SQLCODE NOT = 0 AND SQLCODE NOT = 100
+082400110916                 SET lnc_Err20       TO TRUE
+082500110916                 PERFORM SQL_ErrorLog
+082600110914             END-IF
+082700110914           END-IF.
+082800110914
+082900110914      * ---------------------------------
+083000110914       Check-OASetup.
+083100110914      * ---------------------------------
+083200110914      *****************************************************************
+083300110914      * DESCRIPTION: This process is to check if account have OA      *
+083400110914      *              record setup.                                    *
+083500110914      *****************************************************************
+083600110914           INITIALIZE li_Cnt1.
+083700110914           MOVE SPACES             TO lc-Sqlerr-Statement.
+083800110914           MOVE "Check-OASetup"    TO lc-Sqlerr-Statement.
+083900110914           MOVE ZEROES             TO SQLCODE.
+084000110914
+084100140515      * RFS135089.3 - Start: added validation of future models
+084200140515      * ---------------------------------------------------------------
+084300140515      *    EXEC SQL
+084400140515      *       SELECT COUNT(*)
+084500140515      *       INTO :li_Cnt1
+084600140515      *       FROM   MFAACAAHP
+084700140515      *       WHERE  ACCOUNT_NO = :li_AccountNo
+084800140515      *       AND    START_DATE <= :li_TradeDate
+084900140515      *       AND    (END_DATE = 0 OR END_DATE >= :li_TradeDate)
+085000140515      *    END-EXEC.
+085100140515      * ---------------------------------------------------------------
+085200110914
+085300140515           EXEC SQL
+085400140515             SELECT COUNT(*)
+085500140515               INTO :li_Cnt1
+085600140515             FROM   MFAACAAHP
+085700140515             WHERE  ACCOUNT_NO = :li_AccountNo     AND
+085800140515                 ((START_DATE <= :li_TradeDate  AND
+085900140515                         (END_DATE = 0 OR END_DATE >= :li_TradeDate) )
+086000140515                                      OR
+086100140515                  (START_DATE > :li_TradeDate )   )
+086200140515           END-EXEC.
+086300140515
+086400140515      * RFS135089.3 - End
+086500140515
+086600110914           IF  SQLCODE NOT = 0
+086700110916               SET lnc_Err21       TO TRUE
+086800110916               PERFORM SQL_ErrorLog
+086900110914           END-IF.
+087000110914
+087100110914      * ---------------------------------
+087200110914       Open-ACTINVCUR-Cursor.
+087300110914      * ---------------------------------
+087400110914           MOVE SPACES               TO lc-Sqlerr-Statement.
+087500110914           MOVE "Open-ACTINVCUR"     TO lc-Sqlerr-Statement.
+087600110914           MOVE ZEROES               TO SQLCODE.
+087700110914
+087800110914           EXEC SQL
+087900110914              OPEN lcu_ACTINVCUR
+088000110914           END-EXEC.
+088100110914
+088200110914           IF  SQLCODE NOT = 0
+088300110916               SET lnc_Err22         TO TRUE
+088400110916               PERFORM SQL_ErrorLog
+088500110914           END-IF.
+088600110914
+088700110914      * ---------------------------------
+088800110914       Fetch-ACTINVCUR-Cursor.
+088900110914      * ---------------------------------
+089000110914           MOVE SPACES               TO lc-Sqlerr-Statement.
+089100110914           MOVE "Fetch-ACTINVCUR"    TO lc-Sqlerr-Statement.
+089200110914           MOVE ZEROES               TO SQLCODE.
+089300110914           INITIALIZE ltb_Buy_Array.
+089400110914           MOVE ZEROES               TO li_BuyMax.
+089500110914
+089600110914           EXEC SQL
+089700110914              FETCH NEXT FROM lcu_ACTINVCUR FOR
+089800110914                   :lnci_200 ROWS
+089900110914              INTO :ltb_Buy
+090000110914           END-EXEC.
+090100110914
+090200110914           IF  SQLCODE = 0
+090300110914               MOVE SQLERRD(3)       TO li_BuyMax
+090400110914           ELSE
+090500110914             IF  SQLCODE = 100
+090600110914                 SET lb_INVFetchEnd  TO TRUE
+090700110914             ELSE
+090800110914               IF  SQLCODE NOT = 0 AND SQLCODE NOT = 100
+090900110916                   SET lnc_Err23     TO TRUE
+091000110916                   PERFORM SQL_ErrorLog
+091100110914               END-IF
+091200110914             END-IF
+091300110914           END-IF.
+091400110914
+091500110914      * ---------------------------------
+091600110914       Close-ACTINVCUR-Cursor.
+091700110914      * ---------------------------------
+091800110914           EXEC SQL
+091900110914              CLOSE lcu_ACTINVCUR
+092000110914           END-EXEC.
+092100110914
+092200140403      * RFS135089 - Start
+092300140403      * ---------------------------------
+092400140403       Find-Model-main.
+092500140403      * ---------------------------------
+092600140403      *****************************************************************
+092700140403      * DESCRIPTION: This routine will determine purchase trades      *
+092800140403      *              allocation match any standard OA model.          *
+092900140403      *****************************************************************
+093000140403      * Initial variables
+093100140403           SET li_modelidx               TO 1
+093200140403           SET lncc_startSearchModel     TO TRUE
+093300140403
+093400140403      * Perform the search until end or model found
+093500140403           PERFORM UNTIL lb_ModelFoundYes OR
+093600140403                         lncc_endSearchModel
+093700140403
+093800140403             SEARCH ltb_Model varying li_modelidx
+093900140403               WHEN lc_ModelCd(li_modelidx) = SPACES
+094000140403                SET lncc_endSearchModel  TO TRUE
+094100140403               WHEN lc_ModelType(li_modelidx)       = lc_ModType    AND
+094200140514                    li_ModelStartDate (li_modelidx) <= li_tradedate AND
+094300140403                    (li_ModelEndDate(li_modelidx) >= li_tradeDate OR
+094400140514                           li_ModelEndDate(li_modelidx) = 0)
+094500140403                PERFORM find-model
+094600140403      * If model is not found then increase the Index
+094700140403                IF lb_ModelFoundNo
+094800140403                  SET li_modelidx UP BY 1
+094900140403                END-IF
+095000140403             END-SEARCH
+095100140403
+095200140403           END-PERFORM.
+095300140403      * ---------------------------------
+095400140403       Find-Model.
+095500140403      * ---------------------------------
+095600140403      * Loop through details of the Model to know if it is
+095700140403      *   really match
+095800140403           SET lb_SkipModelNo TO TRUE
+095900140403
+096000140403      * Initialize Structure Flag
+096100140403           PERFORM VARYING li_structidx FROM 1 BY 1 UNTIL
+096200140403                     lc_StructCD(li_modelidx, li_structidx) = SPACES
+096300140403             INITIALIZE lc_StructTradeExist(li_modelidx, li_structidx)
+096400140425      * RFS135089.2 - Start: initialize calculated percentages
+096500140425             INITIALIZE ln_StructPercentClc(li_modelidx, li_structidx)
+096600140425      * RFS135089.2 - End
+096700140403           END-PERFORM
+096800140403
+096900140425      * RFS135089.2 - Start: initialize index to be used to point to
+097000140425      *   to selected Model
+097100140425           INITIALIZE li_saveModelidx
+097200140425      * RFS135089.2 - End
+097300140425
+097400140403           PERFORM VARYING  li_Buyidx FROM 1 BY 1
+097500140403                   UNTIL li_Buyidx > li_BuyMax OR
+097600140403                         lb_SkipModelYes
+097700140403      * Search for every Structure
+097800140403             PERFORM search-through-existing-model
+097900140403           END-PERFORM
+098000140403
+098100140403      * Check if all Structures found
+098200140403           IF lb_SkipModelNo
+098300140423            SET li_structidx         TO 1
+098400140423      * RFS135081.1 - do the search only for Standard Model
+098500140423            IF lncc_StandardModel
+098600140423             SEARCH ltb_Structure VARYING li_structidx
+098700140423              WHEN lc_StructCd (li_modelidx, li_structidx) = SPACES
+098800140423                 CONTINUE
+098900140423              WHEN ln_StructPercent(li_modelidx, li_structidx) > 0 AND
+099000140423               lc_StructTradeExist(li_modelidx, li_structidx) = SPACES
+099100140423                 SET lb_SkipModelYes TO TRUE
+099200140423             END-SEARCH
+099300140423            END-IF
+099400140423
+099500140423            IF lb_SkipModelNo
+099600140423              SET lb_ModelFoundYes TO TRUE
+099700140423            END-IF
+099800140423
+099900140403           END-IF.
+100000140403
+100100140403      * ---------------------------------
+100200140403       search-through-existing-model.
+100300140403      * ---------------------------------
+100400140403           SET li_structidx        TO 1
+100500140403           SEARCH ltb_Structure VARYING li_structidx
+100600140403             WHEN lc_StructCd(li_modelidx, li_structidx) = SPACES
+100700140403               SET lb_SkipModelYes         TO TRUE
+100800140403             WHEN lc_StructCd(li_modelidx, li_structidx) =
+100900140403                              lc_BuyStruct(li_Buyidx)
+101000140403               IF lncc_StandardModel
+101100140403      * Calculate difference in %
+101200140403                 COMPUTE ln_Difference =
+101300140403                     ln_StructPercent(li_modelidx, li_structidx) -
+101400140403                                         ln_BuyPercent (li_Buyidx)
+101500140403                 IF ln_Difference < 0
+101600140403                   COMPUTE ln_Difference = ln_Difference * -1
+101700140403                 END-IF
+101800140403
+101900140403                 IF ln_Difference >
+102000140403                                 ln_ModelSetupThreshold (li_modelidx)
+102100140403                   SET lb_SkipModelYes TO TRUE
+102200140403                 END-IF
+102300140403               END-IF
+102400140403
+102500140403               MOVE "Y"      TO
+102600140403                       lc_StructTradeExist(li_modelidx, li_structidx)
+102700140425      * RFS135089.2 - Start: save the calculated Buy percent
+102800140425               MOVE ln_BuyPercent (li_Buyidx)   TO
+102900140425                       ln_StructPercentClc(li_modelidx, li_structidx)
+103000140425               MOVE li_modelidx      TO li_saveModelidx
+103100140425      * RFS135089.2 - End
+103200140403           END-SEARCH.
+103300140403      * -------------------------------------------------------------
+103400110914      * ---------------------------------
+103500140403      *Find-Model.
+103600110810      * ---------------------------------
+103700110810      *****************************************************************
+103800110810      * DESCRIPTION: This routine will determine purchase trades      *
+103900110810      *              allocation match any standard OA model.          *
+104000110810      *****************************************************************
+104100140403      *    SET li_modelidx     TO 1
+104200140403      *    SET lb_ModelMatchNo TO TRUE
+104300140403      *    MOVE ZEROES         TO li_Cnt
+104400140403      *
+104500140403      *    SEARCH ltb_Model varying li_modelidx
+104600140403      *    WHEN lc_ModelCd(li_modelidx) = SPACES
+104700140403      *         SET lb_ModelFoundNo TO TRUE
+104800140403      *    WHEN lc_ModelType(li_modelidx) = lc_ModType
+104900140403      *    AND  li_ModelStartDate (li_modelidx) <= li_tradedate
+105000140403      *    AND (li_ModelEndDate(li_modelidx) >= li_tradeDate
+105100140403      *    OR   li_ModelEndDate(li_modelidx) = 0)
+105200140403      *         SET li_Cnt TO li_modelidx
+105300140403      *         SET lb_ModelMatchYes TO TRUE
+105400140403      *    END-SEARCH.
+105500140403      *    IF  lb_ModelMatchYes
+105600140403      *        SET lb_ModelFoundNo  TO TRUE
+105700140403      *        PERFORM VARYING li_modelidx FROM li_Cnt BY 1
+105800140403      *            UNTIL li_modelidx > li_modelmax OR lb_ModelFoundYes
+105900140403      *          SET lb_SkipModelNo TO TRUE
+106000140403      *
+106100140403      *          IF  lc_ModelType(li_modelidx) NOT = lc_ModType
+106200140403      *          OR  li_ModelStartDate (li_modelidx) > li_tradedate
+106300140403      *          OR  (li_ModelEndDate(li_modelidx) < li_tradeDate
+106400140403      *          AND li_ModelEndDate (li_modelidx) NOT = 0)
+106500140403      *              SET lb_SkipModelYes TO TRUE
+106600140403      *          END-IF
+106700140403      *
+106800140403      *          PERFORM VARYING li_structidx FROM 1 BY 1 UNTIL
+106900140403      *               lc_StructCD(li_modelidx, li_structidx) = SPACES
+107000140403      *               MOVE SPACES TO lc_StructTradeExist(li_modelidx,
+107100140403      *                                                   li_structidx)
+107200140403      *          END-PERFORM
+107300140403      *
+107400140403      *          PERFORM VARYING  li_Buyidx FROM 1 BY 1
+107500140403      *               UNTIL li_Buyidx > li_BuyMax OR  lb_SkipModelYes
+107600140403      *             SET li_structidx TO 1
+107700140403      *             SEARCH ltb_Structure varying li_structidx
+107800140403      *              WHEN lc_StructCd(li_modelidx, li_structidx) =
+107900140403      *                   SPACES
+108000140403      *                   SET lb_SkipModelYes TO TRUE
+108100140403      *              WHEN lc_StructCd(li_modelidx, li_structidx) =
+108200140403      *                   lc_BuyStruct(li_Buyidx)
+108300140403      *
+108400140403      *                IF  lncc_StandardModel
+108500140403      *                    IF  ln_StructPercent(li_modelidx,
+108600140403      *                                        li_structidx) >
+108700140403      *                        ln_BuyPercent(li_Buyidx)
+108800140403      *                        COMPUTE ln_Difference = ln_StructPercent
+108900140403      *                                   (li_modelidx, li_structidx) -
+109000140403      *                                                ln_BuyPercent
+109100140403      *                                                   (li_Buyidx)
+109200140403      *                    ELSE
+109300140403      *                        COMPUTE ln_Difference = ln_BuyPercent
+109400140403      *                                                   (li_Buyidx) -
+109500140403      *                                                ln_StructPercent
+109600140403      *                                    (li_modelidx, li_structidx)
+109700140403      *                    END-IF
+109800140403      *
+109900140403      *                    IF  ln_Difference > ln_ModelSetupThreshold
+110000140403      *                                                   (li_modelidx)
+110100140403      *                        SET lb_SkipModelYes TO TRUE
+110200140403      *                    END-IF
+110300140403      *                END-IF
+110400140403      *
+110500140403      *                MOVE "Y" TO lc_StructTradeExist(li_modelidx,
+110600140403      *                                                   li_structidx)
+110700140403      *             END-SEARCH
+110800140403      *          END-PERFORM
+110900140403      *
+111000140403      *
+111100140403      *          IF  lb_SkipModelNo
+111200140403      *              SET li_structidx     TO 1
+111300140403      *              SEARCH ltb_Structure varying li_structidx
+111400140403      *                WHEN lc_StructCd (li_modelidx, li_structidx)
+111500140403      *                     = SPACES
+111600140403      *                     CONTINUE
+111700140403      *                WHEN ln_StructPercent(li_modelidx, li_structidx)
+111800140403      *                     > ZEROES
+111900140403      *                AND
+112000140403      *                     lc_StructTradeExist(li_modelidx,
+112100140403      *                                                   li_structidx)
+112200140403      *                     = SPACES
+112300140403      *                     SET lb_SkipModelYes TO TRUE
+112400140403      *              END-SEARCH
+112500140403      *          END-IF
+112600140403      *          IF  lb_SkipModelNo
+112700140403      *              SET lb_ModelFoundYes TO TRUE
+112800140403      *          END-IF
+112900140403      *       END-PERFORM
+113000140403      *    END-IF.
+113100140403      * -------------------------------------------------------------
+113200140403      * RFS135089 - End
+113300110815      * ---------------------------------
+113400140403       Create-OA-Model.
+113500110815      * ---------------------------------
+113600110913            IF  lc_ModelType(li_modelidx) = lncc_C
+113700140425      * RFS135089.2 - Start
+113800140425               PERFORM insertMfaaccadp
+113900140425      * ---------------------------------------------------------------
+114000140425      *         MOVE ZEROES                     TO li_Seq
+114100140425      *         PERFORM VARYING li_Buyidx FROM 1 BY 1 UNTIL
+114200140425      *         lc_BuyStruct(li_Buyidx) = SPACES
+114300140425      *
+114400140425      *          MOVE lc_BuyStruct(li_Buyidx)   TO lc_Structure
+114500140425      *          MOVE ln_BuyPercent(li_Buyidx)  TO ln_Percent
+114600140425      *          ADD 1                          TO li_Seq
+114700140425      *          EXEC SQL
+114800140425      *             INSERT INTO MFAACAADP
+114900140425      *             VALUES (:li_AccountNo,
+115000140425      *                     :li_TradeDate,
+115100140425      *                     :lc_Structure,
+115200140425      *                     :ln_Percent,
+115300140425      *                     :li_Seq)
+115400140425      *          END-EXEC
+115500140425      *        END-PERFORM
+115600140425      * ---------------------------------------------------------------
+115700140425      * RFS135089.2 - End
+115800110815            END-IF
+115900110815
+116000110908            IF  lb_ModelFoundYes AND li_Seq > ZEROES
+116100110908                MOVE lc_ModelCd(li_modelidx)    TO lc_model
+116200110908                MOVE ln_ModelThresholdRate(li_modelidx)
+116300110908                                                TO ln_Threshold
+116400110908                MOVE ln_ModelRebalToPercent(li_modelidx)
+116500110908                                                TO ln_RebalToPercent
+116600110908                EXEC SQL
+116700110908                   INSERT INTO MFAACAAHP
+116800110908                   VALUES(:li_AccountNo,
+116900110908                          :li_TradeDate,
+117000110908                          :lc_model,
+117100140514                          0,
+117200140514                          0,
+117300110908                          :ln_Threshold,
+117400110908                          :ln_RebalToPercent)
+117500110908                END-EXEC
+117600110815            END-IF.
+117700140507
+117800140425      * RFS135089.2 - Start
+117900140425      * ---------------------------------
+118000140425       insertMfaaccadp.
+118100140425      * ---------------------------------
+118200140425      * Insert records with Structures and Percentages
+118300140425      * using data in array we prepared before.
+118400140425            MOVE ZEROES                     TO li_Seq
+118500140425
+118600140425            IF li_saveModelidx > 0
+118700140425              MOVE li_saveModelidx          TO li_Modelidx
+118800140425              PERFORM VARYING li_Structidx FROM 1 BY 1 UNTIL
+118900140425                   lc_StructCd (li_Modelidx, li_Structidx) = SPACES
+119000140425                MOVE lc_StructCd (li_Modelidx, li_Structidx)         TO
+119100140425                                                        lc_Structure
+119200140425                MOVE ln_StructPercentClc (li_Modelidx, li_Structidx) TO
+119300140425                                                        ln_Percent
+119400140425                ADD 1 TO li_Seq
+119500140425                EXEC SQL
+119600140425                  INSERT INTO MFAACAADP
+119700140425                    VALUES (:li_AccountNo,
+119800140425                            :li_TradeDate,
+119900140425                            :lc_Structure,
+120000140425                            :ln_Percent,
+120100150206      * RFS143694 - START
+120200150206      *                     :li_Seq)
+120300150206                            :li_Seq,
+120400150206                            :lc_custum_ind,
+120500150206                            :li_minthres_rate,
+120600201231186018*                    :li_maxthres_rate)
+120700201231186018                     :li_maxthres_rate,
+120800201231186018                     :lc_IncludeRbal)
+120900150206      * RFS143694 - END
+121000140425                END-EXEC
+121100140425             END-PERFORM
+121200140425           END-IF.
+121300140425      * RFS135089.2 - End
+121400110815      * ---------------------------------
+121500110815       Write-Audit-Log.
+121600110815      * ---------------------------------
+121700110902           CALL "GETDAT" USING ld_Parm_SysDate.
+121800110815           CANCEL "GETDAT".
+121900110907           MOVE ld_Parm_SysDate            TO ld_SysDate.
+122000110815
+122100110907           ACCEPT li_Parm_SysTime FROM TIME.
+122200110907           COMPUTE li_Parm_SysTime = li_Parm_SysTime / 10000.
+122300110907           MOVE li_Parm_SysTime            TO li_SysTime.
+122400110907
+122500110907           MOVE SPACES                     TO lc-Sqlerr-Statement.
+122600110907           MOVE "Write-Audit-Log (Select)" TO lc-Sqlerr-Statement.
+122700110907           MOVE ZEROES                     TO SQLCODE.
+122800110907
+122900110830           EXEC SQL
+123000110915              SELECT  DISTINCT(INVESTOR_NO)
+123100110830              INTO :li_InvestorNo
+123200110912              FROM    QTEMP/SQACTINV2
+123300110830              WHERE   ACCOUNT_NO = :li_AccountNo
+123400110907           END-EXEC.
+123500110830
+123600110908           IF  SQLCODE NOT = 0
+123700110916               SET lnc_Err24               TO TRUE
+123800110916               PERFORM SQL_ErrorLog
+123900110907           END-IF.
+124000110907
+124100110907           MOVE SPACES                     TO lc-Sqlerr-Statement.
+124200110907           MOVE "Write-Audit-Log (Insert)" TO lc-Sqlerr-Statement.
+124300110907           MOVE ZEROES                     TO SQLCODE.
+124400110907
+124500110815           EXEC SQL
+124600110815           INSERT INTO MFAIVRCLP
+124700110815           VALUES (:li_InvestorNo,
+124800110902                   :ld_SysDate,
+124900110907                   :li_SysTime,
+125000110906                   :lncc_OAModSetUp,
+125100110906                   :lncc_ACCAAMDS,
+125200110815                   :li_AccountNo,
+125300110902                    " ",
+125400110906                   :lncc_Chg_Category)
+125500110815           END-EXEC.
+125600110829
+125700110908           IF  SQLCODE NOT = 0
+125800110916               SET lnc_Err25               TO TRUE
+125900110916               PERFORM SQL_ErrorLog
+126000110907           END-IF.
+126100110810
+126200110425      * ---------------------------------
+126300110908       Close-File.
+126400110425      * ---------------------------------
+126500110908           CLOSE Struct-Asset-Alloc-Mod-SCH-DT.
+126600110908
+126700110908      * ---------------------------------
+126800110908       Close-MODELCUR-Cursor.
+126900110908      * ---------------------------------
+127000110425           EXEC SQL
+127100110810              CLOSE lcu_MODELCUR
+127200110425           END-EXEC.
+127300110425
+127400110810      * ---------------------------------
+127500110810       Close-ACTCUR-Cursor.
+127600110810      * ---------------------------------
+127700110810           EXEC SQL
+127800110810              CLOSE lcu_ACTCUR
+127900110810           END-EXEC.
+128000110810
+128100110810      * ---------------------------------
+128200110504       SQL_ErrorLog.
+128300110504      * ---------------------------------
+128400110505      *****************************************************************
+128500110505      * DESCRIPTION: This para will log the SQL error occured within  *
+128600110505      *              the program.                                     *
+128700110505      *****************************************************************
+128800110916           MOVE "99"           TO  pc_Retn_Code.
+128900110504           DISPLAY "ERROR ON" lc-Sqlerr-Statement "WITH ERROR CODE"
+129000110916                    SQLCODE.
+129100110916      *__________________________________*
+129200110916      * DSP-ERROR AND FORCE-MSGW ROUTINES
+129300110916      *__________________________________*
+129400110916           COPY CPYSQLRTN.
+129500110504
+129600110427      * ---------------------------------
+129700110916       End-Job.
+129800110427      * ---------------------------------
+129900110505      *****************************************************************
+130000110505      * DESCRIPTION: End of the Job.                                  *
+130100110505      *****************************************************************
+130200110908           PERFORM Close-File.
+130300110908           PERFORM Close-MODELCUR-Cursor.
+130400110810           PERFORM Close-ACTCUR-Cursor.
+130500110810           PERFORM Close-ACTINVCUR-Cursor.
+130600101111           GOBACK.
+130700101111
+130800110504      *

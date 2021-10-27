@@ -1,0 +1,317 @@
+000001170313      * %ATTR DBGVIEW(*SOURCE)
+000101130318       IDENTIFICATION DIVISION.
+000201130318       PROGRAM-ID.     FXSTMS22.
+000301130318       AUTHOR.         Daphne D.
+000401130423       INSTALLATION.   L & T Financial Services Technology Inc.
+000501130318       DATE-WRITTEN.   March 2013.
+000601130318      ******************************************************************
+000701130318      * DESCRIPTION:                                                   *
+000801130318      *                                                                *
+000901130318      * This module is used to bind with ANNSTMTJSI and is used to     *
+001001130318      * calculate account fund's Net deposits,Gross Withdrawals,       *
+001101130318      * Market value for creating section 22                           *
+001201130318      *
+001301130318      * CALLED BY  : ANNSTMTJSI
+001401130423      *
+001501130318      ******************************************************************
+001601130318      *                                                                *
+001701130318      *    C H A N G E   H I S T O R Y                                 *
+001801130318      *                                                                *
+001901130318      ******************************************************************
+002001130318      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE              *
+002101130318      ******************************************************************
+002201130318      * DAPHNE D   *2013/03/18    *RFS 117038   -CREATE NEW PROGRAM    *
+002301131024      * PRAVEEN E  * 2013/09/05   *RFS123925 RECOMPIL ONLY - CPYJSISTMT*
+002401130930      * Deepika A  *2013/08/30    *RFS 128223   -Defect Fix            *
+002501130930      *            *              *Populate Determination of RRSP/LIRA *
+002601130930      *            *              *to RRIF for TRI trades.             *
+002701140519      * Noble T    * 2014/05/02   * RFS130239 - Recompile - CPYJSISTMT *
+002801140418      *Sangeetha V  * 2014/03/25 * RFS129378 - Recompile for CPYJSISTMT*
+002901150216      *Pooja K     * 2015/02/16   * RFS 143392 - RECOMPILE FOR         *
+003001150216      *            *              * CPYJSISTMT                         *
+003101150330      * POOJA K    * 2015/03/27   * RFS144030 - RECOMPILE FOR CPYJSISTMT
+003201150423      * POOJA K    * 2015/04/21   * RFS142884 - RECOMPILE FOR CPYJSISTMT
+003301150511      * Pooja K    * 2015/05/08   * RFS144587 - Recompile for CPYJSISTMT
+003401160107      * Kamal T    * 2016/01/06   * RFS153909 - Rollback RFS 1 4 3 3 9 4
+003402211019      * Surendran C* 2021/10/19   * RFS186592 -RECOMPILE FOR CPYJSISTMT*
+003501130318      ******************************************************************
+003601130318      /
+003701130318      ******************************************************************
+003801130318      *       E N V I R O N M E N T   D I V I S I O N                  *
+003901130318      ******************************************************************
+004001130318       ENVIRONMENT DIVISION.
+004101130318       CONFIGURATION SECTION.
+004201130318       SOURCE-COMPUTER. IBM-AS400.
+004301130318       OBJECT-COMPUTER. IBM-AS400.
+004401130318
+004501130318       SPECIAL-NAMES.
+004601130318      /
+004701130318       INPUT-OUTPUT SECTION.
+004801130318       FILE-CONTROL.
+004901130318
+005001130318       DATA DIVISION.
+005101130318       FILE SECTION.
+005201130318
+005301130319       WORKING-STORAGE SECTION.
+005401130318       01  lc_Constants.
+005501130319         03  lnc_80                   PIC S9(2) VALUE 80.
+005601130319         03  lnc_2                    PIC S9(1) VALUE 2.
+005701130319         03  lnc_3                    PIC S9(1) VALUE 3.
+005801130319         03  lnc_5                    PIC S9(1) VALUE 5.
+005901130319         03  lnc_TRO                  PIC X(3)  VALUE "TRO".
+006001130319         03  lnc_Z                    PIC X(1)  VALUE "Z".
+006101130319         03  lnc_Y                    PIC X(1)  VALUE "Y".
+006201130319         03  lnc_BUY                  PIC X(3)  VALUE "BUY".
+006301130319         03  lnc_SWI                  PIC X(3)  VALUE "SWI".
+006401130319         03  lnc_MFR                  PIC X(3)  VALUE "MFR".
+006501130319         03  lnc_SEL                  PIC X(3)  VALUE "SEL".
+006601130319         03  lnc_SWO                  PIC X(3)  VALUE "SWO".
+006701130319         03  lnc_FEE                  PIC X(3)  VALUE "FEE".
+006801130423         03  lnc_RVS                  PIC X(3)  VALUE "RVS".
+006901130319         03  lnc_TRI                  PIC X(3)  VALUE "TRI".
+007001130319         03  lnc_RENGIC               PIC X(6)  VALUE "RENGIC".
+007101130319         03  lnc_REGICR               PIC X(6)  VALUE "REGICR".
+007201130423         03  lnc_N                    PIC X(1)  VALUE "N".
+007301130319
+007401130319       01  lc_Variables.
+007501130423         03  lc_FromAccountTypeRule   PIC X(1)  VALUE SPACES.
+007601130423         03  lc_ToAccountTypeRule     PIC X(1)  VALUE SPACES.
+007701130423         03  li_AtAccount             PIC S9(9) VALUE 0.
+007801130423         03  li_AtOtherAccount        PIC S9(9) VALUE 0.
+007901130423         03  lc_FirstRun              PIC X(1)  VALUE "Y".
+008001130423
+008101130429       01  Ws-Err-Code                PIC X(02) VALUE SPACES.
+008201130429         88  lncc_Err_Ok                        VALUE SPACES.
+008301130429         88  lncc_Err_01                        VALUE "01".
+008401130429         88  lncc_Err_02                        VALUE "02".
+008501130930      * RFS 128223 - START
+008601130930         88  lncc_Err_03                        VALUE "03".
+008701130930         88  lncc_Err_04                        VALUE "04".
+008801130930      * RFS 128223 - END
+008901130327
+009001130327       01  lnc_Constants.
+009101130429         03  lc_ErrCodeDescr01        PIC X(80)
+009201130327                       VALUE "Error While getting Acct Type Rule".
+009301130429         03  lc_ErrCodeDescr02        PIC X(80)
+009401130327                       VALUE "Error While getting Acc Type Rule-Rule 2".
+009501130930      * RFS 128223 - START
+009601130930         03  lc_ErrCodeDescr03        PIC X(80)
+009701130930                       VALUE "Error While getting Acc Type Rule 3".
+009801130930         03  lc_ErrCodeDescr04        PIC X(80)
+009901130930                       VALUE "Error While getting Acc Type Rule 4".
+010001130930      * RFS 128223 - END
+010101130327
+010201130318      * ---------------------------------
+010301130318      * Copybooks - Begin
+010401130318      * ---------------------------------
+010501130318
+010601130322           EXEC SQL
+010701130322             INCLUDE SQLCA
+010801130322           END-EXEC.
+010901130319
+011001130322           COPY CPYSTMS22.
+011101130322           COPY CPYJSISTMT.
+011201130327
+011301130327           Copy Cpysqlfld
+011401130327           REPLACING == "CURRENT_PROGRAM" == BY == "FXSTMS22" ==.
+011501130318      * ---------------------------------
+011601130318      * Copybooks - End
+011701130318      * ---------------------------------
+011801130315
+011901130318       LINKAGE SECTION.
+012001130423        01  pc-StatementRecord. COPY DD-ALL-FORMATS OF MFASTMEXP.
+012101130318
+012201130423       PROCEDURE DIVISION USING pc-StatementRecord.
+012301130318
+012401130318      *---------------------------------------
+012501130318       MAINLINE.
+012601130318      *--------------------------------------
+012701130320           EXEC SQL
+012801130320             WHENEVER SQLERROR   CONTINUE
+012901130320           END-EXEC.
+013001130318              PERFORM Initial-Logic.
+013101130318              PERFORM Detail-Process.
+013201130318              PERFORM Termination.
+013301130318
+013401130318      *---------------------------------------
+013501130318       Initial-Logic.
+013601130318      *--------------------------------------
+013701130429           IF  lc_FirstRun = lnc_Y
+013801130430             INITIALIZE lt_Section22Calc
+013901130430             MOVE lnc_N            TO lc_FirstRun
+014001130430           END-IF.
+014101130318      *---------------------------------------
+014201130318       Detail-Process.
+014301130318      *--------------------------------------
+014401130423           MOVE pc-StatementRecord TO ACCOUNT-TXN-SECTION.
+014501130322
+014601130319           IF  AT-SECTION-NO = lnc_80
+014701130430             SET li_Idx            TO 1.
+014801130319             SEARCH lc_Section22AcctInvSum VARYING li_Idx
+014901130319
+015001130319             AT END
+015101130319               COMPUTE li_S22Index = li_S22Index + 1
+015201130404               SET li_Idx TO li_S22Index
+015301130430               MOVE AT-ACCOUNT     TO li_S22AccountNo(li_Idx)
+015401130430               MOVE AT-FUND-NO     TO lc_S22FundNumber(li_Idx)
+015501130430               MOVE ZERO           TO ln_S22OpeningMarketValue(li_Idx),
+015601130430                                      ln_S22NetDeposit(li_Idx),
+015701130430                                      ln_S22GrossWithdrawal(li_Idx),
+015801130430                                      ln_S22ClosingMarketValue(li_Idx),
+015901130430                                      ln_S22AccrualInterestPrior(li_Idx)
+016001130403             WHEN lc_S22FundNumber(li_Idx) = SPACES
+016101130423               OR lc_S22FundNumber(li_Idx) = "00000000"
+016201130403               COMPUTE li_S22Index = li_S22Index + 1
+016301130430               SET li_Idx          TO li_S22Index
+016401130430               MOVE AT-ACCOUNT     TO li_S22AccountNo(li_Idx)
+016501130430               MOVE AT-FUND-NO     TO lc_S22FundNumber(li_Idx)
+016601130430               MOVE ZERO           TO ln_S22OpeningMarketValue(li_Idx),
+016701130430                                      ln_S22NetDeposit(li_Idx),
+016801130430                                      ln_S22GrossWithdrawal(li_Idx),
+016901130430                                      ln_S22ClosingMarketValue(li_Idx),
+017001130430                                      ln_S22AccrualInterestPrior(li_Idx)
+017101130403             WHEN AT-ACCOUNT = li_S22AccountNo(li_Idx) AND
+017201130403                  AT-FUND-NO = lc_S22FundNumber(li_Idx)
+017301130430                  CONTINUE
+017401130319             END-SEARCH
+017501130318
+017601130319     ** Determine whether it is a RRSP/LIRA/LRSP -> RRIF, LIF conversion
+017701130318
+017801130430             MOVE AT-ACCOUNT       TO li_AtAccount
+017901130430             MOVE AT-OTHER-ACCOUNT TO li_AtOtherAccount
+018001130322
+018101130319             IF  AT-TRANS-TYPE-CODE = lnc_TRO AND
+018201130319                 AT-CONTR-REDEMP-CODE(1:1) = lnc_Z
+018301130429               EXEC SQL
+018401130319                 SELECT COALESCE(ACCTYP.ACCOUNT_TYPE_RULE," ")
+018501130319                 INTO  :lc_FromAccountTypeRule
+018601130319                 FROM  MFAACCNTP  ACCNTP
+018701130319                 INNER JOIN MFAACCTYP ACCTYP
+018801130319                 ON ACCNTP.ACCOUNT_TYPE_CODE = ACCTYP.ACCOUNT_TYPE_CODE
+018901130322                 WHERE ACCNTP.ACCOUNT_NO = :li_AtAccount
+019001130319               END-EXEC
+019101130319
+019201130327               MOVE SQLSTATE TO lc_sqlStates
+019301130327               EVALUATE TRUE
+019401130327                 WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+019501130327                   CONTINUE
+019601130327                 WHEN OTHER
+019701130430                   SET  lncc_Err_01          TO    TRUE
+019801130430                   MOVE lc_ErrCodeDescr01    TO    lc_SqlErrShortDescr
+019901130327                   PERFORM Dsp-Error
+020001130327               END-EVALUATE
+020101130327
+020201130319               IF  lc_FromAccountTypeRule = lnc_2
+020301130319                 EXEC SQL
+020401130319                   SELECT  COALESCE(ACCTYP.ACCOUNT_TYPE_RULE," ")
+020501130319                   INTO  :lc_ToAccountTypeRule
+020601130319                   FROM  MFAACCNTP  ACCNTP
+020701130319                   INNER JOIN MFAACCTYP ACCTYP
+020801130319                   ON ACCNTP.ACCOUNT_TYPE_CODE =
+020901130319                           ACCTYP.ACCOUNT_TYPE_CODE
+021001130322                   WHERE ACCNTP.ACCOUNT_NO = :li_AtOtherAccount
+021101130319                 END-EXEC
+021201130327
+021301130429                 MOVE SQLSTATE TO lc_sqlStates
+021401130429                 EVALUATE TRUE
+021501130429                   WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+021601130429                     CONTINUE
+021701130429                   WHEN OTHER
+021801130429                     SET  lncc_Err_02        TO    TRUE
+021901130429                     MOVE lc_ErrCodeDescr02  TO    lc_SqlErrShortDescr
+022001130429                     PERFORM Dsp-Error
+022101130429                 END-EVALUATE
+022201130429                 IF  lc_ToAccountTypeRule = lnc_3 OR
+022301130429                   lc_ToAccountTypeRule = lnc_5
+022401130429                   MOVE lnc_Y TO lc_S22RRSPtoRRIF
+022501130429                 END-IF
+022601130429               END-IF
+022701130328             END-IF.
+022801130930      * RFS 128223 - START
+022901130930             IF  AT-TRANS-TYPE-CODE = lnc_TRI AND
+023001130930                 AT-CONTR-REDEMP-CODE(1:1) = lnc_Z
+023101130930               EXEC SQL
+023201130930                 SELECT COALESCE(ACCTYP.ACCOUNT_TYPE_RULE," ")
+023301130930                 INTO  :lc_FromAccountTypeRule
+023401130930                 FROM  MFAACCNTP  ACCNTP
+023501130930                 INNER JOIN MFAACCTYP ACCTYP
+023601130930                 ON ACCNTP.ACCOUNT_TYPE_CODE = ACCTYP.ACCOUNT_TYPE_CODE
+023701130930                 WHERE ACCNTP.ACCOUNT_NO = :li_AtAccount
+023801130930               END-EXEC
+023901130930
+024001130930               MOVE SQLSTATE TO lc_sqlStates
+024101130930               EVALUATE TRUE
+024201130930                 WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+024301130930                   CONTINUE
+024401130930                 WHEN OTHER
+024501130930                   SET  lncc_Err_03          TO    TRUE
+024601130930                   MOVE lc_ErrCodeDescr03    TO    lc_SqlErrShortDescr
+024701130930                   PERFORM Dsp-Error
+024801130930               END-EVALUATE
+024901130930
+025001130930               IF  lc_FromAccountTypeRule = lnc_3 OR lnc_5
+025101130930                 EXEC SQL
+025201130930                   SELECT  COALESCE(ACCTYP.ACCOUNT_TYPE_RULE," ")
+025301130930                   INTO  :lc_ToAccountTypeRule
+025401130930                   FROM  MFAACCNTP  ACCNTP
+025501130930                   INNER JOIN MFAACCTYP ACCTYP
+025601130930                   ON ACCNTP.ACCOUNT_TYPE_CODE =
+025701130930                           ACCTYP.ACCOUNT_TYPE_CODE
+025801130930                   WHERE ACCNTP.ACCOUNT_NO = :li_AtOtherAccount
+025901130930                 END-EXEC
+026001130930
+026101130930                 MOVE SQLSTATE TO lc_sqlStates
+026201130930                 EVALUATE TRUE
+026301130930                   WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+026401130930                     CONTINUE
+026501130930                   WHEN OTHER
+026601130930                     SET  lncc_Err_04        TO    TRUE
+026701130930                     MOVE lc_ErrCodeDescr04  TO    lc_SqlErrShortDescr
+026801130930                     PERFORM Dsp-Error
+026901130930                 END-EVALUATE
+027001130930                 IF  lc_ToAccountTypeRule = lnc_2
+027101130930                   MOVE lnc_Y TO lc_S22RRSPtoRRIF
+027201130930                 END-IF
+027301130930               END-IF
+027401130930             END-IF.
+027501130930      *RFS 128223 - END
+027601130930
+027701130429             IF AT-TRANS-TYPE-CODE = lnc_BUY OR
+027801130429                AT-TRANS-TYPE-CODE = lnc_SWI OR
+027901130429                AT-TRANS-TYPE-CODE = lnc_MFR OR
+028001130429                (AT-TRANS-TYPE-CODE = lnc_TRI AND
+028101130429                AT-CONTR-REDEMP-CODE NOT = lnc_RENGIC)
+028201130429               IF  AT-TRANS-STATUS-CODE = lnc_RVS
+028301130429                 COMPUTE ln_S22NetDeposit(li_Idx) =
+028401130429                         ln_S22NetDeposit(li_Idx) -  AT-NET
+028501130429               ELSE
+028601130429                 COMPUTE ln_S22NetDeposit(li_Idx) =
+028701130429                         ln_S22NetDeposit(li_Idx) +  AT-NET
+028801130429               END-IF
+028901130429             END-IF.
+029001130319
+029101130429             IF  AT-TRANS-TYPE-CODE = lnc_SEL OR
+029201130429                 AT-TRANS-TYPE-CODE = lnc_SWO OR
+029301130429                 AT-TRANS-TYPE-CODE = lnc_FEE OR
+029401130328                 (AT-TRANS-TYPE-CODE = lnc_TRO AND
+029501130328                  AT-CONTR-REDEMP-CODE NOT = lnc_REGICR)
+029601130429               IF AT-TRANS-STATUS-CODE = lnc_RVS
+029701130429                  COMPUTE ln_S22GrossWithdrawal(li_Idx) =
+029801130429                          ln_S22GrossWithdrawal(li_Idx) - AT-GROSS
+029901130429             ELSE
+030001130429               COMPUTE ln_S22GrossWithdrawal(li_Idx) =
+030101130429                       ln_S22GrossWithdrawal(li_Idx) + AT-GROSS
+030201130429               END-IF
+030301130429             END-IF.
+030401130318
+030501130318      *-----------------------------------
+030601130318       Termination.
+030701130318      *-----------------------------------
+030801130318           GOBACK.
+030901130318
+031001130318      *-----------------------------------
+031101130318       DspError.
+031201130318      *-----------------------------------
+031301130327      * DSP-ERROR and FORCE-MSGW Routines
+031401130327           COPY CPYSQLRTN.
+031501130318

@@ -1,0 +1,1269 @@
+000100200225       IDENTIFICATION DIVISION.
+000200210309       PROGRAM-ID.    SEGDTEXTV.
+000300121201       AUTHOR.        Rupesh Kumar.
+000400121201       INSTALLATION.  L&T Financial Services Technology Inc.
+000500121201       DATE-WRITTEN.  December 01, 2012.
+000600170913       DATE-COMPILED.
+000700170605
+000800121201      ******************************************************************
+000900121206      **   RFS-NUMBER : 110949                                        **
+001000121201      **                                                              **
+001100121210      **   DESCRIPTION: Combine existing SEG fund specific extracts   **
+001200121206      **                into a single extract and to revise the       **
+001300121206      **                process of extraction of the new file.        **
+001400121201      **                                                              **
+001500121206      **   CALLED BY  : JOBSEGCMT                                     **
+001600121201      **                                                              **
+001700200221      **   PARAMETERS : NONE.                                         **
+001800121201      ******************************************************************
+001900121201      ******************************************************************
+002000121201      *     C H A N G E   H I S T O R Y                                *
+002100121201      ******************************************************************
+002200200213      ******************************************************************
+002300121201      * PROGRAMMER   * DATE OF CHANGE * DESCRIPTION OF CHANGE          *
+002400030417      ******************************************************************
+002500121201      ******************************************************************
+002600121206      * RUPESH KUMAR *  2012/11/30  * RFS110949 - NEW PROGRAM CREATED  *
+002700130715      * TamilSelvi * 2013/07/15   * RFS110904 - Recompile for MFAACCONP*
+002800131125      * Noble T      *  2013/11/22  * RFS130613 - To Correct the GMV   *
+002900131125      *              *              * for contracts with less than 15  *
+003000131125      *              *              * years to maturity.               *
+003100140122      * Thilaga K   * 2014/01/21 * RFS133150 - Recompile for MFATRCODP
+003200140312      * Abhisek M   * 2014/03/12 * RFS129784 - Recompile
+003300140313      * Thilaga K  * 2014/02/18   * RFS132733 - Recompile for MFAGDTHVP
+003400140403      * Arthy K     * 2014/04/03 * RFS134936 - Recompile for MFAACCONP *
+003500140507      * Thilaga K  * 2014/05/07   * RFS134936 - Recompile for MFAACCNNP*
+003600140623      * Manjusha V * 2014/04/01   * RFS129902 - Recompile for CPGLWBRULE
+003700140605      * TamilSelvi * 2014/06/03   * RFS137220 - Recompile for MFAGDTHCS
+003800140826      * Nagamnai S * 2014/08/13   * RFS139007 - Recompile for CPGLWBRULE
+003900150512      * Thilaga K  * 2015/05/12   * RFS145136 - Recompile for MFAACCNNP*
+004000160615      * Richard S. * 2016/03/09   * RFS157138 - performance tuning     *
+004100160615      *            *              * Correct the binding in PGM.        *
+004200190226      * Kavya K    *  2019/02/25  * RFS181057 - Recompile for MFAACMDP *
+004300200219      * Kirthigaa  *  2020/02/17  * RFS185473 -Addition of new Fields  *
+004400200304      *                           *    SEGCONS  Extract                *
+004500200618      * Kirthigaa S*  2020/04/17  * RFS186069 - Recompile for MFAACMDP *
+004600200706      * Ashwini B  * 2020/06/25   * RFS184676 - Recompile for MFAGDTHVP*
+004700200706      * CHAYA SP   * 2020/07/06   * RFS185172- Recompile for MFAACCONP*
+004800200719      * M K SINDHU * 2020/07/08   * RFS185172- Recompile for MFAGDTHVP
+004900200719      *            *              * and MFATRCODP
+005000201021      * Kavya K    * 2020/10/19   * RFS186497 - Recompile for MFAACMDP*
+005100201221      * Chaya SP   * 2020/10/19   * RFS180721 - Recompile for MFATRCODP
+005200210217      * Kavin      * 2021/02/17   * RFS186290 - Recompile only
+005300210310      * Ashwini B  * 2021/03/09   * RFS1110610 - SEGCONS Fund Entry Date
+005400210415      *            *              * is updated incorrectly.
+005500210427      * Gomathi    * 2021/04/20   * RFS186584 - Additional fields
+005600210427      *            *              * added into detail records
+005700210806      * Ashwini B  * 2021/05/17   * RFS1114837 - MSGW in contract level
+005800210806      *            *              * environments due to initialization
+005900210806      *            *              * issue.
+006000210806      * Vignesh    * 2021/07/07   * RFS187254 - Recompile for MFATRCODP
+006100210823      * Thilaga K  * 2021/08/20   * RFS1118605- Performance issue
+006200210823      *            *              * JOBSEGCMT long running.
+006300210826      *            *              * Changes also tagged using 118605
+006301211013      * Kavin K    * 2021/08/09   * RFS187471 - Recompile for MFAGDTHVP
+006302211014      * Sasikumar B* 2021/09/14   * RFS187570 - Adding additional fields
+006303211014      *            *              * into SEGCONS report
+006304211014      * Niranjan   * 2021/10/11   * RFS1121799 - Get Annuitant Date of
+006305211014      *            *              * birth from FXACCANUIT
+006600200214      ******************************************************************
+006700200221       ENVIRONMENT DIVISION.
+006800980204       CONFIGURATION SECTION.
+006900200306       SOURCE-COMPUTER. IBM-AS400.
+007000980204       OBJECT-COMPUTER. IBM-AS400.
+007100200501       SPECIAL-NAMES. DATA-AREA IS WS-DATA-AREA
+007200121201                      LOCAL-DATA IS WS-LOCAL
+007300210823118605                DATA-AREA  IS WS-DATA-AREA-1
+007400160615157138                DATA-AREA  IS WS-DTAARA-MFAPRCDTP
+007500160615157138                LINKAGE TYPE IS PROCEDURE FOR "FXACCANUIT"
+007600200217130613                LINKAGE TYPE IS PROCEDURE FOR "FXSEGMATVA".
+007700030417      *
+007800980204       INPUT-OUTPUT SECTION.
+007900200214       FILE-CONTROL.
+008000000217
+008100000217       DATA DIVISION.
+008200000217       FILE SECTION.
+008300030417      * ---------------------------------
+008400980204       WORKING-STORAGE SECTION.
+008500030417      * ---------------------------------
+008600030422      * Replace "SQLSTD" with the name of Current Program
+008700030710          COPY CPYSQLFLD
+008800121201               REPLACING == "CURRENT_PROGRAM" == BY == "SEGDTEXTV" ==.
+008900121205
+009000121205      * For FXACCANUIT
+009100121205       COPY CPACCANUIT.
+009200030414      *
+009300030417           EXEC SQL
+009400200214             INCLUDE SQLCA
+009500030417           END-EXEC.
+009600030417      *
+009700030417      * Error Codes, Uniquely Identify where the error happened
+009800121210       01  WS-ERR-CODE                 PIC X(02) VALUE SPACES.
+009900121210         88  lncc_Err10                          VALUE "10".
+010000121210         88  lncc_Err11                          VALUE "11".
+010100121210         88  lncc_Err12                          VALUE "12".
+010200121210         88  lncc_Err13                          VALUE "13".
+010300121210         88  lncc_Err14                          VALUE "14".
+010400200302      * RFS185473 - Starts
+010500200302         88  lncc_Err15                          VALUE "15".
+010600200303         88  lncc_Err16                          VALUE "16".
+010700200304      * RFS185473 - Ends
+010701211014      * RFS187570 - Start
+010702211014         88  lncc_Err17                          VALUE "17".
+010703211014         88  lncc_Err18                          VALUE "18".
+010704211014         88  lncc_Err19                          VALUE "19".
+010705211014         88  lncc_Err20                          VALUE "20".
+010706211014         88  lncc_Err21                          VALUE "21".
+010707211014         88  lncc_Err22                          VALUE "22".
+010708211014         88  lncc_Err23                          VALUE "23".
+010709211014         88  lncc_Err24                          VALUE "24".
+010710211014      * RFS187570 - End
+010800121201
+010900121201      * Error Code literal values
+011000121210       01  lc_ErrorDescr.
+011100121210         03  lnc_OpenCursorError       PIC X(45) VALUE
+011200121210               "Error while Opening Cursor".
+011300121210         03  lnc_FetchCursorError      PIC X(45) VALUE
+011400121210                "Error while Fetching the Cursor".
+011500121210         03  lnc_InsertDetail          PIC X(45) VALUE
+011600121210                "Error while Inserting into Detail".
+011700121210         03  lnc_InsertSummary         PIC X(45) VALUE
+011800121210                "Error while Inserting into Summary".
+011900121210         03  lnc_ErrorGetinvcls        PIC X(45) VALUE
+012000121210                "Error in Get-Investment-Class".
+012100121210         03  lnc_ErrorFileLevel1       PIC X(45) VALUE
+012200121210                "End of File Level1 was Reached".
+012300200304      *RFS185473 - Starts
+012400200303         03  lnc_GetPAC                PIC X(45) VALUE
+012500200303                "Error while getting PAC Details".
+012600200303         03  lnc_GetTrd_Dat      PIC X(45) VALUE
+012700200303                "Error while getting Trade Details".
+012800200304      *RFS185473 - Ends
+012801211014      * RFS187570 - Start
+012802211014         03  lnc_GetMFRMaxDat    PIC X(45) VALUE
+012803211014                "Error while getting MFR Max Trade date".
+012804211014         03  lnc_GetMFRDetail    PIC X(45) VALUE
+012805211014                "Error while getting MFR Deatils".
+012806211014         03  lnc_GetMFRRate      PIC X(45) VALUE
+012807211014                "Error while getting MFR Rate & Upper Limit".
+012808211014         03  lnc_GetMFRTier      PIC X(45) VALUE
+012809211014                "Error while getting MFR Tier Number".
+012810211014         03  lnc_GetMFEDetail    PIC X(45) VALUE
+012811211014                "Error while getting MFE Deatils".
+012812211014         03  lnc_GetMFESched     PIC X(45) VALUE
+012813211014                "Error while getting MFE Schedule Code".
+012814211014         03  lnc_GetMFERate      PIC X(45) VALUE
+012815211014                "Error while getting MFE Rate & Lower Limit".
+012816211014         03  lnc_GetMFETier      PIC X(45) VALUE
+012817211014                "Error while getting MFE Tier Number".
+012818211014      * RFS187570 - End
+012900200304
+013000121210       01  lc_WorkFields.
+013100121210         03  li_Sysdate                PIC S9(8).
+013200121210         03  lc_InvClass               PIC  X(5).
+013300121210         03  lc_LdStrCd                PIC  X(1).
+013400121210         03  lc_InvCode                PIC  X(5).
+013500121210         03  li_AnuitDOB               PIC  9(08).
+013600160615157138   03  li_IssueAgeSave           PIC S9(03) VALUE 0.
+013700210823118605   03  lc_SQL_stmt               PIC X(1000).
+013800210826118605   03  lc_Ojlibname              PIC X(10) VALUE SPACES.
+013900121210
+014000121210       01  lc_Constants.
+014100121210         03  lnc_TableNotJournaled     PIC X(05) VALUE "01567".
+014200121210         03  lnc_B                     PIC X(01) VALUE "B".
+014300121210         03  lnc_C                     PIC X(01) VALUE "C".
+014400121210         03  lnc_SUM                   PIC X(03) VALUE "SUM".
+014500121210         03  lnc_DTL                   PIC X(03) VALUE "DTL".
+014600121201
+014700121210       01  lc_LocalDataArea.
+014800121210         03  lc_PassFillerX0124        PIC X(1024).
+014900121201
+015000121210       01  WS-Process-Data.
+015100121210         03  li_CurrProcessDate        PIC S9(08).
+015200121210         03  FILLER                    PIC X(45).
+015300121210         03  li_LastProcessDate        PIC 9(08).
+015400121210         03  FILLER                    PIC X(451).
+015500200219
+015600200219      * RFS185473 Starts
+015700200219       01  lc_ScreenEditCodeSEGEXTA.
+015800200227         03  lc_ScreenCodeSEGEXTA      PIC X(08) VALUE "SEGCONS".
+015900200227         03  lc_EditCodeSEGEXTA        PIC X(06) VALUE "SGEXTA".
+016000200304         03  lc_levelCodeSEGEXTA       PIC X(01) VALUE "E".
+016100200227         03  lc_SEGEXTAALllowed         PIC X(01) VALUE " ".
+016200200218           88   Lb_SEGEXTAAllowedYes    VALUE "Y".
+016300200219           88   Lb_SEGEXTAAllowedNo     VALUE "N".
+016400200219      *RFS185473 Ends
+016500200219
+016600121201      * Level breaks on
+016700121201      * Record Structure for the main cursor select
+016800121201
+016900121210       01  lc_Detail.
+017000121210         03  lc_Rec-Type               PIC X(3).
+017100121210         03  li_Account-No             PIC S9(9).
+017200121210         03  li_Contract-No            PIC S9(9).
+017300121210         03  lc_Contract-Status        PIC X.
+017400121210         03  li_Start-Date             PIC S9(9).
+017500121210         03  li_Maturity-Date          PIC S9(9).
+017600200218         03  lc_Investment-Code        PIC X(5).
+017700200217185473   03  li_InvestorNo             PIC S9(09).
+017800210510186584   03  lc_Externalloadtype_N     PIC X(10).
+017900121201
+018000200221       01  lc_Detail-Out.
+018100121210         03  lc_Key                    PIC X(19).
+018200121210         03  lc_Rec-Type               PIC X(3).
+018300121210         03  li_Account-No             PIC S9(9).
+018400121210         03  li_Contract-No            PIC S9(9).
+018500121210         03  lc_Contract-Status        PIC X.
+018600200303         03  li_Start-Date             PIC S9(9).
+018700121210         03  li_Maturity-Date          PIC S9(9).
+018800121210         03  li_Issue-Age              PIC S9(03).
+018900121210         03  lc_Investment-Code        PIC X(5).
+019000121210         03  lc_Investment-Class       PIC X(5).
+019100121210         03  lc_Load-Indicator         PIC X(1).
+019200121219         03  ln_CurMktVal              PIC S9(11)V99.
+019300121219         03  ln_GarDthVal              PIC S9(11)v99.
+019400121210         03  ln_GarMatVal              PIC S9(11)v99.
+019500121201
+019600200219      *RFS185473 - Starts
+019700200219       01  lc_Detail-ALT.
+019800200303         03  lc_Key                    PIC X(19).
+019900200304         03  lc_Rec-Type               PIC X(3).
+020000200304         03  li_Account-No             PIC S9(9).
+020100200303         03  li_Contract-No            PIC S9(9).
+020200200303         03  lc_Contract-Status        PIC X.
+020300200303         03  li_Start-Date             PIC S9(9).
+020400200303         03  li_Maturity-Date          PIC S9(9).
+020500200303         03  li_Issue-Age              PIC S9(03).
+020600200303         03  lc_Investment-Code        PIC X(5).
+020700200303         03  lc_Investment-Class       PIC X(5).
+020800200303         03  lc_Load-Indicator         PIC X(1).
+020900200303         03  ln_CurMktVal              PIC S9(11)V99.
+021000200303         03  ln_GarDthVal              PIC S9(11)v99.
+021100200303         03  ln_GarMatVal              PIC S9(11)v99.
+021200200310         03  lc_FundEntryDate          PIC S9(9).
+021300200304         03  li_PACDepositAmt          PIC S9(13)v99.
+021400200219      *RFS185473 - Ends
+021500210510186584  03   lc_Externalloadtype       PIC X(10).
+021501211014      * RFS187570 - Start
+021502211014         03 ln_MFERate                 PIC S9(05)V9(2) VALUE ZEROES.
+021503211014         03 ln_MFETierNum              PIC S9(03)      VALUE ZEROES.
+021504211014         03 ln_MFRRate                 PIC S9(03)V9(6) VALUE ZEROES.
+021505211014         03 ln_MFRTierNum              PIC S9(03)      VALUE ZEROES.
+021506211014      * RFS187570 - End
+021600200219
+021700121210       01  lc_Summary-Out.
+021800121210         03  lc_Key                    PIC X(19).
+021900121210         03  lc_Rec-Type               PIC XXX.
+022000121210         03  li_Account-No             PIC S9(9).
+022100121210         03  li_Contract-No            PIC S9(9).
+022200121210         03  ln_TotMatVal              PIC S9(11)v99.
+022300121210         03  ln_TotDthVal              PIC S9(11)v99.
+022400121219         03  ln_TotMktVal              PIC S9(11)V99.
+022500121218      *  03  lc_Filler                 PIC X(81).
+022600200221
+022700200306      *RFS185473 - Starts
+022800200221       01   pi_SegExtAccountNo         PIC S9(09).
+022900200221       01   pi_SegExtContractNo        PIC S9(09).
+023000200221       01   pc_SegExtInvestmentCode    PIC X(05).
+023100200306      *RFS185473 - Ends
+023200210824      * RFS1118605 - Begin
+023300210824       01 lc_StartSeqNo                 PIC X(10) VALUE ZERO.
+023400210824       01 li_StartSeqNo REDEFINES lc_StartSeqNo   PIC S9(10).
+023500210824       01 lc_EndSeqNo                   PIC X(10) VALUE ZERO.
+023600210824       01 li_EndSeqNo   REDEFINES lc_EndSeqNo     PIC S9(10).
+023700210824      * RFS1118605 - End
+023701211014      * RFS187570 - Start
+023702211014       01 lc_MFESchdCode             PIC X(5)        VALUE SPACES.
+023703211014       01 ln_MFELowerLimit           PIC S9(11)V9(2) VALUE ZEROES.
+023704211014       01 lc_MFRSchdCode             PIC X(5)        VALUE SPACES.
+023705211014       01 ln_MFRUpperLimit           PIC S9(11)V9(2) VALUE ZEROES.
+023706211014       01 li_MFRMaxDate              PIC S9(08) VALUE ZEROES.
+023707211014       01 ln_MFRTotAssetAmt          PIC S9(11)V9(2) VALUE ZEROES.
+023708211014       01 ln_MFETotAssetAmt          PIC S9(11)V9(2) VALUE ZEROES.
+023709211014      * RFS187570 - End
+023800121201
+023900121201      * Control level variables for control break logic
+024000121201
+024100121210       01  CURR-CONTROLS.
+024200121210         03  CURR-LEVEL1.
+024300121210           05  CURR-ACCOUNT            PIC 9(9).
+024400121210           05  CURR-CONTRACT           PIC 9(9).
+024500121201
+024600121210       01  PREV-CONTROLS.
+024700121210         03  PREV-LEVEL1.
+024800121210           05  PREV-ACCOUNT            PIC 9(9).
+024900121210           05  PREV-CONTRACT           PIC 9(9).
+025000121201
+025100121201      * Copybooks - Begin
+025200121201
+025300121201      * Copybook for Performance and Statistics program (FxPfSts)
+025400121201       COPY CPPFSTS.
+025500121201
+025600121201      * Copybook for FXSEGMATIX
+025700121201       COPY CPFXSGMTIX.
+025800121201
+025900121201      * Copybooks for the variables for the common modules
+026000121201       COPY CPDROPTB.
+026100121201
+026200121201      * Copybook to get data from Process-Date Data Area
+026300121201       COPY CPPRCDTP.
+026400200219
+026500200304      *RFS185473 - Starts
+026600200219      * Copybook for FXSCEDTAL1
+026700200219       COPY CPSCEDTAL1.
+026800200304      *RFS185473 - Ends
+026900200217
+027000121201      * Copybooks - End
+027100210824      * RFS1118605 - start
+027200210824       LINKAGE SECTION.
+027300210824       01  pc_StartSeqNo       PIC X(10).
+027400210824       01  pc_EndSeqNo         PIC X(10).
+027500121201
+027600121210      * ---------------------------------
+027700210824      *PROCEDURE DIVISION.
+027800210824       PROCEDURE DIVISION USING pc_StartSeqNo,
+027900210824                                pc_EndSeqNo.
+028000210824      * ---------------------------------
+028100210824      * RFS1118605 - End
+028200030710      * ---------------------------------
+028300030710       MAIN-PROCESS.
+028400030417      * ---------------------------------
+028500121201
+028600121201           PERFORM Initial-Logic.
+028700121201
+028800121210           PERFORM Process-Level-logic TEST BEFORE
+028900121210                   UNTIL CURR-CONTROLS  =  HIGH-VALUES
+029000121201
+029100121201           PERFORM End-Job.
+029200121210           GOBACK.
+029300121201
+029400121210      * ------------------------------
+029500121201       Initial-Logic.
+029600121210      * ------------------------------
+029700210824      *RFS1118605 - Start
+029800210824            INITIALIZE lc_StartSeqNo
+029900210824                       lc_EndSeqNo.
+030000210824            MOVE pc_StartSeqNo TO lc_StartSeqNo
+030100210824            MOVE pc_EndSeqNo   TO lc_EndSeqNo
+030200210824      *RFS1118605 - End
+030300210824
+030400121210           PERFORM Std-Write-Start-Data.
+030500121201
+030600121201      * Get the lda
+030700121201           ACCEPT lc_LocalDataArea   FROM WS-LOCAL.
+030800121201
+030900121201      * Get system date
+031000121210           ACCEPT li_Sysdate         FROM DATE YYYYMMDD.
+031100121201
+031200121201      * Get the process date
+031300121210           ACCEPT WS-Process-Data    FROM WS-DTAARA-MFAPRCDTP
+031400121210                                     FOR  "MFAPRCDTP".
+031500121201
+031600121201      * setup level break logic
+031700121210           MOVE   LOW-VALUES         TO   CURR-CONTROLS
+031800121210                                          PREV-CONTROLS.
+031900200219
+032000200227      * RFS185473 - Starts
+032100200227
+032200200227           SET  Lb_SEGEXTAAllowedNo    TO TRUE.
+032300200227           MOVE lc_ScreenCodeSEGEXTA   TO Pass-Screen-Code.
+032400200227           MOVE lc_EditcodeSEGEXTA     TO Pass-Edit-Code.
+032500200227           MOVE lc_LevelCodeSEGEXTA    TO Pass-Level-Code.
+032600200227
+032700200227           CALL "FXSCEDTAL1" USING     Pass-Screen-Code
+032800200227                                       Pass-Edit-Code
+032900200227                                       Pass-Level-Code
+033000200227                                       Retn-Edit-Allowed-Flag.
+033100200304           IF Retn-Edit-Allowed
+033200200227              SET Lb_SEGEXTAAllowedYes TO TRUE
+033300200227           END-IF.
+033400200227           CANCEL "FXSCEDTAL1".
+033500200227      * RFS185473 - Ends
+033600200227
+033700121201      * Display info.that program Start
+033800121210           PERFORM Dsp-Program-Start.
+033900121201
+034000121201      * Declare & Open files and Cursors .....
+034100200227           PERFORM SQL-Declare-Driver-file.
+034200121201           PERFORM SQL-Open-Driver-file.
+034300200227
+034400121201      * Drop the table and create the output work file.
+034500210823           EXEC SQL
+034600210823             DROP TABLE QTEMP/DETAILOUT
+034700210823           END-EXEC.
+034800210823
+034900210823           EXEC SQL
+035000210823             CREATE TABLE QTEMP/DETAILOUT (
+035100210823             REC_KEY          CHAR (19) NOT NULL WITH DEFAULT,
+035200210823             REC_TYPE         CHAR (3) NOT NULL WITH DEFAULT,
+035300210823             ACCOUNT_NO       NUMERIC (9, 0)  NOT NULL WITH DEFAULT,
+035400210823             CONTRACT_NO      NUMERIC (9, 0)  NOT NULL WITH DEFAULT,
+035500210823             CONTRACT_STATUS  CHAR (1  ) NOT NULL WITH DEFAULT,
+035600210823             START_DATE       NUMERIC (9, 0)  NOT NULL WITH DEFAULT,
+035700210823             MATURITY_DATE    NUMERIC (9, 0)  NOT NULL WITH DEFAULT,
+035800210823             ISSUE_AGE        NUMERIC (9, 0)  NOT NULL WITH DEFAULT,
+035900210823             INVESTMENT_CODE  CHAR (5  ) NOT NULL WITH DEFAULT,
+036000210823             INVESTMENT_CLASS CHAR (5  ) NOT NULL WITH DEFAULT,
+036100210823             LOAD_INDICATOR   CHAR (1  ) NOT NULL WITH DEFAULT,
+036200210823             CURMKTVAL        NUMERIC (13, 2) NOT NULL WITH DEFAULT,
+036300210823             GARDTHVAL        NUMERIC (13, 2) NOT NULL WITH DEFAULT,
+036400210823             GARMATVAL        NUMERIC (13, 2) NOT NULL WITH DEFAULT)
+036500210823           END-EXEC.
+036600121201
+036700200304      *  RFS185473 - Starts
+036800200219      *  Check for the new Screen Code SEGEXTA
+036900200218           IF Lb_SEGEXTAAllowedYes
+037000200218              PERFORM Create_DetailALT
+037100200218           ELSE
+037200200218              CONTINUE
+037300200218           END-IF.
+037400200306      *  RFS185473 - Ends
+037500200306
+037600200217           EXEC SQL
+037700121210             DROP TABLE QTEMP/SUMMOUT
+037800121201           END-EXEC.
+037900121201
+038000121201           EXEC SQL
+038100121210             CREATE TABLE QTEMP/SUMMOUT (
+038200121210             REC_KEY              CHAR (19) NOT NULL WITH DEFAULT,
+038300121210             REC_TYPE             CHAR (3) NOT NULL WITH DEFAULT,
+038400121210             ACCOUNT_NO           NUMERIC (9, 0)  NOT NULL WITH DEFAULT,
+038500121210             CONTRACT_NO          NUMERIC (9, 0)  NOT NULL WITH DEFAULT,
+038600121210             TOTMATVAL            NUMERIC (13, 2) NOT NULL WITH DEFAULT,
+038700121210             TOTDTHVAL            NUMERIC (13, 2) NOT NULL WITH DEFAULT,
+038800121219             TOTMKTVAL            NUMERIC (13, 2) NOT NULL WITH DEFAULT)
+038900121201           END-EXEC.
+039000200306      *RFS185473 - Starts
+039100210823      *RFS1118605 - Start
+039200210823           ACCEPT lc_Ojlibname FROM WS-DATA-AREA-1
+039300210823                  FOR "MFAOBJECTS" .
+039400210823      *RFS1118605 - End
+039500200306      *------------------
+039600200306       Create_DetailALT.
+039700200306      *------------------
+039800200306
+039900200306      * Drop the table and create the alternate output workfile *
+040000210823           EXEC SQL
+040100210823             DROP TABLE QTEMP/DETAILOUT
+040200210823           END-EXEC.
+040300210823
+040400210823           EXEC SQL
+040500210823             CREATE TABLE QTEMP/DETAILOUT (
+040600210823             REC_KEY          CHAR (19) NOT NULL WITH DEFAULT,
+040700210823             REC_TYPE         CHAR (3) NOT NULL WITH DEFAULT,
+040800210823             ACCOUNT_NO       NUMERIC (9, 0)  NOT NULL WITH DEFAULT,
+040900210823             CONTRACT_NO      NUMERIC (9, 0)  NOT NULL WITH DEFAULT,
+041000210823             CONTRACT_STATUS  CHAR (1  ) NOT NULL WITH DEFAULT,
+041100210823             START_DATE       NUMERIC (9, 0)  NOT NULL WITH DEFAULT,
+041200210823             MATURITY_DATE    NUMERIC (9, 0)  NOT NULL WITH DEFAULT,
+041300210823             ISSUE_AGE        NUMERIC (9, 0)  NOT NULL WITH DEFAULT,
+041400210823             INVESTMENT_CODE  CHAR (5  ) NOT NULL WITH DEFAULT,
+041500210823             INVESTMENT_CLASS CHAR (5  ) NOT NULL WITH DEFAULT,
+041600210823             LOAD_INDICATOR   CHAR (1  ) NOT NULL WITH DEFAULT,
+041700210823             CURMKTVAL        NUMERIC (13, 2) NOT NULL WITH DEFAULT,
+041800210823             GARDTHVAL        NUMERIC (13, 2) NOT NULL WITH DEFAULT,
+041900210823             GARMATVAL        NUMERIC (13, 2) NOT NULL WITH DEFAULT,
+042000210823             FUNDENTRYDATE    NUMERIC (9, 0) NOT NULL WITH DEFAULT,
+042100210823             PACDEPOSITAMT    NUMERIC (13,2) NOT NULL WITH DEFAULT
+042200210823186584      ,EXTERNAL_LOAD_TYPE CHAR(10) NOT NULL WITH DEFAULT
+042201211014      * RFS187570 - Start
+042202211014            ,MFE_RATE         NUMERIC (7, 2) NOT NULL WITH DEFAULT
+042203211014            ,MFE_TIER_NUM     NUMERIC (3, 0) NOT NULL WITH DEFAULT
+042204211014            ,MFR_RATE         NUMERIC (9, 6) NOT NULL WITH DEFAULT
+042205211014            ,MFR_TIER_NUM     NUMERIC (3, 0) NOT NULL WITH DEFAULT
+042206211014      * RFS187570 - End
+042300210823                              )
+042400210823           END-EXEC.
+042500210823
+042600200306      *  RFS185473 - Ends
+042700200306
+042800121210      * SQL Driver
+042900121201       SQL-Declare-Driver-file.
+043000121201
+043100121201           EXEC SQL
+043200121210             DECLARE level1_drv CURSOR FOR
+043300121210             SELECT    :lnc_DTL,
+043400121210                       A.ACCOUNT_NO,
+043500121210                       A.CONTRACT_NO,
+043600121210                       B.CONTRACT_STATUS,
+043700121210                       B.START_DATE,
+043800121210                       B.MATURITY_DATE,
+043900200306                       A.INVESTMENT_CODE
+044000200306185473                 ,C.INVESTOR_NO
+044100210419186584                 ,D.EXTERNAL_LOAD_TYPE_CODE
+044200121210             FROM      MFAACCCIP  A
+044300210824118605*      JOIN      MFAACCONP  B
+044400210826118605       JOIN      WRKACCCON  B
+044500121210             ON        A.ACCOUNT_NO = B.ACCOUNT_NO
+044600121210             AND       A.CONTRACT_NO = B.CONTRACT_NO
+044700121210             JOIN      MFAACCNTP  C
+044800121210             ON        A.ACCOUNT_NO = C.ACCOUNT_NO
+044900210429186584       LEFT OUTER JOIN MFAINVMDP   D
+045000210419186584       ON        A.INVESTMENT_CODE = D.INVESTMENT_CODE
+045100121212             WHERE
+045200121212                       C.ACCOUNT_STATUS = "A"
+045300210825      *      AND       B.CONTRACT_STATUS <> "C"
+045400210824118605       AND    B.Seq_No between :li_StartSeqNo AND :li_EndSeqNo
+045500121212             ORDER BY  A.ACCOUNT_NO,A.CONTRACT_NO,A.INVESTMENT_CODE
+045600210301             FOR FETCH ONLY
+045700121210             OPTIMIZE FOR ALL ROWS
+045800121201           END-EXEC.
+045900121201
+046000121201      * open cursor
+046100121201       SQL-Open-Driver-file.
+046200121201
+046300121201           EXEC SQL
+046400121201             OPEN level1_drv
+046500121201           END-EXEC.
+046600121201
+046700121201      * SQL error Checking
+046800121201           MOVE SQLSTATE TO Sw-Sql-States.
+046900121210
+047000121201           EVALUATE TRUE
+047100121201               WHEN Sw-Sql-Successful
+047200121210               WHEN Sw-Sql-States = lnc_TableNotJournaled
+047300121201                    CONTINUE
+047400121201               WHEN OTHER
+047500121201                    SET lncc_Err10         TO TRUE
+047600121210                    STRING lnc_OpenCursorError      DELIMITED BY SPACE
+047700121210                           SPACE                    DELIMITED BY SIZE
+047800121201                           SQLSTATE                 DELIMITED BY SIZE
+047900121201                      INTO Ws-Sql-Err-Short-Descr
+048000121201                    PERFORM SQLFailProcess
+048100121201           END-EVALUATE.
+048200121201
+048300121210      * ------------------------------
+048400121201       Process-Level-logic.
+048500121210      * ------------------------------
+048600121201
+048700121201           PERFORM Get-Current-Record.
+048800121201
+048900121210           IF CURR-LEVEL1 NOT = PREV-LEVEL1
+049000121210              AND  PREV-CONTROLS NOT = LOW-VALUES
+049100121210              PERFORM Level-Summary-1
+049200121210           END-IF.
+049300121201
+049400121210           IF CURR-CONTROLS NOT =  HIGH-VALUES
+049500121210              IF CURR-LEVEL1 NOT =  PREV-LEVEL1
+049600121210                 PERFORM Level-ReInit-1
+049700121210              END-IF
+049800121210              MOVE CURR-CONTROLS  TO PREV-CONTROLS
+049900121210              PERFORM Detail-Processing
+050000121210           END-IF.
+050100121201
+050200121201       Detail-Processing.
+050300121201
+050400121210           INITIALIZE lc_Detail-Out.
+050500121210           MOVE CORR lc_Detail         TO lc_Detail-Out.
+050600200219
+050700200219      *RFS185473 - Starts
+050800200219           IF Lb_SEGEXTAAllowedYes
+050900200217              PERFORM Additional-Detail
+051000200217           ELSE
+051100200217              CONTINUE
+051200200219           END-IF.
+051300200221      *RFS185473 - Ends
+051400121201
+051500121201      * get the maturity values and the death values
+051600121201
+051700121201      *  FXSEGMATIX  Obtain
+051800121201      *             - Guaranteed Maturity Value
+051900200221      *             - Guaranteed Death Value
+052000121201
+052100200221           INITIALIZE           pi_SegMatValAccountNo
+052200121210                                pi_SegMatValContractNo
+052300121210                                pc_SegMatValInvestmentCode
+052400121210                                pc_SegMatValMode
+052500121210                                pi_SegMatValGMV
+052600121210                                pi_SegMatValGDV
+052700121210                                pi_GMPercent
+052800121210                                pi_GDPercent
+052900121210                                pi_CurrMarketValue
+053000121210                                pi_TradeDate
+053100121210                                pc_SegMatValReturn.
+053200121201
+053300121210            SET pb_GuarMatDthAndCurrMarketA TO TRUE.
+053400121201
+053500121210            MOVE li_Account-No OF lc_Detail
+053600121201                                       TO pi_SegMatValAccountNo.
+053700121210            MOVE li_Contract-No OF lc_Detail
+053800121201                                       TO pi_SegMatValContractNo.
+053900121210            MOVE lc_Investment-Code OF lc_Detail
+054000121201                                       TO pc_SegMatValInvestmentCode.
+054100121210            MOVE li_CurrProcessDate    TO pi_TradeDate.
+054200121201
+054300131125130613*     CALL "FXSEGMATIX" USING pi_SegMatValAccountNo
+054400131125130613      CALL "FXSEGMATVA" USING pi_SegMatValAccountNo
+054500121201                                    pi_SegMatValContractNo
+054600131125130613*                             pc_SegMatValInvestmentCode
+054700121201                                    pc_SegMatValMode
+054800131125130613                              pc_SegMatValInvestmentCode
+054900121201                                    pi_SegMatValGMV
+055000121201                                    pi_SegMatValGDV
+055100121201                                    pi_GMPercent
+055200121201                                    pi_GDPercent
+055300121201                                    pi_CurrMarketValue
+055400121201                                    pi_TradeDate
+055500121201                                    pc_SegMatValReturn.
+055600121201
+055700200303185473     COMPUTE ln_GarMatVal of lc_Detail-Out   = pi_SegMatValGMV.
+055800200303|          COMPUTE ln_GarDthVal of lc_Detail-Out   = pi_SegMatValGDV.
+055900200303185473     COMPUTE ln_CurMktVal of lc_Detail-Out   = pi_CurrMarketValue.
+056000121214
+056100121201
+056200121210           COMPUTE ln_TotMatVal = pi_SegMatValGMV + ln_TotMatVal.
+056300121210           COMPUTE ln_TotDthVal = pi_SegMatValGDV + ln_TotDthVal.
+056400121219           COMPUTE ln_TotMktVal = pi_CurrMarketValue + ln_TotMktVal.
+056500121217
+056600121210
+056700160615157138* Only calculate the age when the account/contract changes
+056800160615157138*    PERFORM   Get-GLWB-DOB.
+056900160615157138     If Curr-Level1 Not = Prev-Level1
+057000160615157138        PERFORM   Get-GLWB-DOB
+057100160615157138     Else
+057200200303157138        Compute li_Issue-Age of lc_Detail-Out = li_IssueAgeSave
+057300160615157138     End-if.
+057400121201
+057500121210           MOVE lc_Investment-Code    OF  lc_Detail
+057600121201                                      TO lc_InvCode
+057700121201
+057800121213           PERFORM Get-Investment-Class.
+057900121213
+058000121217           MOVE CURR-CONTROLS          TO lc_Key OF lc_Detail-Out.
+058100200217           MOVE lnc_B TO   lc_Key OF  lc_Detail-Out (19:1).
+058200121201
+058300200306      *RFS185473 - Starts
+058400200306            IF Lb_SEGEXTAAllowedNo
+058500200306               EXEC SQL
+058600200306                 INSERT INTO QTEMP/DETAILOUT
+058700200306                 VALUES :lc_Detail-Out
+058800200306               END-EXEC
+058900200306            ELSE
+059000200306              MOVE CORR lc_Detail-Out       TO  lc_Detail-ALT
+059100200306               EXEC SQL
+059200200306                 INSERT INTO QTEMP/DETAILOUT
+059300200306                 VALUES :lc_Detail-ALT
+059400200306               END-EXEC
+059500200306            END-IF.
+059600210823
+059700200306      *RFS185473 - Ends
+059800200219
+059900200219      * SQL error Checking
+060000121201
+060100121201           MOVE SQLSTATE TO Sw-Sql-States.
+060200121210
+060300121201           EVALUATE TRUE
+060400121201               WHEN Sw-Sql-Successful
+060500121210               WHEN Sw-Sql-States = lnc_TableNotJournaled
+060600121201                    CONTINUE
+060700121201               WHEN OTHER
+060800121210                    SET lncc_Err12         TO TRUE
+060900121210                    STRING lnc_InsertDetail         DELIMITED BY SPACE
+061000121210                           SPACE                    DELIMITED BY SIZE
+061100121201                           SQLSTATE                 DELIMITED BY SIZE
+061200121201                      INTO Ws-Sql-Err-Short-Descr
+061300121201                    PERFORM SQLFailProcess
+061400121201           END-EVALUATE.
+061500121210
+061600200306       Level-Reinit-1.
+061700121201
+061800121210           INITIALIZE lc_Summary-Out.
+061900121210           MOVE CORR lc_Detail      TO lc_Summary-Out.
+062000121210           MOVE lnc_SUM             TO lc_Rec-Type OF lc_Summary-Out.
+062100121210           MOVE CURR-CONTROLS       TO lc_Key OF lc_Summary-Out.
+062200121210           MOVE lnc_C  TO lc_Key OF lc_Summary-Out (19:1).
+062300121201
+062400121201       Level-Summary-1.
+062500121201
+062600121201           EXEC SQL
+062700121210             INSERT INTO QTEMP/SUMMOUT
+062800121210             VALUES :lc_Summary-Out
+062900121201           END-EXEC.
+063000121201
+063100121201      * SQL error Checking
+063200121201
+063300121201           MOVE SQLSTATE TO Sw-Sql-States.
+063400121210
+063500121201           EVALUATE TRUE
+063600121201               WHEN Sw-Sql-Successful
+063700121210               WHEN Sw-Sql-States = lnc_TableNotJournaled
+063800121201                    CONTINUE
+063900121201               WHEN OTHER
+064000121210                    SET lncc_Err13         TO TRUE
+064100121210                    STRING lnc_InsertSummary        DELIMITED BY SPACE
+064200121210                           SPACE                    DELIMITED BY SIZE
+064300121201                           SQLSTATE                 DELIMITED BY SIZE
+064400121201                      INTO Ws-Sql-Err-Short-Descr
+064500121201                    PERFORM SQLFailProcess
+064600121201           END-EVALUATE.
+064700121201
+064800121201       Get-Current-Record.
+064900121201
+065000121201      *       Fetch Cursor
+065100121201           EXEC SQL
+065200121210             FETCH NEXT FROM level1_drv
+065300121210             INTO :lc_Detail
+065400121201           END-EXEC.
+065500121201
+065600121201      *            Check status after every IO.
+065700121201      * If error encountered then write error information to
+065800121201      *            error table or display error info
+065900121201
+066000121201           MOVE SQLSTATE                   TO SW-SQL-STATES
+066100121201
+066200121201           EVALUATE TRUE
+066300121210               WHEN SW-SQL-SUCCESSFUL OR SW-SQL-WARNING
+066400121210                    MOVE li_Account-No  OF  lc_Detail
+066500121210                                        TO CURR-ACCOUNT
+066600121210                    MOVE li_Contract-No OF  lc_Detail
+066700121210                                        TO CURR-CONTRACT
+066800121210               WHEN SW-SQL-END
+066900121210                    MOVE HIGH-VALUES    TO CURR-CONTROLS
+067000121210                    MOVE SQLERRD(3)     TO PASS-NUM-RECORDS
+067100121210                                        OF COMM-CPPFSTS-PARAMETERS
+067200121210                    MOVE lnc_ErrorFileLevel1
+067300121210                                        TO PASS-DESCRIPTION-35
+067400121210                                        OF COMM-CPPFSTS-PARAMETERS
+067500121210                    PERFORM STD-WRITE-INFO-DATA
+067600121210               WHEN OTHER
+067700121210                    SET lncc_Err11      TO TRUE
+067800121210                    STRING lnc_FetchCursorError     DELIMITED BY SPACE
+067900121210                           SPACE                    DELIMITED BY SIZE
+068000121201                           SQLSTATE                 DELIMITED BY SIZE
+068100121210                    INTO Ws-Sql-Err-Short-Descr
+068200121210                    PERFORM SQLFailProcess
+068300121201           END-EVALUATE.
+068400121213
+068500121213      *Annuitant Age
+068600121213       Get-GLWB-DOB.
+068700210824      *RFS1118605 - Start
+068800210824      * Commented out logic to call FXACCANUIT to retrieve annuitant
+068900210824      * DOB. return parameter pi_tradedate from FXSEGMATVA will hold
+069000210824      * value for annuitant DOB.
+069100210824
+069200121213      *  FXACCANUIT  Obtain
+069300121213      *             - DOB for GLWB Calculation
+069400121213
+069500210824      *    INITIALIZE   pc_AnnuitFlag,
+069600210824      *                 pi_AnnuitAccountNo,
+069700210824      *                 pi_AnnuitContractNo,
+069800210824      *                 pi_AnnSequenceNo,
+069900210824      *                 pc_AnnuitantStatus,
+070000210824      *                 pi_DateOfBirth,
+070100210824      *                 pc_FirstName,
+070200210824      *                 pc_LastName,
+070300210824      *                 pi_socialInsuranceNo,
+070400210824      *                 pc_sex,
+070500210824      *                 pc_AnnuitReturnCode.
+070600121213
+070700121213      * Get DOB of the younger of the two annuitants.
+070800210824      *    SET pb_YoungerAnnuit TO TRUE.
+070900210824      *
+071000210824      *    MOVE li_Account-No  OF lc_Detail  TO pi_AnnuitAccountNo.
+071100210824      *    MOVE li_Contract-No OF lc_Detail  TO pi_AnnuitContractNo.
+071200210824      *
+071300210824      *    CALL "FXACCANUIT" USING pc_AnnuitFlag,
+071400210824      *                            pi_AnnuitAccountNo,
+071500210824      *                            pi_AnnuitContractNo,
+071600210824      *                            pi_AnnSequenceNo,
+071700210824      *                            pc_AnnuitantStatus,
+071800210824      *                            pi_DateOfBirth,
+071900210824      *                            pc_FirstName,
+072000210824      *                            pc_LastName,
+072100210824      *                            pi_socialInsuranceNo,
+072200210824      *                            pc_sex,
+072300210824      *                            pc_AnnuitReturnCode.
+072400121213
+072500210824      *    IF pb_RetriveYes
+072600210824      *       COMPUTE li_AnuitDOB = pi_DateOfBirth
+072700210824      *    ELSE
+072800210824      *       COMPUTE li_AnuitDOB = ZERO
+072900210824      *    END-IF.
+073000210824
+073100211011      *RFS1121799 Starts
+073200211013      * Add the original logic of calling FXACCANUIT to get DOB
+073300211011      *    IF li_CurrProcessDate NOT = pi_TradeDate
+073400211011      *    AND pi_TradeDate NOT = 0
+073500211011      *        MOVE pi_TradeDate TO li_AnuitDOB
+073600211011      *    ELSE
+073700211011      *        MOVE 0 TO li_AnuitDOB
+073800211011      *    END-IF.
+073801211013      *RFS1121799 Ends
+073900210824      *RFS1118605 - End
+073901211013      *RFS1121799 Starts
+074000211011           INITIALIZE   pc_AnnuitFlag,
+074100211011                        pi_AnnuitAccountNo,
+074200211011                        pi_AnnuitContractNo,
+074300211011                        pi_AnnSequenceNo,
+074400211011                        pc_AnnuitantStatus,
+074500211011                        pi_DateOfBirth,
+074600211011                        pc_FirstName,
+074700211011                        pc_LastName,
+074800211011                        pi_socialInsuranceNo,
+074900211011                        pc_sex,
+075000211011                        pc_AnnuitReturnCode.
+075100211011
+075200211011      * Get DOB of the younger of the two annuitants.
+075300211011           SET pb_YoungerAnnuit TO TRUE.
+075400211011
+075500211011           MOVE li_Account-No  OF lc_Detail  TO pi_AnnuitAccountNo.
+075600211011           MOVE li_Contract-No OF lc_Detail  TO pi_AnnuitContractNo.
+075700211011
+075800211011           CALL "FXACCANUIT" USING pc_AnnuitFlag,
+075900211011                                   pi_AnnuitAccountNo,
+076000211011                                   pi_AnnuitContractNo,
+076100211011                                   pi_AnnSequenceNo,
+076200211011                                   pc_AnnuitantStatus,
+076300211011                                   pi_DateOfBirth,
+076400211011                                   pc_FirstName,
+076500211011                                   pc_LastName,
+076600211011                                   pi_socialInsuranceNo,
+076700211011                                   pc_sex,
+076800211011                                   pc_AnnuitReturnCode.
+076900211011
+077000211011           IF pb_RetriveYes
+077100211011              COMPUTE li_AnuitDOB = pi_DateOfBirth
+077200211011           ELSE
+077300211011              COMPUTE li_AnuitDOB = ZERO
+077400211011           END-IF.
+077500211011      *RFS1121799 Ends
+077600210824
+077700200306           IF li_AnuitDOB NOT = 0
+077800200303185473        COMPUTE li_Issue-Age  OF lc_Detail-Out  =
+077900121213              ( li_Start-Date OF lc_Detail - li_AnuitDOB ) / 10000
+078000121213           ELSE
+078100200304185473        COMPUTE li_Issue-Age OF lc_Detail-Out   = 0
+078200121213           END-IF.
+078300121201
+078400200303157138     COMPUTE li_IssueAgeSave = li_Issue-Age OF lc_Detail-Out.
+078500160615
+078600121201       Get-Investment-Class.
+078700121201
+078800121201           EXEC SQL
+078900121210             SELECT INVCLSP.CLASS,
+079000121210                    INVP.LOAD_STRUCTURE
+079100121210             INTO  :lc_InvClass,
+079200121210                   :lc_LdStrCd
+079300121210             FROM   MFAINVCLSP INVCLSP
+079400121210             INNER  JOIN MFAINVP INVP
+079500121210             ON     INVCLSP.INVESTMENT_CODE = INVP.INVESTMENT_CODE
+079600200227             WHERE  INVCLSP.INVESTMENT_CODE = :lc_InvCode
+079700121201           END-EXEC.
+079800121210
+079900121201           MOVE SQLSTATE TO lc_SqlStates.
+080000121201
+080100121201           EVALUATE TRUE
+080200121201               WHEN SW-SQL-SUCCESSFUL
+080300200303                 MOVE lc_InvClass TO lc_Investment-Class
+080400200304185473                                               OF lc_Detail-Out
+080500200306                 MOVE lc_LdStrCd  TO lc_Load-Indicator
+080600200306185473                                               OF lc_Detail-Out
+080700121201               WHEN NOT SW-SQL-SUCCESSFUL
+080800121210                 SET  Lncc_Err14  TO TRUE
+080900121210                 STRING lnc_ErrorGetinvcls  DELIMITED BY SPACE
+081000121210                        SPACE               DELIMITED BY SIZE
+081100121201                        SQLSTATE            DELIMITED BY SIZE
+081200121201                        INTO Ws-Sql-Err-Short-Descr
+081300121201                 PERFORM SQLFailProcess
+081400121201               WHEN SW-SQL-END
+081500121201                 MOVE SPACES      TO lc_InvClass
+081600121201           END-EVALUATE.
+081700121201
+081800121213
+081900200306      *RFS185473 - Starts
+082000200306      * ------------------
+082100200306        Additional-Detail.
+082200200306      * ------------------
+082300200306            MOVE li_Account-No OF lc_Detail
+082400200306                                       TO pi_SegExtAccountNo.
+082500200306            MOVE li_Contract-No OF lc_Detail
+082600200306                                       TO pi_SegExtContractNo.
+082700200306            MOVE lc_Investment-Code OF lc_Detail
+082800200306                                       TO pc_SegExtInvestmentCode.
+082900200306            PERFORM Get-First-Trade.
+083000200306            PERFORM Get-PAC-Info.
+083100210429      *RFS186584 - Start *
+083200210510            MOVE lc_Externalloadtype_N of lc_Detail
+083300210510                                       TO lc_Externalloadtype.
+083400210429      *RFS186584 - Ends
+083401211014      * RFS197570 - Start
+083402211014            PERFORM GET-MFR-Details.
+083403211014            PERFORM GET-MFE-Details.
+083404211014      * RFS187570 - End
+083500200306
+083600200306      * Get Trade date of the transaction for the account
+083700200306      * ----------------
+083800200306        Get-First-Trade.
+083900200306      * ----------------
+084000200306
+084100210309      *RFS1110610 Start
+084200210309      *    EXEC SQL
+084300210309      *      SELECT COALESCE(MIN(DIGITS(TRNP.TRADE_Date)),0)
+084400210309      *      INTO :lc_fundEntryDate
+084500210309      *      FROM MFATRNP TRNP
+084600210309      *      JOIN MFATRCODP TRCODP ON
+084700210309      *      TRNP.Placement_Date   = TRCODP.Placement_Date    AND
+084800210309      *      TRNP.Trans_no         = TRCODP.Trans_no
+084900210309      *      WHERE TRNP.ACCOUNT_NO = :pi_SegExtAccountNo      AND
+085000210309      *      TRCODP.Contract_no    = :pi_SegExtContractNo     AND
+085100210309      *      TRNP.TRANS_TYPE_CODE IN ("BUY", "SWI", "TRI")    AND
+085200210309      *     TRNP.REVERSE <> "Y"
+085300210309      *     END-EXEC.
+085400210309
+085500210614114837     INITIALIZE lc_fundEntryDate.
+085600210309           EXEC SQL
+085700210309             SELECT EFFECTIV_DATE
+085800210309             INTO :lc_fundEntryDate
+085900210309             FROM MFAACMDP
+086000210309             WHERE ACCOUNT_NO = :pi_SegExtAccountNo
+086100210309           END-EXEC.
+086200210309      *RFS1110610 End
+086300200306
+086400200306      *SQL Error Checking
+086500200306
+086600200310            MOVE SQLSTATE TO Sw-Sql-States.
+086700200306            EVALUATE TRUE
+086800200306                WHEN Sw-Sql-Successful
+086900200311                  OR Sw-Sql-Warning
+087000200311                  OR Sw-Sql-End
+087100200306                WHEN Sw-Sql-States = lnc_TableNotJournaled
+087200200306                     CONTINUE
+087300200306                WHEN OTHER
+087400200306                     SET    lncc_Err15     TO TRUE
+087500200306                     STRING lnc_GetTrd_Dat DELIMITED BY SPACE
+087600200306                     SPACE                 DELIMITED BY SIZE
+087700200306                     SQLSTATE              DELIMITED BY SIZE
+087800200306                     INTO Ws-Sql-Err-Short-Descr
+087900200306                PERFORM SQLFailProcess
+088000200306            END-EVALUATE.
+088100200306
+088200200306      * ---------------------
+088300200306         Get-PAC-Info.
+088400200310      *----------------------
+088500200306
+088600200306            EXEC SQL
+088700200306              SELECT COALESCE(SUM(CASE
+088800200306                 WHEN COALESCE(IVRPAP.SPLIT_OPTION_CODE," " ) = "$"
+088900200306                        THEN (COALESCE(IVRPPP.DEPOSIT_AMT,0))
+089000200306                 WHEN COALESCE(IVRPAP.SPLIT_OPTION_CODE," ") = "%"
+089100200306                        THEN ((COALESCE(IVRPAP.PAC_AMT,0))
+089200200306                            * (COALESCE(IVRPPP.DEPOSIT_AMT,0))/100)
+089300200306                 ELSE 0
+089400200306                      END),0)
+089500200306               INTO :li_PACDepositAmt
+089600200306               FROM MFAIVRPPP IVRPPP
+089700200306               JOIN MFAIVRPAP IVRPAP  ON
+089800200306                IVRPAP.investor_no     = IVRPPP.investor_no    AND
+089900200306                IVRPAP.pac_seq_no      = IVRPPP.pac_seq_no
+090000200306               WHERE IVRPAP.PAC_STATUS = "AC"                  AND
+090100200306                IVRPAP.Investor_no = :li_InvestorNo            AND
+090200200306                IVRPPP.Account_no  = :pi_SegExtAccountNo       AND
+090300200306                IVRPPP.Investment_Code = :pc_SegExtInvestmentCode
+090400200306            END-EXEC.
+090500200306      *SQL Error Checking
+090600200306
+090700200306            MOVE SQLSTATE TO Sw-Sql-States.
+090800200306            EVALUATE TRUE
+090900200306                WHEN Sw-Sql-Successful
+091000200311                OR   Sw-Sql-Warning
+091100200311                OR   Sw-Sql-End
+091200200306                WHEN Sw-Sql-States = lnc_TableNotJournaled
+091300200306                     CONTINUE
+091400200306                WHEN OTHER
+091500200306                     SET lncc_Err16         TO TRUE
+091600200306                     STRING lnc_GetPAC      DELIMITED BY SPACE
+091700200306                     SPACE                  DELIMITED BY SIZE
+091800200306                     SQLSTATE               DELIMITED BY SIZE
+091900200311                 INTO Ws-Sql-Err-Short-Descr
+092000200306                 PERFORM SQLFailProcess
+092100200306             END-EVALUATE.
+092200200306      *RFS185473 - Ends
+092300200306
+092301211014      * RFS187570 - Start
+092302211014      *---------------------
+092303211014       GET-MFR-Details.
+092304211014      *---------------------
+092305211014           INITIALIZE ln_MFRTotAssetAmt,
+092306211014                      lc_MFRSchdCode,
+092307211014                      ln_MFRRate,
+092308211014                      ln_MFRUpperLimit,
+092309211014                      li_MFRMaxDate,
+092310211014                      ln_MFRTierNum.
+092311211014
+092312211014           EXEC SQL
+092313211014             SELECT COALESCE(MAX(TRADE_DATE), 0)
+092314211014             INTO :li_MFRMaxDate
+092315211014             FROM WRKHHLDIVR
+092316211014           END-EXEC.
+092317211014
+092318211014           MOVE SQLSTATE TO Sw-Sql-States.
+092319211014           EVALUATE TRUE
+092320211014               WHEN Sw-Sql-Successful
+092321211014               OR   Sw-Sql-Warning
+092322211014               OR   Sw-Sql-End
+092323211014                    CONTINUE
+092324211014               WHEN OTHER
+092325211014                    SET lncc_Err17         TO TRUE
+092326211014                    STRING lnc_GetMFRMaxDat DELIMITED BY SPACE
+092327211014                    SPACE                   DELIMITED BY SIZE
+092328211014                    SQLSTATE                DELIMITED BY SIZE
+092329211014                INTO Ws-Sql-Err-Short-Descr
+092330211014                PERFORM SQLFailProcess
+092331211014            END-EVALUATE.
+092332211014
+092333211014           EXEC SQL
+092334211014             SELECT COALESCE(CASE WHEN HHLDIVR.ASSETS_BY_RULE = "3"
+092335211014                                  THEN HHLDIVR.TOT_IVR_ASSETS_AMT
+092336211014                                  ELSE 0
+092337211014                             END , 0),
+092338211014                    COALESCE(CASE WHEN
+092339211014                                  HHLDIVR.OVR_MFR_SCHEDULE_CODE <> " "
+092340211014                                  THEN HHLDIVR.OVR_MFR_SCHEDULE_CODE
+092341211014                             ELSE HHLDIVR.MFR_SCHEDULE_CODE
+092342211014                             END , " ")
+092343211014             INTO :ln_MFRTotAssetAmt,
+092344211014                  :lc_MFRSchdCode
+092345211014             FROM WRKHHLDIVR HHLDIVR
+092346211014             WHERE HHLDIVR.ACCOUNT_NO     = :pi_SegExtAccountNo AND
+092347211014                  HHLDIVR.INVESTMENT_CODE = :pc_SegExtInvestmentCode AND
+092348211014                   HHLDIVR.TRADE_DATE     = :li_MFRMaxDate
+092349211014             FETCH FIRST ROW ONLY
+092350211014           END-EXEC.
+092351211014
+092352211014           MOVE SQLSTATE TO Sw-Sql-States.
+092353211014           EVALUATE TRUE
+092354211014               WHEN Sw-Sql-Successful
+092355211014               OR   Sw-Sql-Warning
+092356211014               OR   Sw-Sql-End
+092357211014                    CONTINUE
+092358211014               WHEN OTHER
+092359211014                    SET lncc_Err18         TO TRUE
+092360211014                    STRING lnc_GetMFRDetail DELIMITED BY SPACE
+092361211014                    SPACE                   DELIMITED BY SIZE
+092362211014                    SQLSTATE                DELIMITED BY SIZE
+092363211014                INTO Ws-Sql-Err-Short-Descr
+092364211014                PERFORM SQLFailProcess
+092365211014            END-EVALUATE.
+092366211014
+092367211014           EXEC SQL
+092368211014             SELECT COALESCE(MFR_RATE,0),
+092369211014                    COALESCE(UPPER_LIMIT,0)
+092370211014              INTO :ln_MFRRate,
+092371211014                   :ln_MFRUpperLimit
+092372211014             FROM MFAMFRSCP
+092373211014             WHERE MFR_SCHEDULE_CODE  = :lc_MFRSchdCode  AND
+092374211014                   UPPER_LIMIT       >= :ln_MFRTotAssetAmt
+092375211014             ORDER BY UPPER_LIMIT ASC
+092376211014             FETCH FIRST ROW ONLY
+092377211014           END-EXEC.
+092378211014
+092379211014           MOVE SQLSTATE TO Sw-Sql-States.
+092380211014           EVALUATE TRUE
+092381211014               WHEN Sw-Sql-Successful
+092382211014               OR   Sw-Sql-Warning
+092383211014               OR   Sw-Sql-End
+092384211014                    CONTINUE
+092385211014               WHEN OTHER
+092386211014                    SET lncc_Err19         TO TRUE
+092387211014                    STRING lnc_GetMFRRate   DELIMITED BY SPACE
+092388211014                    SPACE                   DELIMITED BY SIZE
+092389211014                    SQLSTATE                DELIMITED BY SIZE
+092390211014                INTO Ws-Sql-Err-Short-Descr
+092391211014                PERFORM SQLFailProcess
+092392211014           END-EVALUATE.
+092393211014
+092394211014           EXEC SQL
+092395211014             SELECT MFRSCHED.ROWNUMBER
+092396211014              INTO :ln_MFRTierNum
+092397211014             FROM (SELECT ROW_NUMBER()
+092398211014                         OVER(PARTITION BY MFR_SCHEDULE_CODE
+092399211014                               ORDER BY UPPER_LIMIT ASC) AS ROWNUMBER,
+092400211014                          MFR_SCHEDULE_CODE,
+092401211014                          UPPER_LIMIT
+092402211014                   FROM MFAMFRSCP
+092403211014                   WHERE MFR_SCHEDULE_CODE  = :lc_MFRSchdCode)
+092404211014                   AS MFRSCHED
+092405211014             WHERE MFRSCHED.MFR_SCHEDULE_CODE = :lc_MFRSchdCode AND
+092406211014                   MFRSCHED.UPPER_LIMIT       = :ln_MFRUpperLimit
+092407211014           END-EXEC.
+092408211014
+092409211014           MOVE SQLSTATE TO Sw-Sql-States.
+092410211014           EVALUATE TRUE
+092411211014               WHEN Sw-Sql-Successful
+092412211014               OR   Sw-Sql-Warning
+092413211014               OR   Sw-Sql-End
+092414211014                    CONTINUE
+092415211014               WHEN OTHER
+092416211014                    SET lncc_Err20         TO TRUE
+092417211014                    STRING lnc_GetMFRTier   DELIMITED BY SPACE
+092418211014                    SPACE                   DELIMITED BY SIZE
+092419211014                    SQLSTATE                DELIMITED BY SIZE
+092420211014                INTO Ws-Sql-Err-Short-Descr
+092421211014                PERFORM SQLFailProcess
+092422211014           END-EVALUATE.
+092423211014      *-----------------
+092424211014       GET-MFE-Details.
+092425211014      *-----------------
+092426211014           Initialize ln_MFETotAssetAmt,
+092427211014                      lc_MFESchdcode,
+092428211014                      ln_MFELowerLimit,
+092429211014                      ln_MFERate,
+092430211014                      ln_MFETierNum.
+092431211014
+092432211014           EXEC SQL
+092433211014             SELECT COALESCE(CASE WHEN HHLDIVR.ASSETS_BY_RULE = "3"
+092434211014                                  THEN HHLDIVR.TOT_IVR_ASSETS_AMT
+092435211014                                  ELSE 0
+092436211014                             END , 0)
+092437211014             INTO :ln_MFETotAssetAmt
+092438211014             FROM WRKHHLDIVR HHLDIVR
+092439211014             WHERE HHLDIVR.ACCOUNT_NO     = :pi_SegExtAccountNo AND
+092440211014                  HHLDIVR.INVESTMENT_CODE = :pc_SegExtInvestmentCode AND
+092441211014                   HHLDIVR.TRADE_DATE     = :li_MFRMaxDate
+092442211014           END-EXEC.
+092443211014
+092444211014           MOVE SQLSTATE TO Sw-Sql-States.
+092445211014           EVALUATE TRUE
+092446211014               WHEN Sw-Sql-Successful
+092447211014               OR   Sw-Sql-Warning
+092448211014               OR   Sw-Sql-End
+092449211014                    CONTINUE
+092450211014               WHEN OTHER
+092451211014                    SET lncc_Err21         TO TRUE
+092452211014                    STRING lnc_GetMFEDetail DELIMITED BY SPACE
+092453211014                    SPACE                   DELIMITED BY SIZE
+092454211014                    SQLSTATE                DELIMITED BY SIZE
+092455211014                INTO Ws-Sql-Err-Short-Descr
+092456211014                PERFORM SQLFailProcess
+092457211014           END-EVALUATE.
+092458211014
+092459211014           EXEC SQL
+092460211014             SELECT MFE_SCHEDULE_CODE
+092461211014             INTO  :lc_MFESchdcode
+092462211014             FROM MFAIMSCHP  IMSCHP
+092463211014             WHERE IMSCHP.INVESTMENT_CODE  = :pc_SegExtInvestmentCode
+092464211014           END-EXEC.
+092465211014
+092466211014           MOVE SQLSTATE TO Sw-Sql-States.
+092467211014           EVALUATE TRUE
+092468211014               WHEN Sw-Sql-Successful
+092469211014               OR   Sw-Sql-Warning
+092470211014               OR   Sw-Sql-End
+092471211014                    CONTINUE
+092472211014               WHEN OTHER
+092473211014                    SET lncc_Err22         TO TRUE
+092474211014                    STRING lnc_GetMFESched  DELIMITED BY SPACE
+092475211014                    SPACE                   DELIMITED BY SIZE
+092476211014                    SQLSTATE                DELIMITED BY SIZE
+092477211014                INTO Ws-Sql-Err-Short-Descr
+092478211019                PERFORM SQLFailProcess
+092479211014           END-EVALUATE.
+092480211014
+092481211014           EXEC SQL
+092482211014             SELECT MFAMRSCHP.LOWER_LIMIT_AMT
+092483211014                   ,MFAMRSCHP.PERCENT_AMT
+092484211014             INTO :ln_MFELowerLimit
+092485211014                 ,:ln_MFERate
+092486211014             FROM MFAMRSCHP
+092487211014             WHERE MFE_SCHEDULE_CODE = :lc_MFESchdcode    AND
+092488211018                   LOWER_LIMIT_AMT  <= :ln_MFETotAssetAmt
+092489211022             ORDER BY LOWER_LIMIT_AMT DESC,
+092491211018                      EFFECTIV_DATE DESC
+092492211014             FETCH FIRST ROW ONLY
+092493211014           END-EXEC.
+092494211014
+092495211014           MOVE SQLSTATE TO Sw-Sql-States.
+092496211014           EVALUATE TRUE
+092497211014               WHEN Sw-Sql-Successful
+092498211014               OR   Sw-Sql-Warning
+092499211014               OR   Sw-Sql-End
+092500211014                    CONTINUE
+092501211014               WHEN OTHER
+092502211014                    SET lncc_Err23         TO TRUE
+092503211014                    STRING lnc_GetMFERate   DELIMITED BY SPACE
+092504211014                    SPACE                   DELIMITED BY SIZE
+092505211014                    SQLSTATE                DELIMITED BY SIZE
+092506211014                INTO Ws-Sql-Err-Short-Descr
+092507211014                PERFORM SQLFailProcess
+092508211014           END-EVALUATE.
+092509211014
+092510211014           EXEC SQL
+092511211014             SELECT MFESCHED.ROWNUMBER
+092512211014              INTO :ln_MFETierNum
+092513211014             FROM (SELECT ROW_NUMBER()
+092514211014                          OVER(PARTITION BY MFE_SCHEDULE_CODE
+092515211014                               ORDER BY LOWER_LIMIT_AMT ASC)
+092516211014                          AS ROWNUMBER,
+092517211014                          MFE_SCHEDULE_CODE,
+092518211014                          LOWER_LIMIT_AMT
+092519211014                   FROM MFAMRSCHP
+092520211019                   WHERE MFE_SCHEDULE_CODE  = :lc_MFESchdCode
+092521211018                   GROUP BY MFE_SCHEDULE_CODE,
+092522211018                            LOWER_LIMIT_AMT)
+092523211014                   AS MFESCHED
+092524211014             WHERE MFESCHED.MFE_SCHEDULE_CODE = :lc_MFESchdCode AND
+092525211014                   MFESCHED.LOWER_LIMIT_AMT   = :ln_MFELowerLimit
+092526211014           END-EXEC.
+092527211014
+092528211014           MOVE SQLSTATE TO Sw-Sql-States.
+092529211014           EVALUATE TRUE
+092530211014               WHEN Sw-Sql-Successful
+092531211014               OR   Sw-Sql-Warning
+092532211014               OR   Sw-Sql-End
+092533211014                    CONTINUE
+092534211014               WHEN OTHER
+092535211014                    SET lncc_Err24         TO TRUE
+092536211014                    STRING lnc_GetMFETier   DELIMITED BY SPACE
+092537211014                    SPACE                   DELIMITED BY SIZE
+092538211014                    SQLSTATE                DELIMITED BY SIZE
+092539211014                INTO Ws-Sql-Err-Short-Descr
+092540211014                PERFORM SQLFailProcess
+092541211014           END-EVALUATE.
+092542211014      * RFS187570 - End
+092543121201      * Copybook to Write Performance/Statistics Info
+092544121201           COPY CPPFCAL.
+092600121201
+092700121201      * Dsp-Error and Force-Msgw Routines
+092800121201           COPY CPYSQLRTN.
+092900121210      * --------------------------
+093000121201       END-JOB.
+093100121210      * --------------------------
+093200210823      *RFS1118605 - Start
+093300210823      *Copy detailout file records to OJ to support multi thread
+093400210823
+093500210823           INITIALIZE lc_SQL_stmt.
+093600210823
+093700210823           STRING "INSERT INTO "       DELIMITED BY SIZE
+093800210823                  lc_Ojlibname         DELIMITED BY SPACE
+093900210824                  "/DETAILOP "          DELIMITED BY SIZE
+094000210823                  "SELECT * FROM     " DELIMITED BY SIZE
+094100210823                  "QTEMP/DETAILOUT   " DELIMITED BY SIZE
+094200210823             INTO lc_SQL_stmt
+094300210823           END-STRING.
+094400210823
+094500210823           EXEC SQL
+094600210823             EXECUTE IMMEDIATE :lc_SQL_stmt
+094700210823           END-EXEC.
+094800210825
+094900210825           INITIALIZE lc_SQL_stmt.
+095000210825
+095100210825           STRING "INSERT INTO "       DELIMITED BY SIZE
+095200210825                  lc_Ojlibname         DELIMITED BY SPACE
+095300210825                  "/SUMMOP   "          DELIMITED BY SIZE
+095400210825                  "SELECT * FROM     " DELIMITED BY SIZE
+095500210825                  "QTEMP/SUMMOUT     " DELIMITED BY SIZE
+095600210825             INTO lc_SQL_stmt
+095700210825           END-STRING.
+095800210825
+095900210825           EXEC SQL
+096000210825             EXECUTE IMMEDIATE :lc_SQL_stmt
+096100210825           END-EXEC.
+096200210826      *RFS1118605 - End
+096300210826
+096400121201      * - Display info, that program End
+096500121201           PERFORM DSP-PROGRAM-END.
+096600121201
+096700121201       SQLFailProcess.
+096800121201           PERFORM Dsp-Error.
+096900121201           GOBACK.
+097000121201

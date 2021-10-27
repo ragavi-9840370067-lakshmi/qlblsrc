@@ -1,0 +1,986 @@
+000100170313      * %ATTR COMMIT(*CHG) DBGVIEW(*SOURCE)
+000200070323       IDENTIFICATION DIVISION.
+000300070326       PROGRAM-ID.    IVRSPLTHHM.
+000400070323      *---------------------------------------------------------------**
+000500070323      * Description: This module performs investor split function for
+000600070329      *              Household and Additional Mailing.
+000700210130      *
+000800070323      * Called By  : FXIVRSPLT - Investor Split Main Program/Module.
+000900070323      *---------------------------------------------------------------**
+001000070323      * CCYY.MM.DD| Programmer | Description
+001100070323      *---------------------------------------------------------------**
+001200171012      * 2007.03.26| Brian L.   | RFS38247 - New
+001300070607      * 2007.06.07| Brian L.   | RFS42542 - Initialize lncc_EndOfCurs1
+001400130209      * 2012.12.04| Naganaveen | RFS111361 - Added Cursor for Household
+001500130611      * 2013.05.29| Ramya K    | RFS123349 - Defect- Fix for NFU's
+001600130611      *                          getting rejected with  '003 Database
+001700130611      *                          not available'
+001800160419      * 2016.03.30| Meenu K    | RFS151407 - User receives error MSG
+001900160419      *           |            | when trying to add investor number in
+002000160419      *           |            | investor household
+002100180613      *2018/05/25 | Janapriya J| RFS179223 - Recompile for MFAIVRHDP*
+002200180816      *2018/08/16 | Sethu B    | RFS180381 - Recompile for MFAIVRHDP*
+002300180816      *2018/08/16 | Muthukumar | RFS180381 - Recompile for CPYHHMM
+002400200425      *2020/04/21 | Mayilsamy D| RFS185774 - Inserted default values *
+002500200421      *           |            | newly added fields in MFAIVRHDP     *
+002600200421      *           |            | and MFAIVRHLP                       *
+002700201113      * Ewa K.    | 2020/11/13 | RFS185174 Recompile for CPWSYSPARM. *
+002800210301      * Rajesh R  | 2021/02/05 | RFS187018 Recompile for MFAIVRHDP   *
+002900210412      *           |            | Added logic to insert newly included*
+003000210412      *           |            | Date Fields.                        *
+003100210525      *MuthukumarS| 2021/05/25 | RFS1112427 - All Household records  *
+003200210525      *           |            | with Acc# populated are duplicated  *
+003300210615      *           |            | any Investor split happens          *
+003400210828      *Mayilsamy D| 2021/08/28 | RFS187441 - Recompile for MFAIVRHHP *
+003500210929      *Bagathsingh| 2021/09/29 | RFS1118805 - NFU address change     *
+003600210929      *           |            | issue fix
+003700070323      *---------------------------------------------------------------**
+003800070323      * Comments
+003900070323      *---------------------------------------------------------------**
+004000070323       ENVIRONMENT DIVISION.
+004100070323       CONFIGURATION SECTION.
+004200210407       SPECIAL-NAMES.
+004300210407                    LINKAGE TYPE IS PROCEDURE FOR "GETCTLNUM"
+004400210407      *RFS187018 - Starts
+004500210407                    DATA-AREA IS WS-DTAARA-MFASYSPARM.
+004600210407      *RFS187018 - End
+004700171012       DATA DIVISION.
+004800070323       WORKING-STORAGE SECTION.
+004900070323      *
+005000070323           Copy Cpysqlfld
+005100070326               REPLACING == "CURRENT_PROGRAM" == BY == "IVRSPLTHHM" ==.
+005200070323      *
+005300070323           EXEC SQL INCLUDE SQLCA END-EXEC.
+005400130209      * RFS 111361 - Start
+005500130209           EXEC SQL
+005600130209              INCLUDE CPYINVHHMM
+005700130209           END-EXEC.
+005800130209      * RFS 111361 - End
+005900130209
+006000070323
+006100070410       01  lc_ConstantVariables.
+006200070410           05  lncc_MAL               PIC X(04)  VALUE "MAL#".
+006300070410           05  lncc_ADD               PIC X(04)  VALUE "ADD#".
+006400070410           05  lncc_MDT               PIC X(04)  VALUE "MDT#".
+006500070410           05  lncc_Addr              PIC X(3)   VALUE "ADR".
+006600130209111361     05  lnc_N                  PIC X(1)   VALUE "N".
+006700070323
+006800070608R42542 01  lc_ControlVariables.
+006900070608   ¦       05  lncc_EndOfCurs1        PIC X(1)   VALUE "N".
+007000070608R42542     05  lncc_EndOfCurs2        PIC X(1)   VALUE "N".
+007100070608
+007200070410       01  lc_NumericVariables.
+007300070410           05  li_New_Addr_No         PIC S9(07) COMP-3.
+007400070410           05  li_New_No              PIC S9(07) COMP-3.
+007500070410           05  li_New_Mal_No          PIC S9(07) COMP-3.
+007600070410           05  li_NewMdtNo            PIC S9(07) COMP-3.
+007700210406
+007800210406      *RFS187018 - Start*
+007900210407       01 lc_MFASYSPARM.
+008000210407           03  Lc-Filler-1                      PIC X(1175).
+008100210407           03  Lc-HelloLife-HH-Code             PIC X(03).
+008200210407
+008300210406       01  lc_Effective_Date           PIC X(10).
+008400210406       01  lc_CnvtEffDate.
+008500210406           03  lc_CnvtDateYYYY         PIC X(4).
+008600210406           03  Filler                  PIC X(1) VALUE "-".
+008700210406           03  lc_CnvtDateMM           PIC X(2).
+008800210406           03  Filler                  PIC X(1) VALUE "-".
+008900210406           03  lc_CnvtDateDD           PIC X(2).
+009000210410       01  lc_Household_Creation_Date  PIC X(10).
+009100210410       01  lc_Household_Start_Date     PIC X(10).
+009200210410       01  lc_Household_Stop_Date      PIC X(10).
+009300210406      *RFS187018 - End
+009400070323
+009500210602112427 01  LC_SAME_ADDRESS_FLAG        PIC X(10).
+009600210602
+009700070328      *** MAIL-LIST-HEADER(MFAMLSHDP) Cursor.
+009800070328
+009900070328       01 Lcu-MailListHeaderCursor.
+010000070328          05 Lcu-MailNoH                 PIC S9(7) COMP-3.
+010100070328          05 Lcu-MailDescr               PIC  X(35).
+010200070328          05 Lcu-AddrNo                  PIC S9(9) COMP-3.
+010300070328          05 Lcu-InvestorNo              PIC S9(9) COMP-3.
+010400070328          05 Lcu-StartDate               PIC S9(9) COMP-3.
+010500070328          05 Lcu-EndDate                 PIC S9(9) COMP-3.
+010600070328
+010700070328      *** MAIL-LIST-DETAILS(MFAMLSDTP) Cursor.
+010800070328
+010900070328       01 Lcu-MailListDetailCursor.
+011000070328          05 Lcu-MailNoD                 PIC S9(7) COMP-3.
+011100070328          05 Lcu-MailDtlNo               PIC S9(7) COMP-3.
+011200070328          05 Lcu-FormCode                PIC  X(10).
+011300070328          05 Lcu-AccountNo               PIC S9(9) COMP-3.
+011400070328          05 Lcu-NoOfCopies              PIC S9(3) COMP-3.
+011500070328          05 Lcu-SelectAllAccts          PIC  X(1).
+011600070328          05 Lcu-OriginalOrCopy          PIC  X(1).
+011700070328
+011800070328      *** MAIL-LIST-DETAILS(MFAMLSDTP) Record.
+011900070328
+012000070328       01 Ltb-MailListDetailRecord.
+012100070328          05 Ltb-MailNo                  PIC S9(7) COMP-3.
+012200070328          05 Ltb-MailDtlNo               PIC S9(7) COMP-3.
+012300070328          05 Ltb-FormCode                PIC  X(10).
+012400070328          05 Ltb-AccountNo               PIC S9(9) COMP-3.
+012500070328          05 Ltb-NoOfCopies              PIC S9(3) COMP-3.
+012600070328          05 Ltb-SelectAllAccts          PIC  X(1).
+012700070410          05 Ltb-OriginalOrCopy          PIC  X(1).
+012800070329
+012900070329       01  lc_Mfaaddp_Rec.
+013000070329           COPY DD-ALL-FORMATS OF MFAADDP.
+013100070329       01  lc_Mfaaddpa_Rec.
+013200070329           COPY DD-ALL-FORMATS OF MFAADDPA.
+013300070323
+013400070330           EXEC SQL INCLUDE CpyIvrSplt END-EXEC.
+013500070323
+013600130209      * RFS 111361 - Start
+013700130209       01  lc_FetchVariables .
+013800130209         03  li_HHinvtor_No             PIC S9(9).
+013900130209         03  lc_Household-Linkage-Code  PIC X(3) .
+014000130209         03  lc_Same-Address            PIC X(1) .
+014100180611179223   03  li_Householdid             PIC S9(12).
+014200200423185774   03  li_Account_No              PIC S9(9).
+014300200423185774   03  lc_Primary_Account_Flag    PIC X(1).
+014400210929118805   03  li_HHinvtor_No_2           PIC S9(9).
+014500210303
+014600210303
+014700130209      * RFS 111361 - END
+014800070323      *---------------------------------------------------------------*
+014900070323       LINKAGE SECTION.
+015000070329
+015100070330       PROCEDURE DIVISION.
+015200070323
+015300070323      *---------------------------------------------------------------*
+015400070323       MAINLINE.
+015500070328
+015600070323           PERFORM Initial_Logic.
+015700070410           IF ec_XML_MSG_Type NOT = lncc_Addr
+015800070329              PERFORM Create-Household-Details
+015900130209      * RFS 111361 - Start
+016000130209           ELSE
+016100130209              IF ec_XML_MSG_Type = lncc_Addr
+016200130209                 PERFORM CREATE-HOUSEHOLD-CURSOR
+016300130209              END-IF
+016400130209           END-IF.
+016500130209      * RFS 111361 - Ends
+016600070329
+016700070328           PERFORM Create-Addtional-Mail-Header
+016800070410                                   UNTIL lncc_EndOfCurs1 = lncc_Y.
+016900070323           PERFORM End_Program.
+017000070323
+017100070323      *---------------------------------------------------------------*
+017200070323       Initial_Logic.
+017300070323
+017400070323      * Initialize variables
+017500070607           INITIALIZE lc_NumericVariables.
+017600070607R42542     MOVE lncc_N        TO lncc_EndOfCurs1.
+017700130209
+017800130209      * RFS 111361 - Start
+017900130209      * Get system date & Time.
+018000130209           INITIALIZE  li_AuditTime
+018100130209                       li_SysDate.
+018200130209           ACCEPT li_AuditTime FROM TIME.
+018300130209           ACCEPT li_SysDate   FROM DATE YYYYMMDD.
+018400210406
+018500210406      * RFS187018 - Start
+018600210407           ACCEPT lc_Mfasysparm FROM WS-DTAARA-MFASYSPARM
+018700210407                  FOR "MFASYSPARM".
+018800210407
+018900210406           MOVE li_SysDate(1:4) TO lc_CnvtDateYYYY
+019000210406           MOVE li_SysDate(5:2) TO lc_CnvtDateMM
+019100210406           MOVE li_SysDate(7:2) TO lc_CnvtDateDD
+019200210406           MOVE lc_CnvtEffDate  TO Lc_Effective_Date
+019300210406      * RFS187018 - End
+019400210406
+019500130209      * Get LOGON id for audit purposes.
+019600130209           MOVE SPACES                 TO lc_UserName.
+019700130209           CALL "GETUSRID" USING lc_UserName.
+019800130209      * RFS 111361 - End
+019900070607
+020000070328      * Declare a cursor.
+020100070409      *Declare Mail-List-Header Cursor.
+020200070328             EXEC SQL
+020300070328              DECLARE  C_mlshd CURSOR FOR
+020400070328                SELECT  MAIL_NO,
+020500070328                        MAIL_DESCR,
+020600070328                        ADDR_NO,
+020700070328                        INVESTOR_NO,
+020800070328                        START_DATE,
+020900070328                        END_DATE
+021000070328                FROM Mfamlshdp
+021100070328                WHERE INVESTOR_NO = :en_Orig_Ivr_No
+021200070329                FOR FETCH ONLY
+021300070328             END-EXEC.
+021400070328
+021500070328           EXEC SQL
+021600070328              OPEN  C_mlshd
+021700070328           END-EXEC.
+021800070328
+021900070328           MOVE SQLSTATE TO lc_sqlStates.
+022000070328           EVALUATE TRUE
+022100070328             WHEN lncc_sqlSuccessful
+022200070328               CONTINUE
+022300070328             WHEN OTHER
+022400070328               SET lncc_Err-01  TO  TRUE
+022500070328               PERFORM Error_Routine
+022600070328           END-EVALUATE.
+022700070328
+022800070409      *Declare Mail-List-Detail Cursor.
+022900070328             EXEC SQL
+023000070328              DECLARE  C_mlsdt CURSOR FOR
+023100070409                SELECT  mlsdtp.MAIL_NO,
+023200070409                        mlsdtp.MAIL_DTL_NO,
+023300070409                        mlsdtp.FORM_CODE,
+023400070409                        mlsdtp.ACCOUNT_NO,
+023500070409                        mlsdtp.NO_OF_COPIES,
+023600070409                        mlsdtp.SELECT_ALL_ACCTS,
+023700070409                        mlsdtp.ORIGINAL_OR_COPY
+023800070409                FROM MFAMLSDTP mlsdtp
+023900070409                WHERE EXISTS
+024000070409                   (SELECT :lncc_X
+024100070409                    FROM MFAACCNTP accntp
+024200070409                    WHERE
+024300070409                      accntp.Investor_No = :en_New_Ivr_No  AND
+024400070409                      (accntp.Account_No = mlsdtp.Account_No OR
+024500070409                      mlsdtp.Account_No = 0)  AND
+024600070410                      mlsdtp.Mail_No = :li_NewMdtNo)
+024700070329                FOR FETCH ONLY
+024800070328             END-EXEC.
+024900070328
+025000070328           MOVE SQLSTATE TO lc_sqlStates.
+025100070328           EVALUATE TRUE
+025200070328             WHEN lncc_sqlSuccessful
+025300070328               CONTINUE
+025400070328             WHEN OTHER
+025500070330               SET lncc_Err-02  TO  TRUE
+025600070328               PERFORM Error_Routine
+025700070328           END-EVALUATE.
+025800070328
+025900210602      * RFS 1112427 - Start
+026000210602           EXEC SQL
+026100210603             DROP TABLE WKHHUPDDT
+026200210602           END-EXEC.
+026300210602
+026400210602           MOVE SQLSTATE TO lc_sqlStates.
+026500210602           IF lncc_sqlSuccessful OR lncc_sqlWarning OR
+026600210602              lncc_sqlTblNotExists
+026700210602              CONTINUE
+026800210602           ELSE
+026900210602              SET lncc_Err-43  TO TRUE
+027000210602              PERFORM Error_Routine
+027100210602           END-IF.
+027200210602
+027300210602           EXEC SQL
+027400210603             CREATE TABLE WKHHUPDDT
+027500210602             (
+027600210602               PRI_INVESTOR_NO      NUMERIC(9,0)
+027700210602              ,HOUSEHOLD_ID         NUMERIC(12,0)
+027800210602              ,NEW_INVESTOR_NO      NUMERIC(9,0)
+027900210602              ,SAME_ADDRESS_FLAG    CHAR(1)
+028000210602             )
+028100210602           END-EXEC.
+028200210602
+028300210602           EXEC SQL
+028400210603              INSERT INTO WKHHUPDDT
+028500210602              SELECT DISTINCT IVRHHP.INVESTOR_NO, IVRHHP.HOUSEHOLD_ID,
+028600210602                              :en_New_Ivr_No,
+028700210602                              COALESCE(HHDLCP.SAME_ADDRESS, " ")
+028800210602              FROM MFAIVRHHP IVRHHP
+028900210602              INNER JOIN MFAIVRHDP IVRHDP ON
+029000210602                 IVRHHP.HOUSEHOLD_ID = IVRHDP.HOUSEHOLD_ID
+029100210602              INNER JOIN MFAACCNTP ACCNTP ON
+029200210602                  ACCNTP.ACCOUNT_NO = IVRHDP.ACCOUNT_NO
+029300210602              LEFT OUTER JOIN MFAHHDLCP HHDLCP ON
+029400210602                  HHDLCP.HOUSEHOLD_LINKAGE_CODE =
+029500210602                  IVRHDP.HOUSEHOLD_LINKAGE_CODE
+029600210602              AND HHDLCP.SAME_ADDRESS = "N"
+029700210602              WHERE IVRHDP.INVESTOR_NO = IVRHDP.INVESTOR_NO_2
+029800210602                AND IVRHDP.PRIMARY_ACCOUNT_FLAG = "Y"
+029900210602                AND IVRHDP.ACCOUNT_NO <> 0
+030000210602                AND IVRHDP.INVESTOR_NO <> ACCNTP.INVESTOR_NO
+030100210603                AND IVRHDP.INVESTOR_NO = :en_Orig_Ivr_No WITH NC
+030200210602           END-EXEC.
+030300210602
+030400210602      * RFS 1112427 - End
+030500070329      *---------------------------------------------------------------*
+030600070329      * Create a new record in INVESTOR-HOUSEHOLD-HEADER (mfaivrhhp)  *
+030700070409      * file if either the Investor_No or Investor_NO_2 equals the    *
+030800070329      * passed in original Investor-No.                               *
+030900070329      *---------------------------------------------------------------*
+031000171007      /
+031100070327       Create-Household-Details.
+031200180611
+031300210525      * RFS 1112427 - Start
+031400210525      * Commented the below and make it clean code. Insert default values
+031500210525      * for Account # and Primary flag when trying to add new record to
+031600210525      * the Household that dont have Account# populated
+031700210525      *    EXEC SQL
+031800210525      *      INSERT INTO MFAIVRHDP
+031900210525      *       SELECT DISTINCT
+032000210525      *              INVESTOR_NO,
+032100210525      *              HOUSEHOLD_LINKAGE_CODE,
+032200180531179223*              :en_New_Ivr_No
+032300210525179223*              :en_New_Ivr_No,
+032400200421      *RFS185774-Starts
+032500200421179223*              HOUSEHOLD_ID
+032600210525      *              HOUSEHOLD_ID,
+032700210525      *              ACCOUNT_NO,
+032800210303      *RFS187018-Starts
+032900210303187018*              PRIMARY_ACCOUNT_FLAG
+033000210525187018*              PRIMARY_ACCOUNT_FLAG,
+033100210525187018*              HOUSEHOLD_CREATION_DATE,
+033200210525187018*              HOUSEHOLD_START_DATE,
+033300210525187018*              HOUSEHOLD_STOP_DATE
+033400210303      *RFS187018-Ends
+033500200421      *RFS185774-Ends
+033600210525      *       FROM MFAIVRHDP
+033700210525      *       WHERE INVESTOR_NO   = :en_Orig_Ivr_No
+033800210525      *       OR    INVESTOR_NO_2 = :en_Orig_Ivr_No
+033900210525      *    END-EXEC.
+034000210525
+034100210525           EXEC SQL
+034200210525             INSERT INTO MFAIVRHDP
+034300210525              SELECT DISTINCT
+034400210525                     INVESTOR_NO
+034500210525                    ,HOUSEHOLD_LINKAGE_CODE
+034600210525                    ,:en_New_Ivr_No
+034700210525                    ,HOUSEHOLD_ID
+034800210525                    ,0
+034900210525                    ,"N"
+035000210525                    ,HOUSEHOLD_CREATION_DATE
+035100210525                    ,HOUSEHOLD_START_DATE
+035200210525                    ,HOUSEHOLD_STOP_DATE
+035300210525              FROM MFAIVRHDP
+035400210525              WHERE ACCOUNT_NO = 0
+035500210525                AND (INVESTOR_NO   = :en_Orig_Ivr_No OR
+035600210525                     INVESTOR_NO_2 = :en_Orig_Ivr_No)
+035700210525           END-EXEC.
+035800210525      * RFS 1112427 - End
+035900070327
+036000070327           MOVE SQLSTATE TO lc_sqlStates.
+036100070327
+036200070327           EVALUATE TRUE
+036300070330             WHEN lncc_sqlSuccessful  OR lncc_sqlEnd
+036400070327               CONTINUE
+036500070327             WHEN OTHER
+036600070330               SET lncc_Err-03  TO  TRUE
+036700070329               PERFORM Error_Routine
+036800070327           END-EVALUATE.
+036900210525
+037000210525      * RFS 1112427 - Start
+037100210525      * Update the Household Investor # with the New Ivr# passed
+037200210525      * as parameter, to all the Accounts that didnt undergo any
+037300210525      * change as part of the Investor split process
+037400210525           EXEC SQL
+037500210525            UPDATE MFAIVRHDP IVRHDP SET IVRHDP.INVESTOR_NO_2 =
+037600210525                                        :en_New_Ivr_No
+037700210525            WHERE EXISTS (SELECT ACCOUNT_NO
+037800210525            FROM MFAACCNTP ACCNTP
+037900210525            WHERE ACCNTP.ACCOUNT_NO = IVRHDP.ACCOUNT_NO
+038000210525              AND ACCNTP.INVESTOR_NO <> IVRHDP.INVESTOR_NO_2)
+038100210525              AND IVRHDP.ACCOUNT_NO <> 0
+038200210525              AND (INVESTOR_NO   = :en_Orig_Ivr_No OR
+038300210525                   INVESTOR_NO_2 = :en_Orig_Ivr_No)
+038400210525           END-EXEC.
+038500210525
+038600210525           MOVE SQLSTATE TO lc_sqlStates.
+038700210525
+038800210525           EVALUATE TRUE
+038900210525             WHEN lncc_sqlSuccessful  OR lncc_sqlEnd
+039000210525               CONTINUE
+039100210525             WHEN OTHER
+039200210525               SET lncc_Err-41  TO  TRUE
+039300210525               PERFORM Error_Routine
+039400210525           END-EVALUATE.
+039500210602
+039600210602           MOVE " " TO LC_SAME_ADDRESS_FLAG.
+039700210602           PERFORM UPDATE-HH-PRIMARY-INVESTOR.
+039800210602
+039900210602      *----------------------------
+040000210602       UPDATE-HH-PRIMARY-INVESTOR.
+040100210602      *----------------------------
+040200210602
+040300210602           EXEC SQL
+040400210602              UPDATE MFAIVRHHP IVRHHP SET IVRHHP.INVESTOR_NO =
+040500210602              (SELECT HHUPD.NEW_INVESTOR_NO
+040600210602                 FROM WKHHUPDDT HHUPD
+040700210602                WHERE HHUPD.PRI_INVESTOR_NO = IVRHHP.INVESTOR_NO
+040800210602                  AND HHUPD.HOUSEHOLD_ID    = IVRHHP.HOUSEHOLD_ID
+040900210602                  AND (HHUPD.SAME_ADDRESS_FLAG = :LC_SAME_ADDRESS_FLAG
+041000210602                       OR :LC_SAME_ADDRESS_FLAG = " "))
+041100210602              WHERE EXISTS (SELECT HHUPD.NEW_INVESTOR_NO
+041200210602                 FROM WKHHUPDDT HHUPD
+041300210602                WHERE HHUPD.PRI_INVESTOR_NO = IVRHHP.INVESTOR_NO
+041400210602                  AND HHUPD.HOUSEHOLD_ID    = IVRHHP.HOUSEHOLD_ID
+041500210602                  AND (HHUPD.SAME_ADDRESS_FLAG = :LC_SAME_ADDRESS_FLAG
+041600210602                       OR :LC_SAME_ADDRESS_FLAG = " "))
+041700210602           END-EXEC.
+041800210602
+041900210602           MOVE SQLSTATE TO lc_sqlStates.
+042000210602
+042100210602           EVALUATE TRUE
+042200210602             WHEN lncc_sqlSuccessful  OR lncc_sqlEnd
+042300210602               CONTINUE
+042400210602             WHEN OTHER
+042500210602               SET lncc_Err-44  TO  TRUE
+042600210602               PERFORM Error_Routine
+042700210602           END-EVALUATE.
+042800210602
+042900210602           EXEC SQL
+043000210602              UPDATE MFAIVRHDP IVRHDP SET IVRHDP.INVESTOR_NO =
+043100210602              (SELECT HHUPD.NEW_INVESTOR_NO
+043200210602                 FROM WKHHUPDDT HHUPD
+043300210602                WHERE HHUPD.PRI_INVESTOR_NO = IVRHDP.INVESTOR_NO
+043400210602                  AND HHUPD.HOUSEHOLD_ID    = IVRHDP.HOUSEHOLD_ID
+043500210602                  AND (HHUPD.SAME_ADDRESS_FLAG = :LC_SAME_ADDRESS_FLAG
+043600210602                       OR :LC_SAME_ADDRESS_FLAG = " "))
+043700210602              WHERE EXISTS (SELECT HHUPD.NEW_INVESTOR_NO
+043800210602                 FROM WKHHUPDDT HHUPD
+043900210602                WHERE HHUPD.PRI_INVESTOR_NO = IVRHDP.INVESTOR_NO
+044000210602                  AND HHUPD.HOUSEHOLD_ID    = IVRHDP.HOUSEHOLD_ID
+044100210602                  AND (HHUPD.SAME_ADDRESS_FLAG = :LC_SAME_ADDRESS_FLAG
+044200210602                       OR :LC_SAME_ADDRESS_FLAG = " "))
+044300210602           END-EXEC.
+044400210602
+044500210602           MOVE SQLSTATE TO lc_sqlStates.
+044600210602
+044700210602           EVALUATE TRUE
+044800210602             WHEN lncc_sqlSuccessful  OR lncc_sqlEnd
+044900210602               CONTINUE
+045000210602             WHEN OTHER
+045100210602               SET lncc_Err-45  TO  TRUE
+045200210602               PERFORM Error_Routine
+045300210602           END-EVALUATE.
+045400210602
+045500210525      * RFS 1112427 - End
+045600210525
+045700130209      * RFS 111361 - Start
+045800130209      *------------------------
+045900130209       CREATE-HOUSEHOLD-CURSOR.
+046000130209      *------------------------
+046100210525
+046200210525      * RFS 1112427 - Start
+046300210525      * Update the Household Investor # with the New Ivr# passed
+046400210525      * as parameter, to all the Accounts that didnt undergo any
+046500210525      * change as part of the Investor split process
+046600210525           EXEC SQL
+046700210525             UPDATE MFAIVRHDP IVRHDP SET IVRHDP.INVESTOR_NO_2 =
+046800210525                                         :en_New_Ivr_No
+046900210525              WHERE EXISTS (SELECT ACCOUNT_NO
+047000210525                              FROM MFAACCNTP ACCNTP, MFAHHDLCP HHDLCP
+047100210525                             WHERE ACCNTP.ACCOUNT_NO = IVRHDP.ACCOUNT_NO
+047200210525                               AND ACCNTP.INVESTOR_NO <>
+047300210525                                   IVRHDP.INVESTOR_NO_2
+047400210525                               AND HHDLCP.HOUSEHOLD_LINKAGE_CODE =
+047500210525                                   IVRHDP.HOUSEHOLD_LINKAGE_CODE
+047600210525                               AND HHDLCP.SAME_ADDRESS = "N")
+047700210525                AND IVRHDP.ACCOUNT_NO <> 0
+047800210525                AND (INVESTOR_NO   = :en_Orig_Ivr_No OR
+047900210525                     INVESTOR_NO_2 = :en_Orig_Ivr_No)
+048000210525           END-EXEC.
+048100210525
+048200210525           MOVE SQLSTATE TO lc_sqlStates.
+048300210525
+048400210525           EVALUATE TRUE
+048500210525             WHEN lncc_sqlSuccessful  OR lncc_sqlEnd
+048600210525               CONTINUE
+048700210525             WHEN OTHER
+048800210602               SET lncc_Err-42  TO  TRUE
+048900210525               PERFORM Error_Routine
+049000210525           END-EVALUATE.
+049100210602
+049200210602           MOVE "N" TO LC_SAME_ADDRESS_FLAG.
+049300210602           PERFORM UPDATE-HH-PRIMARY-INVESTOR.
+049400210602
+049500210525      * RFS 1112427 - End
+049600210525
+049700130209           EXEC SQL
+049800130209              DECLARE C_HUSHOLD CURSOR FOR
+049900130209              SELECT DISTINCT
+050000130209                     A.INVESTOR_NO,
+050100130209                     A.HOUSEHOLD_LINKAGE_CODE,
+050200130209                     HHDLCP.SAME_ADDRESS
+050300180611179223              ,A.HOUSEHOLD_ID
+050400210525      * RFS 1112427 - Start
+050500210525185774*             ,A.ACCOUNT_NO
+050600210525185774*             ,A.PRIMARY_ACCOUNT_FLAG
+050700210525                    ,0 ACCOUNT_NO
+050800210525                    ,"N" PRIMARY_ACCOUNT_FLAG
+050900210525      * RFS 1112427 - End
+051000210929118805              ,A.INVESTOR_NO_2
+051100210303
+051200130209              FROM (
+051300130209              SELECT
+051400130209                     IVRHHP.INVESTOR_NO,
+051500130209                     IVRHHP.HOUSEHOLD_LINKAGE_CODE
+051600180611179223              ,IVRHHP.HOUSEHOLD_ID
+051700200423185774              ,IVRHDP.ACCOUNT_NO
+051800200423185774              ,IVRHDP.PRIMARY_ACCOUNT_FLAG
+051900210929118805              ,IVRHDP.INVESTOR_NO_2
+052000130209              FROM MFAIVRHHP IVRHHP
+052100130209              LEFT OUTER JOIN MFAIVRHDP IVRHDP
+052200130209              ON     IVRHHP.INVESTOR_NO= IVRHDP.INVESTOR_NO
+052300130209              AND    IVRHDP.HOUSEHOLD_LINKAGE_CODE=
+052400130209                      IVRHHP.HOUSEHOLD_LINKAGE_CODE
+052500180611179223        AND     IVRHHP.HOUSEHOLD_ID= IVRHDP.HOUSEHOLD_ID
+052600210525      * RFS 1112427 - Start
+052700210525      *       WHERE   IVRHHP.investor_no= :en_Orig_Ivr_No
+052800210525      *       OR      IVRHDP.INVESTOR_NO_2= :en_Orig_Ivr_No
+052900210525              WHERE   (IVRHHP.investor_no= :en_Orig_Ivr_No OR
+053000210525                       IVRHDP.INVESTOR_NO_2= :en_Orig_Ivr_No)
+053100210525                AND   IVRHDP.ACCOUNT_NO = 0
+053200210525      * RFS 1112427 - End
+053300130209              )
+053400130209              AS A
+053500130209              LEFT OUTER JOIN MFAHHDLCP  HHDLCP
+053600130209              ON A.HOUSEHOLD_LINKAGE_CODE=
+053700130209                     HHDLCP.HOUSEHOLD_LINKAGE_CODE
+053800130209           END-EXEC.
+053900130209
+054000130209           EXEC SQL
+054100130209              OPEN C_HUSHOLD
+054200130209           END-EXEC.
+054300130209
+054400130209           MOVE SQLSTATE TO lc_sqlStates.
+054500130209
+054600130209           EVALUATE TRUE
+054700130209             WHEN lncc_sqlSuccessful
+054800130209                  SET lb_FetchBegin TO TRUE
+054900130209                  PERFORM EACH-HH-LINK
+055000130209                    UNTIL lb_FetchEnd
+055100130209                  PERFORM CLOSE-CURSOR
+055200130209             WHEN lncc_sqlEnd
+055300130209                  CONTINUE
+055400130611123349            PERFORM CLOSE-CURSOR
+055500130209             WHEN OTHER
+055600130209                  SET lncc_Err-14  TO TRUE
+055700130209                  PERFORM ERROR_ROUTINE
+055800130209           END-EVALUATE.
+055900130209      /
+056000130209      *-------------
+056100130209       EACH-HH-LINK.
+056200130209      *-------------
+056300130209
+056400130209           EXEC SQL
+056500130209              FETCH
+056600130209              NEXT
+056700130209              FROM  C_HUSHOLD
+056800130209              INTO  :li_HHinvtor_No,
+056900130209                    :lc_Household-Linkage-Code,
+057000130209                    :lc_Same-Address
+057100180611                   ,:li_Householdid
+057200200423185774             ,:li_Account_No
+057300200423185774             ,:lc_Primary_Account_Flag
+057400210929118805             ,:li_HHinvtor_No_2
+057500130209           END-EXEC.
+057600130209
+057700130209           MOVE SQLSTATE TO lc_sqlStates.
+057800130209           EVALUATE TRUE
+057900130209             WHEN lncc_sqlSuccessful
+058000130209                  PERFORM PROCESS-HOUSEHOLD
+058100130209             WHEN lncc_sqlEnd
+058200130209                  SET lb_FetchEnd TO TRUE
+058300130209             WHEN OTHER
+058400130209                  SET lncc_Err-15  TO TRUE
+058500130209                  PERFORM ERROR_ROUTINE
+058600130209           END-EVALUATE.
+058700130209      /
+058800130209      *------------------
+058900130209       PROCESS-HOUSEHOLD.
+059000130209      *------------------
+059100210410      * RFS187018 - Start
+059200210410           PERFORM GET-IVRHDP-DATE-FIELDS.
+059300210410      * RFS187018 - End
+059400210410
+059500130209           IF lc_Same-Address = lnc_Y
+059600130209              MOVE en_New_Ivr_No TO li_InvestorNo
+059700130209              PERFORM HOUSEHOLDMAIL
+059800130209           ELSE
+059900130209              IF lc_Same-Address = lnc_N
+060000130209                 EXEC SQL
+060100130209                     INSERT
+060200130209                     INTO   MFAIVRHDP
+060300160419151407*              VALUES (:en_Orig_Ivr_No,
+060400160419151407               VALUES (:li_HHinvtor_No,
+060500130209                             :lc_Household-linkage-code,
+060600180531179223*                      :en_New_Ivr_No)
+060700180531179223                       :en_New_Ivr_No,
+060800200425      *RFS185774-Starts
+060900200421179223*                      :li_householdid)
+061000200423                             :li_householdid
+061100200423                            ,:li_Account_No
+061200210303      *RFS187018-Starts
+061300210303      *                     ,:lc_Primary_Account_Flag)
+061400210303                            ,:lc_Primary_Account_Flag
+061500210303                            ,:lc_Household_Creation_Date
+061600210303                            ,:lc_Household_Start_Date
+061700210303                            ,:lc_Household_Stop_Date )
+061800210303      *RFS187018-Ends
+061900200425      *RFS185774-Ends
+062000130209                 END-EXEC
+062100130209                 MOVE SQLSTATE TO lc_sqlStates
+062200130209                 IF  NOT lncc_sqlSuccessful
+062300130209                        SET lncc_Err-16  TO TRUE
+062400130209                        PERFORM ERROR_ROUTINE
+062500130209                 END-IF
+062600130209
+062700130209                    COMPUTE li_AuditTime = li_AuditTime + 1
+062800130209
+062900130209                 EXEC SQL
+063000130209                    INSERT
+063100130209                    INTO   MFAIVRHLP
+063200130209                    VALUES (:en_New_Ivr_No,
+063300130209                            :lc_Household-linkage-code,
+063400130209                            " ",
+063500130209                            :li_HHinvtor_No,
+063600130209                            :lnc_A,
+063700130209                            :lnc_SET,
+063800130209                            :li_SysDate,
+063900130209                            :li_AuditTime,
+064000200421185774*                     :lc_UserName)
+064100200423185774                      :lc_UserName
+064200210303187018*                    ,:li_Account_No)
+064300210303187018                     ,:li_Account_No
+064400210303187018                     ," "
+064500210303187018                     ," ")
+064600130209                 END-EXEC
+064700130209                 MOVE SQLSTATE TO lc_sqlStates
+064800130209                 IF  NOT lncc_sqlSuccessful
+064900130209                        SET lncc_Err-17  TO TRUE
+065000130209                        PERFORM ERROR_ROUTINE
+065100130209                 END-IF
+065200130209              END-IF
+065300130209           END-IF.
+065400130209      /
+065500130209      *-------------
+065600130209       CLOSE-CURSOR.
+065700130209      *-------------
+065800130209           EXEC SQL
+065900130209              CLOSE C_HUSHOLD
+066000130209           END-EXEC.
+066100130209      /
+066200130209      * RFS 111361 - Ends
+066300210410      * RFS187018 - Starts
+066400210410      *---------------------------------------------------------------*
+066500210410      *This Para Retrives Newly Introduced DATE Format Fields from    *
+066600210410      *MFAIVRHDP Into ISO - Internation Standard Format (YYYY-MM-DD)  *
+066700210410      *---------------------------------------------------------------*
+066800210410       GET-IVRHDP-DATE-FIELDS.
+066900210410
+067000210410           EXEC SQL
+067100210410             SELECT  CHAR(A.HOUSEHOLD_CREATION_DATE, ISO)
+067200210410                   , CHAR(A.HOUSEHOLD_START_DATE, ISO)
+067300210410                   , CHAR(A.HOUSEHOLD_STOP_DATE, ISO)
+067400210410               INTO
+067500210410                    :lc_Household_Creation_Date
+067600210410                   ,:lc_Household_Start_Date
+067700210410                   ,:lc_Household_Stop_Date
+067800210410               FROM MFAIVRHDP A
+067900210410              WHERE A.INVESTOR_NO  = :li_HHinvtor_No
+068000210410               AND  A.HOUSEHOLD_LINKAGE_CODE
+068100210410                                   = :lc_Household-linkage-code
+068200210410               AND  A.HOUSEHOLD_ID = :li_householdid
+068300210410               AND  A.ACCOUNT_NO   = :li_Account_No
+068400210410               AND  A.PRIMARY_ACCOUNT_FLAG
+068500210410                                   = :lc_Primary_Account_Flag
+068600210929118805         AND A.INVESTOR_NO_2  = :li_HHinvtor_No_2
+068700210410           END-EXEC.
+068800210410
+068900210410           MOVE SQLSTATE TO lc_sqlStates.
+069000210410           EVALUATE TRUE
+069100210410             WHEN lncc_sqlSuccessful
+069200210410                  CONTINUE
+069300210410             WHEN lncc_sqlEnd
+069400210410                  MOVE "1900-01-01" TO  lc_Household_Creation_Date
+069500210410                  MOVE "1900-01-01" TO  lc_Household_Start_Date
+069600210410                  MOVE "1900-01-01" TO  lc_Household_Stop_Date
+069700210410             WHEN OTHER
+069800210410
+069900210410                  SET lncc_Err-18  TO TRUE
+070000210410                  PERFORM ERROR_ROUTINE
+070100210410           END-EVALUATE.
+070200210410      * RFS187018 - END
+070300070329      *---------------------------------------------------------------*
+070400070329      * Create a new Header record in MAIL-LIST-HEADER (MFAMLSHDP)    *
+070500070329      * file (MFAADDP) based on the passed in original Investor-No,   *
+070600070329      * but with new Mail-No and new passed in Investor-No.           *
+070700070329      *---------------------------------------------------------------*
+070800070329      /
+070900070328       Create-Addtional-Mail-Header.
+071000070409           EXEC SQL
+071100070409              FETCH NEXT FROM C_mlshd INTO
+071200070409                :Lcu-MailNoH,
+071300070409                :Lcu-MailDescr,
+071400070409                :Lcu-AddrNo,
+071500070409                :Lcu-InvestorNo,
+071600070409                :Lcu-StartDate,
+071700070409                :Lcu-EndDate
+071800070409           END-EXEC.
+071900070409
+072000070409           MOVE SQLSTATE TO lc_sqlStates.
+072100070409
+072200070409           EVALUATE TRUE
+072300070409             WHEN lncc_sqlSuccessful
+072400070409               CONTINUE
+072500070409             WHEN lncc_sqlEnd
+072600070410              MOVE lncc_Y TO lncc_EndOfCurs1
+072700070409             WHEN OTHER
+072800070409               SET lncc_Err-04  TO  TRUE
+072900070409               PERFORM Error_Routine
+073000070409           END-EVALUATE.
+073100070328
+073200070410           IF lncc_EndOfCurs1    NOT = lncc_Y
+073300070328              PERFORM Process-Header-Cursor-Record
+073400070328           END-IF.
+073500070328
+073600070328      /
+073700070328       Process-Header-Cursor-Record.
+073800070329           PERFORM Create-New-Address-Record.
+073900070329
+074000070410           INITIALIZE lc_Ctl_Parms.
+074100070410           MOVE lncc_MAL to lc_Ctl_Code.
+074200070328
+074300070328           PERFORM Get_New_Control_Number.
+074400070410           MOVE li_New_No      TO li_New_Mal_No
+074500070329
+074600070327           EXEC SQL
+074700070327              INSERT INTO MFAMLSHDP
+074800070327                     (MAIL_NO,
+074900070327                      MAIL_DESCR,
+075000070329                      Addr_No,
+075100070327                      INVESTOR_NO,
+075200070327                      START_DATE,
+075300070327                      END_DATE)
+075400070410                 SELECT :li_New_Mal_No,
+075500070327                         MAIL_DESCR,
+075600070410                         :li_New_Addr_No,
+075700070327                         :en_New_Ivr_No,
+075800070327                         START_DATE,
+075900070327                         END_DATE
+076000070327                 FROM MFAMLSHDP
+076100070329                 WHERE MAIL_NO     = :Lcu-MailNoH
+076200070327           END-EXEC.
+076300070327
+076400070327           MOVE SQLSTATE TO lc_sqlStates.
+076500070327
+076600070327           EVALUATE TRUE
+076700070327             WHEN lncc_sqlSuccessful
+076800070329               CONTINUE
+076900070327             WHEN OTHER
+077000070330               SET lncc_Err-05  TO  TRUE
+077100070327               PERFORM Error_Routine
+077200070327           END-EVALUATE.
+077300070327
+077400070329      *---------------------------------------------------------------*
+077500070329      * The Header record has been created successfule, then process  *
+077600070329      * MAIL-LIST-DETAILS (MFAMLSDTP) file.                           *
+077700070329      *---------------------------------------------------------------*
+077800070330
+077900070410           MOVE Lcu-MailNoH   TO li_NewMdtNo.
+078000070608           MOVE lncc_N        TO lncc_EndOfCurs2.
+078100070405
+078200070330           EXEC SQL
+078300070330              OPEN  C_mlsdt
+078400070330           END-EXEC.
+078500070330
+078600070330           MOVE SQLSTATE TO lc_sqlStates.
+078700070330
+078800070330           EVALUATE TRUE
+078900070330             WHEN lncc_sqlSuccessful
+079000070330                  CONTINUE
+079100070330             WHEN OTHER
+079200070330                  SET lncc_Err-06  TO  TRUE
+079300070330                  PERFORM Error_Routine
+079400070330           END-EVALUATE.
+079500070330
+079600070328           PERFORM Create-Addtional-Mail-Detail
+079700070410                                   UNTIL lncc_EndOfCurs2 = lncc_Y.
+079800070328
+079900070330           EXEC SQL
+080000070330             CLOSE C_mlsdt
+080100070330           END-EXEC.
+080200070329      *---------------------------------------------------------------*
+080300070329      * For each new Header record, create a new record in Address    *
+080400070329      * file (MFAADDP) and create a new record in Address Audit file  *
+080500070329      * (Mfaaddpa)                                                    *
+080600070329      *---------------------------------------------------------------*
+080700070329      /
+080800070329       Create-New-Address-Record.
+080900070329
+081000070410           INITIALIZE lc_Ctl_Parms.
+081100070410           MOVE lncc_ADD to lc_Ctl_Code.
+081200070329
+081300070329           PERFORM Get_New_Control_Number.
+081400070410           MOVE li_New_No      TO li_New_Addr_No.
+081500070329
+081600070329           EXEC SQL
+081700070329             SELECT *
+081800070329               INTO :Mfaaddp
+081900070329               FROM  Mfaaddp
+082000070329              WHERE  Addr_No = :Lcu-AddrNo
+082100070329           END-EXEC.
+082200070329
+082300070329           MOVE SQLSTATE TO lc_sqlStates.
+082400070329           EVALUATE TRUE
+082500070329             WHEN lncc_sqlSuccessful
+082600070329                  CONTINUE
+082700070329             WHEN OTHER
+082800070330                  SET lncc_Err-07  TO  TRUE
+082900070329                  PERFORM Error_Routine
+083000070329           END-EVALUATE.
+083100070329
+083200070410           MOVE li_New_Addr_No TO Addr-No OF lc_Mfaaddp_Rec.
+083300070329           EXEC SQL
+083400070329             INSERT INTO  Mfaaddp VALUES :Mfaaddp
+083500070329           END-EXEC.
+083600070329
+083700070329           MOVE SQLSTATE TO lc_sqlStates.
+083800070329           EVALUATE TRUE
+083900070329             WHEN lncc_sqlSuccessful
+084000070329                  CONTINUE
+084100070329             WHEN OTHER
+084200070330                  SET lncc_Err-08  TO  TRUE
+084300070329                  PERFORM Error_Routine
+084400070329           END-EVALUATE.
+084500070329
+084600070329           MOVE CORR Mfaaddp   OF lc_Mfaaddp_Rec
+084700070329                  TO Mfaaddpa  OF lc_Mfaaddpa_Rec.
+084800070329           MOVE FUNCTION CURRENT-DATE TO lc_Current_Date_Time.
+084900070410           MOVE li_Current_Date       TO Audit-Date   OF Mfaaddpa.
+085000070410           MOVE li_Current_Time_HHMM  TO Audit-Time   OF Mfaaddpa.
+085100070329           MOVE ec_User_Id            TO Audit-User   OF Mfaaddpa.
+085200070329           MOVE lncc_N                TO Audit-Status OF Mfaaddpa.
+085300070329
+085400070329           EXEC SQL
+085500070329             INSERT INTO Mfaaddpa VALUES :Mfaaddpa
+085600070329           END-EXEC.
+085700070329
+085800070329           MOVE SQLSTATE TO lc_sqlStates.
+085900070329           EVALUATE TRUE
+086000070329             WHEN lncc_sqlSuccessful
+086100070329                  CONTINUE
+086200070329             WHEN OTHER
+086300070330                  SET lncc_Err-09  TO  TRUE
+086400070329                  PERFORM Error_Routine
+086500070329           END-EVALUATE.
+086600070329
+086700070329      *---------------------------------------------------------------*
+086800070329      * Create new Detail records or Update the existing records in   *
+086900070329      * MAIL-LIST-DETAILS (MFAMLSDTP) file based on the passed in parm*
+087000070329      *---------------------------------------------------------------*
+087100070329      /
+087200070328       Create-Addtional-Mail-Detail.
+087300070409      ***** Fetch record from the cursor C_mlsdt.
+087400070409           EXEC SQL
+087500070409              FETCH NEXT FROM C_mlsdt INTO
+087600070409                :Lcu-MailNoD,
+087700070409                :Lcu-MailDtlNo,
+087800070409                :Lcu-FormCode,
+087900070409                :Lcu-AccountNo,
+088000070409                :Lcu-NoOfCopies,
+088100070409                :Lcu-SelectAllAccts,
+088200070409                :Lcu-OriginalOrCopy
+088300070409           END-EXEC.
+088400070409
+088500070409           MOVE SQLSTATE TO lc_sqlStates.
+088600070409
+088700070409           EVALUATE TRUE
+088800070409             WHEN lncc_sqlSuccessful
+088900070409               CONTINUE
+089000070409             WHEN lncc_sqlEnd
+089100070410              MOVE lncc_Y  TO lncc_EndOfCurs2
+089200070409             WHEN OTHER
+089300070409               SET lncc_Err-10  TO  TRUE
+089400070409               PERFORM Error_Routine
+089500070409           END-EVALUATE.
+089600070328
+089700070410           IF lncc_EndOfCurs2    NOT = lncc_Y
+089800070328              PERFORM Process-Detail-Cursor-Record
+089900070328           END-IF.
+090000070328
+090100070328      /
+090200070328       Process-Detail-Cursor-Record.
+090300070410           INITIALIZE lc_Ctl_Parms.
+090400070410           MOVE lncc_MDT to lc_Ctl_Code.
+090500070328
+090600070328           PERFORM Get_New_Control_Number.
+090700070328
+090800070328           IF Lcu-AccountNo =  ZEROS
+090900070328              INITIALIZE  Ltb-MailListDetailRecord
+091000070328              MOVE Lcu-MailListDetailCursor
+091100070328                               TO  Ltb-MailListDetailRecord
+091200070410              MOVE li_New_Mal_No  TO Ltb-MailNo
+091300070410              MOVE li_New_No      TO Ltb-MailDtlNo
+091400070328              EXEC SQL
+091500070328                 INSERT INTO MFAMLSDTP
+091600070328                   VALUES :Ltb-MailListDetailRecord
+091700070328              END-EXEC
+091800070409              MOVE SQLSTATE TO lc_sqlStates
+091900070409              EVALUATE TRUE
+092000070409                WHEN lncc_sqlSuccessful
+092100070409                     CONTINUE
+092200070409                WHEN OTHER
+092300070409                     SET lncc_Err-11  TO  TRUE
+092400070409                     PERFORM Error_Routine
+092500070409              END-EVALUATE
+092600070409           ELSE
+092700070410              MOVE li_New_Mal_No  TO Ltb-MailNo
+092800070410              MOVE li_New_No      TO Ltb-MailDtlNo
+092900070409              EXEC SQL
+093000070409                UPDATE MFAMLSDTP Dtp1
+093100070409                   SET (Dtp1.MAIL_NO,
+093200070409                        Dtp1.MAIL_DTL_NO) =
+093300070410                       (:li_New_Mal_No,
+093400070410                        :li_New_No)
+093500070409                   WHERE Dtp1.MAIL_NO     = :Lcu-MailNoD
+093600070409                   AND   Dtp1.Mail_Dtl_No = :Lcu-MailDtlNo
+093700070409              END-EXEC
+093800070409              MOVE SQLSTATE TO lc_sqlStates
+093900070409              EVALUATE TRUE
+094000070409                WHEN lncc_sqlSuccessful
+094100070409                     CONTINUE
+094200070409                WHEN OTHER
+094300070409                     SET lncc_Err-12  TO  TRUE
+094400070409                     PERFORM Error_Routine
+094500070409              END-EVALUATE
+094600070409           END-IF.
+094700070328
+094800070402
+094900070323      *---------------------------------------------------------------*
+095000070327       Get_New_Control_Number.
+095100070410           CALL "GETCTLNUM" USING lc_Ctl_Code
+095200070410                                  li_Ctl_Next_No
+095300070410                                  lc_Ctl_Return_Code.
+095400070323
+095500070410           IF lc_Ctl_Return_Code = lncc_99
+095600070409              SET lncc_Err-13  TO  TRUE
+095700070323              PERFORM Error_Routine
+095800070323           ELSE
+095900070410              MOVE li_Ctl_Next_No TO li_New_No
+096000070323           END-IF.
+096100070323
+096200070323      *---------------------------------------------------------------*
+096300070323       Error_Routine.
+096400070323           MOVE lncc_99 TO ec_Return_Code.
+096500070323           PERFORM DSP-ERROR.
+096600070323           PERFORM End_Program.
+096700070323
+096800070323      *---------------------------------------------------------------*
+096900070323       End_Program.
+097000070410           EXEC SQL  WHENEVER SQLERROR CONTINUE  END-EXEC.
+097100070410           EXEC SQL  CLOSE C_mlshd               END-EXEC.
+097200070410           EXEC SQL  CLOSE C_mlsdt               END-EXEC.
+097300130611123349     PERFORM CLOSE-CURSOR.
+097400070330
+097500070323           GOBACK.
+097600070323
+097700070323      *---------------------------------------------------------------*
+097800130209
+097900130209      * RFS 111361 - Start
+098000130209           EXEC SQL
+098100130209              INCLUDE CPYHHMM
+098200130209           END-EXEC.
+098300130209      * RFS 111361 - Ends
+098400070323      * DSP-ERROR and FORCE-MSGW Routines.
+098500070323
+098600070323          COPY CPYSQLRTN.

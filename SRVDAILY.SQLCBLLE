@@ -1,0 +1,2936 @@
+000001170319      * %ATTR DBGVIEW(*SOURCE)
+000101080125       IDENTIFICATION DIVISION.
+000201080125       PROGRAM-ID. SRVDAILY.
+000301080125       AUTHOR.        Emmanuel Yala.
+000401080125       INSTALLATION.  Citigroup Fund Services Canada.
+000501080125       DATE-WRITTEN.  January 24, 2008.
+000601080125       DATE-COMPILED.
+000701080125      *****************************************************************
+000801080125      **   DESCRIPTION: This program has been adapted from SRVCALC1   *
+000901080125      **                It will be used by GrandFather clients        *
+001001080125      **   CALLED BY  : JOBSRVFEE                                     *
+001101080125      **   PARAMETERS : Comm-Date (QBegin&QEnd)                       *
+001201080124      **                MthEnd-Flag                                   *
+001301080124      **                QtrEnd-Flag                                   *
+001401080124      **                Q7-Flag                                       *
+001501080124      **                DlyAccrual-Flag                               *
+001601080124      **                Comm-Freq                                     *
+001701080125      *****************************************************************
+001801080124      *                  C H A N G E   H I S T O R Y
+001901080125      *****************************************************************
+002001080125      *****************************************************************
+002101080125      * PROGRAMMER   *DATE OF CHANGE* DESCRIPTION OF CHANGE           *
+002201080125      *****************************************************************
+002301080124      * Emmanuel Yala* 2008/01/24 * RFS40800 - Wrote the program      *
+002401080219      *              *            * RFS42749 - Alternate Service Fee  *
+002501080219      *              *            * pricing functionality             *
+002601080305      * Emmanuel Yala* 2008/03/05 * RFS 44696.3 Skip Investments      *
+002701080305      *              *            * attached to Hold back Rate Type   *
+002801080508      * R Salire     * 2008/05/08 * RFS 51999 - Fix logic for         *
+002901080508      *              *            * bypassing E dealers.              *
+003001080602      * Sanjeev Paul * 2008/06/02 * RFS 49817 - Fix bug for generating*
+003101080602      *              *            * incorrect number of accounts for  *
+003201080602      *              *            * COMMSRVF                          *
+003301090106      * Waldi R.     * 2009/01/06 * RFS 60213/53230 - set the review- *
+003401090106      *              *            * flag to "Y" when the price is not *
+003501090106      *              *            * found for that day. This flag will*
+003601090106      *              *            * be used in SRVTRAPP program to re-*
+003701090106      *              *            * calculate the market value fields *
+003801090313      * Brad Doyle   * 2009/03/13 * RFS 64445 - Increase array size   *
+003901090407      * Pawel A.     * 2009/04/03 * RFS 66695 - JOBSRVFEE on MSGW when*
+004001090407      *              *            * dropping file SFSDLYVAR. Use      *
+004101090407      *              *            * keyword CASCADE to drop indexes   *
+004201090428      * Meynard B    * 2009/04/28 * RFS 50475 - E Dealer Tiered       *
+004301090428      *              *            * Service Fee                       *
+004401090611      * Meynard B    * 2009/06/11 * RFS 50475.7 - Service fee amt     *
+004501090611      *              *            * calculation should divide by 1200 *
+004601090618      * Meynard B    * 2009/06/17 * RFS 50475.10 - Chk MFAINVTVP after*
+004701090618      *              *            * MFADEAISP override chk when creat *
+004801090618      *              *            * ing MFAAIBSRVP rec for E dealers  *
+004901090618      * Meynard B    * 2009/06/18 * RFS 50475.10A- Create MFAAIBSRVP  *
+005001090618      *              *            * with 0 Record File Date           *
+005101090626      * Meynard B    * 2009/06/26 * RFS 70971   - E dealer skipping   *
+005201090625      *              *            * based on ALDTTF edit code         *
+005301091130      * Pawel A.     * 2009/11/30 * RFS 74895 - JOBSRVFEE on MSGW when*
+005401091130      *              *            * dropping file SFSDLYVAR.          *
+005501091221      * Abdi Hassan  * 2009/12/18 *RFS67590 - Recompile for MFAIVNVTVP
+005601110411      *              *            * table expansion
+005701110427      * Waldi R.     * 2011/03/28 *RFS94351 - Recompile for MFADEADSP *
+005801110420      * Santanu D.   * 2011/04/11 *RFS91255 - To generate records in  *
+005901110420      *              *            *Dealer-Rep Daily Service Fee file  *
+006001110420      *              *            *(MFADEADSP) at account level when  *
+006101110420      *              *            *edit code is on.                   ***
+006201130320      * Ashmitha K   * 2013/03/14 * RFS120000:
+006301130320      *              *            * Recompile for MFATRSCDP file
+006401130320      *              *            * changes.
+006501140613      *Vinsfy J      *2014/06/13  * Recopile for MFAACCATP            *
+006601141022      * Kiruthika    * 2014/09/24 * RFS139475 - JOBSRVFEE in Message
+006701141022      * Rajendran    *            * Wait on: UATITO3
+006801141216      * Sushmita J   * 2014/10/16 * RFS141635 - Recompile for MFADEADVP.
+006901141126      * Kamal T      * 2014/10/28 * RFS130093 - Modifications to tiered
+007001141126      *              *            * trailer functionality to accrue at
+007101141126      *              *            * the account investment level
+007201141222      * Kamal T      * 2014/12/22 * RFS143732 - JOBSRVFEE has a long run
+007301141222      *              *            * time due to performance  issue
+007401141222      *              *            * Added index SFSDLYVAR1 on SFSDLYVAR
+007501150507      * Lev O        * 2015/05/07 * RFS147218 - Performance fix:
+007601150424      *              *            *   use known index/position of
+007701150424      *              *            *   investment code.
+007801150525      * Lev O        * 2015/05/25 * RFS148008 - Created additional indexes
+007901150525      *              *            *   and modify cursor to resolve
+008001150525      *              *            *   performance problem.
+008101150525      *              *            *   - removed unused Join condition
+008201150525      *              *            *    in GVARCUR cursor.
+008301150616      * Manjusha V   * 2015/05/08 * RFS146251 Recompile for MFADEADSP  *
+008401150616      * Manjusha V   * 2015/04/27 * RFS145730 ESG25 - Modify to capture
+008501150616      *              *            * Dealer-Account-No in MFADEADSP.
+008601151030      * Aarthi M     * 2015/10/30 * RFS151542 Trailer fee extract:
+008701151030      *              *            * account/funds appears twice
+008801151030      *              *            * with bad info.
+008901160108      * Vinsfy J     * 2015/11/17 * RFS141793 - Service Fee trailer issue.
+009001170202      * Arthy K      * 2017/02/01 * RFS164537 - Recompile for MFAINVTSP
+009002170815      * Arthy K      * 2017/04/24 * RFS167811 - Trailer fee calculation
+009003170815      *              *            * based on Prorated rate.
+009004200807      * Mayilsamy D  * 2020/07/13 * RFS185175-Modified to exclude the
+009005200718      *              *            * trailer fee instruction records
+009006200718      *              *            * which are linked with opening
+009007200718      *              *            * unit balance month end trailer fee
+009008200718      *              *            * calculation.
+009009211006      * Ragavi S     * 2021/07/30 * RFS1114291-  Tiered trailer Fee get
+009010211006      *              *            * generated for inactive funds
+009101110411      *******************************************************************
+009201080124       ENVIRONMENT DIVISION.
+009301080124       CONFIGURATION SECTION.
+009401080124       SOURCE-COMPUTER. IBM-AS400.
+009501080124       OBJECT-COMPUTER. IBM-AS400.
+009601080124       SPECIAL-NAMES.
+009701080124           LOCAL-DATA IS WS-LOCAL.
+009801080124      /
+009901080124       INPUT-OUTPUT SECTION.
+010001080124       FILE-CONTROL.
+010101080124
+010201080124           SELECT  ACCOUNT
+010301080124                   ASSIGN TO DATABASE-MFAACCNTLA
+010401080124                   ORGANIZATION IS INDEXED
+010501080124                   ACCESS IS DYNAMIC
+010601080124                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+010701080124                   WITH DUPLICATES.
+010801080124
+010901080124           SELECT  ACCOUNT-INVESTMENT
+011001080124                   ASSIGN TO DATABASE-MFAACCIVP
+011101080124                   ORGANIZATION IS INDEXED
+011201080124                   ACCESS IS DYNAMIC
+011301080124                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY.
+011401080124
+011501080124           SELECT  ACCOUNT-INVESTMENT-OLD-SF-BAL
+011601080124                   ASSIGN TO DATABASE-MFAACIOSP
+011701080124                   ORGANIZATION IS INDEXED
+011801080124                   ACCESS IS DYNAMIC
+011901080124                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY.
+012001080124
+012101080124           SELECT  TRANS
+012201080124                   ASSIGN TO DATABASE-MFATRNLA
+012301080124                   ORGANIZATION IS INDEXED
+012401080124                   ACCESS IS DYNAMIC
+012501080124                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+012601080124                   WITH DUPLICATES.
+012701080124
+012801080124           SELECT  TRANS-OLD-SF-REDUCED
+012901080124                   ASSIGN TO DATABASE-MFATRNSRP
+013001080124                   ORGANIZATION IS INDEXED
+013101080124                   ACCESS IS DYNAMIC
+013201080124                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY.
+013301080124
+013401080124           SELECT  DEALER-REP-DLY-SRV-FEE
+013501080124                   ASSIGN TO DATABASE-MFADEADSP
+013601080124                   ORGANIZATION IS INDEXED
+013701080124                   ACCESS IS DYNAMIC
+013801080124                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY.
+013901080124
+014001080124           SELECT  BUSINESS-DAY-FILE
+014101080124                   ASSIGN TO DATABASE-MFABUSDAP
+014201080124                   ORGANIZATION IS INDEXED
+014301080124                   ACCESS IS DYNAMIC
+014401080124                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY.
+014501080124
+014601080124           SELECT  INVESTMENT-UNIT-PRICE
+014701080124                   ASSIGN TO DATABASE-MFAINVUPLB
+014801080124                   ORGANIZATION IS INDEXED
+014901080124                   ACCESS IS DYNAMIC
+015001080124                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+015101080124                   WITH DUPLICATES.
+015201080124
+015301080124           SELECT  EXCHANGE-RATE-HISTORY
+015401080124                   ASSIGN TO DATABASE-MFAEXRHMP
+015501080124                   ORGANIZATION IS INDEXED
+015601080124                   ACCESS IS DYNAMIC
+015701080124                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY.
+015801080124
+015901080124           SELECT  PROGRAM-EXCHANGE-RATE
+016001080124                   ASSIGN TO DATABASE-MFAPRGERP
+016101080124                   ORGANIZATION IS INDEXED
+016201080124                   ACCESS IS DYNAMIC
+016301080124                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY.
+016401080124
+016501080124           SELECT  INVESTMENT
+016601080124                   ASSIGN TO DATABASE-MFAINVP
+016701080124                   ORGANIZATION IS INDEXED
+016801080124                   ACCESS IS DYNAMIC
+016901080124                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY.
+017001080124
+017101080124           SELECT  ACCOUNT-ATTRIBUTES
+017201080124                   ASSIGN TO DATABASE-MFAACCATP
+017301080124                   ORGANIZATION IS INDEXED
+017401080124                   ACCESS IS DYNAMIC
+017501080124                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY.
+017601080124
+017701080124           SELECT  ACCOUNT-INV-ATTRIBUTES
+017801080124                   ASSIGN TO DATABASE-MFAAIVATP
+017901080124                   ORGANIZATION IS INDEXED
+018001080124                   ACCESS IS DYNAMIC
+018101080124                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY.
+018201080124
+018301080124
+018401080124           SELECT  INVESTMENT-TRAILER-SCHEDULE
+018501080124                   ASSIGN TO DATABASE-MFAINVTSP
+018601080124                   ORGANIZATION IS INDEXED
+018701080124                   ACCESS IS DYNAMIC
+018801080124                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY.
+018901080124
+019001080124           SELECT  TRAILER-PAYMENT
+019101080124                   ASSIGN TO DATABASE-MFATRAPLI
+019201080124                   ORGANIZATION IS INDEXED
+019301080124                   ACCESS IS DYNAMIC
+019401080124                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+019501080124                   WITH DUPLICATES
+019601080124                   FILE STATUS IS lc_File_Status.
+019701080124
+019801080124           SELECT  DEALER-COMMISSIONS
+019901080124                   ASSIGN TO DATABASE-MFADEACMP
+020001080124                   ORGANIZATION IS INDEXED
+020101080124                   ACCESS IS RANDOM
+020201080124                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+020301080124                   FILE STATUS IS lc_File_Status.
+020401080124
+020501080124           SELECT  INVESTMENT-TRAILER-VAR-SCHED
+020601080124                   ASSIGN TO DATABASE-MFAINVTVP
+020701080124                   ORGANIZATION IS INDEXED
+020801080124                   ACCESS IS DYNAMIC
+020901080124                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY.
+021001080124
+021101080124           SELECT  DEALER-REP-DLY-SRV-VAR
+021201080124                   ASSIGN TO DATABASE-MFADEADVP
+021301080124                   ORGANIZATION IS INDEXED
+021401080124                   ACCESS IS DYNAMIC
+021501080124                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+021601080124                   FILE STATUS IS lc_File_Status.
+021701080124
+021801080124       DATA DIVISION.
+021901080124       FILE SECTION.
+022001080124       FD  ACCOUNT
+022101080124           LABEL RECORDS ARE STANDARD.
+022201080124       01  ACC-REC.               COPY DD-ALL-FORMATS OF MFAACCNTLA.
+022301080124      /
+022401080124       FD  ACCOUNT-INVESTMENT
+022501080124           LABEL RECORDS ARE STANDARD.
+022601080124       01  AIV-REC.               COPY DD-ALL-FORMATS OF MFAACCIVP.
+022701080124      /
+022801080124       FD  ACCOUNT-INVESTMENT-OLD-SF-BAL
+022901080124           LABEL RECORDS ARE STANDARD.
+023001080124       01  AOI-REC.               COPY DD-ALL-FORMATS OF MFAACIOSP.
+023101080124      /
+023201080124       FD  TRANS
+023301080124           LABEL RECORDS ARE STANDARD.
+023401080124       01  TRN-REC.               COPY DD-ALL-FORMATS OF MFATRNLA.
+023501080124      /
+023601080124       FD  TRANS-OLD-SF-REDUCED
+023701080124           LABEL RECORDS ARE STANDARD.
+023801080124       01  TOS-REC.               COPY DD-ALL-FORMATS OF MFATRNSRP.
+023901080124      /
+024001080124       FD  DEALER-REP-DLY-SRV-FEE
+024101080124           LABEL RECORDS ARE STANDARD.
+024201080124       01  DEALER-REP-DLY-SRV-FEE-REC.
+024301080124                                  COPY DD-ALL-FORMATS OF MFADEADSP.
+024401080124      /
+024501080124       FD  BUSINESS-DAY-FILE
+024601080124           LABEL RECORDS ARE STANDARD.
+024701080124       01  BUD-REC.               COPY DD-ALL-FORMATS OF MFABUSDAP.
+024801080124      /
+024901080124       FD  INVESTMENT-UNIT-PRICE
+025001080124           LABEL RECORDS ARE STANDARD.
+025101080124       01  IUP-REC.               COPY DD-ALL-FORMATS OF MFAINVUPLB.
+025201080124      /
+025301080124       FD  EXCHANGE-RATE-HISTORY
+025401080124           LABEL RECORDS ARE STANDARD.
+025501080124       01  EXCHANGE-RATE-HISTORY-REC.
+025601080124                                  COPY DD-ALL-FORMATS OF MFAEXRHMP.
+025701080124      /
+025801080124       FD  PROGRAM-EXCHANGE-RATE
+025901080124           LABEL RECORDS ARE STANDARD.
+026001080124       01  PROGRAM-EXCHANGE-RATE-REC.
+026101080124                               COPY DD-ALL-FORMATS OF MFAPRGERP.
+026201080124      /
+026301080124       FD  INVESTMENT
+026401080124           LABEL RECORDS ARE STANDARD.
+026501080124       01  IVS-REC.               COPY DD-ALL-FORMATS OF MFAINVP.
+026601080124      /
+026701080124       FD  ACCOUNT-ATTRIBUTES
+026801080124           LABEL RECORDS ARE STANDARD.
+026901080124       01  ACCT-ATTRIBUTES-REC.   COPY DD-ALL-FORMATS OF MFAACCATP.
+027001080124      /
+027101080124       FD  ACCOUNT-INV-ATTRIBUTES
+027201080124           LABEL RECORDS ARE STANDARD.
+027301080124       01  ACCT-INV-ATTRIBUTES-REC. COPY DD-ALL-FORMATS OF MFAAIVATP.
+027401080124      /
+027501080124       FD  INVESTMENT-TRAILER-SCHEDULE
+027601080124           LABEL RECORDS ARE STANDARD.
+027701080124       01  INV-TRAILER-SCHD-REC.  COPY DD-ALL-FORMATS OF MFAINVTSP.
+027801080124      /
+027901080124       FD  TRAILER-PAYMENT
+028001080124           LABEL RECORDS ARE STANDARD.
+028101080124       01  TRAILER-PAYMENT-REC.   COPY DD-ALL-FORMATS OF MFATRAPLI.
+028201080124      /
+028301080124       FD  DEALER-COMMISSIONS
+028401080124           LABEL RECORDS ARE STANDARD.
+028501080124       01  DEALER-COMMISSIONS-REC. COPY DD-ALL-FORMATS OF MFADEACMP.
+028601080124      /
+028701080124       FD  INVESTMENT-TRAILER-VAR-SCHED
+028801080124           LABEL RECORDS ARE STANDARD.
+028901080124       01  INVEST-TRAILER-VAR-SCHED-REC.
+029001080124                      COPY DD-ALL-FORMATS OF MFAINVTVP.
+029101080124      /
+029201080124       FD  DEALER-REP-DLY-SRV-VAR
+029301080124           LABEL RECORDS ARE STANDARD.
+029401080124       01  DLR-REP-DLY-SRV-VAR-REC. COPY DD-ALL-FORMATS OF MFADEADVP.
+029501080124      /
+029601080124
+029701080124       WORKING-STORAGE SECTION.
+029801080124
+029901080124       01  CURR-CONTROLS.
+030001080124          03 CURR-LEVEL1.
+030101080124           05 CURR-DEALER-CODE         PIC X(4).
+030201110411           05 CURR-REP-CODE            PIC X(6).
+030301110411R91255     05 CURR-ACCOUNT-NO          PIC S9(9).
+030401150616145730 01  CURR-DEALER-ACCOUNT-NO      PIC X(15).
+030501080124
+030601080124       01  PREV-CONTROLS.
+030701080124          03 PREV-LEVEL1.
+030801080124           05 PREV-DEALER-CODE      PIC X(4).
+030901080124           05 PREV-REP-CODE         PIC X(6).
+031001110411R91255     05 PREV-ACCOUNT-NO       PIC S9(9).
+031101150616145730 01  PREV-DEALER-ACCOUNT-NO   PIC X(15).
+031201080124
+031301080124       01  Misc_Fields.
+031401080124           05 lc_File_Status        PIC XX.
+031501080124           05 lc_DlrCode            PIC X(4) VALUE SPACES.
+031601080124           05 lc_ProcessDealer      PIC X(1) VALUE "Y".
+031701080124           05 ln_LastPrice          PIC 9(4)V9999.
+031801080124           05 ln_LastExchangeRate   PIC 9(2)V9(7).
+031901080124           05 lc_SameBalance        PIC X(1) VALUE "N".
+032001080124           05 ln_OpeningBalance     PIC 9(9)V999    VALUE 0 COMP-3.
+032101080124           05 ln_OpeningBalance_G   PIC 9(9)V999    VALUE 0 COMP-3.
+032201080124           05 ln_CarryForward       PIC 9(9)V999    VALUE 0 COMP-3.
+032301080124           05 ln_CarryForward_G     PIC 9(9)V999    VALUE 0 COMP-3.
+032401080124           05 ln_RunningBalance_G   PIC 9(9)V999    VALUE 0 COMP-3.
+032501080124           05 lc_FirstRead_SW       PIC X(1) VALUE "Y".
+032601080124           05 lc_ExchangeRate_Type  PIC X(1) VALUE " ".
+032701080124           05 lc_SplitServFee_SW    PIC X(1) VALUE "N".
+03280109052050475      05 lc_InvCode            PIC X(5) VALUE SPACES.
+03290109052050475      05 lc_DlrInv_RateType    PIC X(1) VALUE SPACES.
+03300109052050475      05 li_AccountNoSv        PIC S9(9) VALUE 0.
+03310109052050475      05 lc_InvestCodeSv       PIC X(5) VALUE SPACES.
+033201141022139475     05 ln_Array_Size_Acc     PIC S9(9).
+033301141022139475     05 ln_Array_Size_Inv     PIC S9(9).
+033401151030      * RFS 151542 Starts
+033501151030139475*    05 ln_Array_Limit_Inv    PIC S9(9) VALUE 1795.
+033601151102           05 ln_Array_Limit_Inv    PIC S9(9) VALUE 1794.
+033701151030      * RFS 151542 Ends
+033801141022139475     05 ln-InvestmentCode     PIC X(5) VALUE SPACES.
+033901080305     *** RFS44696.3 - Start
+034001080305           05 lc_Schedule                    PIC  X(04) VALUE SPACES.
+034101080305           05 lc_TrailerRateType             PIC  X(01) VALUE SPACES.
+034201080305       01  Constants.
+034301080305           05 lncc_Yes                       PIC  X(01) VALUE "Y".
+034401080305           05 lncc_H                         PIC  X(01) VALUE "H".
+034402170815167811     05 lncc_P                         PIC  X(01) VALUE "P".
+03450109042950475      05 lncc_V                         PIC  X(01) VALUE "V".
+03460109052050475      05 lncc_No                        PIC  X(01) VALUE "N".
+034701080305       01  lc_ScrnAllowedHSRV.
+034801080305           05 lc_HSRVScrnCd                  PIC X(8) VALUE "SRVFEE".
+034901080305           05 lc_HSRVEdtCd                   PIC X(6) VALUE "HSRV".
+035001080305           05 lc_HSRVEdtLvl                  PIC X(1) VALUE "A".
+035101080305           05 lc_HSRVEditCode                PIC  X(01).
+035201080305              88 lncc_HSRVEditExist           Value "Y".
+035301080305              88 lncc_HSRVEditNotExist        Value "N".
+035401080305     *** RFS44696.3 - End
+035501080305
+035601141022139475 01  lt_LocalDataArea.
+035701141022139475     05 FILLER                         PIC X(500) VALUE SPACES.
+035801141022139475     05 lt-InvestmentCode              PIC X(005) VALUE SPACES.
+035901141022139475     05 FILLER                         PIC X(519) VALUE SPACES.
+036001080305
+036101080124        01 Investment_Accrual_Array.
+036201090313
+036301090313      * RFS 64445 - Begin
+036401090313      *    05 ltb_Investment_Accrual_Entry OCCURS 1000 TIMES
+036501141022      * RFS 139475 - Begin
+036601141022      *    05 ltb_Investment_Accrual_Entry OCCURS 3000 TIMES
+036701141022           05 ltb_Investment_Accrual_Entry OCCURS 1 TO 5000
+036801141022                                          DEPENDING ON ln_Array_Size_Acc
+036901141022      * RFS 139475 - End
+037001090313      * RFS 64445 - End
+037101080124                                          INDEXED BY IACIDX.
+037201080124
+037301080124              07 lc_IA_InvestmentCode     PIC X(5).
+037401080124              07 lc_IA_CurrencyCode       PIC X(3).
+037501080124              07 lc_IA_Processed          PIC X(1).
+037601080124              07 li_IA_Counter            PIC 9(9).
+037701080124
+037801080125        01 Trans_Date_Array.
+037901080124           05 WS-TRANS-BAL-ENTRY OCCURS 100 TIMES INDEXED BY TRNIDX.
+038001080125              07 ln_Trans_UnitValue          PIC 9(9)V999999.
+038101080125              07 ln_Trans_UnitValue_G        PIC 9(9)V999999.
+038201080125              07 ln_Trans_UnitBalance        PIC 9(9)V999.
+038301080125              07 ln_Trans_UnitBalance_G      PIC 9(9)V999.
+038401080125              07 lc_Trans_UnitAdjust         PIC X(1).
+038501080125              07 lc_Trans_InvestCode     PIC X(5).
+038601080125              07 li_Trans_Date                PIC 9(8).
+038701080125              07 ln_Trans_Price               PIC 9(4)V9999.
+038801080124
+038901080125        01 BusinessDay_Array.
+039001080124          05 WS-B-BUSINESS-DAY-ENTRY OCCURS 100 TIMES INDEXED BY BUDIDX,
+039101080124                                                                 BUDMAX.
+039201080124              07 WS-B-BUDIDX-END               PIC X(1).
+039301080124              07 WS-B-DATE                     PIC 9(8).
+039401090313
+039501090313      * RFS 64445 - Begin
+039601090313      *       07 WS-B-INVESTMENT-ENTRY OCCURS 1000 INDEXED BY BUDIDX2
+039701090313              07 WS-B-INVESTMENT-ENTRY OCCURS 1795 INDEXED BY BUDIDX2
+039801090313      * RFS 64445 - End
+039901080124                                                             BUDIDX2SV.
+040001080124
+040101080124                 09 WS-B-BUDIDX2-END           PIC X(1).
+040201080124                 09 WS-B-INVESTMENT-CODE       PIC X(5).
+040301080125                 09 ln_B_Units                 PIC 9(9)V999  COMP-3.
+040401080125                 09 ln_B_Units_G               PIC 9(9)V999  COMP-3.
+040501080125                 09 ln_B_Units_VAR             PIC 9(9)V999  COMP-3.
+040601080125                 09 ln_B_Price                 PIC 9(4)V9999 COMP-3.
+040701080125                 09 ln_B_ExchangeRate          PIC 9(2)V9(7) COMP-3.
+040801080125                 09 ln_B_Value_Actual          PIC 9(9)V9(6) COMP-3.
+040901080125                 09 ln_B_Value_Base            PIC 9(9)V9(6) COMP-3.
+041001080125                 09 ln_B_Value_Actual_G        PIC 9(9)V9(6) COMP-3.
+041101080125                 09 ln_B_Value_Base_G          PIC 9(9)V9(6) COMP-3.
+041201080125                 09 ln_B_Value_Actual_VAR      PIC 9(9)V9(6) COMP-3.
+041301080125                 09 lc_B_Var_SchedCode         PIC X(4).
+041401080125                 09 li_B_Var_EffectDate        PIC S9(8) COMP-3.
+041501080125                 09 li_B_Var_StartDate         PIC S9(8) COMP-3.
+041601080125                 09 lc_B_Calc_VarUnitFlag      PIC X.
+04170109010660213            09 lc_B_Price_Not_Found       PIC X.
+041801080124
+04190109010660213  01  lc_LastFlag                         PIC X.
+042001090106
+042101151102      *RFS151542 Begin
+042201151102           05 lc_Limit_Flag                  PIC X.
+042301151102              88 lc_Limit_Flag_Y             Value "Y".
+042401151102              88 lc_Limit_Flag_N             Value "N".
+042501151102      *RFS151542 End
+042601151102
+042701080124       01  lc_InvLmtArray.
+042801080124           05 ltb_InvLmt_Entry           OCCURS 50 TIMES
+042901080124                                          INDEXED BY VARIDX.
+043001080124              10 ln_ArrayLmtDays          PIC  S9(05) COMP-3.
+043101080124              10 ln_ArrayLmtCnt           PIC  S9(05) COMP-3.
+043201080124              10 ln_ArrayLmtUnits         PIC  S9(9)V999  COMP-3.
+043301080124              10 ln_ArrayLmt_ActualVal    PIC  S9(9)V9(6) COMP-3.
+043401080124              10 ln_ArLmtDistUnits        PIC  S9(9)V999  COMP-3.
+043501080124              10 ln_ArLmtDistActualVal    PIC  S9(9)V9(6) COMP-3.
+043601080124           05 ltb_InvLmt_EntryInd        OCCURS   50 TIMES.
+043701080124              10 ln_ArrayLmtInd           PIC S9(4) BINARY OCCURS
+043801080124                                                    4 TIMES.
+043901080124
+044001080124       01  WS-TRANS-STATUS.
+044101080124           05 WS-TRANS-STATUS-88   PIC X(3).
+044201080124              88 History           VALUES "HST" "HSC".
+044301080124              88 Reversal          VALUES "RVS".
+044401080124
+044501080124       01  WS-TRANS-TYPE.
+044601080124           05 WS-TRANS-TYPE-88     PIC X(3).
+044701080124              88 Redemption        VALUES "SEL" "SWO" "TRO" "CQD"
+044801080124                                          "TFE" "FEE" "SAJ".
+044901080609      *RFS49817 Begin
+045001080609        01 WS-PROCESS-DATE       PIC 9(8).
+045101080609      *RFS49817 End
+045102200720      *RFS185175-Starts
+045103200720        01 ln_Count              PIC X(3).
+045104200720      *RFS185175-Ends
+045201080124
+045301080125        01 lc_Bypass_Attribute           PIC X(5) VALUE "BYSRV".
+045401080124
+045501080125        01 li_DlrStrDate                 PIC 9(8).
+045601080125        01 li_DlrStrDate_N REDEFINES li_DlrStrDate.
+045701080125           03 li_DlrStr_YYYYMM           PIC 9(6).
+045801080125           03 li_DlrStr_YYYYMM_N REDEFINES li_DlrStr_YYYYMM.
+045901080125              05 li_DlrStr_YYYY          PIC 9(4).
+046001080125              05 li_DlrStr_MM            PIC 9(2).
+046101080125           03 li_DlrStr_DD               PIC 9(2).
+046201080124
+046301080125        01 li_DlrEndDate                 PIC 9(8).
+046401080125        01 li_DlrEndDate_N REDEFINES li_DlrEndDate.
+046501080125           03 li_DlrEnd_YYYYMM           PIC 9(6).
+046601080125           03 li_DlrEnd_YYYYMM_N REDEFINES li_DlrEnd_YYYYMM.
+046701080125              05 li_DlrEnd_YYYY          PIC 9(4).
+046801080125              05 li_DlrEnd_MM            PIC 9(2).
+046901080125           03 li_DlrEnd_DD               PIC 9(2).
+047001080124
+047101080125        01 li_CompareDate                PIC 9(8).
+047201080125        01 li_CompareDate_N REDEFINES li_CompareDate.
+047301080125           05 li_Compare_YYYYMM          PIC 9(6).
+047401080125           05 li_Compare_YYYYMM_N  REDEFINES li_Compare_YYYYMM.
+047501080125              07 li_Compare_YYYY         PIC 9(4).
+047601080125              07 li_Compare_MM           PIC 9(2).
+047701080125           05 li_Compare_DD              PIC 9(2).
+047801080124
+047901080125        01 li_Month_StrDate              PIC 9(8).
+048001080125        01 li_Month_StrDate_N REDEFINES li_Month_StrDate.
+048101080125           03 li_Month_StrDate_YYYY      PIC 9(4).
+048201080125           03 li_Month_StrDate_MM        PIC 9(2).
+048301080125           03 li_Month_StrDate_DD        PIC 9(2).
+048401080124
+048501080125        01 li_Quarter_StrDate          PIC 9(8).
+048601080125        01 li_Quarter_StrDate_N REDEFINES li_Quarter_StrDate.
+048701080125           03 li_Quarter_StrDate_YYYY    PIC 9(4).
+048801080125           03 li_Quarter_StrDate_MM      PIC 9(2).
+048901080125           03 li_Quarter_StrDate_DD      PIC 9(2).
+049001080124
+049101080125        01 li_Quarter_StrDate_7          PIC 9(8).
+049201080125        01 li_Quarter_StrDate_7N REDEFINES li_Quarter_StrDate_7.
+049301080125           03 li_Quarter_StrDate_7_YYYY  PIC 9(4).
+049401080125           03 li_Quarter_StrDate_7_MM    PIC 9(2).
+049501080125           03 li_Quarter_StrDate_7_DD    PIC 9(2).
+049601080124
+049701080125        01 li_Last_MonthEnd              PIC 9(8).
+049801080125        01 li_Last_MonthEnd_N REDEFINES li_Last_MonthEnd.
+049901080125           03 li_Last_MonthEnd_YYYY      PIC 9(4).
+050001080125           03 li_Last_MonthEnd_MM        PIC 9(2).
+050101080125           03 li_Last_MonthEnd_DD        PIC 9(2).
+050201080124
+050301080125        01 li_Last_QuarterEnd            PIC 9(8).
+050401080125        01 li_Last_QuarterEnd_N REDEFINES li_Last_QuarterEnd.
+050501080125           03 li_Last_QuarterEnd_YYYY    PIC 9(4).
+050601080125           03 li_Last_QuarterEnd_MM      PIC 9(2).
+050701080125           03 li_Last_QuarterEnd_DD      PIC 9(2).
+050801080124
+050901080125        01 li_Last_QuarterEnd_7          PIC 9(8).
+051001080125        01 li_Last_QuarterEnd_7_N REDEFINES li_Last_QuarterEnd_7.
+051101080125           03 li_Last_QuarterEnd_7_YYYY  PIC 9(4).
+051201080125           03 li_Last_QuarterEnd_7_MM    PIC 9(2).
+051301080125           03 li_Last_QuarterEnd_7_DD    PIC 9(2).
+051401080124
+051501080125        01 li_BeginDate_Pass             PIC 9(8).
+051601080125        01 li_BeginDate_Pass_N REDEFINES li_BeginDate_Pass.
+051701080125           03 li_BeginDate_Pass_YYYYMM   PIC 9(6).
+051801080125           03 li_BeginDate_Pass_DD       PIC 9(2).
+051901080124
+052001080125        01 li_EndDate_Pass               PIC 9(8).
+052101080125        01 li_EndDate_Pass_N REDEFINES li_EndDate_Pass.
+052201080125           03 li_EndDate_Pass_YYYYMM     PIC 9(6).
+052301080125           03 li_EndDate_Pass_DD         PIC 9(2).
+052401080124
+052501080124      ********Use the Function FXSCEDTALW
+052601080124      *********************************************
+052701080124      * SCREEN EDITS ALLOWED DECLARATIONS         *
+052801080124      *********************************************
+052901080124       01  SCREEN-EDITS-ALLOWED-REC.
+053001080124                             COPY DD-ALL-FORMATS OF MFAEDTSCP.
+053101080124
+053201080125       01  lc_ScrEdtAllowed_CAPFEE.
+053301080125           05 lc_CAPFEE_ScreenCode       PIC X(8) VALUE "CAPFEE".
+053401080125           05 lc_CAPFEE_EditCode         PIC X(6) VALUE "DLRSPT".
+053501080125           05 lc_CAPFEE_LevelCode        PIC X(1) VALUE "D".
+053601080125           05 lc_CAPFEE_EditSQLLog       PIC X(1) VALUE "N".
+053701080125           05 lc_CAPFEE_ReturnCode       PIC X(2) VALUE "00".
+053801080124
+053901080125       01  lc_ScreenAllowed_DSTVAR.
+054001080125           05 lc_DSTVAR_ScreenCode       PIC X(8) VALUE "SRVCALC".
+054101080125           05 lc_DSTVAR_EditCode         PIC X(6) VALUE "DSTVAR".
+054201080125           05 lc_DSTVAR_EditLevel        PIC X(1) VALUE "T".
+054301080125           05 lc_DSTVAR_RtnFlag          PIC X.
+054401080215              88 lncc_DSTVAR_EditExist       Value "Y".
+054501080215              88 lncc_DSTVAR_EditNotExist    Value "N".
+054601080124
+054701080219      *RFS 42749 - begin
+054801080125       01  lc_ScreenAllowed_SFPRC.
+054901080311           05 lc_SFPRC_ScreenCode        PIC X(8) VALUE "SRVFEE"       .
+055001080125           05 lc_SFPRC_EditCode          PIC X(6) VALUE "SFPRC".
+055101080125           05 lc_SFPRC_EditLevel         PIC X(1) VALUE "F".
+055201080125           05 lc_SFPRC_RtnFlag           PIC X.
+055301080215              88 lncc_SFPRC_EditExist     Value "Y".
+055401080215              88 lncc_SFPRC_EditNotExist  Value "N".
+055501080124
+055601090107      *RFS 60213 - begins.
+055701090107       01  lc_ScreenAllowed_SRVPRC.
+055801090116           05 lc_SRVPRC_ScreenCode        PIC X(8) VALUE "SRVDAILY"    .
+055901090107           05 lc_SRVPRC_EditCode          PIC X(6) VALUE "SRVPRC".
+056001090107           05 lc_SRVPRC_EditLevel         PIC X(1) VALUE "D".
+056101090107           05 lc_SRVPRC_RtnFlag           PIC X.
+056201090107              88 lncc_SRVPRC_EditExist     Value "Y".
+056301090107              88 lncc_SRVPRC_EditNotExist  Value "N".
+056401090107      *RFS 60213 - ends.
+056501090107
+056601110419      *RFS91255 - Start
+056701110411       01  lc_ScreenAllowed_SRVFEA.
+056801141126130093*    05 lc_SRVFEA_ScreenCode        PIC X(8) VALUE "SRVDAILY"    .
+056901141126130093*    05 lc_SRVFEA_EditCode          PIC X(6) VALUE "SRVFEA".
+057001141126130093*    05 lc_SRVFEA_EditLevel         PIC X(1) VALUE "A".
+057101110411           05 lc_SRVFEA_RtnFlag           PIC X.
+057201110419              88 lncc_SRVFEA_EditYes       Value "Y".
+057301110419              88 lncc_SRVFEA_EditNo        Value "N".
+057401110419      *RFS91255 - End
+057501110411
+057601090428      *RFS50475 Add - Beg
+057701090428       01  lc_ScreenAllowed_ALDTTF.
+057801090428           05 lc_ALDTTF_ScreenCode        PIC X(8) VALUE "ACCCDTL "    .
+057901090428           05 lc_ALDTTF_EditCode          PIC X(6) VALUE "ALDTTF".
+058001090428           05 lc_ALDTTF_EditLevel         PIC X(1) VALUE "A".
+058101090428           05 lc_ALDTTF_RtnFlag           PIC X.
+058201090429              88 lb_ALDTTF_EditYes           Value "Y".
+058301090429              88 lb_ALDTTF_EditNo            Value "N".
+058401090428      *RFS50475 Add - End
+058501110411
+058601080124       01  lc_OtherVariables.
+058701080508R51999     05 li_Time                    PIC S9(8) VALUE 0.
+058801080125           05 lc_Srvprice                PIC X(01) Value "S".
+058901080125           05 ln_OtherPrice              PIC S9(4)V9999 Value -1.
+059001080125           05 li_TradeDate               PIC S9(09).
+059101080219           05 li_SfpriceCount            PIC S9(04).
+059201080125           05 lc_InvestCode              PIC X(05).
+059301080124
+059401080125           05 lc_SearchforAltPrice       PIC X(01).
+059501080125              88 lb_SFPriceFound             VALUE "Y".
+059601080125              88 lb_SFPriceNotFound          VALUE "N".
+059701080124
+059801080125           05 lc_LoopthruPrice           PIC X(01).
+059901080124              88 lb_BeginSearch            VALUE "Y".
+060001080124              88 lb_EndofSearch            VALUE "N".
+060101080219      *RFS 42749 - end
+060201080124
+060301080219        01 lc_Variable_Unit_Fields.
+060401080125           05 lc_Module_ID               PIC X(10) VALUES "SRVVAR".
+060501080125           05 lc_Module_Auth_SRVVAR      PIC X     VALUES "N".
+060601080125           05 ln_Price                   PIC S9(4)V9999 COMP-3.
+060701080125           05 ln_Tot_Var_Units           PIC S9(9)V9999  COMP-3.
+060801080125           05 ln_Tot_Var_ActualVal       PIC S9(9)V9(6) COMP-3.
+060901080125           05 ln_TotVarDistUnits         PIC S9(9)V9999  COMP-3.
+061001080125           05 ln_TotVarDistActualVal     PIC S9(9)V9(6) COMP-3.
+061101080125           05 lc_Inv_Trl_Sched           PIC X(4).
+061201080125           05 lc_Inv_Trl_Var_Sched       PIC X(4).
+061301080125           05 li_Lmt_Max                 PIC 9(4).
+061401080125           05 lc_Calling_SRVVDT_Parm1.
+061501080125              10 lc_Option_P1            PIC X(3).
+061601080125              10 li_ProcessDate_P1       PIC S9(8).
+061701080125              10 lc_InvestCode_P1        PIC X(5).
+061801080125              10 li_AccountNo_P1         PIC S9(9).
+061901080125              10 lc_ReturnCode_P1        PIC X(3).
+062001080124
+062101080124      *******************************************************************
+062201080124      **  SQL variables
+062301080124      **
+062401080125EY     01  lc_Program_Name                  PIC X(10) VALUE "SRVDAILY".
+062501080124
+062601080125       01  lc_SQLLog_Variables.
+062701080125           05 lc_Routine_Name               PIC X(25).
+062801080125           05 lc_SQLErr_Statement           PIC X(25)   VALUE " ".
+062901080125           05 lc_SQLErr_Data                PIC X(1780) VALUE " ".
+063001080125           05 lc_SQL_Stats                  PIC X(1966) VALUE " ".
+063101080125           05 lc_SQLErr_Reply               PIC X(01)  VALUE " ".
+063201080124
+063301080305     *** RFS44696.3 - Start
+063401080305           Copy Cpysqlfld
+063501080305               REPLACING == "CURRENT_PROGRAM" == BY == "SRVDAILY" ==.
+063601080305     *** RFS44696.3 - End
+063701080124           EXEC SQL
+063801080124               INCLUDE SQLCA
+063901080124           END-EXEC.
+064001080124
+064101080124      *****
+064201080124      *****  COPY THE PROCESS-DATE
+064301080124      *****
+064401080124
+064501080124                              COPY PRCDTWS.
+064601080124      *****************
+064701080124       LINKAGE SECTION.
+064801080124      *****************
+064901080125        01 Comm_Date                    PIC 9(16).
+065001080125        01 Comm_Date_N REDEFINES Comm_Date.
+065101080125           03 Comm_QBegin               PIC 9(8).
+065201080125           03 Comm_QBegin_N REDEFINES Comm_QBegin.
+065301080125              05 Comm_QBegin_YYYYMM    PIC 9(6).
+065401080125              05 Comm_QBegin_YYYYMM_N  REDEFINES Comm_QBegin_YYYYMM.
+065501080125                 07 Comm_QBegin_YYYY    PIC 9(4).
+065601080125                 07 Comm_QBegin_MM      PIC 9(2).
+065701080125              05 Comm_QBegin_DD         PIC 9(2).
+065801080125           03 Comm_QEnd                 PIC 9(8).
+065901080125           03 Comm_QEnd_N REDEFINES Comm_QEnd.
+066001080125              05 Comm_QEnd_YYYYMM      PIC 9(6).
+066101080125              05 Comm_QEnd_YYYYMM_N REDEFINES Comm_QEnd_YYYYMM.
+066201080125                 07 Comm_QEnd_YYYY      PIC 9(4).
+066301080125                 07 Comm_QEnd_MM        PIC 9(2).
+066401080125              05 Comm_QEnd_DD           PIC 9(2).
+066501080125        01 Comm_MthEnd                  PIC X(1).
+066601080125        01 Comm_QtrEnd                  PIC X(1).
+066701080125        01 Comm_Q7                      PIC X(1).
+066801080125        01 Comm_DlyAccrual              PIC X(1).
+066901080125        01 Comm_Frq                     PIC X(2).
+067001080124
+067101080124      *****************
+067201080125       PROCEDURE DIVISION USING Comm_Date,
+067301080125                                Comm_MthEnd,
+067401080125                                Comm_QtrEnd,
+067501080125                                Comm_Q7,
+067601080125                                Comm_DlyAccrual,
+067701080125                                Comm_Frq.
+067801080124
+067901080124      *--------*
+068001080124       MAINLINE.
+068101080124      *--------*
+068201080508R51999     ACCEPT li_Time FROM TIME.
+068301080508EY         DISPLAY "START SRVDAILY..." li_Time.
+068401080124           PERFORM INITIAL-LOGIC     THRU INL-EXIT.
+068501080124           IF CURR-CONTROLS IS EQUAL TO HIGH-VALUES
+068601080124              GO TO ML-1200.
+068701080124       ML-0010.
+068801080124           PERFORM GET-CURRENT-RECORD  THRU GCR-EXIT.
+068901080124       ML-0020.
+069001080124           IF PREV-LEVEL1 IS EQUAL TO CURR-LEVEL1
+069101080124              GO TO ML-1100.
+069201080124           IF PREV-CONTROLS IS EQUAL TO LOW-VALUES
+069301080124              GO TO ML-0040.
+069401080124       ML-0030.
+069501080124           PERFORM LEVEL-SUMMARY-1     THRU LS1-EXIT.
+069601080124       ML-0040.
+069701080124           IF CURR-CONTROLS IS EQUAL TO HIGH-VALUES
+069801080124              GO TO ML-1200.
+069901080124       ML-0050.
+070001080124       ML-0100.
+070101080124           PERFORM LEVEL-REINIT-1      THRU LR1-EXIT.
+070201080124           MOVE CURR-CONTROLS          TO PREV-CONTROLS.
+070301150616145730     MOVE CURR-DEALER-ACCOUNT-NO TO PREV-DEALER-ACCOUNT-NO
+070401080124       ML-1100.
+070501080124           PERFORM DETAIL-PROCESSING   THRU DPR-EXIT.
+070601080124           GO TO ML-0010.
+070701080124       ML-1200.
+070801151102
+070901151103      * RFS151542 Begin
+071001151102           IF lc_Limit_Flag IS NOT EQUAL TO "Y"
+071101151102             MOVE SPACES TO lt-InvestmentCode
+071201151103             DISPLAY lt_LocalDataArea UPON WS-LOCAL
+071301151102           END-IF.
+071401151102      * RFS151542 End
+071501151102
+071601080124           PERFORM END-JOB             THRU EOJ-EXIT.
+071701080508R51999     ACCEPT li_Time FROM TIME.
+071801080508EY         DISPLAY "END SRVDAILY..." li_Time.
+071901080124           STOP RUN.
+072001080124      /
+072101080124      *------------------
+072201080124       GET-CURRENT-RECORD.
+072301080124      *------------------
+072401080124
+072501080124           IF lc_FirstRead_SW IS NOT EQUAL TO "Y"
+072601080124             GO TO GCR-0010
+072701080124           END-IF.
+072801211006
+072901080124           MOVE "N"          TO lc_FirstRead_SW.
+073101080124      *--------
+073201080124       GCR-0005.
+073301080124      *-
+073401080124           READ ACCOUNT NEXT RECORD
+073501080124           AT END
+073601080124           MOVE HIGH-VALUES  TO CURR-CONTROLS
+073701080124           GO TO GCR-EXIT.
+073801080124
+073901080124      ** check if this dealer should be processed.
+074001080124
+074101080124           IF DEALER-CODE OF
+074201080124              ACCOUNT    IS EQUAL TO SPACES
+074301080124              GO TO GCR-0005.
+074401080124           IF DEALER-CODE OF
+074501080124              ACCOUNT    IS EQUAL TO lc_DlrCode
+074601080124              GO TO GCR-0006.
+074701080124           INITIALIZE MFADEACMP OF DEALER-COMMISSIONS-REC.
+074801080124           MOVE DEALER-CODE OF
+074901080124                ACCOUNT                TO  DEALER-CODE OF
+075001080124                                       DEALER-COMMISSIONS.
+075101080124           MOVE "CAD" TO CURRENCY-DDS OF DEALER-COMMISSIONS.
+075201080124           PERFORM DEALER-TO-BE-PROCESSED THRU DLP-EXIT.
+075301080124           IF lc_ProcessDealer
+075401080124                          IS NOT EQUAL TO  "Y"
+075501080124              GO TO GCR-0005.
+075601080124
+075701080124      *--------
+075801080124       GCR-0006.
+075901080124      *-
+076001080124           MOVE DEALER-CODE OF ACCOUNT TO  lc_DlrCode.
+076101080124
+076201080124      *    if exclude account with attribute code "BYSRV"
+076301080124           MOVE ACCOUNT-NO OF ACCOUNT
+076401080124                       TO ACCOUNT-NO OF ACCOUNT-ATTRIBUTES.
+076501080125           MOVE lc_Bypass_Attribute
+076601080124                       TO ACCOUNT-ATTRIBUTE-CODE OF ACCOUNT-ATTRIBUTES.
+076701080124           READ ACCOUNT-ATTRIBUTES
+076801080124           INVALID KEY
+076901080124             CONTINUE
+077001080124           NOT INVALID KEY
+077101080124             GO TO GCR-0005
+077201080124           END-READ.
+077301080124
+077401080124           MOVE ACCOUNT-NO OF ACCOUNT
+077501080124                             TO ACCOUNT-NO OF ACCOUNT-INVESTMENT.
+077601080124
+077701080124           MOVE LOW-VALUES   TO INVESTMENT-CODE OF ACCOUNT-INVESTMENT.
+077801080124
+077901080124           START ACCOUNT-INVESTMENT
+078001080124           KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+078101080124           INVALID KEY
+078201080124           GO TO GCR-0005.
+078301080124
+078401080124       GCR-0010.
+078501080124
+078601080124           READ ACCOUNT-INVESTMENT NEXT RECORD
+078701080124           AT END
+078801080124           GO TO GCR-0005.
+078901080124
+079001080124           IF ACCOUNT-NO OF ACCOUNT-INVESTMENT IS NOT EQUAL
+079101080124           TO ACCOUNT-NO OF ACCOUNT
+079201080124             GO TO GCR-0005
+079301080124           END-IF.
+079401080124
+079501080124           MOVE ACCOUNT-NO OF ACCOUNT-INVESTMENT
+079601080124                       TO ACCOUNT-NO OF ACCOUNT-INV-ATTRIBUTES.
+079701080124           MOVE INVESTMENT-CODE OF ACCOUNT-INVESTMENT
+079801080124                       TO INVESTMENT-CODE OF ACCOUNT-INV-ATTRIBUTES.
+079901080125           MOVE lc_Bypass_Attribute
+080001080124                       TO ACCOUNT-INV-ATTRIBUTE-CODE
+080101080124                       OF ACCOUNT-INV-ATTRIBUTES.
+080201080124
+080301080124           READ ACCOUNT-INV-ATTRIBUTES
+080401080124           INVALID KEY
+080501080124             CONTINUE
+080601080124           NOT INVALID KEY
+080701080124             GO TO GCR-0010
+080801080124           END-READ.
+080901080124
+081001080124           MOVE ACCOUNT-NO OF ACCOUNT-INVESTMENT
+081101080124                             TO ACCOUNT-NO
+081201080124                             OF ACCOUNT-INVESTMENT-OLD-SF-BAL.
+081301080124
+081401080124           MOVE INVESTMENT-CODE OF ACCOUNT-INVESTMENT
+081501080124                             TO INVESTMENT-CODE
+081601080124                             OF ACCOUNT-INVESTMENT-OLD-SF-BAL.
+081701080124
+081801080124           READ ACCOUNT-INVESTMENT-OLD-SF-BAL
+081901080124           INVALID KEY
+082001080124             MOVE ZERO         TO ln_OpeningBalance_G
+082101080124             MOVE ZERO         TO ln_RunningBalance_G
+082201080124           NOT INVALID KEY
+082301080124             MOVE BEGINNING-OLD-BALANCE OF AOI-REC
+082401080124                             TO ln_OpeningBalance_G
+082501080124                                ln_RunningBalance_G
+082601080124           END-READ.
+082701080124
+082801080124
+082901080124           SET BUDIDX        TO 1.
+083001080124           SET BUDIDX2       TO 1.
+083101080124
+083201080124           SEARCH WS-B-INVESTMENT-ENTRY VARYING BUDIDX2
+083301080124           WHEN WS-B-INVESTMENT-CODE(BUDIDX, BUDIDX2) IS EQUAL
+083401080124           INVESTMENT-CODE OF ACCOUNT-INVESTMENT
+083501080124           SET BUDIDX2SV TO BUDIDX2
+083601080124             GO TO GCR-INVESTMENT-FOUND
+083701080124           WHEN WS-B-INVESTMENT-CODE(BUDIDX, BUDIDX2) = SPACES
+083801080124             GO TO GCR-0010.
+083901080124
+084001080124
+084101080124       GCR-INVESTMENT-FOUND.
+084201080124
+084301080124
+084401080124           MOVE DEALER-CODE OF ACCOUNT
+084501080124                             TO CURR-DEALER-CODE.
+084601080124
+084701080124           MOVE DEALER-REP-CODE OF ACCOUNT
+084801080124                             TO CURR-REP-CODE.
+084901150616145730     MOVE DEALER-ACCOUNT-NO OF ACCOUNT
+085001150616145730                       TO CURR-DEALER-ACCOUNT-NO.
+085101080124
+085201110419      *RFS91255 - Start
+085301110418      ** For SRVFEA edit code enabled, Account no of Account
+085401110411      ** is moved to current account variable.
+085501110419           IF lncc_SRVFEA_EditYes
+085601110411              MOVE ACCOUNT-NO OF ACCOUNT
+085701110411                             TO CURR-ACCOUNT-NO
+085801110411           ELSE
+085901110419              MOVE ZEROS     TO CURR-ACCOUNT-NO
+086001110411           END-IF.
+086101110419      *RFS91255 - End
+086201080124      ** ESTABLISH STARTING BALANCE
+086301080124
+086401080124           MOVE ACCOUNT-NO OF ACCOUNT-INVESTMENT
+086501080124                             TO ACCOUNT-NO OF TRANS.
+086601080124           MOVE INVESTMENT-CODE OF ACCOUNT-INVESTMENT
+086701080124                             TO INVESTMENT-CODE OF TRANS.
+086801080124
+086901080125           MOVE li_DlrStrDate  TO PROCESS-DATE OF TRANS.
+087001080124           MOVE ZEROS        TO TRANS-PROC-SEQ-NO OF TRANS.
+087101080124
+087201080124           MOVE "N"          TO lc_SameBalance.
+087301080124
+087401080124           START TRANS
+087501080124           KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+087601080124           INVALID KEY
+087701080124           MOVE "Y"          TO lc_SameBalance
+087801080124           MOVE CURR-UNIT-BAL OF ACCOUNT-INVESTMENT
+087901080124                             TO ln_OpeningBalance
+088001080124           GO TO GCR-EXIT.
+088101080124
+088201080124       GCR-NEXT-TRANS.
+088301080124
+088401080124           READ TRANS NEXT RECORD
+088501080124           AT END
+088601080124           MOVE "Y"          TO lc_SameBalance
+088701080124           MOVE CURR-UNIT-BAL OF ACCOUNT-INVESTMENT
+088801080124                             TO ln_OpeningBalance
+088802211006111429     MOVE LAST-FINANCIAL-ACTIVITY OF ACCOUNT-INVESTMENT
+088803211006111429      TO   WS-PROCESS-DATE
+088804211006
+088901080124           GO TO GCR-EXIT.
+089001080124
+089101080124      ** TRANS NOT FOR THIS ACCOUNT INVESTMENT
+089201080610      *RFS49817 Begin
+089301211006111429*    MOVE PROCESS-DATE OF TRANS
+089401211006111429*                      TO WS-PROCESS-DATE
+089501080610      *RFS49817 End
+089601080124
+089701080124           IF ACCOUNT-NO OF TRANS IS NOT EQUAL
+089801080124           ACCOUNT-NO OF ACCOUNT-INVESTMENT OR
+089901080124           INVESTMENT-CODE OF TRANS IS NOT EQUAL
+090001080124           INVESTMENT-CODE OF ACCOUNT-INVESTMENT
+090101080124             MOVE "Y"        TO lc_SameBalance
+090201080124             MOVE CURR-UNIT-BAL OF ACCOUNT-INVESTMENT
+090301080124                             TO ln_OpeningBalance
+090302211006111429     MOVE LAST-FINANCIAL-ACTIVITY OF ACCOUNT-INVESTMENT
+090303211006111429      TO   WS-PROCESS-DATE
+090401080124             GO TO GCR-EXIT
+090501080124           END-IF.
+090601080124
+090602211006111429     MOVE PROCESS-DATE OF TRANS
+090603211006111429                       TO WS-PROCESS-DATE.
+090604211006
+090701080124           MOVE TRANS-TYPE-CODE OF TRANS
+090801080124                             TO WS-TRANS-TYPE-88.
+090901080124
+091001080124           MOVE TRANS-STATUS-CODE OF TRANS
+091101080124                             TO WS-TRANS-STATUS-88.
+091201080124
+091301080124           IF NOT History AND NOT Reversal
+091401080124              GO TO GCR-NEXT-TRANS
+091501080124           END-IF.
+091601080124
+091701080124      ** TRANS OCCURRED AFTER QUARTER - CALCULATE BALANCE
+091801080124
+091901080124           IF PROCESS-DATE OF TRANS IS GREATER THAN
+092001080125           li_DlrEndDate
+092101080124             MOVE "Y"        TO lc_SameBalance
+092201080124           END-IF.
+092301080124
+092401080124           IF (Redemption AND History)
+092501080124           OR (NOT Redemption AND Reversal)
+092601080124             ADD UNIT-AMT OF TRANS,
+092701080124             CLOSING-UNIT-BAL OF TRANS,
+092801080124                            GIVING ln_OpeningBalance
+092901080124           ELSE
+093001080124             SUBTRACT UNIT-AMT OF TRANS
+093101080124             FROM CLOSING-UNIT-BAL OF TRANS
+093201080124                            GIVING ln_OpeningBalance
+093301080124           END-IF.
+093401080124
+093501080124       GCR-EXIT.
+093601080124           EXIT.
+093701080124      /
+093801080124       DETAIL-PROCESSING.
+093901080124
+094001080124           SET BUDIDX2 TO BUDIDX2SV.
+094101080124
+094201080124      ** INITIALIZE ARRAY
+094301080124
+094401080124           PERFORM INIT-ARRAY THRU INA-EXIT
+094501080124           VARYING TRNIDX FROM 1 BY 1
+094601080124           UNTIL TRNIDX IS GREATER THAN BUDMAX.
+094701080124
+094801080124
+094901080124      ** SAME BALANCE PROCESSING
+095001080124
+095101080124           IF lc_SameBalance IS NOT EQUAL TO "Y"
+095201080124             GO TO DPR-DAY-BY-DAY
+095301080124           END-IF.
+095401080124
+095501080124           SET BUDIDX TO 1.
+095601080124
+095701080124           SEARCH WS-B-BUSINESS-DAY-ENTRY
+095801080124           VARYING BUDIDX
+095901080125           WHEN WS-B-DATE(BUDIDX) = li_DlrStrDate
+096001080124           SET TRNIDX TO BUDIDX
+096101080124           SET BUDIDX DOWN BY 1
+096201080124           GO TO DPR-SAME-BALANCE.
+096301080124
+096401080124       DPR-SAME-BALANCE.
+096501080124
+096601080124           SET BUDIDX UP BY 1.
+096701080124           SET TRNIDX TO BUDIDX.
+096801080124
+096901080124           MOVE WS-B-DATE(BUDIDX)
+097001080125                             TO li_Trans_Date(TRNIDX).
+097101080125           MOVE ln_B_Price(BUDIDX, BUDIDX2)
+097201080125                             TO ln_Trans_Price(TRNIDX).
+097301080124           MOVE WS-B-INVESTMENT-CODE(BUDIDX, BUDIDX2)
+097401080125                             TO lc_Trans_InvestCode(TRNIDX).
+097501080124
+097601080125           COMPUTE ln_Trans_UnitValue(TRNIDX) ROUNDED =
+097701080125           ln_OpeningBalance * ln_B_Price(BUDIDX, BUDIDX2).
+097801080124           MOVE ln_OpeningBalance
+097901080125                             TO ln_Trans_UnitBalance(TRNIDX).
+098001080124
+098101080125           ADD ln_Trans_UnitBalance(TRNIDX)
+098201080125                              TO ln_B_Units(BUDIDX, BUDIDX2).
+098301080124
+098401080125           ADD ln_Trans_UnitValue(TRNIDX)
+098501080125                              TO ln_B_Value_Actual(BUDIDX, BUDIDX2).
+098601080124
+098701080125           IF lc_B_Calc_VarUnitFlag(BUDIDX, BUDIDX2) = "Y"
+098801080124              PERFORM CALC-VARIABLE-UNITS  THRU CVU-EXIT
+098901080124           END-IF.
+099001080124
+099101080124
+099201080125           COMPUTE ln_Trans_UnitValue_G(TRNIDX) ROUNDED =
+099301080125           ln_OpeningBalance_G * ln_B_Price(BUDIDX, BUDIDX2).
+099401080124           MOVE ln_OpeningBalance_G
+099501080125                             TO ln_Trans_UnitBalance_G(TRNIDX).
+099601080124
+099701080125           ADD ln_Trans_UnitBalance_G(TRNIDX)
+099801080125                              TO ln_B_Units_G(BUDIDX, BUDIDX2).
+099901080124
+100001080125           ADD ln_Trans_UnitValue_G(TRNIDX)
+100101080125                              TO ln_B_Value_Actual_G(BUDIDX, BUDIDX2).
+100201080124
+100301080124           IF WS-B-BUDIDX-END(BUDIDX) IS EQUAL "Y"
+100401080124             GO TO DPR-END-FEE
+100501080124           END-IF.
+100601080124
+100701080124           GO TO DPR-SAME-BALANCE.
+100801080124
+100901080124       DPR-DAY-BY-DAY.
+101001080124      ** IF ACTIVITY HAS OCCURED DURING THE QUARTER
+101101080124
+101201080124           MOVE PLACEMENT-DATE OF TRANS
+101301080124                             TO PLACEMENT-DATE OF TOS-REC.
+101401080124           MOVE TRANS-NO OF TRANS
+101501080124                             TO TRANS-NO OF TOS-REC.
+101601080124
+101701080124           READ TRANS-OLD-SF-REDUCED
+101801080124           INVALID KEY
+101901080124           GO TO DPR-OLD-CONTINUE.
+102001080124
+102101080124           IF TRANS-TYPE-CODE OF TRANS = "SEL" OR
+102201080124                                         "SAJ" OR
+102301080124                                         "TFE" OR
+102401080124                                         "CQD" OR
+102501080124                                         "FEE" OR
+102601080124                                         "SWO" OR
+102701080124                                         "TRO"
+102801080124             IF TRANS-STATUS-CODE = "HST"
+102901080124               SUBTRACT OLD-SF-UNITS-REDUCED OF TOS-REC
+103001080124               FROM ln_RunningBalance_G
+103101080124             ELSE
+103201080124               ADD OLD-SF-UNITS-REDUCED OF TOS-REC
+103301080124               TO ln_RunningBalance_G
+103401080124             END-IF
+103501080124           ELSE
+103601080124      * For purchases transaction, if it can be found from MFATRNSRP,
+103701080124      * it means the transaction is related to grandfarther unit and
+103801080124      * ln_RunningBalance_G needs to be updated.
+103901080124             IF TRANS-STATUS-CODE = "HST"
+104001080124               ADD OLD-SF-UNITS-REDUCED OF TOS-REC
+104101080124               TO ln_RunningBalance_G
+104201080124             ELSE
+104301080124               SUBTRACT OLD-SF-UNITS-REDUCED OF TOS-REC
+104401080124               FROM ln_RunningBalance_G
+104501080124             END-IF
+104601080124           END-IF.
+104701080124
+104801080124       DPR-OLD-CONTINUE.
+104901080124
+105001080124           SET BUDIDX TO 1.
+105101080124
+105201080124           SEARCH WS-B-BUSINESS-DAY-ENTRY
+105301080124           VARYING BUDIDX
+105401080124           WHEN WS-B-DATE(BUDIDX) = PROCESS-DATE OF TRANS
+105501080124           SET TRNIDX TO BUDIDX
+105601080124           MOVE CLOSING-UNIT-BAL OF TRANS
+105701080125                             TO ln_Trans_UnitBalance(TRNIDX)
+105801080124           MOVE ln_RunningBalance_G
+105901080125                             TO ln_Trans_UnitBalance_G(TRNIDX)
+106001080125           MOVE "Y"          TO lc_Trans_UnitAdjust(TRNIDX).
+106101080124
+106201080124       DPR-NEXT-TRANS.
+106301080124
+106401080124           READ TRANS NEXT RECORD
+106501080124           AT END
+106601080124           GO TO DPR-COMPL-ARRAY.
+106701080124
+106801080124           IF ACCOUNT-NO OF TRANS IS NOT EQUAL
+106901080124           ACCOUNT-NO OF ACCOUNT-INVESTMENT OR
+107001080124           INVESTMENT-CODE OF TRANS IS NOT EQUAL
+107101080124           INVESTMENT-CODE OF ACCOUNT-INVESTMENT OR
+107201080124           PROCESS-DATE OF TRANS IS GREATER THAN
+107301080125           li_DlrEndDate
+107401080124             GO TO DPR-COMPL-ARRAY
+107501080124           END-IF.
+107601080124
+107701080124           MOVE TRANS-TYPE-CODE OF TRANS
+107801080124                             TO WS-TRANS-TYPE-88.
+107901080124
+108001080124           MOVE TRANS-STATUS-CODE OF TRANS
+108101080124                             TO WS-TRANS-STATUS-88.
+108201080124
+108301080124           IF NOT History AND NOT Reversal
+108401080124              GO TO DPR-NEXT-TRANS
+108501080124           END-IF.
+108601080124
+108701080124           GO TO DPR-DAY-BY-DAY.
+108801080124
+108901080124       DPR-COMPL-ARRAY.
+109001080124           SET BUDIDX TO 1.
+109101080124           SEARCH WS-B-BUSINESS-DAY-ENTRY
+109201080124           VARYING BUDIDX
+109301080125           WHEN WS-B-DATE(BUDIDX) = li_DlrStrDate
+109401080124            SET TRNIDX TO BUDIDX
+109501080124            SET TRNIDX DOWN BY 1
+109601080124           END-SEARCH.
+109701080124
+109801080124           MOVE ln_OpeningBalance
+109901080124                             TO ln_CarryForward.
+110001080124           MOVE ln_OpeningBalance_G
+110101080124                             TO ln_CarryForward_G.
+110201080124       DPR-COMP-ARRAY-0010.
+110301080124
+110401080124           SET TRNIDX UP BY 1.
+110501080124
+110601080125           IF lc_Trans_UnitAdjust(TRNIDX) IS NOT EQUAL TO "Y"
+110701080124             MOVE ln_CarryForward
+110801080125                             TO ln_Trans_UnitBalance(TRNIDX)
+110901080124             MOVE ln_CarryForward_G
+111001080125                             TO ln_Trans_UnitBalance_G(TRNIDX)
+111101080124           ELSE
+111201080125             MOVE ln_Trans_UnitBalance(TRNIDX)
+111301080124                             TO ln_CarryForward
+111401080125             MOVE ln_Trans_UnitBalance_G(TRNIDX)
+111501080124                             TO ln_CarryForward_G
+111601080124           END-IF.
+111701080124
+111801080124           SET BUDIDX TO TRNIDX.
+111901080124
+112001080124           MOVE WS-B-DATE(BUDIDX)
+112101080125                             TO li_Trans_Date(TRNIDX).
+112201080125           MOVE ln_B_Price(BUDIDX, BUDIDX2)
+112301080125                             TO ln_Trans_Price(TRNIDX).
+112401080124           MOVE WS-B-INVESTMENT-CODE(BUDIDX, BUDIDX2)
+112501080125                             TO lc_Trans_InvestCode(TRNIDX).
+112601080124
+112701080125           IF lc_B_Calc_VarUnitFlag(BUDIDX, BUDIDX2) = "Y"
+112801080124              PERFORM CALC-VARIABLE-UNITS  THRU CVU-EXIT
+112901080124           END-IF.
+113001080124
+113101080125           COMPUTE ln_Trans_UnitValue(TRNIDX) ROUNDED =
+113201080125           ln_Trans_UnitBalance(TRNIDX) * ln_B_Price(BUDIDX, BUDIDX2).
+113301080124
+113401080125           COMPUTE ln_Trans_UnitValue_G(TRNIDX) ROUNDED =
+113501080125           ln_Trans_UnitBalance_G(TRNIDX) * ln_B_Price(BUDIDX, BUDIDX2).
+113601080124
+113701080125           ADD ln_Trans_UnitBalance(TRNIDX)
+113801080125                              TO ln_B_Units(BUDIDX, BUDIDX2).
+113901080125           ADD ln_Trans_UnitBalance_G(TRNIDX)
+114001080125                              TO ln_B_Units_G(BUDIDX, BUDIDX2).
+114101080124
+114201080125           ADD ln_Trans_UnitValue(TRNIDX)
+114301080125                              TO ln_B_Value_Actual(BUDIDX, BUDIDX2).
+114401080125           ADD ln_Trans_UnitValue_G(TRNIDX)
+114501080125                              TO ln_B_Value_Actual_G(BUDIDX, BUDIDX2).
+114601080124
+114701080124           IF WS-B-BUDIDX-END(BUDIDX) IS NOT EQUAL TO "Y"
+114801080124             GO TO DPR-COMP-ARRAY-0010
+114901080124           END-IF.
+115001080124
+115101080124       DPR-END-FEE.
+115201080124
+115301080124      *** FLAG INVESTMENT HAS BEEN PROCESSED
+115401080602
+115501080602      * RFS49817 Begin
+115601080606           IF CURR-UNIT-BAL OF ACCOUNT-INVESTMENT  = 0
+115701160108      * RFS141793 -start
+115801160108      *      IF WS-PROCESS-DATE IS less THAN
+115901160108             IF (WS-PROCESS-DATE IS less THAN
+116001160108      * RFS141793 -END
+116101080606                li_DlrStrDate   or
+116201080609                WS-PROCESS-DATE IS greater THAN
+116301160108      * RFS141793 -START
+116401160108      *         li_DlrEndDate
+116501160108                li_DlrEndDate) AND
+116601160108                LAST-FINANCIAL-ACTIVITY OF ACCOUNT-INVESTMENT
+116701160108                IS LESS THAN li_DlrStrDate
+116801160108      * RFS141793 -END
+116901080606                 GO TO DPR-EXIT
+117001080606             END-IF
+117101080609           END-IF
+117201080602      * RFS49817 End
+117301150421
+117401150424      * RFS147218 - Start
+117501150421      *    SET IACIDX TO 1.
+117601150421           SET IACIDX    TO BUDIDX2
+117701150421           MOVE "Y"         TO lc_IA_Processed(IACIDX)
+117801150421           ADD  1           TO li_IA_Counter(IACIDX).
+117901150421      *    SEARCH ltb_Investment_Accrual_Entry
+118001150421      *    VARYING IACIDX
+118101150421      *    WHEN lc_IA_InvestmentCode(IACIDX) =
+118201150421      *    INVESTMENT-CODE OF ACCOUNT-INVESTMENT
+118301150421      *      MOVE "Y"         TO lc_IA_Processed(IACIDX)
+118401150421      *      ADD  1           TO li_IA_Counter(IACIDX).
+118501150424      * RFS147218 - End
+118601080124       DPR-EXIT.
+118701080124           EXIT.
+118801080124      /
+118901080124       LEVEL-SUMMARY-1.
+119001080124
+119101080124           SET IACIDX TO 1.
+119201080124           SET IACIDX DOWN BY 1.
+119301080124
+119401080124       LS1-0009.
+119501080124
+119601080124           SET BUDIDX TO 1.
+119701080124           SEARCH WS-B-BUSINESS-DAY-ENTRY
+119801080124           VARYING BUDIDX
+119901080125           WHEN WS-B-DATE(BUDIDX) = li_DlrStrDate
+120001080124           NEXT SENTENCE.
+120101080124
+120201080124       LS1-0010.
+120301080124           SET IACIDX UP BY 1.
+120401080124
+120501080124           IF lc_IA_InvestmentCode(IACIDX) IS EQUAL TO SPACES
+120601080124             GO TO LS1-EXIT
+120701080124           END-IF.
+120801080124
+120901080124           IF lc_IA_Processed(IACIDX) NOT = "Y"
+121001080124             GO TO LS1-0010
+121101080124           END-IF.
+121201080124
+121301080124           SET BUDIDX TO 1.
+121401080124           SET BUDIDX2 TO 1.
+121501080124
+121601080124      **LOCATE INVESTMENT TOTALS ACCRUED
+121701080124
+121801080124           SEARCH WS-B-INVESTMENT-ENTRY VARYING BUDIDX2
+121901080124           WHEN WS-B-INVESTMENT-CODE(BUDIDX, BUDIDX2) =
+122001080124           lc_IA_InvestmentCode(IACIDX)
+122101080124           NEXT SENTENCE.
+122201080124
+122301080124           SET BUDIDX DOWN BY 1.
+122401080124
+122501080124       LS1-0030.
+122601080124
+122701080124           SET BUDIDX UP BY 1.
+122801080124
+122901080124      **Must include the last record of the period
+123001080124
+123101080125           IF ln_B_Units(BUDIDX, BUDIDX2)            = 0  AND
+123201080125              ln_B_Value_Actual(BUDIDX, BUDIDX2)     = 0  AND
+123301080125              ln_B_Units_G(BUDIDX, BUDIDX2)          = 0  AND
+123401080125              ln_B_Value_Actual_G(BUDIDX, BUDIDX2)   = 0  AND
+123501080125              WS-B-DATE(BUDIDX)                  NOT = li_DlrEndDate
+123601080124             GO TO LS1-0050
+123701080124           END-IF.
+123801080124
+12390108021942749      INITIALIZE MFADEADSP OF DEALER-REP-DLY-SRV-FEE-REC.
+124001080124           MOVE PREV-DEALER-CODE
+124101080124                              TO DEALER-CODE OF DEALER-REP-DLY-SRV-FEE.
+124201080124           MOVE PREV-REP-CODE TO DEALER-REP-CODE
+124301080124                                 OF DEALER-REP-DLY-SRV-FEE.
+124401110419      *RFS91255 - Start
+124501110411      ** Account no is moved to Dealer-Rep-Dly-Srv-Fee Record
+124601110411           MOVE PREV-ACCOUNT-NO
+124701110411                              TO ACCOUNT-NO
+124801110411                                 OF DEALER-REP-DLY-SRV-FEE.
+124901150616145730     MOVE PREV-DEALER-ACCOUNT-NO
+125001150616145730                        TO DEALER-ACCOUNT-NO
+125101150616145730                           OF DEALER-REP-DLY-SRV-FEE.
+125201110419      *RFS91255 - End
+125301080124           MOVE lc_IA_InvestmentCode(IACIDX)
+125401080124                              TO INVESTMENT-CODE
+125501080124                                 OF DEALER-REP-DLY-SRV-FEE.
+125601080124           MOVE li_IA_Counter(IACIDX)
+125701080124                              TO NO-OF-ACCOUNTS
+125801080124                                 OF DEALER-REP-DLY-SRV-FEE.
+125901080124           MOVE WS-B-DATE(BUDIDX)
+126001080124                              TO PROCESS-DATE
+126101080124                                 OF DEALER-REP-DLY-SRV-FEE.
+126201080124      **Grandfathered units total
+126301080124
+126401080125           MOVE ln_B_Units_G(BUDIDX, BUDIDX2)
+126501080124EY                            TO UNITS-GF OF DEALER-REP-DLY-SRV-FEE.
+126601080124
+126701080124      **New units = units - grandfathered units
+126801080124EY         COMPUTE UNITS OF DEALER-REP-DLY-SRV-FEE
+126901080125           = ln_B_Units(BUDIDX, BUDIDX2) - ln_B_Units_G(BUDIDX, BUDIDX2).
+127001080124
+127101080124
+127201080125           MOVE ln_B_Price(BUDIDX, BUDIDX2)
+127301080124                              TO UNIT-PRICE OF DEALER-REP-DLY-SRV-FEE.
+127401080125           MOVE ln_B_ExchangeRate(BUDIDX, BUDIDX2)
+127501080124                              TO EXCHANGE-RATE
+127601080124                                 OF DEALER-REP-DLY-SRV-FEE.
+127701080124
+127801080124           IF lc_IA_CurrencyCode(IACIDX) = "CAD"
+127901080125             MOVE  ln_B_Value_Actual(BUDIDX, BUDIDX2)
+128001080125                              TO ln_B_Value_Base(BUDIDX, BUDIDX2)
+128101080125             MOVE  ln_B_Value_Actual_G(BUDIDX, BUDIDX2)
+128201080125                              TO ln_B_Value_Base_G(BUDIDX, BUDIDX2)
+128301080124           ELSE
+128401080125             COMPUTE ln_B_Value_Base(BUDIDX, BUDIDX2) ROUNDED =
+128501080125               ln_B_Value_Actual(BUDIDX, BUDIDX2) /
+128601080125               ln_B_ExchangeRate(BUDIDX, BUDIDX2)
+128701080125             COMPUTE ln_B_Value_Base_G(BUDIDX, BUDIDX2) ROUNDED =
+128801080125               ln_B_Value_Actual_G(BUDIDX, BUDIDX2) /
+128901080125               ln_B_ExchangeRate(BUDIDX, BUDIDX2)
+129001080124           END-IF.
+129101080124
+129201080124           MOVE ZEROES
+129301080124             TO UNITS-VAR              OF DEALER-REP-DLY-SRV-FEE
+129401080124                DAILY-VALUE-BASE-VAR   OF DEALER-REP-DLY-SRV-FEE
+129501080124                DAILY-VALUE-ACTUAL-VAR OF DEALER-REP-DLY-SRV-FEE
+129601080124                UNITS-FIX              OF DEALER-REP-DLY-SRV-FEE
+129701080124                DAILY-VALUE-BASE-FIX   OF DEALER-REP-DLY-SRV-FEE
+129801080124                DAILY-VALUE-ACTUAL-FIX OF DEALER-REP-DLY-SRV-FEE.
+129901080125           IF lc_B_Calc_VarUnitFlag  (BUDIDX, BUDIDX2) NOT = "Y"
+130001080124              GO TO LS1-0040
+130101080124           END-IF.
+130201080124
+130301080124      **Populate Variable and Fix Infor to Dlr-Rep-Dly-Srv-Fee
+130401080124           PERFORM GET-VARIABLE-UNITS THRU GVU-EXIT.
+130501080125           MOVE ln_Tot_Var_Units TO ln_B_Units_VAR(BUDIDX, BUDIDX2).
+130601080125           MOVE ln_Tot_Var_ActualVal
+130701080125             TO ln_B_Value_Actual_VAR(BUDIDX, BUDIDX2).
+130801080124
+130901080124EY         IF (UNITS OF DEALER-REP-DLY-SRV-FEE -
+131001080125               ln_B_Units_VAR(BUDIDX, BUDIDX2)) < 0
+131101080124               MOVE ZEROES TO UNITS-FIX OF DEALER-REP-DLY-SRV-FEE
+131201080124           ELSE
+131301080124               COMPUTE UNITS-FIX OF DEALER-REP-DLY-SRV-FEE =
+131401080124EY                     UNITS OF DEALER-REP-DLY-SRV-FEE -
+131501080125                       ln_B_Units_VAR(BUDIDX, BUDIDX2)
+131601080124           END-IF.
+131701080124
+131801080125           MOVE ln_B_Units_VAR(BUDIDX, BUDIDX2)
+131901080124             TO UNITS-VAR OF DEALER-REP-DLY-SRV-FEE.
+132001080124
+132101080125           MOVE ln_B_Value_Actual_VAR(BUDIDX, BUDIDX2)
+132201080124             TO DAILY-VALUE-ACTUAL-VAR    OF DEALER-REP-DLY-SRV-FEE.
+132301080124           COMPUTE DAILY-VALUE-ACTUAL-FIX OF DEALER-REP-DLY-SRV-FEE
+132401080124                   ROUNDED = (UNITS-FIX  OF DEALER-REP-DLY-SRV-FEE *
+132501080124                              UNIT-PRICE OF DEALER-REP-DLY-SRV-FEE).
+132601080124
+132701080124           IF lc_IA_CurrencyCode(IACIDX) = "CAD"
+132801080124              MOVE DAILY-VALUE-ACTUAL-VAR  OF DEALER-REP-DLY-SRV-FEE
+132901080124                TO DAILY-VALUE-BASE-VAR    OF DEALER-REP-DLY-SRV-FEE
+133001080124              MOVE DAILY-VALUE-ACTUAL-FIX  OF DEALER-REP-DLY-SRV-FEE
+133101080124                TO DAILY-VALUE-BASE-FIX    OF DEALER-REP-DLY-SRV-FEE
+133201080124           ELSE
+133301080124              COMPUTE DAILY-VALUE-BASE-VAR OF DEALER-REP-DLY-SRV-FEE
+133401080124                ROUNDED = DAILY-VALUE-ACTUAL-VAR OF
+133501080124                                DEALER-REP-DLY-SRV-FEE   /
+133601080125                          ln_B_ExchangeRate(BUDIDX, BUDIDX2)
+133701080124              COMPUTE DAILY-VALUE-BASE-FIX OF DEALER-REP-DLY-SRV-FEE
+133801080124                ROUNDED = DAILY-VALUE-ACTUAL-FIX OF
+133901080124                                DEALER-REP-DLY-SRV-FEE   /
+134001080125                           ln_B_ExchangeRate(BUDIDX, BUDIDX2)
+134101080124           END-IF.
+134201080124
+134301080124       LS1-0040.
+134401080124
+134501080124      **Grandfathered base value
+134601080124
+134701080125           MOVE ln_B_Value_Base_G(BUDIDX, BUDIDX2)
+134801080124EY                            TO DAILY-VALUE-BASE-GF
+134901080124                                 OF DEALER-REP-DLY-SRV-FEE.
+135001080124      **Grandfathered actual value
+135101080125           MOVE ln_B_Value_Actual_G(BUDIDX, BUDIDX2)
+135201080124EY                            TO DAILY-VALUE-ACTUAL-GF
+135301080124                                 OF DEALER-REP-DLY-SRV-FEE.
+135401080124
+135501080124      **New base value
+135601080124EY         COMPUTE DAILY-VALUE-BASE =
+135701080125           ln_B_Value_Base(BUDIDX, BUDIDX2) -
+135801080125           ln_B_Value_Base_G(BUDIDX, BUDIDX2).
+135901080124
+136001080124      **New actual value
+136101080124EY         COMPUTE DAILY-VALUE-ACTUAL =
+136201080125           ln_B_Value_Actual(BUDIDX, BUDIDX2) -
+136301080125           ln_B_Value_Actual_G(BUDIDX, BUDIDX2).
+136401080124
+136501080124
+136601080125           IF lc_B_Calc_VarUnitFlag  (BUDIDX, BUDIDX2) = "Y"
+136701080124              IF UNITS-VAR OF DEALER-REP-DLY-SRV-FEE = 0
+136801080124EY               MOVE UNITS                  OF DEALER-REP-DLY-SRV-FEE
+136901080124                   TO UNITS-FIX              OF DEALER-REP-DLY-SRV-FEE
+137001080124EY               MOVE DAILY-VALUE-BASE       OF DEALER-REP-DLY-SRV-FEE
+137101080124                   TO DAILY-VALUE-BASE-FIX   OF DEALER-REP-DLY-SRV-FEE
+137201080124EY               MOVE DAILY-VALUE-ACTUAL     OF DEALER-REP-DLY-SRV-FEE
+137301080124                   TO DAILY-VALUE-ACTUAL-FIX OF DEALER-REP-DLY-SRV-FEE
+137401080124              END-IF
+137501080124EY            COMPUTE UNITS OF DEALER-REP-DLY-SRV-FEE
+137601080124               = UNITS-VAR OF DEALER-REP-DLY-SRV-FEE +
+137701080124                 UNITS-FIX OF DEALER-REP-DLY-SRV-FEE
+137801080124EY            COMPUTE DAILY-VALUE-BASE OF DEALER-REP-DLY-SRV-FEE
+137901080124               = DAILY-VALUE-BASE-VAR OF DEALER-REP-DLY-SRV-FEE +
+138001080124                 DAILY-VALUE-BASE-FIX OF DEALER-REP-DLY-SRV-FEE
+138101080124EY            COMPUTE DAILY-VALUE-ACTUAL OF DEALER-REP-DLY-SRV-FEE
+138201080124               = DAILY-VALUE-ACTUAL-VAR OF DEALER-REP-DLY-SRV-FEE +
+138301080124                 DAILY-VALUE-ACTUAL-FIX OF DEALER-REP-DLY-SRV-FEE
+138401080124
+138501080124           END-IF.
+138601080124
+138701080124EY         MOVE ZEROS         TO SF-AMT-GF OF DEALER-REP-DLY-SRV-FEE.
+138801080124EY         MOVE ZEROS         TO SF-AMT    OF DEALER-REP-DLY-SRV-FEE.
+138901080124EY         MOVE "N"           TO ELIGIBLE-FOR-PAYMENT-GF
+139001080124                                 OF DEALER-REP-DLY-SRV-FEE.
+139101080225EYDef      MOVE "N"           TO ELIGIBLE-FOR-PAYMENT
+139201080124                                 OF DEALER-REP-DLY-SRV-FEE.
+139301080124
+139401080124           MOVE ZEROES        TO SF-AMT-VAR
+139501080124                                 OF DEALER-REP-DLY-SRV-FEE
+139601080124                                 SF-AMT-FIX
+139701080124                                 OF DEALER-REP-DLY-SRV-FEE.
+139801080124
+139901080124           MOVE SPACES        TO REVIEW-FLAG
+140001080124                                 OF DEALER-REP-DLY-SRV-FEE.
+140101080124           MOVE "N"           TO ELIGIBLE-FOR-PAYMENT-VAR
+140201080124                                 OF DEALER-REP-DLY-SRV-FEE
+140301080124                                 ELIGIBLE-FOR-PAYMENT-FIX
+140401080124                                 OF DEALER-REP-DLY-SRV-FEE.
+140501080124
+140601080125           IF lc_B_Calc_VarUnitFlag  (BUDIDX, BUDIDX2) = "Y"
+140701080124              PERFORM WRITE-DLY-VAR-FEE   THRU WDVF-EXIT
+140801080124           END-IF.
+140901080124
+14100109010660213      IF lc_B_Price_Not_Found (BUDIDX, BUDIDX2) = "Y"
+14110109011560213         MOVE "Y"  TO REVIEW-FLAG OF DEALER-REP-DLY-SRV-FEE
+14120109010660213      END-IF.
+141301090106
+141401080124           WRITE DEALER-REP-DLY-SRV-FEE-REC
+141501080124             INVALID KEY
+141601080124                DISPLAY "Problem writing MFADEADSP file"
+141701080124           END-WRITE.
+141801080124
+141901080124      **Last day of the period - Get next investment
+142001080124
+142101080124       LS1-0050.
+142201080124
+142301080124           IF WS-B-BUDIDX-END(BUDIDX) IS EQUAL TO "Y"
+142401080124             GO TO LS1-0009
+142501080124           END-IF.
+142601080124
+142701080124      **Get Next Business-Day
+142801080124
+142901080124           GO TO LS1-0030.
+143001080124
+143101080124       LS1-EXIT.
+143201080124           EXIT.
+143301080124      /
+143401080124       LEVEL-REINIT-1.
+143501080124
+143601080124           SET IACIDX TO 1.
+143701080124           SET IACIDX DOWN BY 1.
+143801080124
+143901080124       LR1-0010.
+144001080124           SET IACIDX UP BY 1.
+144101080124
+144201080124           IF lc_IA_InvestmentCode(IACIDX) IS EQUAL TO SPACES
+144301080124             GO TO LR1-0090
+144401080124           END-IF.
+144501080124
+144601080124           MOVE SPACES        TO lc_IA_Processed(IACIDX).
+144701080124           MOVE ZEROES        TO li_IA_Counter(IACIDX).
+144801080124
+144901080124       LR1-0050.
+145001080124           SET BUDIDX TO 1.
+145101150421
+145201150424      * RFS147218 - Start
+145301150421      *    SET BUDIDX2 TO 1.
+145401150421      *    SEARCH WS-B-INVESTMENT-ENTRY VARYING BUDIDX2
+145501150421      *    WHEN WS-B-INVESTMENT-CODE(BUDIDX, BUDIDX2) =
+145601150421      *    lc_IA_InvestmentCode(IACIDX)
+145701150421      *      SET BUDIDX DOWN BY 1
+145801150421           SET BUDIDX2  TO  IACIDX
+145901150421           SET BUDIDX DOWN BY 1
+146001150424      * RFS147218 - End
+146101080124             GO TO LR1-0060.
+146201080124
+146301080124           GO TO LR1-0010.
+146401080124
+146501080124       LR1-0060.
+146601080124           SET BUDIDX UP BY 1.
+146701080125           MOVE ZEROES        TO ln_B_Units_VAR(BUDIDX, BUDIDX2)
+146801080125                                 ln_B_Value_Actual_VAR(BUDIDX, BUDIDX2).
+146901080125           MOVE ZEROES        TO ln_B_Units(BUDIDX, BUDIDX2)
+147001080125                                 ln_B_Value_Base(BUDIDX, BUDIDX2)
+147101080125                                 ln_B_Value_Actual(BUDIDX, BUDIDX2).
+147201080125           MOVE ZEROES        TO ln_B_Units_G(BUDIDX, BUDIDX2)
+147301080125                                 ln_B_Value_Base_G(BUDIDX, BUDIDX2)
+147401080125                                 ln_B_Value_Actual_G(BUDIDX, BUDIDX2).
+147501080124
+147601080124           IF WS-B-BUDIDX-END(BUDIDX) IS NOT EQUAL TO "Y"
+147701080124             GO TO LR1-0060
+147801080124           END-IF.
+147901080124
+148001080124           GO TO LR1-0010.
+148101080124
+148201080124       LR1-0090.
+148301080124
+148401080124       LR1-EXIT.
+148501080124           EXIT.
+148601080124      /
+148701080124       INIT-ARRAY.
+148801080124
+148901080125           MOVE ZEROES       TO ln_Trans_UnitValue(TRNIDX)
+149001080125                                ln_Trans_UnitBalance(TRNIDX)
+149101080125                                ln_Trans_UnitValue_G(TRNIDX)
+149201080125                                ln_Trans_UnitBalance_G(TRNIDX)
+149301080125                                li_Trans_Date(TRNIDX)
+149401080125                                ln_Trans_Price(TRNIDX).
+149501080125           MOVE SPACES       TO lc_Trans_UnitAdjust(TRNIDX)
+149601080125                                lc_Trans_InvestCode(TRNIDX).
+149701080124
+149801080124       INA-EXIT.
+149901080124           EXIT.
+150001080124      /
+150101080124       INITIAL-LOGIC.
+150201080124
+150301080124      *****
+150401080124      *****  GET THE PROCESS DATE
+150501080124      *****
+150601080124
+150701080124            CALL "MKPRCDT" USING PROCESS-DATE-DATA-AREA.
+150801080124            CANCEL "MKPRCDT".
+150901080124
+151001080125           MOVE PDDA-MONTH-STR-DATE    TO  li_Month_StrDate.
+151101080125           MOVE PDDA-QUARTER-STR-DATE  TO  li_Quarter_StrDate.
+151201080124           MOVE PDDA-QUARTER-STR-DATE-7
+151301080125                                       TO  li_Quarter_StrDate_7.
+151401080125           MOVE PDDA-LAST-MONTH-END    TO  li_Last_MonthEnd.
+151501080125           MOVE PDDA-LAST-QUARTER-END  TO  li_Last_QuarterEnd.
+151601080124           MOVE PDDA-LAST-QUARTER-END-7
+151701080125                                       TO  li_Last_QuarterEnd_7.
+151801080124
+151901080125           MOVE Comm_QBegin            TO  li_DlrStrDate.
+152001080125           MOVE Comm_QEnd              TO  li_DlrEndDate.
+152101151102
+152201151102
+152301151102      * RFS151542 Begin
+152401151102      * Set limit flag to spaces
+152501151102           INITIALIZE lc_Limit_Flag
+152601151102      * RFS151542 End
+152701080124
+152801080124      * Daily accrual will use the given date range
+152901080124
+153001080125           IF Comm_DlyAccrual = "Y"
+153101080124              GO TO INL-0010.
+153201080124
+153301080124      * Check if Month-end date and Quarter-end date is the same
+153401080124
+153501080125           IF Comm_MthEnd     IS EQUAL TO  "Y" AND
+153601080124              PDDA-LAST-MONTH-END IS NOT EQUAL TO
+153701080124                                      PDDA-LAST-QUARTER-END
+153801080124              GO TO INL-0010.
+153901080124
+154001080125           IF Comm_MthEnd     IS EQUAL TO  "Y" AND
+154101080125              Comm_Q7         IS EQUAL TO "N"  AND
+154201080124              PDDA-LAST-MONTH-END IS EQUAL
+154301080124                                       TO  PDDA-LAST-QUARTER-END
+154401080125              MOVE li_Quarter_StrDate TO  li_DlrStrDate
+154501080125              MOVE "Y"                 TO  Comm_QtrEnd
+154601080125              MOVE "Y"                 TO  Comm_MthEnd.
+154701080124              GO TO INL-0010.
+154801080124
+154901080124       INL-0010.
+155001080124
+155101080124
+155201080125           MOVE li_DlrStrDate       TO  li_BeginDate_Pass.
+155301080125           MOVE li_DlrEndDate       TO  li_EndDate_Pass.
+155401080124
+155501080124      ******
+155601080124      * OPEN FILES AND INITIALIZE ACCUMULATORS
+155701080124      ******
+155801080124           OPEN INPUT  INVESTMENT
+155901080124                       INVESTMENT-UNIT-PRICE
+156001080124                       EXCHANGE-RATE-HISTORY
+156101080124                       BUSINESS-DAY-FILE
+156201080124                       ACCOUNT-INVESTMENT
+156301080124                       ACCOUNT
+156401080124                       ACCOUNT-ATTRIBUTES
+156501080124                       ACCOUNT-INV-ATTRIBUTES
+156601080124                       TRANS
+156701080124                       PROGRAM-EXCHANGE-RATE
+156801080124                       INVESTMENT-TRAILER-SCHEDULE
+156901080124                       TRAILER-PAYMENT
+157001080124                       DEALER-COMMISSIONS
+157101080124                       ACCOUNT-INVESTMENT-OLD-SF-BAL
+157201080124                       TRANS-OLD-SF-REDUCED
+157301080124                       INVESTMENT-TRAILER-VAR-SCHED
+157401080124                I-O    DEALER-REP-DLY-SRV-FEE
+157501080124                       DEALER-REP-DLY-SRV-VAR.
+157601080124
+157701080124
+157801080124      ** Determine Exchange-Rate to be used for processing
+157901080124
+158001080215           MOVE "SRVCALC1"     TO PROGRAM-CODE
+158101080124                               OF PROGRAM-EXCHANGE-RATE.
+158201080124           MOVE "DEFAULT"      TO PROGRAM-ACTION
+158301080124                               OF PROGRAM-EXCHANGE-RATE.
+158401080124
+158501080124           READ PROGRAM-EXCHANGE-RATE
+158601080124           INVALID KEY
+158701080124             MOVE HIGH-VALUES  TO CURR-CONTROLS
+158801080124             GO TO INL-EXIT.
+158901080124
+159001080124           MOVE EXCHANGE-RATE-TYPE OF PROGRAM-EXCHANGE-RATE
+159101080124                               TO lc_ExchangeRate_Type.
+159201080124      ** End Exchange-Rate
+159301080124
+159401080124      ** Use the function FXSCEDTALW to check if Split Service Fee's
+159501080124      ** by Rep should be used
+159601080124
+159701080124           MOVE "N" TO lc_SplitServFee_SW.
+159801080124
+159901080124           INITIALIZE MFAEDTSCP OF SCREEN-EDITS-ALLOWED-REC.
+160001080124
+160101080125           MOVE lc_CAPFEE_ScreenCode TO
+160201080124                SCREEN-CODE OF SCREEN-EDITS-ALLOWED-REC.
+160301080125           MOVE lc_CAPFEE_EditCode TO
+160401080124                EDIT-CODE   OF SCREEN-EDITS-ALLOWED-REC.
+160501080125           MOVE lc_CAPFEE_LevelCode TO
+160601080124                LEVEL-CODE  OF SCREEN-EDITS-ALLOWED-REC.
+160701080124
+160801080124           PERFORM GET-SCREEN-EDITS-ALLOWED-RTN THRU GSEAR-EXIT.
+160901080124
+161001080508R51999*    IF lc_CAPFEE_ReturnCode NOT = "00"
+161101080508R51999     IF lc_CAPFEE_ReturnCode = "00"
+161201080124              MOVE "Y" TO lc_SplitServFee_SW
+161301080124           END-IF.
+161401080124
+161501080125           INITIALIZE lc_Variable_Unit_Fields.
+161601080125           MOVE "SRVVAR" TO lc_Module_ID.
+161701080125           CALL "JOBCHKAUT" USING lc_Module_ID, lc_Module_Auth_SRVVAR.
+161801080124
+161901080124      * Use the function FXSCEDTALW to check if Distribution Tiered
+162001080124      * Trailer module setup
+162101080125           INITIALIZE lc_DSTVAR_RtnFlag.
+162201080125           IF lc_Module_Auth_SRVVAR = "Y"
+162301080125              CALL "FXSCEDTAL1" USING lc_DSTVAR_ScreenCode
+162401080125                                      lc_DSTVAR_EditCode
+162501080125                                      lc_DSTVAR_EditLevel
+162601080125                                      lc_DSTVAR_RtnFlag
+162701080124              CANCEL "FXSCEDTAL1"
+162801080124           END-IF.
+162901080124
+163001080219      * RFS42749 - Begin
+163101080124      * Use the function FXSCEDTALW to check if SFPRC alternate
+163201080124      * service fee pricing functionality exist
+163301080125           INITIALIZE lc_SFPRC_RtnFlag
+163401080125              CALL "FXSCEDTAL1" USING lc_SFPRC_ScreenCode
+163501080125                                      lc_SFPRC_EditCode
+163601080125                                      lc_SFPRC_EditLevel
+163701080125                                      lc_SFPRC_RtnFlag.
+163801080124              CANCEL "FXSCEDTAL1".
+163901080219      * RFS42749 - End
+164001080305
+164101090107      * RFS60213 - begins.
+164201090107      * Use the function FXSCEDTALW to check if SRVPRC actual
+164301090107      * price service fee functionality exists
+164401090107           INITIALIZE lc_SRVPRC_RtnFlag
+164501090107              CALL "FXSCEDTAL1" USING lc_SRVPRC_ScreenCode
+164601090107                                      lc_SRVPRC_EditCode
+164701090107                                      lc_SRVPRC_EditLevel
+164801090107                                      lc_SRVPRC_RtnFlag.
+164901090107              CANCEL "FXSCEDTAL1".
+165001090107      * RFS60213 - ends.
+165101090107
+165201080305     *** RFS44696.3 - Start
+165301080305           Initialize lc_HSRVEditCode.
+165401080305           CALL "FXSCEDTAL1" USING lc_HSRVScrnCd
+165501080305                                   lc_HSRVEdtCd
+165601080305                                   lc_HSRVEdtLvl
+165701080305                                   lc_HSRVEditCode
+165801080305           CANCEL "FXSCEDTAL1"
+165901080305     *** RFS44696.3 - End
+166001080124
+166101090428      *RFS50475 Add - Beg
+166201090428           Initialize lc_ALDTTF_RtnFlag.
+166301090428           CALL "FXSCEDTAL1" USING lc_ALDTTF_ScreenCode
+166401090428                                   lc_ALDTTF_EditCode
+166501090428                                   lc_ALDTTF_EditLevel
+166601090428                                   lc_ALDTTF_RtnFlag.
+166701090428           CANCEL "FXSCEDTAL1".
+166801090428      *RFS50475 Add - End
+166901090428
+167001141117      * RFS130093 - Begin
+167101141117      * Comment out logic to check SRVFEA
+167201110419      * RFS91255 - Start
+167301110412      **Use the function FXSCEDTAL1 to check for SRVFEA edit code
+167401141117      *    INITIALIZE lc_SRVFEA_RtnFlag
+167501141117      *    CALL "FXSCEDTAL1" USING lc_SRVFEA_ScreenCode
+167601141117      *                            lc_SRVFEA_EditCode
+167701141117      *                            lc_SRVFEA_EditLevel
+167801141117      *                            lc_SRVFEA_RtnFlag.
+167901141117      *    CANCEL "FXSCEDTAL1".
+168001110419      * RFS91255 - End
+168101141117           MOVE lncc_Yes TO lc_SRVFEA_RtnFlag.
+168201141117      * RFS130093 - End
+168301110412
+168401080124           PERFORM LOAD-INITIAL-ARRAY
+168501080124                             THRU LIA-EXIT.
+168601080124           PERFORM LOAD-ACCRUAL-ARRAY
+168701080124                             THRU LAA-EXIT.
+168801080124
+168901080124           CLOSE       INVESTMENT
+169001080124                       INVESTMENT-UNIT-PRICE
+169101080124                       EXCHANGE-RATE-HISTORY
+169201080124                       BUSINESS-DAY-FILE
+169301080124                       INVESTMENT-TRAILER-SCHEDULE
+169401080124                       INVESTMENT-TRAILER-VAR-SCHED
+169501080124                       PROGRAM-EXCHANGE-RATE.
+169601080124
+169701080124           MOVE LOW-VALUES   TO CURR-CONTROLS
+169801080124                                PREV-CONTROLS
+169901080124                                DEALER-CODE OF ACCOUNT
+170001080124                                DEALER-REP-CODE OF ACCOUNT.
+170101080124
+170201080125           IF lc_Module_Auth_SRVVAR = "Y"
+170301080124              PERFORM DECLARE-SQL-STATEMENT THRU DSS-EXIT
+170401080124           END-IF.
+170501080124       INL-EXIT.
+170601080124           EXIT.
+170701080124      /
+170801080124       END-JOB.
+170901080124
+171001080124           CLOSE       TRANS
+171101080124                       ACCOUNT-INVESTMENT
+171201080124                       ACCOUNT
+171301080124                       ACCOUNT-ATTRIBUTES
+171401080124                       ACCOUNT-INV-ATTRIBUTES
+171501080124                       DEALER-COMMISSIONS
+171601080124                       TRAILER-PAYMENT
+171701080124                       DEALER-REP-DLY-SRV-VAR
+171801080124                       DEALER-REP-DLY-SRV-FEE.
+171901080124
+172001080124       EOJ-EXIT.
+172101080124           EXIT.
+172201080124
+172301080124       LOAD-INITIAL-ARRAY.
+172401080124      ** Load Business-Day Array
+172501080124       LIA-DAYS.
+172601080124      ** Initialize
+172701080125           INITIALIZE BusinessDay_Array.
+172801080124
+172901141022139475     ACCEPT lt_LocalDataArea FROM WS-LOCAL.
+173001141022139475     MOVE lt-InvestmentCode
+173101141022139475                         TO ln-InvestmentCode.
+173201141022139475*
+173301080124           SET BUDIDX          TO 1.
+173401080124           SET BUDIDX          DOWN BY 1.
+173501080124
+173601080124       LIA-D-0010.
+173701080124
+173801080125           MOVE li_DlrStrDate  TO BUSINESS-DAY OF BUD-REC.
+173901080124
+174001080124           START BUSINESS-DAY-FILE
+174101080124           KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+174201080124           INVALID KEY
+174301080124           MOVE HIGH-VALUES   TO CURR-CONTROLS
+174401080124           GO TO LIA-EXIT.
+174501080124
+174601080124       LIA-D-0020.
+174701080124
+174801080124           READ BUSINESS-DAY-FILE NEXT RECORD
+174901080124           AT END
+175001080124           GO TO LIA-EXIT.
+175101080124
+175201080125           IF BUSINESS-DAY OF BUD-REC IS GREATER THAN li_DlrEndDate
+175301080124             SET BUDMAX TO BUDIDX
+175401080124             MOVE "Y"          TO WS-B-BUDIDX-END(BUDIDX)
+175501080124             GO TO LIA-EXIT
+175601080124           END-IF.
+175701080124
+175801080124           SET BUDIDX UP BY 1.
+175901080124
+176001080124           MOVE "N"            TO WS-B-BUDIDX-END(BUDIDX).
+176101080124           MOVE BUSINESS-DAY OF BUD-REC
+176201080124                               TO WS-B-DATE(BUDIDX).
+176301080124
+176401080124       LIA-PRICE.
+176501080124
+176601080124           SET BUDIDX2         TO 1.
+176701080124           SET BUDIDX2         DOWN BY 1.
+176801141022139475     INITIALIZE ln_Array_Size_Inv.
+176901080124
+177001080124       LIA-P-0010.
+177101080124
+177201141022139475     IF ln-InvestmentCode = ' '
+177301141022139475        MOVE LOW-VALUES  TO INVESTMENT-CODE OF INVESTMENT
+177401141022139475     ELSE
+177501141022139475        MOVE ln-InvestmentCode
+177601141022139475                         TO INVESTMENT-CODE OF INVESTMENT
+177701141022139475     END-IF.
+177801080124
+177901080124           START INVESTMENT
+178001080124           KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+178101080124           INVALID KEY
+178201080124           MOVE HIGH-VALUES    TO CURR-CONTROLS
+178301080124           GO TO LIA-EXIT.
+178401080124
+178501080124       LIA-P-0020.
+178601080124           READ INVESTMENT NEXT RECORD
+178701080124           AT END
+178702200807      *RFS185175 - Starts
+178703200808      * If there is no valid investments then exit pgm
+178704200807           IF BUDIDX2 = 0
+178705200808              MOVE HIGH-VALUES TO CURR-CONTROLS
+178706200808              SET BUDIDX2      TO 1
+178707200808              MOVE "Y"         TO WS-B-BUDIDX2-END(BUDIDX, BUDIDX2)
+178708200808              GO TO LIA-EXIT
+178709200807           END-IF
+178710200807      *RFS185175 - Ends
+178801080124           MOVE "Y"            TO WS-B-BUDIDX2-END(BUDIDX, BUDIDX2)
+178901080124           GO TO LIA-D-0020.
+179001080124
+179101151102151542     SET lc_Limit_Flag_N          TO TRUE
+179201141022139475     IF ln_Array_Size_Inv = ln_Array_Limit_Inv
+179301141022139475        MOVE INVESTMENT-CODE OF INVESTMENT
+179401141022139475                         TO lt-InvestmentCode
+179501141022139475        DISPLAY lt_LocalDataArea UPON WS-LOCAL
+179601151102151542        SET lc_Limit_Flag_Y          TO TRUE
+179701141022139475        MOVE "Y"         TO WS-B-BUDIDX2-END(BUDIDX, BUDIDX2)
+179801141022139475        GO TO LIA-D-0020
+179901141022139475     END-IF.
+180001141022139475*
+180101080125           MOVE SPACES TO lc_Inv_Trl_Sched
+180201080125                          lc_Inv_Trl_Var_Sched.
+180301080124           MOVE INVESTMENT-CODE OF INVESTMENT
+180401080124                TO INVESTMENT-CODE OF INVESTMENT-TRAILER-SCHEDULE.
+180501080305
+180601080305D44696     INITIALIZE lc_Schedule
+180701080305
+180801080124           READ INVESTMENT-TRAILER-SCHEDULE
+180901080124           INVALID KEY
+181001080124              CONTINUE
+181101080124           NOT INVALID KEY
+181201080124              MOVE TRAILER-SCHEDULE-CODE OF INVESTMENT-TRAILER-SCHEDULE
+181301080125                TO lc_Inv_Trl_Sched
+181401080305D44696             lc_Schedule
+181501080124           END-READ.
+181502200720      *RFS185175 - Starts
+181503200720           INITIALIZE ln_Count
+181504200720           IF lc_Schedule NOT = SPACES
+181505200720            EXEC SQL
+181506200720              SELECT COUNT(1)
+181507200720              INTO :ln_Count
+181508200720              FROM Mfatrscdp Trscdp
+181509200720              WHERE Trscdp.Trailer_Schedule_Code = :lc_Schedule
+181510200720               And  Trscdp.Trailer_Rate_Type IN ( "S" , "V" )
+181511200720               And  Trscdp.Assets_Rule = "1"
+181512200720            END-EXEC
+181513200720            MOVE SQLSTATE TO lc_sqlStates
+181514200720             EVALUATE TRUE
+181515200720              WHEN lncc_sqlSuccessful
+181516200720                   IF ln_Count > 0
+181517200720                      GO TO LIA-P-0020
+181518200720                   END-IF
+181519200720              WHEN OTHER
+181520200720                CONTINUE
+181521200720             END-EVALUATE
+181522200720           END-IF
+181523200720      *RFS185175 - Ends
+181524170815      *RFS 167811 Begin
+181525170815           INITIALIZE lc_TrailerRateType
+181526170815           IF lc_Schedule NOT = SPACES
+181527170815            EXEC SQL
+181528170815              SELECT Trscdp.Trailer_Rate_Type
+181529170815              INTO :lc_TrailerRateType
+181530170815              FROM Mfatrscdp Trscdp
+181531170815              WHERE Trscdp.Trailer_Schedule_Code = :lc_Schedule
+181532170815               And  Trscdp.Trailer_Rate_Type   = :lncc_P
+181533170815            END-EXEC
+181534170815            MOVE SQLSTATE TO lc_sqlStates
+181535170815             EVALUATE TRUE
+181536170815              WHEN lncc_sqlSuccessful
+181537170815                   GO TO LIA-P-0020
+181538170815              WHEN OTHER
+181539170815                CONTINUE
+181540170815             END-EVALUATE
+181541170815           END-IF
+181542170815      *RFS 167811 End
+181601080305     *** RFS44696.3 - Start
+181701080305           IF lncc_HSRVEditExist  AND lc_Schedule NOT = SPACES
+181801080305            EXEC SQL
+181901080305              SELECT Trscdp.Trailer_Rate_Type
+182001080305              INTO :lc_TrailerRateType
+182101080305              FROM Mfatrscdp Trscdp
+182201080305              WHERE Trscdp.Trailer_Schedule_Code = :lc_Schedule
+182301080305               And  Trscdp.Trailer_Rate_Type   = :lncc_H
+182401080305            END-EXEC
+182501080305            MOVE SQLSTATE TO lc_sqlStates
+182601080305             EVALUATE TRUE
+182701080305              WHEN lncc_sqlSuccessful
+182801080305                IF lc_TrailerRateType = lncc_H
+182901080305                   GO TO LIA-P-0020
+183001080305                ELSE
+183101080305                  CONTINUE
+183201080305                END-IF
+183301080305              WHEN OTHER
+183401080305                CONTINUE
+183501080305             END-EVALUATE
+183601080305           END-IF
+183701080305     *** RFS44696.3 - End
+183801080124
+183901080125           IF lc_Module_Auth_SRVVAR NOT = "Y"
+184001080124              GO TO LIA-P-0050.
+184101080124
+184201080124
+184301080124           MOVE INVESTMENT-CODE OF INVESTMENT
+184401080124                TO INVESTMENT-CODE OF INVESTMENT-TRAILER-VAR-SCHED.
+184501080124           READ INVESTMENT-TRAILER-VAR-SCHED
+184601080124             INVALID KEY
+184701080124                INITIALIZE MFAINVTVP OF INVEST-TRAILER-VAR-SCHED-REC
+184801080124             NOT INVALID KEY
+184901080124                MOVE TRAILER-SCHEDULE-CODE
+185001080124                              OF INVESTMENT-TRAILER-VAR-SCHED
+185101080125                TO lc_Inv_Trl_Var_Sched
+185201080124           END-READ.
+185301080124
+185401080124       LIA-P-0050.
+185501080125           IF lc_Inv_Trl_Sched = " " AND lc_Inv_Trl_Var_Sched = " "
+185601080124              GO TO LIA-P-0020
+185701080124           END-IF.
+185801080124
+185901080124           SET BUDIDX2         UP BY 1.
+186001141022139475     IF BUDIDX2 > ln_Array_Size_Inv
+186101141022139475          COMPUTE ln_Array_Size_Inv =
+186201141022139475                  ln_Array_Size_Inv + 1
+186301141022139475     END-IF.
+186401080124           MOVE "N"            TO WS-B-BUDIDX2-END(BUDIDX, BUDIDX2)
+186501080124
+186601110427           IF lc_Module_Auth_SRVVAR = "Y" AND
+186701110427R91255*      lc_Inv_Trl_Var_Sched NOT = SPACES
+186801141028      * RFS130093 - Begin
+186901141028R91255*      lc_Inv_Trl_Var_Sched NOT = SPACES AND
+187001141028R91255*      lncc_SRVFEA_EditNo
+187101141028             lc_Inv_Trl_Var_Sched NOT = SPACES
+187201141028      * RFS130093 - End
+187301110427             MOVE lc_Inv_Trl_Var_Sched
+187401110427               TO lc_B_Var_SchedCode(BUDIDX, BUDIDX2)
+187501110427             MOVE EFFECT-DATE OF INVESTMENT-TRAILER-VAR-SCHED
+187601110427               TO li_B_Var_EffectDate(BUDIDX, BUDIDX2)
+187701110427             MOVE START-DATE OF INVESTMENT-TRAILER-VAR-SCHED
+187801110427               TO li_B_Var_StartDate(BUDIDX, BUDIDX2)
+187901080124             IF START-DATE OF INVESTMENT-TRAILER-VAR-SCHED  <=
+188001080124                              WS-B-DATE(BUDIDX)     AND
+188101110427                DATE-PREPARED OF INVESTMENT-TRAILER-VAR-SCHED > 0
+188201080125                MOVE "Y" TO lc_B_Calc_VarUnitFlag(BUDIDX, BUDIDX2)
+188301080124             END-IF
+188401080124           END-IF.
+188501080124
+188601080124
+188701080124           MOVE INVESTMENT-CODE OF INVESTMENT
+188801080124                               TO WS-B-INVESTMENT-CODE(BUDIDX, BUDIDX2).
+188901080124
+189001080124           MOVE INVESTMENT-CODE OF INVESTMENT
+189101080124                               TO INVESTMENT-CODE
+189201080124                               OF INVESTMENT-UNIT-PRICE.
+189301080124
+189401080124           MOVE WS-B-DATE(BUDIDX)
+189501080124                               TO TRADE-DATE
+189601080124                               OF INVESTMENT-UNIT-PRICE.
+189701080215
+189801080219      *RFS42749 begins
+189901080215           Set lb_SFPriceNotFound TO True
+190001080125           IF lncc_SFPRC_EditExist
+190101080124              PERFORM  CHECK-ALTERNATE-PRICE
+190201080124           END-IF
+190301080124
+19040109010760213      IF Comm_DlyAccrual = "Y" AND lncc_SRVPRC_EditExist
+19050109010660213         MOVE SPACES TO lc_B_Price_Not_Found(BUDIDX, BUDIDX2)
+19060109010660213                        lc_LastFlag
+19070109010660213      END-IF.
+190801090106
+190901080124           IF lb_SFPriceNotFound
+191001080219      *RFS42749 ends
+191101080124              READ INVESTMENT-UNIT-PRICE
+191201080124              INVALID KEY
+191301080124              PERFORM GET-LAST-UNIT-PRICE
+191401080124                                  THRU GLUP-EXIT
+191501080124              MOVE ln_LastPrice  TO UNIT-PRICE
+191601080124                                  OF INVESTMENT-UNIT-PRICE
+19170108021942749         END-READ
+19180108021942749      END-IF.
+191901080124
+192001080124           MOVE UNIT-PRICE OF INVESTMENT-UNIT-PRICE
+192101080125                               TO ln_B_Price(BUDIDX, BUDIDX2).
+192201080124
+192301080124
+192401080124           IF CURRENCY-DDS OF INVESTMENT = "CAD"
+192501080125             MOVE 1.0          TO ln_B_ExchangeRate(BUDIDX, BUDIDX2)
+192601080124             GO TO LIA-P-0020
+192701080124           END-IF.
+192801080124
+192901080124      ** Get exchange rate for non-Canadian currency.
+193001080124
+193101080124           MOVE CURRENCY-DDS OF INVESTMENT
+193201080124                               TO CURRENCY-DDS
+193301080124                               OF EXCHANGE-RATE-HISTORY.
+193401080124
+193501080124           MOVE WS-B-DATE(BUDIDX)
+193601080124                               TO TRADE-DATE
+193701080124                               OF EXCHANGE-RATE-HISTORY.
+193801080124
+193901080124           MOVE lc_ExchangeRate_Type
+194001080124                               TO EXCHANGE-RATE-TYPE
+194101080124                               OF EXCHANGE-RATE-HISTORY.
+194201080124
+194301080124           READ EXCHANGE-RATE-HISTORY
+194401080124           INVALID KEY
+194501080124           PERFORM GET-LAST-EXCHANGE-RATE
+194601080124                               THRU GLER-EXIT
+194701080124           MOVE ln_LastExchangeRate
+194801080124                               TO EXCHANGE-RATE
+194901080124                               OF EXCHANGE-RATE-HISTORY.
+195001080124
+195101080124           MOVE EXCHANGE-RATE OF EXCHANGE-RATE-HISTORY
+195201080125                               TO ln_B_ExchangeRate(BUDIDX, BUDIDX2).
+195301080124
+195401080124           GO TO LIA-P-0020.
+195501080124
+195601080124       LIA-EXIT.
+195701080124           EXIT.
+195801080124      /
+195901080124       GET-LAST-UNIT-PRICE.
+196001080124
+19610109010760213      IF Comm_DlyAccrual = "Y"  AND lncc_SRVPRC_EditExist
+19620109010660213         MOVE "Y" TO lc_B_Price_Not_Found(BUDIDX, BUDIDX2)
+19630109010660213      END-IF.
+196401090106
+196501080124           IF BUDIDX IS NOT EQUAL TO 1
+196601080124             SET BUDIDX DOWN BY 1
+196701080125             MOVE ln_B_Price(BUDIDX, BUDIDX2)
+196801080124                             TO ln_LastPrice
+19690109010760213        IF Comm_DlyAccrual = "Y"  AND lncc_SRVPRC_EditExist
+19700109010760213         MOVE lc_B_Price_Not_Found(BUDIDX, BUDIDX2) TO lc_LastFlag
+19710109010760213        END-IF
+197201080124             SET BUDIDX UP BY 1
+197301090107      ** For the calendar days where the trading is not allowed and
+197401090107      ** the price was found for the last day where the trading was
+197501090107      ** allowed, the price is carried forward.
+19760109010760213        IF Comm_DlyAccrual = "Y"  AND lncc_SRVPRC_EditExist
+19770109010760213           IF ALLOW-TRADING OF BUD-REC NOT = "Y" AND
+19780109010760213              lc_LastFlag = SPACES
+19790109010760213                 MOVE " " TO lc_B_Price_Not_Found(BUDIDX, BUDIDX2)
+19800109010760213           END-IF
+19810109010760213        END-IF
+198201080124             GO TO GLUP-EXIT
+198301080124           END-IF.
+198401080124
+198501080124           MOVE INVESTMENT-CODE OF INVESTMENT
+198601080124                               TO INVESTMENT-CODE
+198701080124                               OF INVESTMENT-UNIT-PRICE.
+198801080124
+198901080124           MOVE WS-B-DATE(BUDIDX)
+199001080124                               TO TRADE-DATE
+199101080124                               OF INVESTMENT-UNIT-PRICE.
+199201080124
+199301080124
+199401080124           START INVESTMENT-UNIT-PRICE
+199501080124           KEY IS GREATER  THAN EXTERNALLY-DESCRIBED-KEY
+199601080124              INVALID KEY
+199701080124              GO TO GLUP-100.
+199801080124
+199901080124           READ INVESTMENT-UNIT-PRICE PRIOR RECORD
+200001080124           AT END
+200101080124              MOVE 0     TO ln_LastPrice
+200201080124              GO TO GLUP-EXIT.
+200301080124
+200401080124           GO TO GLUP-200.
+200501080124
+200601080124      *--------
+200701080124       GLUP-100.
+200801080124      *--------
+200901080124           READ INVESTMENT-UNIT-PRICE LAST RECORD
+201001080124            AT END MOVE 0  TO ln_LastPrice
+201101080124            GO TO GLUP-EXIT.
+201201080124
+201301080124      *--------
+201401080124       GLUP-200.
+201501080124      *--------
+201601080124           IF INVESTMENT-CODE OF INVESTMENT-UNIT-PRICE
+201701080124           IS NOT EQUAL TO INVESTMENT-CODE OF INVESTMENT
+201801080124           MOVE 0            TO ln_LastPrice
+201901080124           GO TO GLUP-EXIT.
+202001080124
+202101080124           MOVE UNIT-PRICE OF IUP-REC
+202201080124                             TO ln_LastPrice.
+202301080124
+202401080124       GLUP-EXIT.
+202501080124           EXIT.
+202601080124      /
+202701080124       GET-LAST-EXCHANGE-RATE.
+202801080124
+202901080124           IF BUDIDX IS NOT EQUAL TO 1
+203001080124             SET BUDIDX DOWN BY 1
+203101080125             MOVE ln_B_ExchangeRate(BUDIDX, BUDIDX2)
+203201080124                             TO ln_LastExchangeRate
+203301080124             SET BUDIDX UP BY 1
+203401080124             GO TO GLER-EXIT
+203501080124           END-IF.
+203601080124
+203701080124           MOVE CURRENCY-DDS OF INVESTMENT
+203801080124                               TO CURRENCY-DDS
+203901080124                               OF EXCHANGE-RATE-HISTORY.
+204001080124
+204101080124           MOVE WS-B-DATE(BUDIDX)
+204201080124                               TO TRADE-DATE
+204301080124                               OF EXCHANGE-RATE-HISTORY.
+204401080124
+204501080124           MOVE lc_ExchangeRate_Type
+204601080124                               TO EXCHANGE-RATE-TYPE
+204701080124                               OF EXCHANGE-RATE-HISTORY.
+204801080124
+204901080124           START EXCHANGE-RATE-HISTORY
+205001080124           KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+205101080124           INVALID KEY
+205201080124           MOVE 0            TO ln_LastExchangeRate
+205301080124           GO TO GLER-EXIT.
+205401080124
+205501080124           READ EXCHANGE-RATE-HISTORY PRIOR RECORD
+205601080124           AT END
+205701080124           MOVE 0            TO ln_LastExchangeRate
+205801080124           GO TO GLER-EXIT.
+205901080124
+206001080124           IF CURRENCY-DDS OF EXCHANGE-RATE-HISTORY
+206101080124           IS NOT EQUAL TO CURRENCY-DDS OF INVESTMENT
+206201080124           MOVE 0            TO ln_LastExchangeRate
+206301080124           GO TO GLER-EXIT.
+206401080124
+206501080124           IF EXCHANGE-RATE-TYPE  OF EXCHANGE-RATE-HISTORY
+206601080124           IS NOT EQUAL TO lc_ExchangeRate_Type
+206701080124           MOVE 0            TO ln_LastExchangeRate
+206801080124           GO TO GLER-EXIT.
+206901080124
+207001080124           MOVE EXCHANGE-RATE OF EXCHANGE-RATE-HISTORY
+207101080124                             TO ln_LastExchangeRate.
+207201080124
+207301080124       GLER-EXIT.
+207401080124           EXIT.
+207501080124      /
+207601080124      *-------------------
+207701080124       LOAD-ACCRUAL-ARRAY.
+207801080124      *-------------------
+207901080124           INITIALIZE Investment_Accrual_Array.
+208001080124           SET BUDIDX TO 1.
+208101080124           SET BUDIDX2 TO 1.
+208201080124           SET BUDIDX2 DOWN BY 1.
+208301141022139475     MOVE 1     TO ln_Array_Size_Acc.
+208401080124
+208501080124      *--------
+208601080124       LAA-0010.
+208701080124      *-
+208801080124           SET BUDIDX2 UP BY 1.
+208901080124           SET IACIDX TO BUDIDX2.
+209001141022139475     IF IACIDX  >= ln_Array_Size_Acc
+209101141022139475           COMPUTE ln_Array_Size_Acc =
+209201141022139475                   ln_Array_Size_Acc + 1
+209301141022139475     END-IF.
+209401141022139475*
+209501080124           MOVE WS-B-INVESTMENT-CODE(BUDIDX, BUDIDX2)
+209601080124                             TO lc_IA_InvestmentCode(IACIDX)
+209701080124                                INVESTMENT-CODE OF INVESTMENT.
+209801080124           READ INVESTMENT
+209901080124           INVALID KEY
+210001080124           MOVE "CAD"        TO CURRENCY-DDS OF INVESTMENT.
+210101080124
+210201080124           MOVE CURRENCY-DDS OF INVESTMENT
+210301080124                             TO lc_IA_CurrencyCode(IACIDX).
+210401080124
+210501080124           IF WS-B-BUDIDX2-END(BUDIDX, BUDIDX2) IS EQUAL TO "Y"
+210601080124             GO TO LAA-EXIT
+210701080124           END-IF.
+210801080124
+210901080124           GO TO LAA-0010.
+211001080124
+211101080124       LAA-EXIT.
+211201080124           EXIT.
+211301080124
+211401080124      *----------------------
+211501080124       DEALER-TO-BE-PROCESSED.
+211601080124      *----------------------
+211701080124
+211801080124      ** Ws-Compare date is used on a per dealer basis to verify
+211901080124      ** against. If an existing trailer payment record exists it
+212001080124      ** is compared to the range of dates for the total run and if
+212101080124      ** it is less than the start range, the start range is used for
+212201080124      ** the dealer of transactions to process.  If the last trailer
+212301080124      ** date is greater than the end range date then the dealer
+212401080124      ** is not processed, as the period has already been done.
+212501080124      ** If the date falls within the period being ran then this
+212601080124      ** date is used as a starting point for the dealer to search
+212701080124      ** for transactions to be processed.
+212801080124      **
+212901080124      ** The verification is done by adding 1 month or 1 year to the
+213001090106      *alternatead and compared to the date range being run.
+213101080124
+213201080125           MOVE li_BeginDate_Pass     TO  li_DlrStrDate,
+213301080125                                           li_CompareDate.
+213401080125           MOVE li_EndDate_Pass       TO  li_DlrEndDate.
+213501080124
+213601080124           MOVE "N"                    TO  lc_ProcessDealer.
+213701080124           READ DEALER-COMMISSIONS
+213801080124              INVALID KEY
+213901080124              GO TO DLP-EXIT.
+214001080124
+214101080124      ** Bypass processing Dealer if Commission Bonus Source is = "E"
+214201080124      ** and Split Service Fees by Rep "CAPFEE" = "Y"
+214301080124           IF lc_SplitServFee_SW = "Y" AND
+214401080124              COMM-BONUS-SOURCE OF DEALER-COMMISSIONS = "E"
+214501090428      *RFS50475 Add - Beg
+214601090522      *      IF lb_ALDTTF_EditYes and Is-Month-End
+21470109062670971        IF lb_ALDTTF_EditYes
+214801090428              CONTINUE
+21490109062670971        ELSE
+21500109062670971         GO TO DLP-EXIT
+21510109062670971        END-IF
+215201090522      *      ELSE
+215301090522      *       GO TO DLP-EXIT
+215401090522      *      END-IF
+215501090429      *RFS50475 Add - End
+215601080124           END-IF.
+215701080124
+215801080124      ** Daily Accrual is allowed for MO, QT, Q7 depending on FRQ
+215901080125           IF Comm_DlyAccrual = "Y"
+216001080125             IF (Comm_Frq = "MO" AND
+216101080124                (SRV-FREQUENCY-CODE OF DEALER-COMMISSIONS = "MO" OR
+216201080124                                                            "QT"))
+216301080124               OR
+216401080125                ((Comm_Frq = "QT" OR "Q7") AND
+216501080125                  SRV-FREQUENCY-CODE OF DEALER-COMMISSIONS = Comm_Frq)
+216601080124                MOVE "Y"      TO  lc_ProcessDealer
+216701080124                GO TO DLP-0001
+216801080124             END-IF
+216901080124
+217001080124             GO TO DLP-EXIT
+217101080124           END-IF.
+217201080124
+217301080125           IF   Comm_MthEnd   IS EQUAL TO  "Y" AND
+217401080124                SRV-FREQUENCY-CODE OF
+217501080124                DEALER-COMMISSIONS
+217601080124                              IS EQUAL TO  "MO"
+217701080124                MOVE "Y"               TO  lc_ProcessDealer
+217801080124                GO TO DLP-0001.
+217901080124
+218001080125           IF   Comm_QtrEnd   IS EQUAL TO  "Y" AND
+218101080124                SRV-FREQUENCY-CODE OF
+218201080124                DEALER-COMMISSIONS
+218301080124                              IS EQUAL TO  "QT"
+218401080124                MOVE "Y"               TO  lc_ProcessDealer
+218501080124                GO TO DLP-0001.
+218601080124
+218701080125           IF   Comm_Q7       IS EQUAL TO  "Y" AND
+218801080124                SRV-FREQUENCY-CODE OF
+218901080124                DEALER-COMMISSIONS
+219001080124                              IS EQUAL TO  "Q7"
+219101080124                MOVE "Y"               TO  lc_ProcessDealer
+219201080124                GO TO DLP-0001.
+219301080124
+219401080124           GO TO DLP-EXIT.
+219501080124
+219601080124       DLP-0001.
+219701080124                INITIALIZE MFATRAPP OF TRAILER-PAYMENT-REC.
+219801080124                PERFORM GET-BEGIN-END-DATE THRU GBE-EXIT.
+219901080124
+220001080124       DLP-EXIT.
+220101080124           EXIT.
+220201080124
+220301080124       GET-BEGIN-END-DATE.
+220401080124
+220501080124           MOVE DEALER-CODE OF
+220601080124                ACCOUNT                TO  DEALER-CODE OF
+220701080124                                       TRAILER-PAYMENT.
+220801080124
+220901080124      ** The ending period is used to verify if the dealer has
+221001080124      ** been processed for the date range and as a starting point
+221101080124      ** for the dealer transactions to be read in get current.
+221201080124
+221301080125           MOVE li_DlrEnd_YYYY   TO YEAR OF TRAILER-PAYMENT.
+221401080124
+221501080125           MOVE li_DlrEnd_MM     TO MONTH OF TRAILER-PAYMENT.
+221601080124
+221701080124
+221801080124           START TRAILER-PAYMENT
+221901080124                 KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+222001080124                 INVALID KEY
+222101080124                 GO TO GBE-0030.
+222201080124
+222301080124           READ  TRAILER-PAYMENT NEXT RECORD
+222401080124                 AT END
+222501080124                 GO TO GBE-0030.
+222601080124
+222701080124           IF DEALER-CODE OF
+222801080124              TRAILER-PAYMENT IS NOT EQUAL TO DEALER-CODE OF
+222901080124                                           ACC-REC
+223001080124              GO TO GBE-0030.
+223101080124
+223201080124       GBE-0010.
+223301080124
+223401080125           IF Comm_Q7 = "Y"
+223501080124             GO TO GBE-0030.
+223601080124
+223701080124           MOVE YEAR OF
+223801080125                TRAILER-PAYMENT        TO  li_Compare_YYYY.
+223901080124           MOVE MONTH OF
+224001080125                TRAILER-PAYMENT        TO  li_Compare_MM.
+224101080124
+224201080125           MOVE 1                      TO  li_Compare_DD.
+224301080124
+224401080124       GBE-0020.
+224501080124
+224601080125           IF  li_Compare_MM IS LESS THAN 12
+224701080125               ADD 1                   TO  li_Compare_MM
+224801080125           ELSE ADD 1                   TO  li_Compare_YYYY
+224901080125               MOVE 1                  TO  li_Compare_MM
+225001080124           END-IF.
+225101080124
+225201080124      *--------
+225301080124       GBE-0030.
+225401080124      *-
+225501080125           IF  li_Compare_YYYYMM IS LESS THAN
+225601080125                                         li_DlrStr_YYYYMM
+225701080125               MOVE li_DlrStrDate  TO li_CompareDate.
+225801080124
+225901080125           IF  li_Compare_YYYYMM IS GREATER THAN li_DlrEnd_YYYYMM
+226001080124               MOVE "N"                TO  lc_ProcessDealer.
+226101080124
+226201080125           IF (Comm_DlyAccrual NOT = "Y") OR
+226301080125              (Comm_DlyAccrual = "Y" AND
+226401080125               li_CompareDate > li_DlrStrDate)
+226501080125           MOVE  li_CompareDate TO li_DlrStrDate.
+226601080124
+226701080124           IF SRV-FREQUENCY-CODE OF DEALER-COMMISSIONS = "MO"
+226801080125              AND Comm_DlyAccrual NOT = "Y"
+226901080125              MOVE li_Month_StrDate TO li_DlrStrDate
+227001080124           END-IF.
+227101080124
+227201080124           GO TO GBE-EXIT.
+227301080124
+227401080124       GBE-EXIT.
+227501080124           EXIT.
+227601080124
+227701080124      *--------------------
+227801080124       FIND-THE-FIRST-DATE.
+227901080124      *--------------------
+228001080125           IF Comm_QBegin_MM IS GREATER THAN 2
+228101080125              SUBTRACT 2 FROM Comm_QBegin_MM.
+228201080124              GO TO FFD-EXIT.
+228301080124
+228401080125           IF Comm_QBegin_MM IS EQUAL TO  2
+228501080125              SUBTRACT 1 FROM Comm_QBegin_YYYY
+228601080125              MOVE 12 TO Comm_QBegin_MM
+228701080124              GO TO FFD-EXIT.
+228801080124
+228901080125           IF Comm_QBegin_MM IS EQUAL TO  1
+229001080125              SUBTRACT 1 FROM Comm_QBegin_YYYY
+229101080125              MOVE 11 TO Comm_QBegin_MM.
+229201080124
+229301080124       FFD-EXIT.
+229401080124           EXIT.
+229501080124
+229601080124      *-----------------------------
+229701080124       GET-SCREEN-EDITS-ALLOWED-RTN.
+229801080124      *-----------------------------
+229901080124            CALL "FXSCEDTALW" USING SCREEN-EDITS-ALLOWED-REC,
+230001080125                                    lc_CAPFEE_EditSQLLog,
+230101080125                                    lc_CAPFEE_ReturnCode.
+230201080124       GSEAR-EXIT.
+230301080124            EXIT.
+230401080124
+230501080124      *----------------------
+230601080124       DECLARE-SQL-STATEMENT.
+230701080124      *----------------------
+230801080124           EXEC SQL
+230901080124                WHENEVER SQLERROR  CONTINUE
+231001080124           END-EXEC.
+231101080124
+231201090407      * RFS 66695 Begin
+231301091130      * RFS 74895 Begin
+231401091130      *    EXEC SQL
+231501091130      *      DROP INDEX QTEMP/SFSDLRVAR1
+231601091130      *    END-EXEC.
+231701091130      * RFS 74895 END
+231801080124
+231901090407      *    EXEC SQL
+232001090407      *      DROP INDEX QTEMP/SFSDLYVAR2
+232101090407      *    END-EXEC.
+232201090407      *
+232301150108      * RFS143732 - Begin
+232401150525
+232501150525      * RFS148008 - Start: drop table will drop indexes as well-comment
+232601150525      *    EXEC SQL
+232701150525      *      DROP INDEX SFSDLYVAR1
+232801150525      *    END-EXEC.
+232901150525      * RFS148008 - End
+233001150525
+233101150108      * RFS143732 - End
+233201141222
+233301080124           EXEC SQL
+233401090407             DROP TABLE SFSDLYVAR CASCADE
+233501080124           END-EXEC.
+233601090407      * RFS 66695 End
+233701080124
+233801080124           EXEC SQL
+233901080124                WHENEVER SQLERROR GO TO SQL-ERROR-RTN
+234001080124           END-EXEC.
+234101080124           EXEC SQL
+234201080124                WHENEVER NOT FOUND CONTINUE
+234301080124           END-EXEC.
+234401080124
+234501080125           MOVE "CRT  SFSDLYVAR"   TO lc_SQLErr_Statement.
+234601080124           EXEC SQL
+234701080124             CREATE TABLE SFSDLYVAR
+234801080124              (DEALER_CODE       CHAR      ( 4) NOT NULL WITH DEFAULT,
+234901080124               DEALER_REP_CODE   CHAR      ( 6) NOT NULL WITH DEFAULT,
+235001080124               ACCOUNT_NO        DEC       ( 9) NOT NULL WITH DEFAULT,
+235101080124               PROCESS_DATE      DEC       ( 9) NOT NULL WITH DEFAULT,
+235201080124               INVESTMENT_CODE   CHAR      ( 5) NOT NULL WITH DEFAULT,
+235301080124               LOWER_LIMIT_DAYS  DEC       ( 5) NOT NULL WITH DEFAULT,
+235401080124               UNITS_VAR         DEC     (13,3) NOT NULL WITH DEFAULT,
+235501080124               ACTUAL_VALUE      DEC     (16,6) NOT NULL WITH DEFAULT,
+235601080124               DIST_UNITS_VAR    DEC     (13,3) NOT NULL WITH DEFAULT,
+235701080124               DIST_ACTUAL_VALUE DEC     (16,6) NOT NULL WITH DEFAULT)
+235801080124           END-EXEC.
+235901080124
+236001091130      * RFS 74895 Begin
+236101091130      *    MOVE "CRT IDX SFSDLYVAR1"   TO lc_SQLErr_Statement.
+236201091130      *    EXEC SQL
+236301091130      *       CREATE INDEX QTEMP/SFSDLRVAR1 ON SFSDLYVAR
+236401091130      *       (DEALER_CODE     ASC,
+236501091130      *        DEALER_REP_CODE ASC,
+236601091130      *        INVESTMENT_CODE ASC,
+236701091130      *        PROCESS_DATE    ASC,
+236801091130      *        LOWER_LIMIT_DAYS ASC)
+236901091130      *    END-EXEC.
+237001091130      * RFS 74895 End
+237101080124
+237201141222      * RFS143732 - Begin
+237301141222
+237401141222           MOVE "CRT IDX SFSDLYVAR1"   TO lc_SQLErr_Statement.
+237501141222           EXEC SQL
+237601141223              CREATE INDEX SFSDLYVAR1 ON SFSDLYVAR
+237701141222              (DEALER_CODE     ASC,
+237801141222               DEALER_REP_CODE ASC,
+237901141222               ACCOUNT_NO      ASC,
+238001141222               INVESTMENT_CODE ASC,
+238101141222               PROCESS_DATE    ASC,
+238201141222               LOWER_LIMIT_DAYS ASC)
+238301141222           END-EXEC.
+238401141222
+238501141222      * RFS143732 - End
+238601150805      * RFS148008 - Start
+238701150525           EXEC SQL
+238801150525               CREATE INDEX SFSDLYVAR2 ON SFSDLYVAR
+238901150525                 ( LOWER_LIMIT_DAYS )
+239001150525           END-EXEC.
+239101150525
+239201150525           EXEC SQL
+239301150525             CREATE INDEX SFSDLYVAR3 ON SFSDLYVAR
+239401150525                (DEALER_CODE     ,
+239501150525                 DEALER_REP_CODE ,
+239601150525                 INVESTMENT_CODE ,
+239701150525                 PROCESS_DATE    ,
+239801150525                 LOWER_LIMIT_DAYS )
+239901150525           END-EXEC.
+240001150525
+240101150525           EXEC SQL
+240201150525             CREATE INDEX SFSDLYVAR4 ON SFSDLYVAR
+240301150525                (DEALER_CODE     ,
+240401150525                 DEALER_REP_CODE ,
+240501150525                 PROCESS_DATE    ,
+240601150525                 INVESTMENT_CODE,
+240701150525                 LOWER_LIMIT_DAYS )
+240801150525           END-EXEC.
+240901150525
+241001150525           EXEC SQL
+241101150525             CREATE INDEX SFSDLYVAR5 ON SFSDLYVAR
+241201150525                (ACCOUNT_NO      ,
+241301150525                 DEALER_REP_CODE ,
+241401150525                 PROCESS_DATE    ,
+241501150525                 INVESTMENT_CODE,
+241601150525                 DEALER_CODE )
+241701150525           END-EXEC.
+241801150525      * RFS148008 - End: create more indexes
+241901150525
+242001150525      * RFS148008 - End
+242101150525
+242201080125           MOVE "DELCARE GVARCUR"      TO lc_SQLErr_Statement.
+242301080124           EXEC SQL
+242401080124             DECLARE GVARCUR CURSOR FOR
+242501080124             SELECT SFSDLYVAR.LOWER_LIMIT_DAYS,
+242601080124                    COUNT(*),
+242701080124                    SUM(SFSDLYVAR.UNITS_VAR),
+242801080124                    SUM(SFSDLYVAR.ACTUAL_VALUE),
+242901080124                    SUM(SFSDLYVAR.DIST_UNITS_VAR),
+243001080124                    SUM(SFSDLYVAR.DIST_ACTUAL_VALUE)
+243101080124               FROM SFSDLYVAR SFSDLYVAR
+243201141111      * RFS130093 - Begin
+243301141111      *       WHERE SFSDLYVAR.DEALER_CODE     = :PREV-DEALER-CODE
+243401141111      *         AND SFSDLYVAR.DEALER_REP_CODE = :PREV-REP-CODE
+243501141111      *         AND SFSDLYVAR.INVESTMENT_CODE = :lc_InvestCode_P1
+243601141111      *         AND SFSDLYVAR.PROCESS_DATE    = :li_ProcessDate_P1
+243701150525      * RFS148008 - Start: removed unused conditions
+243801150525      * ----------------------------------------------------------------
+243901150525      *       WHERE ((   SFSDLYVAR.DEALER_CODE     = :PREV-DEALER-CODE
+244001150525      *              AND SFSDLYVAR.DEALER_REP_CODE = :PREV-REP-CODE
+244101150525      *              AND SFSDLYVAR.INVESTMENT_CODE = :lc_InvestCode_P1
+244201150525      *              AND SFSDLYVAR.PROCESS_DATE    = :li_ProcessDate_P1
+244301150525      *              AND :lc_SRVFEA_RtnFlag = :lncc_No) OR
+244401150525      *             (   SFSDLYVAR.DEALER_CODE     = :PREV-DEALER-CODE
+244501150525      *              AND SFSDLYVAR.DEALER_REP_CODE = :PREV-REP-CODE
+244601150525      *              AND SFSDLYVAR.ACCOUNT_NO      = :PREV-ACCOUNT-NO
+244701150525      *              AND SFSDLYVAR.INVESTMENT_CODE = :lc_InvestCode_P1
+244801150525      *              AND SFSDLYVAR.PROCESS_DATE    = :li_ProcessDate_P1
+244901150525      *              AND :lc_SRVFEA_RtnFlag = :lncc_Yes))
+245001150525      * ----------------------------------------------------------------
+245101150525              WHERE      SFSDLYVAR.DEALER_CODE     = :PREV-DEALER-CODE
+245201150525                     AND SFSDLYVAR.DEALER_REP_CODE = :PREV-REP-CODE
+245301150525                     AND SFSDLYVAR.ACCOUNT_NO      = :PREV-ACCOUNT-NO
+245401150525                     AND SFSDLYVAR.INVESTMENT_CODE = :lc_InvestCode_P1
+245501150525                     AND SFSDLYVAR.PROCESS_DATE    = :li_ProcessDate_P1
+245601150525      * RFS148008 - End
+245701141111      * RFS130093 - End
+245801080124              GROUP BY SFSDLYVAR.LOWER_LIMIT_DAYS
+245901150525      * RFS148008 - Start: added Optimize for n rows
+246001150525              OPTIMIZE FOR 20 ROWS
+246101150525      * RFS148008 - End
+246201080124           END-EXEC.
+246301080124       DSS-EXIT.
+246401080124           EXIT.
+246501080124
+246601080124      **Calculate Variable Units for account investment for a give date
+246701080124      *--------------------
+246801080124       CALC-VARIABLE-UNITS.
+246901080124      *--------------------
+247001080125           MOVE "ONE"                        TO lc_Option_P1.
+247101080125           MOVE WS-B-DATE(BUDIDX)            TO li_ProcessDate_P1.
+247201080124           MOVE WS-B-INVESTMENT-CODE(BUDIDX, BUDIDX2)
+247301080125                                             TO lc_InvestCode_P1.
+247401080125           MOVE ACCOUNT-NO OF ACCOUNT        TO li_AccountNo_P1
+247501080125           MOVE " "                          TO lc_ReturnCode_P1.
+247601080125           CALL "SRVVDT"   USING  lc_Option_P1,
+247701080125                                  li_ProcessDate_P1,
+247801080125                                  lc_InvestCode_P1,
+247901080125                                  li_AccountNo_P1,
+248001080125                                  lc_ReturnCode_P1.
+248101080124
+248201080125           IF lc_ReturnCode_P1 NOT = " "
+248301080124              DISPLAY "PROBLEM CALC VARIABLE UNIT"
+248401080125              DISPLAY "ACCOUNT NO = " li_AccountNo_P1
+248501080125              DISPLAY "INVESTMENT = " lc_InvestCode_P1
+248601080125              DISPLAY "DATE CAL = "   li_ProcessDate_P1
+248701080124              GO TO CVU-EXIT
+248801080124           END-IF.
+248901080124
+249001080125           MOVE WS-B-DATE(BUDIDX)            TO li_ProcessDate_P1.
+249101080124           MOVE WS-B-INVESTMENT-CODE(BUDIDX, BUDIDX2)
+249201080125                                             TO lc_InvestCode_P1.
+249301080125           MOVE ln_B_Price(BUDIDX, BUDIDX2) TO ln_Price.
+249401080124
+249501090430      *RFS50475 Add - Beg
+249601090430           IF COMM-BONUS-SOURCE OF DEALER-COMMISSIONS = "E"
+249701090430             PERFORM Write_AccInvBaseServFee
+249801090430           ELSE
+249901090515      *    MOVE "INSERT SFSDLYVAR"   TO lc_SQLErr_Statement.
+250001090515           MOVE "INSERT SFSDLYVAR"   TO lc_SQLErr_Statement
+250101090515      *RFS50475 Add - End
+250201110411           EXEC SQL
+250301080124              INSERT INTO SFSDLYVAR
+250401080124              SELECT :CURR-DEALER-CODE,
+250501080124                     :CURR-REP-CODE,
+250601080124                     ACIDUP.ACCOUNT_NO,
+250701080124                     ACIDUP.PROCESS_DATE,
+250801080124                     ACIDUP.INVESTMENT_CODE,
+250901080124                     ACIDVP.LOWER_LIMIT_DAYS,
+251001080124                     ACIDVP.UNITS_VAR,
+251101080125                     DECIMAL(ACIDVP.UNITS_VAR * :ln_Price,15,6),
+251201080124                     ACIDVP.DIST_UNITS_VAR,
+251301080125                     DECIMAL(ACIDVP.DIST_UNITS_VAR * :ln_Price,15,6)
+251401110419      *RFS91255 - Start
+251501110411      **implicit join replaced with inner join
+251601110411      *         FROM MFAACIDUP ACIDUP,
+251701110411      *              MFAACIDVP ACIDVP
+251801110411                FROM MFAACIDUP ACIDUP
+251901110411                INNER JOIN MFAACIDVP ACIDVP ON
+252001110411                     ACIDVP.ACCOUNT_NO      = ACIDUP.ACCOUNT_NO AND
+252101110411                     ACIDVP.INVESTMENT_CODE = ACIDUP.INVESTMENT_CODE
+252201110419      *RFS91255 - End
+252301080125               WHERE ACIDUP.ACCOUNT_NO      = :li_AccountNo_P1
+252401080125                 AND ACIDUP.INVESTMENT_CODE = :lc_InvestCode_P1
+252501080125                 AND ACIDUP.PROCESS_DATE    = :li_ProcessDate_P1
+252601110419      *RFS91255 - Start
+252701110411      *          AND ACIDVP.ACCOUNT_NO      = ACIDUP.ACCOUNT_NO
+252801110411      *          AND ACIDVP.INVESTMENT_CODE = ACIDUP.INVESTMENT_CODE
+252901110419      *RFS91255 - End
+253001080124                 AND ACIDVP.UNITS_VAR       > 0
+253101080124           END-EXEC.
+253201080124       CVU-EXIT.
+253301080124           EXIT.
+253401090430
+253501090430      *RFS50475 Add - Beg
+253601090430      *------------------
+253701090430       Write_AccInvBaseServFee.
+253801090430      *------------------
+253901090515           IF lb_ALDTTF_EditYes AND
+254001090515              Is-Month-End      AND
+254101090522              li_ProcessDate_P1 = Comm_QEnd
+254201090617D10          MOVE SPACE TO lc_DlrInv_RateType
+254301090522             MOVE INVESTMENT-CODE OF ACCOUNT-INVESTMENT TO lc_InvCode
+254401090522             EXEC SQL
+254501090522               SELECT coalesce(b.Trailer_Rate_Type," ")
+254601090522                 INTO :lc_DlrInv_RateType
+254701090522               FROM Mfadeaisp a
+254801090522                    LEFT OUTER JOIN Mfatrscdp b ON
+254901090522                      a.Trailer_Schedule_Code = b.Trailer_Schedule_Code
+255001090522               WHERE a.Dealer_Code = :lc_DlrCode and
+255101090522                     a.Investment_Code = :lc_InvCode
+255201090522             END-EXEC
+255301090617D10           IF lc_DlrInv_RateType = Space
+255401090617 |               EXEC SQL
+255501090617 |                SELECT COALESCE(b.Trailer_Rate_Type, " ")
+255601090617 |                 INTO :lc_DlrInv_RateType
+255701090617 |                FROM Mfainvtvp a
+255801090617 |                   LEFT OUTER JOIN Mfatrscdp b ON
+255901090617 |                    a.Trailer_Schedule_Code = b.Trailer_Schedule_Code
+256001090617 |                WHERE a.Investment_Code = :lc_InvCode
+256101090617 |               END-EXEC
+256201090617D10           END-IF
+256301090522              IF lc_DlrInv_RateType = lncc_V
+256401090520             MOVE "INSERT MFAAIBSRVP"   TO lc_SQLErr_Statement
+256501090520             MOVE li_AccountNo_P1       TO li_AccountNoSv
+256601090520             MOVE lc_InvestCode_P1      TO lc_investCodeSv
+256701090430             EXEC SQL
+256801090430              INSERT INTO Mfaaibsrvp
+256901090430              SELECT ACIDUP.ACCOUNT_NO,
+257001090430                     ACIDUP.INVESTMENT_CODE,
+257101090519                     DECIMAL(ACIDVP.UNITS_VAR * :ln_Price,15,6),
+257201090519                     COALESCE(
+257301090521                     ROUND(DECIMAL(ACIDVP.UNITS_VAR * :ln_Price *
+257401090611504757*                      TRSCVP1.TRAILER_RATE_VAR / 120,15,6),2),
+257501090611504757                       TRSCVP1.TRAILER_RATE_VAR / 1200,15,6),2),
+257601090521                     ROUND(DECIMAL(ACIDVP.UNITS_VAR * :ln_Price *
+257701090611504757*                      TRSCVP2.TRAILER_RATE_VAR / 120,15,6),2),0
+257801090611504757                       TRSCVP2.TRAILER_RATE_VAR / 1200,15,6),2),0
+257901090519                             ),
+258001090430                     COALESCE(TRSCVP1.TRAILER_RATE_VAR,
+258101090519                              TRSCVP2.TRAILER_RATE_VAR,0),
+25820109061850475A*              ACIDUP.PROCESS_DATE
+25830109061850475A               0
+258401110419      *RFS91255 - Start
+258501110411      **implicit join replaced with inner join
+258601110411      *         FROM MFAACIDUP ACIDUP,
+258701110411      *              MFAACIDVP ACIDVP
+258801110411                FROM MFAACIDUP ACIDUP
+258901110411                INNER JOIN MFAACIDVP ACIDVP ON
+259001110411                 ACIDVP.ACCOUNT_NO      = ACIDUP.ACCOUNT_NO AND
+259101110411                 ACIDVP.INVESTMENT_CODE = ACIDUP.INVESTMENT_CODE
+259201110419      *RFS91255 - End
+259301090430                     LEFT OUTER JOIN MFADEAISP DEAISP ON
+259401090430                         DEAISP.DEALER_CODE = :CURR-DEALER-CODE AND
+259501090430                         DEAISP.INVESTMENT_CODE = ACIDUP.INVESTMENT_CODE
+259601090430                     LEFT OUTER JOIN MFAINVTVP INVTVP ON
+259701090430                         INVTVP.INVESTMENT_CODE = ACIDUP.INVESTMENT_CODE
+259801090430                     LEFT OUTER JOIN MFATRSCVP TRSCVP1 ON
+259901090430                         TRSCVP1.TRAILER_SCHEDULE_CODE =
+260001090430                         DEAISP.TRAILER_SCHEDULE_CODE           AND
+260101090430                         TRSCVP1.LOWER_LIMIT_DAYS      =
+260201090430                         ACIDVP.LOWER_LIMIT_DAYS
+260301090430                     LEFT OUTER JOIN MFATRSCVP TRSCVP2 ON
+260401090430                         TRSCVP2.TRAILER_SCHEDULE_CODE =
+260501090430                         INVTVP.TRAILER_SCHEDULE_CODE           AND
+260601090430                         TRSCVP2.LOWER_LIMIT_DAYS      =
+260701090430                         ACIDVP.LOWER_LIMIT_DAYS
+260801090430               WHERE ACIDUP.ACCOUNT_NO      = :li_AccountNo_P1
+260901090430                 AND ACIDUP.INVESTMENT_CODE = :lc_InvestCode_P1
+261001090430                 AND ACIDUP.PROCESS_DATE    = :li_ProcessDate_P1
+261101110419      *RFS91255 - Start
+261201110411      *          AND ACIDVP.ACCOUNT_NO      = ACIDUP.ACCOUNT_NO
+261301110411      *          AND ACIDVP.INVESTMENT_CODE = ACIDUP.INVESTMENT_CODE
+261401110419      *RFS91255 - End
+261501090430                 AND ACIDVP.UNITS_VAR       > 0
+261601090520             END-EXEC
+261701090520           END-IF.
+261801090430      *RFS50475 Add - End
+261901080124
+262001080124      *------------------
+262101080124       GET-VARIABLE-UNITS.
+262201080124      *------------------
+262301080124           INITIALIZE lc_InvLmtArray,
+262401080125                      ln_Tot_Var_ActualVal ,
+262501080125                      li_Lmt_Max,
+262601080124                      ln_TotVarDistActualVal,
+262701080124                      ln_TotVarDistUnits ,
+262801080125                      ln_Tot_Var_Units.
+262901080125           MOVE lc_B_Var_SchedCode (BUDIDX, BUDIDX2)
+263001080125             TO lc_Inv_Trl_Var_Sched.
+263101080124           MOVE lc_IA_InvestmentCode(IACIDX)
+263201080125             TO lc_InvestCode_P1.
+263301080125           MOVE WS-B-DATE(BUDIDX) TO li_ProcessDate_P1.
+263401080124
+263501080125           MOVE "OPEN GVARCUR"       TO lc_SQLErr_Statement.
+263601080124           EXEC SQL
+263701080124              OPEN GVARCUR
+263801080124           END-EXEC.
+263901080124
+264001080125           MOVE "FETCH GVARCUR"       TO lc_SQLErr_Statement.
+264101080124           EXEC SQL
+264201080124             FETCH NEXT FROM GVARCUR
+264301080124               FOR 50  ROWS
+264401080124              INTO :ltb_InvLmt_Entry
+264501080124                   :ltb_InvLmt_EntryInd
+264601080124           END-EXEC.
+264701080125           COMPUTE li_Lmt_Max = SQLERRD(3).
+264801080124
+264901080125           MOVE "CLOSE GVARCUR"       TO lc_SQLErr_Statement.
+265001080124           EXEC SQL
+265101080124              CLOSE GVARCUR
+265201080124           END-EXEC.
+265301080124
+265401080124           SET VARIDX TO 0.
+265501080124
+265601080124      *---------
+265701080124       GVU-0100.
+265801080124      *-
+265901080124           SET VARIDX UP BY 1.
+266001080125           IF VARIDX > li_Lmt_Max
+266101080124              GO TO GVU-EXIT.
+266201080125           ADD ln_ArrayLmtUnits(VARIDX)    TO ln_Tot_Var_Units.
+266301080125           ADD ln_ArrayLmt_ActualVal(VARIDX) TO ln_Tot_Var_ActualVal.
+266401080125           IF lncc_DSTVAR_EditExist
+266501080124              ADD ln_ArLmtDistUnits(VARIDX) TO ln_TotVarDistUnits
+266601080124              ADD ln_ArLmtDistActualVal(VARIDX)
+266701080124                  TO ln_TotVarDistActualVal
+266801080124           END-IF.
+266901080124           GO TO GVU-0100.
+267001080124
+267101080124       GVU-EXIT.
+267201080124           EXIT.
+267301080124
+267401080124      *------------------
+267501080124       WRITE-DLY-VAR-FEE.
+267601080124      *------------------
+267701080124           SET VARIDX TO 0.
+267801080124
+267901080124           INITIALIZE MFADEADVP           OF DLR-REP-DLY-SRV-VAR-REC.
+268001080124           MOVE DEALER-CODE  OF DEALER-REP-DLY-SRV-FEE
+268101080124             TO DEALER-CODE  OF DLR-REP-DLY-SRV-VAR-REC.
+268201080124           MOVE DEALER-REP-CODE  OF DEALER-REP-DLY-SRV-FEE
+268301080124             TO DEALER-REP-CODE  OF DLR-REP-DLY-SRV-VAR-REC.
+268401080124           MOVE INVESTMENT-CODE  OF DEALER-REP-DLY-SRV-FEE
+268501080124             TO INVESTMENT-CODE           OF DLR-REP-DLY-SRV-VAR-REC.
+268601080124           MOVE PROCESS-DATE     OF DEALER-REP-DLY-SRV-FEE
+268701080124             TO PROCESS-DATE              OF DLR-REP-DLY-SRV-VAR-REC.
+268801080125           MOVE lc_Inv_Trl_Var_Sched
+268901080124             TO TRAILER-SCHEDULE-CODE     OF DLR-REP-DLY-SRV-VAR-REC.
+269001080124           MOVE UNIT-PRICE       OF DEALER-REP-DLY-SRV-FEE
+269101080124             TO UNIT-PRICE                OF DLR-REP-DLY-SRV-VAR-REC.
+269201080124           MOVE EXCHANGE-RATE    OF DEALER-REP-DLY-SRV-FEE
+269301080124             TO EXCHANGE-RATE             OF DLR-REP-DLY-SRV-VAR-REC.
+269401080206           MOVE ELIGIBLE-FOR-PAYMENT      OF DEALER-REP-DLY-SRV-FEE
+269501080124             TO ELIGIBLE-FOR-PAYMENT-VAR  OF DLR-REP-DLY-SRV-VAR-REC.
+269601141028      * RFS130093 - Begin
+269701141028           IF lncc_SRVFEA_EditYes
+269801141028            MOVE ACCOUNT-NO       OF DEALER-REP-DLY-SRV-FEE
+269901141028              TO ACCOUNT-NO                OF DLR-REP-DLY-SRV-VAR-REC
+270001141028           ELSE
+270101141028            MOVE ZEROS TO ACCOUNT-NO       OF DLR-REP-DLY-SRV-VAR-REC
+270201141028           END-IF.
+270301141028      * RFS130093 - End
+270401080124
+270501080124       WDVF-NEXT.
+270601080124           SET VARIDX UP BY 1.
+270701080125           IF VARIDX > li_Lmt_Max
+270801080124              GO TO WDVF-EXIT
+270901080124           END-IF.
+271001080124           IF ln_ArrayLmtUnits(VARIDX)      = 0  AND
+271101080124              ln_ArrayLmt_ActualVal(VARIDX) = 0  AND
+271201080125              WS-B-DATE(BUDIDX)         NOT = li_DlrEndDate
+271301080124              GO TO WDVF-NEXT.
+271401080124
+271501080124           MOVE ln_ArrayLmtDays(VARIDX)
+271601080124             TO LOWER-LIMIT-DAYS          OF DLR-REP-DLY-SRV-VAR-REC.
+271701080124           MOVE ln_ArrayLmtCnt(VARIDX)
+271801080124             TO NO-OF-ACCOUNTS            OF DLR-REP-DLY-SRV-VAR-REC.
+271901080124           MOVE ln_ArrayLmtUnits(VARIDX)
+272001080124             TO UNITS-VAR                 OF DLR-REP-DLY-SRV-VAR-REC.
+272101080124           COMPUTE DAILY-VALUE-ACTUAL-VAR OF DLR-REP-DLY-SRV-VAR-REC
+272201080124            ROUNDED = ln_ArrayLmt_ActualVal(VARIDX).
+272301080124
+272401080124           IF lc_IA_CurrencyCode(IACIDX)  = "CAD"
+272501080124              MOVE DAILY-VALUE-ACTUAL-VAR OF DLR-REP-DLY-SRV-VAR-REC
+272601080124                TO DAILY-VALUE-BASE-VAR OF DLR-REP-DLY-SRV-VAR-REC
+272701080124           ELSE
+272801080124              COMPUTE DAILY-VALUE-BASE-VAR OF DLR-REP-DLY-SRV-VAR-REC
+272901080124                 ROUNDED = ln_ArrayLmt_ActualVal(VARIDX) /
+273001080125                           ln_B_ExchangeRate(BUDIDX, BUDIDX2)
+273101080124           END-IF.
+273201080124
+273301080125           IF lncc_DSTVAR_EditExist
+273401080124              MOVE ln_ArLmtDistUnits(VARIDX)
+273501080124                TO DIST-UNITS-VAR OF DLR-REP-DLY-SRV-VAR-REC
+273601080124              COMPUTE DAILY-VALUE-ACTUAL-DIST-VAR OF
+273701080124                      DLR-REP-DLY-SRV-VAR-REC
+273801080124                      ROUNDED = ln_ArLmtDistActualVal(VARIDX)
+273901080124              IF lc_IA_CurrencyCode(IACIDX)  = "CAD"
+274001080124                 MOVE DAILY-VALUE-ACTUAL-DIST-VAR OF
+274101080124                      DLR-REP-DLY-SRV-VAR-REC
+274201080124                   TO DAILY-VALUE-BASE-DIST-VAR  OF
+274301080124                      DLR-REP-DLY-SRV-VAR-REC
+274401080124              ELSE
+274501080124                 COMPUTE DAILY-VALUE-BASE-DIST-VAR OF
+274601080124                         DLR-REP-DLY-SRV-VAR-REC
+274701080124                 ROUNDED = ln_ArLmtDistActualVal(VARIDX) /
+274801080125                           ln_B_ExchangeRate(BUDIDX, BUDIDX2)
+274901080124              END-IF
+275001080124           END-IF.
+275101080124
+275201080215           WRITE DLR-REP-DLY-SRV-VAR-REC
+275301080215EY           INVALID KEY
+275401080215EY              DISPLAY "Problem writing MFADEADVP file"
+275501080215EY         END-WRITE.
+275601080124           GO TO WDVF-NEXT.
+275701080124       WDVF-EXIT.
+275801080124           EXIT.
+275901080219
+276001080219      *RFS42749 Begins
+276101080124      *---------------------
+276201080124       CHECK-ALTERNATE-PRICE.
+276301080124      *---------------------
+276401080219           Set lb_SFPriceNotFound To  True
+276501080219           MOVE INVESTMENT-CODE OF INVESTMENT
+276601080219                               TO INVESTMENT-CODE
+276701080219                               OF INVESTMENT-UNIT-PRICE,
+276801080219                               lc_InvestCode
+276901080219           MOVE WS-B-DATE(BUDIDX)
+277001080219                               TO TRADE-DATE
+277101080219                               OF INVESTMENT-UNIT-PRICE
+277201080219
+277301080219           Initialize li_SfpriceCount
+277401080219           EXEC SQL
+277501080219              Select  count(1)
+277601080219              Into    :li_SfpriceCount
+277701080219              From    Mfainvupp
+277801080219              Where   Investment_code   = :lc_InvestCode
+277901080219             and     Distribution_flag = :lc_Srvprice
+278001080219           END-EXEC
+278101080219
+278201080219           IF  li_SfpriceCount > 0 Then
+278301080219               Set lb_BeginSearch  To True
+278401080219               START INVESTMENT-UNIT-PRICE
+278501080219                 KEY IS GREATER  THAN EXTERNALLY-DESCRIBED-KEY
+278601080219               INVALID KEY
+278701080219                 PERFORM SEARCH-FOR-SRVPRICE-LAST UNTIL lb_EndofSearch
+278801080219               NOT INVALID KEY
+278901080219                 PERFORM SEARCH-FOR-SRVPRICE-PREV UNTIL lb_EndofSearch
+279001080219               END-START
+279101080219           ELSE
+279201080219                Set lb_EndofSearch  To True
+279301080219                Set lb_SFPriceNotFound To  True
+279401080219           END-IF.
+279501080219
+279601080124      *-------------------------
+279701080124       SEARCH-FOR-SRVPRICE-LAST.
+279801080124      *-------------------------
+279901080124           READ INVESTMENT-UNIT-PRICE LAST RECORD
+280001080124            AT END MOVE 0  TO ln_LastPrice
+280101080124            SET lb_EndofSearch to TRUE
+280201080124           END-READ
+280301080124           PERFORM GET-SERVICE-FEE-PRICE.
+280401080124
+280501080124      *-------------------------
+280601080124       SEARCH-FOR-SRVPRICE-PREV.
+280701080124      *-------------------------
+280801080124           READ INVESTMENT-UNIT-PRICE PRIOR RECORD
+280901080124           AT END
+281001080124            MOVE 0            TO ln_LastPrice
+281101080124            SET lb_EndofSearch to TRUE
+281201080124           END-READ
+281301080124           PERFORM GET-SERVICE-FEE-PRICE.
+281401080124
+281501080124      *----------------------
+281601080124       GET-SERVICE-FEE-PRICE.
+281701080124      *----------------------
+281801080124           IF INVESTMENT-CODE OF INVESTMENT-UNIT-PRICE Not =
+281901080124              INVESTMENT-CODE OF INVESTMENT
+282001080124              MOVE 0            TO ln_LastPrice
+282101080124              SET lb_EndofSearch to TRUE
+282201080124           END-IF
+282301080124           IF INVESTMENT-CODE OF INVESTMENT-UNIT-PRICE =
+282401080124              INVESTMENT-CODE OF INVESTMENT   AND
+282501080124              DISTRIBUTION-FLAG OF INVESTMENT-UNIT-PRICE = lc_Srvprice
+282601080124              MOVE UNIT-PRICE OF IUP-REC
+282701080124                             TO ln_LastPrice
+282801080124              MOVE ln_LastPrice  TO UNIT-PRICE
+282901080124                             OF INVESTMENT-UNIT-PRICE
+283001080124              SET lb_SFPriceFound    To TRUE
+283101080124              SET lb_EndofSearch     To TRUE
+283201080124            END-IF.
+283301080219      *RFS42749 ends
+283401080124
+283501080124      *****************************************************************
+283601080124      ****** -SQL error routine
+283701080124      *****************************************************************
+283801080124       SQL-ERROR-RTN.
+283901080124           DISPLAY "SRVCAL1- ENDED WITH ERROR".
+284001080125           DISPLAY "PROCEDURE: " lc_Routine_Name.
+284101080125           DISPLAY "STATEMENT: " lc_SQLErr_Statement.
+284201080124           DISPLAY "SQLCODE = " SQLCODE, " SQLSTATE = " SQLSTATE.
+284301080124           DISPLAY SQLERRMC.
+284401080124
+284501080124       SER-1000.
+284601080125           CALL "SQLLOG" USING lc_Program_Name
+284701080125                               lc_Routine_Name
+284801080124                               SQLCODE
+284901080124                               SQLERRD(1)
+285001080124                               SQLERRD(2)
+285101080124                               SQLERRD(3)
+285201080124                               SQLERRD(4)
+285301080124                               SQLERRD(5)
+285401080124                               SQLERRD(6)
+285501080124                               SQLSTATE
+285601080125                               lc_SQLErr_Data
+285701080125                               lc_SQL_Stats
+285801080125                               lc_SQLErr_Reply.
+285901080124           CANCEL "SQLLOG".
+286001080124           GOBACK.
+286101080124
+286201080124       SER-EXIT.
+286301080124           EXIT.
+286401080124
+286501080124

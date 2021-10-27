@@ -1,0 +1,202 @@
+000100171206       IDENTIFICATION DIVISION.
+000200210713       PROGRAM-ID.    ASMMYMT.
+000300210713       AUTHOR.        Abdi Hassan.
+000400210713       INSTALLATION.  LTi Info Tech.
+000500210713       DATE-WRITTEN.  July 12, 2021.
+000600171206       DATE-COMPILED.
+000700100301      ******************************************************************
+000800210713      *    RFS-NUMBER : RFS-187384                                     *
+000900100301      *                                                                *
+001000210713      *    DESCRIPTION: Process ASM Transaction.                       *
+001100100301      *                                                                *
+001200210713      *    CALLED BY:   JOBASMMYMT                                     *
+001300100301      *                                                                *
+001400210713      *    PARAMETERS:  AsAtDate                                       *
+001500211007      *                                                                *
+001600100301      ******************************************************************
+001700100301      *    C H A N G E   H I S T O R Y                                 *
+001800100301      ******************************************************************
+001900100301      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE              *
+002000210713      ******************************************************************
+002200210713      * Abdi Hassan* 2021/07/12 * RFS187384 - Created                  *
+002300210713      *            *            *                                      *
+002301210713      *            *            *                                      *
+002302210713      *            *            *                                      *
+002303210713      *            *            *                                      *
+002400210713      *            *            *
+002600100301      ******************************************************************
+002700100301
+002800100301       ENVIRONMENT DIVISION.
+002900100301       CONFIGURATION SECTION.
+003000100301       SOURCE-COMPUTER. IBM-AS400.
+003100100301       OBJECT-COMPUTER. IBM-AS400.
+003200100301
+003300100301       INPUT-OUTPUT SECTION.
+003400100301       FILE-CONTROL.
+003500100301
+003600100301       DATA DIVISION.
+003700100301
+003800100301       WORKING-STORAGE SECTION.
+003900100301      *
+004000100301           Copy Cpysqlfld
+004100210713               REPLACING == "CURRENT_PROGRAM" == BY == "ASMMYMT" ==.
+004200100301      *
+004300100301           EXEC SQL
+004400100301             INCLUDE SQLCA
+004500100301           END-EXEC.
+004600100301      *
+004700100301
+004800100301      * Error Codes, Uniquely Identify where the error happened
+004900210713       01 Ws-Err-Code                  PIC X(02) VALUE SPACES.
+005000210713          88 Ws-Err-Ok                     VALUE SPACES.
+005001210713          88 Ws-Err-11                     VALUE "11".
+005002210713          88 Ws-Err-12                     VALUE "12".
+005100210713          88 Ws-Err-13                     VALUE "13".
+005200210713          88 Ws-Err-14                     VALUE "14".
+006900100301
+007000100301       01 Flags.
+007100210713          03 lb_EndOfCursorFlag        PIC 1.
+007200210713             88 lb_EndOfCursorTrue     VALUE B"1".
+007300210713             88 lb_EndOfCursorFalse    VALUE B"0".
+007700100301
+007800100301       01 Constants.
+008700210722          03 lnc_HST                   PIC  X(03) VALUE "SEL".
+008701210722          03 lnc_HST                   PIC  X(03) VALUE "HST".
+008800210713          03 lnc_Y                     PIC  X(01) VALUE "Y".
+009100100301
+009200100301       01 WorkingStorageFields.
+009600210713          03 lc_TrackingID             PIC  X(30).
+009700210713          03 lc_PaymenetID             PIC  X(30).
+009701210713          03 lc_ErrorMsg               PIC  X(30) VALUE SPACES.
+009702210713          03 lc_ReturnCode             PIC  X(05).
+010100100301
+010200100301      /
+010300100301       LINKAGE SECTION.
+010400100301       01 pc_ProcessDate                      PIC  X(08).
+010500100301       01 pi_ProcessDate REDEFINES pc_ProcessDate
+010600100301                                              PIC S9(08).
+011100100301      /
+011200210713       PROCEDURE DIVISION USING pc_ProcessDate.
+011500210713
+011600100301       MAINLINE.
+011700100301     **---------**
+011800100301
+011900100301           PERFORM Initial-Logic.
+012100210713           PERFORM Detail-Process.
+012300100301           PERFORM Termination.
+012400100301
+012500100301     **
+012600100301       Initial-Logic.
+012700100301     **--------------**
+012800100301
+012900100301           EXEC SQL
+013000100301                WHENEVER SQLERROR CONTINUE
+013100100301           END-EXEC.
+013200100301
+013201210713           INITIALIZE  lc_ErrorMsg
+013202210714                       lc_ReturnCode.
+013204210713
+013205210713           IF pc_ProcessDate IS NOT NUMERIC
+013206210713              MOVE ZEROES TO pi_ProcessDate
+013207210713           END-IF.
+013700100301
+019600100301     **
+019700100301       Detail-Process.
+019800100301     **---------------**
+019900100301
+020000210717           PERFORM DeclareASMCursor.
+020100210713           PERFORM Fetch-ASM-Cursor
+020200100301             UNTIL lb_EndOfCursorTrue.
+020300100301
+020400210717       DeclareASMCursor.
+020500210717      *
+020600210717      *    EXEC SQL
+020700210717      *      DECLARE ASM_TXN CURSOR FOR
+020800210717      *      SELECT b.TRACKING_ID
+021000210717      *        FROM Mfatrnp a
+021001210717      *          INNER JOIN Wrkasmep b ON
+021002210717      *          a.Placement_Date = b.Placement_Date AND
+021003210717      *          a.Trans_No       = b.Trans_No
+021100210717      *       WHERE a.Process_Date = :pi_ProcessDate
+021101210722      *         AND a.Trans_Type_Code IN (:lnc_SEL)
+021102210722      *         AND a.Trans_Status_Code = :lnc_HST
+021103210717      *         AND a.Payment_Type_Code = "M"
+021104210717      *         AND b.PAYMENT_ID  = " "
+021105210717      *         AND b.TRACKING_ID <> " "
+021200210717      *    END-EXEC.
+021300210717      *
+021301210717           EXEC SQL
+021302210717             DECLARE ASM_TXN CURSOR FOR
+021303211006             SELECT a.UNIQUE_TRACE_ID
+021304211006               FROM Mfaasmep a
+021305211006               INNER JOIN Mfaasmtrp b ON
+021306211006                 a.Mfaasmep_id = b.Mfaasmep_id
+021307211006               INNER JOIN Mfatrnp c ON
+021308211006                 b.Placemen_date = c.Placement_date AND
+021309211006                 b.Trans_no = c.Trans_no
+021310211006             WHERE a.UNIQUE_TRACE_ID  <>  " "
+021311211006                AND a.CSS_PAYMENT_ID  = " "
+021312211006                AND a.Status_Code = "APR"
+021313211006                AND c.Payment_Type_Code = "M"
+021314211006             GROUP BY a.UNIQUE_TRACE_ID
+021315210717           END-EXEC.
+021400210713
+021500210713           IF SQLCODE < 0
+021600210713              SET Ws-Err-11    TO TRUE
+021700210713              MOVE "Error in Declare ASM_TXN  " TO lc_ErrorMsg
+021800100301              PERFORM SQL-Error-Handling
+021900100301           END-IF.
+022000100301
+022100100301      ** OPEN CURSOR CSR_TXN
+022101210713           SET lb_EndOfCursorFalse TO TRUE
+022200100301
+022300100301           EXEC SQL
+022400210713             OPEN ASM_TXN
+022500100301           END-EXEC.
+022600100301
+022700100301           MOVE Sqlstate       TO Sw-Sql-States.
+022800100301           IF NOT Sw-Sql-Successful
+022801210713              SET lb_EndOfCursorTrue TO TRUE
+022900210713              SET Ws-Err-12    TO TRUE
+023000210713              MOVE "Error opening ASM_TXN  " TO lc_ErrorMsg
+023100100301              PERFORM SQL-Error-Handling
+023200100301           END-IF.
+023300100301
+023400210713       Fetch-ASM-Cursor.
+023800100301
+023900100301           EXEC SQL
+024000210713             FETCH NEXT FROM ASM_TXN
+024100210713              INTO :lc_TrackingID
+024200100301           END-EXEC.
+024300100301
+024400100301           MOVE SQLSTATE TO Sw-Sql-States.
+024500100301           EVALUATE TRUE
+024600210713              WHEN Sw-Sql-Successful
+024601210713                EXEC SQL
+024701210713                   CALL  CRTPAYMAIN(:lc_TrackingID,
+024702210714                                    :lc_ReturnCode)
+024704210713
+024705210713                END-EXEC
+025000210713              WHEN Sw-Sql-End
+025100100301                     SET lb_EndOfCursorTrue   TO TRUE
+025200210713              WHEN OTHER
+025300210713                     SET Ws-Err-13            TO TRUE
+025400210713                     MOVE "Error fetching ASM_TXN  " TO lc_ErrorMsg
+025500100301                     PERFORM SQL-Error-Handling
+025600100301           END-EVALUATE.
+033700100301
+033800100301       SQL-Error-Handling.
+033900100301
+034100100301           STRING lc_ErrorMsg               DELIMITED BY SIZE
+034200100301                  " "                       DELIMITED BY SIZE
+034300100301                  Sqlstate                  DELIMITED BY SIZE
+034400100301             INTO Ws-Sql-Err-Short-Descr.
+034500100301           PERFORM Termination.
+034600100301
+034700100301     **
+034800100301       Termination.
+034900100301     **------------**
+035000100301           GOBACK.
+035100100301
+035200100301      * DSP-ERROR and FORCE-MSGW Routines
+035300100301           COPY CPYSQLRTN.

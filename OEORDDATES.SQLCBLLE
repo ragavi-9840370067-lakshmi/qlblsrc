@@ -1,0 +1,964 @@
+000001190724      * %ATTR DBGVIEW(*SOURCE)
+000100060209       IDENTIFICATION DIVISION.
+000200060209       PROGRAM-ID.     OEORDDATES.
+000300200123       INSTALLATION.   Unisen Inc.
+000400190226       AUTHOR.         Abdi Hassan.
+000500060209       DATE-WRITTEN.   March 2004.
+000600190730       DATE-COMPILED.
+000700060209      ********************************************************************
+000800060209      *       DATE: March 13, 2004                                       *
+000900060209      *                                                                  *
+001000060209      * PROGRAMMER: Abdi Hassan                                          *
+001100190226      *                                                                  *
+001200060209      *  OETRDDATE: Get trade date and settlement date.                  *
+001300060209      *                                                                  *
+001400060209      *    PURPOSE: Get trade date and settlement date using             *
+001500060209      *             investment cutoff time, business-day-frequency and   *
+001600060209      *             investment-settlement-cycle. Use "SETTLEDATE" to   . *
+001700060209      *             settlement-date.                                     *
+001800060209      *       Note: For swithes do not get settlement-date. Two-sided
+001900060209      *             transaction generator will decide setllement date.
+002000060209      *                                                                  *
+002100060209      *  CALLED BY: OETRNBUY   - Order Entry buy trans proram.           *
+002200060209      *             OETRNSEL   - Order Entry sell trans proram.          *
+002300060209      *             OETRNSWI   - Order Entry two-sided trans proram.     *
+002400060209      *                                                                  *
+002500060209      *                                                                  *
+002600060209      ********************************************************************
+002700060209      *****************************************************************
+002800060209      *                                                               *
+002900060209      *    C H A N G E   H I S T O R Y                                *
+003000060209      *                                                               *
+003100060209      *****************************************************************
+003200060209      * PROGRAMMER *YYYY/MM/DD* RFS COMMENTS                          *
+003300060209      *****************************************************************
+003400060209      * MICHAEL    *2004/09/18* RFS 24185                             *
+003500060209      * MONDOUX    *          * - Activated the Settlement-Date calc  *
+003600060209      *            *          *   for switches and transfers.         *
+003700060209      *****************************************************************
+003800060209      * Waldi R.   * 2005/03/30   * RFS26514 - recompile due to
+003900060209      *            *              * CPYOERES copy book changes.
+004000060209      *****************************************************************
+004100060209      * Ewa K.     * 2005/04/01   * RFS25997 recompile source.         *
+004200060209      *            *              * (retrofit by Clement Lui)
+004300060209      *****************************************************************
+004400060209      * John Rab   * 2005/04/13   * RFS26004 - Recompile only.
+004500060209      *            *              * (retrofit by Clement Lui)
+004600060209      *****************************************************************
+004700060209      * Clement Lui* 2005/06/05   * RFS28166 - Remove changes made for*
+004800060209      *            *              *            RFS26000. That is,     *
+004900060209      *            *              *            revert back to pre-    *
+005000060209      *            *              *            ESG16 version.         *
+005100060209      *****************************************************************
+005200060209      * Ewa K.     * 2005/11/18   * RFS28651 - REV order;
+005300060209      *            *              * Trade Date = Order Date
+005400060209      *            *              * Settlement-Date = T+1
+005500060209      *****************************************************************
+005600060209      * Dave vR    * 2006/02/09   * RFS29616 - Set trade date for
+005700060209      *            *              * alternate products (ESG 17)
+005800060209      *****************************************************************
+005900060302      * Ewa K.     * 2006/03/02   * RFS29617 - Recompile only.
+006000060317      *****************************************************************
+006100060317      * Daisy Ly   * 2006/03/17   * RFS29616 - Set time when calling
+006200060317      *            *              *  FXDTCTRDDT (calc trade date)
+006300060405      *            * 2006/04/05   * -determine the trans type if
+006400060405      *            *              *  trans type code is blank
+006500060302      ******************************************************************
+006600060502      * Ewa K.     * 2006/04/03   * RFS33495 - Populate Comm-After-Cut
+006700060502      *            *              * -off external var. of 'CAX' order
+006800060502      *            *              * bas on <Date> element value of OE.
+006900060502      *****************************************************************
+007000061006      * Tony V.    * 2006/09/26   * RFS37319 - Move time initialization
+007100061006      *            *              * prior to
+007200061006      *            *              * GET-CUSTOM-PRICING-TRADE-DATE
+007300061006      *            *              * because ws-order-time was not
+007400061006      *            *              * being populated causing data
+007500061006      *            *              * decimal error
+007600061206      * Halleh S.  * 2006/12/06   * RFS 36212 - Recompile.
+007700070517      * Brian Lu   * 2007/05/03   * RFS35952 - Retrieve 2 Settlement   *
+007800070517      *            *              * schedules for SWO/SWI if CU fund,  *
+007900070517      *            *              * Pass the values to OETRNSWTR.      *
+008000080925      * C.Lentini  * 2008/09/25   * RFS57329 - Include ITXA and ITXP
+008100080925      *            *              * to network ids & fix time issue.
+008200090305      * Alan A.    * 2009/03/05   * RFS60350 - In Cash Transfer (ICT)
+008300090305      *            *              * settlement date changes
+008400090309      * Abdi H.    * 2009/03/05 * RFS64042 - Recompile for ESG19 file
+008500090309      *            *            * changes
+008600100219      * Abdi H.    * 2010/02/19 * RFS72399 - ESG20 implementation
+008700100503      * Andy Chan  * 2010/05/03 * RFS65695 - BMO Transfer In-Kind enhancement
+008800110303      * Abdi Hassan* 2011/03/03 * RFS89055 - Bulk upload               cement
+008900110416      * Abdi Hassan* 2011/04/11 * RFS95014 - Fix Trade date issue      cement
+009000110416      *            *            * for custom funds
+009100110930      * Uday A     * 2011/09/29 * RFS98264 - Bulk Data Upload
+009200121021      * Rekha S    * 2012/08/17 * RFS99891 - Added "WSRV" to Network-Id
+009300121021      *            *            * and trade of trans moved to order date.
+009400121021      * Abdi H     *            * Comment Trade date override.
+009500121021      * DEEPIKA A  * 2012/08/23 * RFS108426- Modify OEORDDATES to process
+009600121021      *            *            *            the settlement date.
+009700121127      * K Naveen   * 2012/11/28 * RFS99905 - To fix QC defect 29676 for
+009800121127      *            *            * Backdated trade date - update service.
+009900141105      * Manjusha V * 2014/11/05 * RFS142052- Recompile for MFAORDC15P.
+010000150317      * Gomathi S  * 2015/03/17 * RFS145882- Recompile for MFAORDC15P.
+010100151121      * Sushmita J * 2015/10/26 * RFS149653- Added a check for Custom
+010200151121      *            *            * Pricing.
+010300160128      * V Lakshmi  *2016/01/28    *RFS151549-recompile for CPYESGERR
+010400160128      *            *              * CPYOE15 ,CPXMLTAG15
+010500160512      *V L Prasanna*2016/05/12 * RFS158785- recompile for MFAOELC15P,
+010600160512      *            *           *    MFAORDC15P,WRKOEUTXP
+010700170327      * Ewa K.     * 2017/03/21*RFS168893 -Recompile for MFAORDD15P    *
+010800170327      *            *           *MFAOELD15P,MFAORDACCP,MFAORLACCP       *
+010900170630      * Emmanuel Y.*2017/06/30 * RFS170249- Incorrect Trade Date on
+011000170630      *            *           * custom priced fund through BDL
+011100171114      * Emmanuel Y.*2017/11/14 * RFS175335- Fixed issue on SettlDate
+011200171114      *            *           * and TradeDate on CU funds for BDL
+011300180109      * Lavanya V  *2018/01/09 * RFS176748 - Trade Date issue for Trans*
+011400180109      *            *           * Bulk file                             *
+011500180809      * Lavanya V  *2018/02/05 * RFS180197 - Added FXDTVTRDDT to valida*
+011600180205      *            *           * te the Trade Date provided in input   *
+011601190222      * Kavya K    * 2019/02/22* RFS181057 - Recompile for MFAORDP15P *
+011602190424      * Lavanya V  * 2019/04/24* RFS182890 - Fix for Custom priced fund*
+011603190603      * Kavya K    * 2019/06/03* RFS182833 - Recompile for MFAORDACCP  *
+011604190603      *            *              *          and MFAORLACCP            *
+011605190919      * Lavanya    * 2019/05/23*RFS1008069 - Remove the custome code to*
+011606190919      *            *           *to validate AOT trade for DJT          *
+011607190919      * Lavanya V  * 2019/07/23*RFS1016434 - AOT for Custom Priced Fund*
+011608200128      * Lavanya V  * 2020/01/28*RFS1019814 - REV for Custom Priced Fund*
+011609200203      * Kavya K    * 2020/02/03*RFS184869 - Recompile for CPYESGERR    *
+011700061006      *****************************************************************
+011800190730
+011900060209       ENVIRONMENT DIVISION.
+012000060209
+012100060209       CONFIGURATION SECTION.
+012200060209
+012300060209       SOURCE-COMPUTER. IBM-AS400.
+012400060209       OBJECT-COMPUTER. IBM-AS400.
+012500060209       SPECIAL-NAMES.
+012600060214           LINKAGE TYPE IS PROCEDURE FOR "SETTLEDATE"
+012700060214           LINKAGE TYPE IS PROCEDURE FOR "FXSETSCHCD"
+012800060214           LINKAGE TYPE IS PROCEDURE FOR "FXDTCTRDDT".
+012900060209
+013000060209       INPUT-OUTPUT SECTION.
+013100060209       FILE-CONTROL.
+013200060209
+013300060209           SELECT  BUS-DAY-PRICE-FREQ-RD
+013400060209                   ASSIGN TO DATABASE-MFABDPFLA
+013500060209                   ORGANIZATION IS INDEXED
+013600060209                   ACCESS IS DYNAMIC
+013700060209                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+013800060209                             WITH  DUPLICATES
+013900060209                   FILE STATUS IS WS-FILE-STATUS.
+014000060209
+014100060209           SELECT  INVESTMENT-SETTLEMENT-CYCLE-RD
+014200060209                   ASSIGN TO DATABASE-MFAINVSCYP
+014300060209                   ORGANIZATION IS INDEXED
+014400060209                   ACCESS IS DYNAMIC
+014500060209                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+014600060209                   FILE STATUS IS WS-FILE-STATUS.
+014700060209
+014800110303           SELECT  Business-Day-Rd
+014900110303                   ASSIGN TO DATABASE-MFABUSDAP
+015000110303                   ORGANIZATION IS INDEXED
+015100110303                   ACCESS IS RANDOM
+015200110303                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+015300110303                   FILE STATUS IS WS-FILE-STATUS.
+015400110303
+015500060209       DATA DIVISION.
+015600060209
+015700060209       FILE SECTION.
+015800060209
+015900060209       FD  BUS-DAY-PRICE-FREQ-RD
+016000060209           LABEL RECORDS ARE STANDARD.
+016100060209       01  BUS-DAY-PRICE-FREQ-RD-REC. COPY DD-ALL-FORMATS OF MFABDPFLA.
+016200060214
+016300060209       FD  INVESTMENT-SETTLEMENT-CYCLE-RD
+016400060209           LABEL RECORDS ARE STANDARD.
+016500060209       01  INVESTMENT-SETTLE-CYCLE-RD-REC.
+016600060209                             COPY DD-ALL-FORMATS OF MFAINVSCYP.
+016700190724
+016800110303       FD  Business-Day-Rd
+016900110303           LABEL RECORDS ARE STANDARD.
+017000110303       01  Business-Day-Rec. COPY DD-ALL-FORMATS OF MFABUSDAP.
+017100110303
+017200060209
+017300060209       WORKING-STORAGE SECTION.
+017301190724
+017302190724013464      EXEC SQL
+017303190724013464        INCLUDE SQLCA
+017304190724013464      END-EXEC.
+017305190724
+017400060209       COPY CPYOE15.
+017500060209       COPY CPYESGERR.
+017600060209       COPY CPYOERESWS.
+017700060209       COPY CPYOE15FLD.
+017800060214      *rfs29616 starts
+017900060214       COPY CPYFXSTSCD.
+018000060214       COPY CPYFXTRDDT.
+018100060214      *rfs29616 ends
+018200060214
+018300060214       01 TRANS-REC               EXTERNAL.
+018400060209                                  COPY DD-ALL-FORMATS OF MFATRNP.
+018500060209
+018600060209       01 INVESTMENT-REC          EXTERNAL.
+018700060209                                  COPY DD-ALL-FORMATS OF MFAINVP.
+018800060209       01 INVESTMENT-GROUP-REC    EXTERNAL.
+018900060209                                  COPY DD-ALL-FORMATS OF MFAINVGRP.
+019000060209       01 PRODUCT-TYPE-CODES-REC  EXTERNAL.
+019100060209                                  COPY DD-ALL-FORMATS OF MFAPRTCDP.
+019200121022
+019300121022      *Rfs99891 - Start
+019400121022       01 Esg-Oe-Clt-Rec            EXTERNAL.
+019500121022          COPY DD-ALL-FORMATS OF Mfaordc15p.
+019600121022      *Rfs99891 - End
+019700060209
+019800060209       01  PERMENANT-WORK-FIELDS.
+019900060214           05 DATE-WORK-FIELDS.
+020000060214              10 WS-TRADE-DATE         PIC 9(8).
+020100060214              10 WS-SETTLE-DATE        PIC 9(8).
+020200060214              10 WS-BUSINESS-DAY-IN    PIC 9(8).
+020300060214              10 WS-BUSINESS-DAY-OUT   PIC 9(8).
+020400060214              10 WS-ORDER-DATE         PIC 9(8).
+020500171114175335        10 WS-AsAtDate           PIC 9(8).
+020600060209
+020700060214           05 WS-BUSINESS-DAY-ERROR    PIC X.
+020800060209              88 INVALID-DATE          VALUE "Y".
+020900060209
+021000060214           05 WS-ORDER-TYPE            PIC X(1).
+021100060209              88 WIRE-ORDER            VALUE "W".
+021200060209              88 DIRECT-ORDER          VALUE "D".
+021300060209
+021400060214           05 WS-NETWORK-ID            PIC X(4).
+021500060209              88 NETWORK-ORDER         VALUE "FSRV" "MFCS"
+021600060209                                             "CSSS" "ITRX"
+021700080925                                             "NSM9"
+021800110121R57329                                       "ITXA" "ITXP"
+021900121021R89055                                       "BULK"
+022000121021R99891                                       "WSRV".
+022100060209
+022200060214           05 WS-ACTION-CODES           PIC X(3).
+022300060209              88 ACTION-NEW             VALUE "NEW".
+022400060209              88 ACTION-CANCEL          VALUE "CAN".
+022500060209              88 ACTION-CHANGE          VALUE "CHG".
+022600060209              88 ACTION-REV-AOT         VALUE "REV" "AOT".
+022700060209              88 ACTION-REVERSAL        VALUE "REV".
+022800060209              88 ACTION-AS-OF-TRANS     VALUE "AOT".
+022900060502R33495        88 ncc_ActionCax          VALUE "CAX".
+023000060209
+023100060214           05 WS-FILE-STATUS              PIC X(2).
+023200060209              88 WS-FILE-STATUS-FOUND    VALUE "00".
+023300060209              88 WS-FILE-STATUS-EOF      VALUE "10".
+023400060209              88 WS-FILE-STATUS-NOTFOUND VALUE "23".
+023500060209              88 WS-FILE-STATUS-LOCKED   VALUE "9D".
+023600060209
+023700060214           05 WS-TRANS-TYPE-REC         PIC X(1).
+023800060209              88 PURCHASE-TRANSACTION   VALUE "5" "I".
+023900060209              88 SWITCH-IN-TRANSACTION  VALUE "I".
+024000060209              88 SWITCH-OUT-TRANSACTION VALUE "O".
+024100060209              88 REDEMPTION-TRANSACTION VALUE "6" "O" "4".
+024200060209              88 SELL-TRANSACTION       VALUE "6" "4".
+024300060209              88 FEE-TRANSACTION        VALUE "4".
+024400060209              88 BUY-TRANSACTION        VALUE "5".
+024500060209              88 SWITCH-TRANSACTION VALUE "I" "O".
+024600100219R72399        88 Maturity-Redemption    VALUE "M".
+024700060209
+02480006040529616        03 WS-TRANS-TYPE-DET      PIC X(1).
+02490006040529616           88 INTERNAL-TRANSFER       VALUE "8".
+02500006040529616           88 EXTERNAL-TRANSFER       VALUE "4".
+02510006040529616           88 TRANSFER-TRN            VALUE "4" "8".
+02520006040529616           88 SWITCH-TRN              VALUE "1".
+02530006040529616           88 COMMISSION-REBATES      VALUE "5".
+02540006040529616           88 LSIF-ROLLOVER           VALUE "R".
+025500090305R60350          88 lb_InCashTransfer       VALUE "9".
+025600060405
+025700180809180197 01  Ws-Error-Code         PIC X(2).
+025800180809180197 01  lnc_Zero              PIC X(2) VALUE "00".
+025900180329
+026000060405       01 l_Constants.
+026100060405          03 lncc_SWO                        PIC X(3) VALUE "SWO".
+026200060405          03 lncc_SWI                        PIC X(3) VALUE "SWI".
+026300060405          03 lncc_TRO                        PIC X(3) VALUE "TRO".
+026400060405          03 lncc_TRI                        PIC X(3) VALUE "TRI".
+026500060405
+026600060214       01  TEMPORARY-WORK-FIELDS.
+026700060214           05 WS-SETTLE-PARM.
+026800060214              10 WS-TRADE-DATE-TEMP     PIC 9(8) VALUE ZEROES.
+026900060214              10 WS-SETTLEMENT-SCHEDULE PIC X(4) VALUE SPACES.
+027000060214              10 WS-SETTLEMENT-DATE     PIC 9(8) VALUE ZEROES.
+027100060209
+027200060214           05 WS-DISP-DAYS             PIC 9(3)  VALUE 0.
+027300060214           05 WS-OPEN-FILE             PIC X(1)  VALUE "Y".
+027400060214              88 OPEN-FILE                       VALUE "N".
+027500060209
+027600060214      *    Cut off time calculation
+027700060214           05 WS-ORDER-TIME         PIC 9(6).
+027800060214           05 WS-ORDER-TIME-HHMMSS REDEFINES WS-ORDER-TIME PIC 9(6).
+027900060214      *    Investment Cut off time
+028000060214           05 WS-TRADING-CUTOFF-TIME PIC 9(6).
+028100060214           05 WS-CUTOFF-TIME REDEFINES WS-TRADING-CUTOFF-TIME.
+028200060214              10 WS-CUTOFF-TIME-HHMM PIC 9(4).
+028300060214              10 WS-CUTOFF-TIME-SS   PIC 9(2).
+028400060209
+028500060214           05 lc_PricingFreq         PIC X(2).
+028600060214              88 lncc_CustomPricingActive        VALUE "CU".
+028700160229149653        88 lncc_DailyPricingFreq           VALUE "DA".
+028800070514
+028900070514R35952 01 Lc_ScreenEditAllowedParm.
+029000070514  ¦       03 lc_ScreenEditsAllowed.
+029100070514  ¦          COPY DD-ALL-FORMATS OF MFAEDTSCP.
+029200070514  ¦       05 lc_SQLLog               PIC X(01) VALUE "N".
+029300070514  ¦       05 lc_ReturnCode           PIC X(02).
+029400070514  ¦          88 lncc_ReturnCodeOK         VALUE "00".
+029500070514  ¦       05 lc_SetLtxExists         PIC X(1).
+029600070514  ¦          88 lncc_SetLtxExistsTrue          VALUE "Y".
+029700070514  ¦          88 lncc_SetLtxExistsFalse         VALUE "N".
+029800070514  ¦
+029900070514  ¦    01 lncc_ScreenEditAllowed.
+030000070514  ¦       05 lncc_ScreenCode         PIC X(08) VALUE "TRNSEBW".
+030100070514  ¦       05 lncc_EditCode           PIC X(06) VALUE "SETLTX".
+030200070514  ¦       05 lncc_LevelCode          PIC X(01) VALUE "T".
+030300070514  ¦       05 lncc_00                 PIC X(02) VALUE "00".
+030400070514  ¦
+030401190724013464 01 li_Count                   PIC S9(2) VALUE ZEROS.
+030402190724013464 01 lc_InvCode                 PIC X(05) VALUE SPACES.
+030403190724013464 01 lc_TransTyp                PIC X(03) VALUE SPACES.
+030404190724013464 01 li_OrdDate                 PIC S9(08) VALUE ZEROS.
+030406190723
+030500070514  ¦   ***** External Fields
+030600070514  v    01 Lc_SettlementScheduleIn  PIC X(4)  EXTERNAL.
+030700070514R35952 01 Lc_SettlementScheduleOut PIC X(4)  EXTERNAL.
+030800121021108426 01 Comm-Ovrset-Edt-Code     PIC X(1)  EXTERNAL.
+030900111003      *RFS98264 - start
+031000111003       01 lc_constants.
+031100111003          03 lncc_Y                 PIC X(01) VALUE "Y".
+031200111003      *RFS98264 - end
+031300180109176748 01 WS-PROCESS-DATE           PIC  X(169).
+031400180809180197 01 COMM-TRDDATE-PROVIDED     PIC X(1) EXTERNAL.
+031401180809180197    88 COMM-TRDDATE-PROVIDED-YES  VALUE 'Y'.
+031402180809180197    88 COMM-TRDDATE-PROVIDED-NO   VALUE 'N'.
+031403180809
+031500060209       LINKAGE SECTION.
+031600060214
+031700060209       PROCEDURE DIVISION.
+031800060209       MAINLINE.
+031900060209
+032000060209           PERFORM INITIAL-LOGIC THRU INL-EXIT.
+032100060209           PERFORM DETAIL-PROCESSING THRU DPR-EXIT.
+032200060209
+032300060209           GOBACK.
+032400060214
+032500060209       DETAIL-PROCESSING.
+032600060214      *    This routine determines what type of transaction
+032700060214      *    would be processed. Invalid transaction would be rejected.
+032800110930      *Rfs98264 - start
+032900111003           IF  COMM-ESB-PROCESS = lncc_Y AND COMM-ProcessDate = ZERO
+033000110930               MOVE ERR-INVALID-TDATE  TO COMM-RETURN-DESC
+033100110930               PERFORM ESG-REJECTION THRU ERJ-EXIT
+033200110930               GO TO DPR-EXIT
+033300110930           END-IF.
+033400110930      *Rfs98264 - end
+033500060209           PERFORM GET-CURRENT-TRADE-DATE THRU GCTD-EXIT.
+033600110930           IF  WS-BUSINESS-DAY-ERROR = "Y"
+033700060209               MOVE ERR-INVALID-TDATE  TO COMM-RETURN-DESC
+033800060209               PERFORM ESG-REJECTION THRU ERJ-EXIT
+033900060209               GO TO DPR-EXIT
+034000110930           END-IF.
+034100060209           MOVE WS-BUSINESS-DAY-OUT TO WS-TRADE-DATE.
+034200060209
+034300060214      *    AOT uses original Order Date as Trade Date
+034400060209           IF ACTION-AS-OF-TRANS
+034500060209              MOVE ORIGINAL-ORDER-DATE OF ESG-OE-DTL-REC TO
+034600060209                                                          WS-TRADE-DATE
+034700060209           END-IF.
+034800060209
+034900060209           MOVE WS-TRADE-DATE TO TRADE-DATE OF TRANS-REC.
+035000060209
+035100060502R33495*    IF DIRECT-ORDER
+035200060502R33495     IF DIRECT-ORDER OR ncc_ActionCax
+035300060209              MOVE ZEROES TO SETTLEMENT-DATE OF TRANS-REC
+035400060209                             WS-SETTLEMENT-DATE
+035500060209              GO TO DPR-EXIT
+035600060209           END-IF.
+035700060209
+035800100313      *Rfs72399 - Start - Calculate Trade only
+035900100313           IF Maturity-Redemption
+036000100313              GO TO DPR-EXIT
+036100100313           END-IF.
+036200100313      *Rfs72399 - End
+036300100313
+036400060214      *    Get settlement date.
+036500060209           PERFORM GET-CURRENT-SETTLE-DATE THRU GCSD-EXIT.
+036600060209           IF WS-BUSINESS-DAY-ERROR = "Y"
+036700060209              MOVE ERR-INVALID-TRANS-SETTLE TO COMM-RETURN-DESC
+036800060209              PERFORM ESG-REJECTION THRU ERJ-EXIT
+036900060209              GO TO DPR-EXIT
+037000060209           END-IF.
+037100060209
+037200060209       DPR-EXIT.
+037300060209           EXIT.
+037400060214
+037500060209       GET-CURRENT-TRADE-DATE.
+037600060209           MOVE "N" TO WS-BUSINESS-DAY-ERROR
+037700060209           MOVE NETWORK-ID OF ESG-OE-DTL-REC TO WS-NETWORK-ID.
+037800060209
+037900110303      *Rfs89055 - Start
+038000110929           IF Comm-Esb-Process = "Y"
+038100110303              MOVE Order-Date OF Esg-Oe-Dtl-Rec TO
+038200110303                   Ws-Business-Day-In
+038300110303                   pi_TradeDateTradeDate
+038400110303                   Business-Day OF Business-Day-Rec
+038500110303              READ Business-Day-Rd
+038600110303                INVALID KEY
+038700110303                  MOVE "Y" TO Ws-Business-Day-Error
+038800110303                  MOVE "ORD08" TO COMM-ERROR-PTR
+038900110303                  GO TO GCTD-EXIT
+039000110303              END-READ
+039100110303              IF Allow-Trading OF Business-Day-Rec NOT = "Y"
+039200110303                 MOVE "Y" TO Ws-Business-Day-Error
+039300110303                 MOVE "ORD09" TO COMM-ERROR-PTR
+039400110303                 GO TO GCTD-EXIT
+039500110303              END-IF
+039600180205
+039700180809      *RFS180197 Starts
+039800180809              IF pi_TradeDateTradeDate NOT = ZEROES AND
+039801180809                 COMM-TRDDATE-PROVIDED-YES
+040000180329                 MOVE INVESTMENT-CODE OF INVESTMENT-REC TO
+040100180329                              pc_TradeDateInvestCode
+040200180205                 MOVE TRANS-TYPE-CODE OF TRANS-REC TO
+040300180205                                          pc_TradeDateTransCode
+040400180205                 IF pc_TradeDateTransCode = SPACES
+040500180205                   IF TRANSFER-TRN
+040600180205                     MOVE lncc_TRO TO pc_TradeDateTransCode
+040700180205                   ELSE
+040800180205                     MOVE lncc_SWO TO pc_TradeDateTransCode
+040900180205                   END-IF
+041000180205                 END-IF
+041100180205
+041200180205                 CALL "FXDTVTRDDT" USING pc_TradeDateInvestCode,
+041300180205                                         pi_TradeDateTradeDate,
+041400180205                                         pc_TradeDateTransCode,
+041500180205                                         Ws-Error-Code
+041600180205
+041700180329                 IF Ws-Error-Code NOT = lnc_Zero
+041800180205                    MOVE "ORD12" TO COMM-ERROR-PTR
+041900180205                    MOVE "Y" TO WS-BUSINESS-DAY-ERROR
+042000180206                    GO TO GCTD-EXIT
+042100180205                 END-IF
+042101190424
+042102190424      *RFS182890 Starts
+042103190424                 IF pi_TradeDateTradeDate > 0
+042104190424                    MOVE pi_TradeDateTradeDate to WS-BUSINESS-DAY-OUT
+042105190424                    GO TO GCTD-EXIT
+042106190424                 END-IF
+042107190424      *RFS182890 Ends
+042200180205              END-IF
+042300180809      *RFS180197 Ends
+042400180205
+042500110303              MOVE Order-Time2 OF Esg-Oe-Dtl-Rec TO Ws-Order-Time
+042600121127      * RFS 99905 - Start
+042700151121149653        MOVE PRICING-FREQ OF INVESTMENT-GROUP-REC
+042800151121149653                               TO lc_PricingFreq
+042900121205              IF pi_TradeDateTradeDate < COMM-SYSDATE
+043000171114175335          AND pi_TradeDateTradeDate < WS-AsAtDate
+043100160229149653          AND lncc_DailyPricingFreq
+043200121127                MOVE pi_TradeDateTradeDate to WS-BUSINESS-DAY-OUT
+043300121127                GO TO GCTD-EXIT
+043400121127              END-IF
+043500121127      * RFS 99905 - End
+043600170706      *RFS170249 Start
+043700170706              IF  pi_TradeDateTradeDate > 0
+043800170706              AND pi_TradeDateTradeDate < COMM-SYSDATE
+043900171114175335        AND pi_TradeDateTradeDate < WS-AsAtDate
+044000170706              AND NOT lncc_DailyPricingFreq
+044100170706                 MOVE pi_TradeDateTradeDate to WS-BUSINESS-DAY-OUT
+044200171114175335*          SET ACTION-REV-AOT TO TRUE
+044300170706                 GO TO GCTD-EXIT
+044400170706              END-IF
+044500170706      *RFS170249 End
+044600170706
+044700110303              PERFORM Get-Custom-Pricing-Trade-Date
+044800110303              GO TO GCTD-EXIT
+044900110303           END-IF.
+045000110303      *Rfs89055 - End
+045100110303
+045200060214      *    Company specific: DJT MAE NBC
+045300060214      *    Assume Order Date from FundServ to be the Trade Date.
+045400190708008069*    IF MANAGEMENT-COMPANY-CODE OF ESG-OE-DTL-REC = "DJT"
+045401190709008069     IF (NOT ACTION-REV-AOT AND
+045402190709008069        (MANAGEMENT-COMPANY-CODE OF ESG-OE-DTL-REC = "DJT"
+045500060209           OR MANAGEMENT-COMPANY-CODE OF ESG-OE-DTL-REC = "MAE"
+045600060209           OR MANAGEMENT-COMPANY-CODE OF ESG-OE-DTL-REC = "NWT"
+045601190709008069        ))
+045700190708008069*    OR (MANAGEMENT-COMPANY-CODE OF ESG-OE-DTL-REC = "NBC"
+045800190708008069*        AND DIRECT-ORDER)
+04590010050365695      OR (MANAGEMENT-COMPANY-CODE OF ESG-OE-DTL-REC = "GGF"
+04600010050365695          AND DIRECT-ORDER)
+046100060209               MOVE ORDER-DATE OF ESG-OE-DTL-REC TO WS-BUSINESS-DAY-OUT
+046200060209               GO TO GCTD-EXIT
+046300060209           END-IF.
+046400060209
+046500060209           IF NETWORK-ID
+046600060302             OF ESG-OE-DTL-REC IS = "ITRX"
+046700060209             MOVE ORDER-DATE OF ESG-OE-DTL-REC TO WS-BUSINESS-DAY-IN
+046800060209             GO TO GCTD-0005.
+046900060209
+047000060209           IF ACTION-REV-AOT
+047100060209              IF NETWORK-ORDER
+047200060209                 MOVE AS-AT-DATE OF ESG-OE-DTL-REC
+047300060209                   TO WS-BUSINESS-DAY-IN
+047400060209              ELSE
+047500060209                 MOVE COMM-SYSDATE TO WS-BUSINESS-DAY-IN
+047600060209              END-IF
+047700060209              GO TO GCTD-0005
+047800060209           END-IF.
+047900060209
+048000060502R33495*    IF ACTION-CANCEL
+048100060502R33495     IF ACTION-CANCEL OR ncc_ActionCax
+048200060209              IF AS-AT-DATE OF ESG-OE-DTL-REC NOT = ZEROES
+048300060209                 MOVE AS-AT-DATE OF ESG-OE-DTL-REC
+048400060209                   TO WS-BUSINESS-DAY-IN
+048500060209              ELSE
+048600060209                MOVE COMM-SYSDATE TO WS-BUSINESS-DAY-IN
+048700060209              END-IF
+048800060209              GO TO GCTD-0005
+048900060209           END-IF.
+049000060209
+049100060209           IF NETWORK-ORDER
+049200060209               MOVE AS-AT-DATE OF ESG-OE-DTL-REC
+049300060209                 TO ORDER-DATE OF ESG-OE-DTL-REC
+049400060209               MOVE ORDER-DATE OF ESG-OE-DTL-REC TO WS-BUSINESS-DAY-IN
+049500060320S29616         MOVE ORDER-TIME2 OF ESG-OE-DTL-REC TO WS-ORDER-TIME
+049600060209           ELSE
+049700060209               MOVE COMM-SYSDATE TO WS-BUSINESS-DAY-IN
+049800080925R57329*- Begin - Use HHMMSS time format
+049900080925               MOVE COMM-SYSTIME-HHMMSS  TO WS-ORDER-TIME
+050000080925S29616*        MOVE COMM-SYSTIME TO WS-ORDER-TIME
+050100080925R57329*- End
+050200060209           END-IF.
+050300060209
+050400060209       GCTD-0005.
+050500060209           INITIALIZE MFABDPFP OF BUS-DAY-PRICE-FREQ-RD-REC.
+050600060209
+050700060209           MOVE PRICING-FREQ OF INVESTMENT-GROUP-REC TO
+050800060209R29616          PRICING-FREQ OF BUS-DAY-PRICE-FREQ-RD-REC,
+050900060209R29616          lc_PricingFreq.
+051000110124
+051100110201R89055     IF COMM-ESB-PROCESS = "Y"
+051200110124   |          MOVE WS-BUSINESS-DAY-IN TO
+051300110124   |               BUSINESS-DAY OF BUS-DAY-PRICE-FREQ-RD-REC
+051400110124   |               pi_TradeDateTradeDate
+051500121205R89055     ELSE
+051600110124              EVALUATE ORDER-TYPE OF ESG-OE-DTL-REC
+051700110124                  WHEN "D"
+051800110124                   MOVE PASS-PROCESS-DATE TO
+051900110124                        BUSINESS-DAY OF BUS-DAY-PRICE-FREQ-RD-REC
+052000110416      *Rfs95014 - Start
+052100110416                        pi_TradeDateTradeDate
+052200110416      *D29616          MOVE PASS-PROCESS-DATE TO
+052300110416      *D29616               pi_TradeDateTradeDate
+052400110416      *Rfs95014 - End
+052500110124                  WHEN OTHER
+052600110124                   MOVE WS-BUSINESS-DAY-IN TO
+052700110124                        BUSINESS-DAY OF BUS-DAY-PRICE-FREQ-RD-REC
+052800110416      *Rfs95014 - Start
+052900110416                        pi_TradeDateTradeDate
+053000110416      *D29616          MOVE WS-BUSINESS-DAY-IN TO
+053100110416      *D29616               pi_TradeDateTradeDate
+053200110416      *Rfs95014 - End
+053300110124              END-EVALUATE
+053400110124R89055     END-IF.
+053500060209
+053600060209           IF NOT ACTION-REV-AOT
+053700060209              IF (MANAGEMENT-COMPANY-CODE
+053800060209                 OF ESG-OE-DTL-REC IS = "GCM" OR "PHN") AND
+053900060209                 DIRECT-ORDER
+054000060209                    MOVE ORDER-DATE OF ESG-OE-DTL-REC
+054100060209                      TO BUSINESS-DAY OF BUS-DAY-PRICE-FREQ-RD-REC
+054200060320D29616              MOVE ORDER-DATE OF ESG-OE-DTL-REC
+054300060320D29616                TO pi_TradeDateTradeDate
+054400060209              END-IF
+054500060209           END-IF.
+054600060209
+054700061006R37319*    Move time initialization here due to data decimal error
+054800061006R37319*    when GET-CUSTOM-PRICING-TRADE-DATE called
+054900061006
+055000061006R37319     IF NETWORK-ORDER
+055100061006R37319        MOVE ORDER-TIME2 OF ESG-OE-DTL-REC TO WS-ORDER-TIME
+055200061006R37319     ELSE
+055300080925R57329*- Begin - Use HHMMSS time format
+055400080925              MOVE COMM-SYSTIME-HHMMSS  TO WS-ORDER-TIME
+055500080925R37319*       MOVE COMM-SYSTIME TO WS-ORDER-TIME
+055600080925R57329*- End
+055700061006R37319     END-IF.
+055800061006
+055900060209R29616     IF lncc_CustomPricingActive
+055901200128013464*019814IF ACTION-AS-OF-TRANS
+055902200128019814       IF ACTION-REV-AOT
+055903190724013464           PERFORM EC-CUSTOM-PRICE-TRADE
+055904190724013464        ELSE
+055905190724013464           PERFORM GET-CUSTOM-PRICING-TRADE-DATE
+055906190724013464       END-IF
+056000190723R29616*       PERFORM GET-CUSTOM-PRICING-TRADE-DATE
+056001190801
+056002190801
+056100060209R29616        GO TO GCTD-EXIT
+056200060209R29616     END-IF.
+056300060209
+056400060209           START BUS-DAY-PRICE-FREQ-RD
+056500060209            KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+056600060209             INVALID KEY
+056700060209              MOVE "Y" TO WS-BUSINESS-DAY-ERROR
+056800060209              MOVE "ORD01" TO COMM-ERROR-PTR
+056900060209              GO TO GCTD-EXIT.
+057000060209
+057100060209       GCTD-0010.
+057200060209           READ BUS-DAY-PRICE-FREQ-RD NEXT RECORD
+057300060209            AT END
+057400060209              MOVE "Y" TO WS-BUSINESS-DAY-ERROR
+057500060209              MOVE "ORD02" TO COMM-ERROR-PTR
+057600060209              GO TO GCTD-EXIT.
+057700060209
+057800060302           IF DIRECT-ORDER
+057900060209              GO TO GCTD-0060
+058000060209           END-IF.
+058100060209
+058200061006R37319*    IF NETWORK-ORDER
+058300061006R37319*       MOVE ORDER-TIME2 OF ESG-OE-DTL-REC TO WS-ORDER-TIME
+058400061006R37319*    ELSE
+058500061006R37319*       MOVE COMM-SYSTIME TO WS-ORDER-TIME
+058600061006R37319*    END-IF.
+058700060209           MOVE TRADING-CUTOFF-TIME OF INVESTMENT-REC
+058800060209             TO WS-CUTOFF-TIME-HHMM.
+058900060209
+059000060209           MOVE ZEROES TO WS-CUTOFF-TIME-SS.
+059100060209
+059200060209           IF COMM-OE-CUT-OFF IS EQUAL "Y"
+059300060502R33495*      IF ACTION-REV-AOT OR ACTION-CANCEL
+059400060502R33495       IF ACTION-REV-AOT OR ACTION-CANCEL OR ncc_ActionCax
+059500060209                IF AS-AT-DATE OF ESG-OE-DTL-REC >
+059600060209                         BUSINESS-DAY OF BUS-DAY-PRICE-FREQ-RD-REC
+059700060209                   GO TO GCTD-0010
+059800060209                END-IF
+059900060209                IF BUSINESS-DAY OF BUS-DAY-PRICE-FREQ-RD-REC
+060000060209                   = AS-AT-DATE OF ESG-OE-DTL-REC AND
+060100060209                   WS-ORDER-TIME-HHMMSS > WS-TRADING-CUTOFF-TIME
+060200060209                   MOVE  "Y" TO COMM-AFTER-CUT-OFF
+060300060209                    GO TO GCTD-0010
+060400060209                END-IF
+060500060209                GO TO GCTD-0015
+060600060209             END-IF
+060700060209             IF ORDER-DATE OF ESG-OE-DTL-REC >
+060800060209                     BUSINESS-DAY OF BUS-DAY-PRICE-FREQ-RD-REC
+060900060209                 GO TO GCTD-0010
+061000060209             END-IF
+061100060209             IF BUSINESS-DAY OF BUS-DAY-PRICE-FREQ-RD-REC
+061200060209                = ORDER-DATE OF ESG-OE-DTL-REC AND
+061300060209                WS-ORDER-TIME-HHMMSS > WS-TRADING-CUTOFF-TIME
+061400060209               MOVE "Y" TO COMM-AFTER-CUT-OFF
+061500060209               GO TO GCTD-0010
+061600060209             END-IF
+061700060209           END-IF.
+061800060209
+061900060209       GCTD-0015.
+062000060209           IF NETWORK-ID
+062100060209             OF ESG-OE-DTL-REC IS = "ITRX"
+062200060209             GO TO GCTD-0060
+062300060209           END-IF.
+062400060209
+062500060209           IF DISPLACEMENT-DAYS OF INVESTMENT-REC = 0
+062600060209             GO TO GCTD-0060
+062700060209           END-IF.
+062800060209
+062900060209           MOVE 0 TO WS-DISP-DAYS.
+063000060209
+063100060209       GCTD-0040.
+063200060209           READ BUS-DAY-PRICE-FREQ-RD NEXT RECORD
+063300060209            AT END
+063400060209              MOVE "Y" TO WS-BUSINESS-DAY-ERROR
+063500060209              MOVE "ORD03" TO COMM-ERROR-PTR
+063600060209              GO TO GCTD-EXIT.
+063700060209
+063800060209           ADD 1 TO WS-DISP-DAYS.
+063900060209
+064000060209           IF WS-DISP-DAYS IS < DISPLACEMENT-DAYS OF INVESTMENT-REC
+064100060209             GO TO GCTD-0040
+064200060209           END-IF.
+064300060209
+064400060209       GCTD-0060.
+064500060209           MOVE BUSINESS-DAY OF BUS-DAY-PRICE-FREQ-RD-REC
+064600060209             TO WS-BUSINESS-DAY-OUT.
+064700060209
+064800060209       GCTD-EXIT.
+064900060209           EXIT.
+065000060214
+065100060209       GET-CURRENT-SETTLE-DATE.
+065200060209           INITIALIZE  WS-SETTLE-PARM.
+065300060209           MOVE COMM-SETTLE-SCHEDULE TO  WS-SETTLEMENT-SCHEDULE
+065400060209
+065500060209R28651*    IF ACTION-AS-OF-TRANS
+065600060209R28651     IF ACTION-REV-AOT
+065700060209              GO TO GCSD-0010.
+065800060209
+065900060209           IF SWITCH-TRANSACTION
+066000070518R35952        IF (lncc_SetLtxExistsTrue
+066100070518  ¦           AND lncc_CustomPricingActive)
+066200070518  ¦               GO TO GCSD-0005
+066300070518  ¦           ELSE
+066400070518  ¦               GO TO GCSD-0010
+066500070518  ¦           END-IF
+066600070518  ¦        END-IF.
+066700070518  v
+066800070518R35952 GCSD-0005.
+066900070518
+067000060214           MOVE INVESTMENT-CODE OF INVESTMENT-REC
+067100060214             TO pc_SettleSchedInvestCode.
+067200060214
+067300060215           MOVE TRANS-TYPE-CODE OF TRANS-REC
+067400060214             TO pc_SettleSchedTransCode.
+067500060405 29616     IF pc_SettleSchedTransCode =  SPACES
+067600060405 29616        IF TRANSFER-TRN
+067700060405 29616           MOVE lncc_TRO TO pc_SettleSchedTransCode
+067800060405 29616        ELSE
+067900060405 29616           MOVE lncc_SWO TO pc_SettleSchedTransCode
+068000060405 29616        END-IF
+068100060405 29616     END-IF.
+068200060209
+068300060225           CALL "FXSETSCHCD" USING pc_SettleSchedInvestCode
+068400060225                                   pc_SettleSchedTransCode
+068500060225                                   pc_SettleSchedSettlementSched
+068600060225                                   pc_SettleSchedErrorCode.
+068700060209
+068800060209R29616     IF nc_SettleSchedErrorNone
+068900060209R29616        MOVE pc_SettleSchedSettlementSched TO
+069000060209R29616             WS-SETTLEMENT-SCHEDULE
+069100060209R29616     ELSE
+069200060214R29616        SET INVALID-DATE TO TRUE
+069300060209R29616        MOVE "ORD07" TO COMM-ERROR-PTR
+069400060209R29616     END-IF.
+069500060209
+069600070509
+069700060209       GCSD-0010.
+069800070514
+069900070514R35952     IF lncc_SetLtxExistsTrue
+070000070517  ¦        AND SWITCH-TRANSACTION
+070100070516  ¦           IF TRANS-TYPE-CODE OF TRANS-REC = " "
+070200070514  ¦              MOVE WS-SETTLEMENT-SCHEDULE
+070300070514  ¦                                   TO Lc_SettlementScheduleOut
+070400070514  ¦           END-IF
+070500070514  ¦
+070600070514  ¦           IF TRANS-TYPE-CODE OF TRANS-REC = lncc_SWI
+070700070514  ¦              MOVE WS-SETTLEMENT-SCHEDULE
+070800070514  ¦                                   TO Lc_SettlementScheduleIn
+070900070514  v           END-IF
+071000070514R35952     END-IF.
+071100090305
+071200090305      *RFS60350 Start
+071300090312           IF lb_InCashTransfer AND BUY-TRANSACTION
+071400090305              MOVE Comm-Settle-Schedule
+071500090305                                      TO Ws-Settlement-Schedule
+071600090305           END-IF.
+071700090305      *RFS60350 End
+071800070514
+071900060209           MOVE WS-TRADE-DATE TO WS-TRADE-DATE-TEMP.
+072000060209
+072100060214      *    AOT uses the Order Date to get Settlement Date.
+072200060214      *    RFS28651 Start
+072300060209      *    IF ACTION-AS-OF-TRANS
+072400060209           IF ACTION-REV-AOT
+072500060214      *    RFS28651 End
+072600060214              MOVE ORDER-DATE TO WS-TRADE-DATE-TEMP
+072700060214R29616     END-IF.
+072800060209
+072900121021      /* RFS 108426 - START                   */
+073000121021           IF Comm-Ovrset-Edt-Code = lncc_Y  AND
+073100121021              SETTLEMENT-DATE OF ESG-OE-DTL-REC NOT = 0
+073200121021                PERFORM Check-Valid-Settlement-Date THRU CVSD-EXIT
+073300121021                GO TO GCSD-EXIT
+073400121021           END-IF.
+073500121021      /* RFS 108426 - END                     */
+073600060209           CALL "SETTLEDATE" USING WS-SETTLE-PARM.
+073700060209           IF WS-SETTLEMENT-DATE NOT = 0
+073800060209              MOVE WS-SETTLEMENT-DATE TO SETTLEMENT-DATE OF TRANS-REC
+073900060209           ELSE
+074000060209              MOVE "Y" TO WS-BUSINESS-DAY-ERROR
+074100060209              MOVE "ORD05" TO COMM-ERROR-PTR
+074200060209           END-IF.
+074300060209
+074400060209       GCSD-EXIT.
+074500060209            EXIT.
+074600060214
+074700121021      /* RFS 108426 - START                   */
+074800121021       Check-Valid-Settlement-Date.
+074900121021           MOVE SETTLEMENT-DATE OF ESG-OE-DTL-REC TO
+075000121021                Business-Day OF Business-Day-Rec
+075100121021           READ Business-Day-Rd
+075200121021             INVALID KEY
+075300121021               MOVE "Y" TO Ws-Business-Day-Error
+075400121021               MOVE "ORD10" TO COMM-ERROR-PTR
+075500121021               GO TO CVSD-EXIT
+075600121021           END-READ
+075700121021           IF Allow-Trading OF Business-Day-Rec NOT = "Y"
+075800121021              MOVE ERR-INVALID-TRANS-SETTLE TO COMM-RETURN-DESC
+075900121021              MOVE "Y" TO Ws-Business-Day-Error
+076000121021              MOVE "ORD11" TO COMM-ERROR-PTR
+076100121021              GO TO CVSD-EXIT
+076200121021           ELSE
+076300121021              Move Settlement-Date of Esg-Oe-Dtl-Rec
+076400121021                                   TO Settlement-Date Of Trans-Rec
+076500121021           END-IF.
+076600121021
+076700121021       CVSD-EXIT.
+076800121021            EXIT.
+076900121021      /* RFS 108426 - END                     */
+077000060209       INITIAL-LOGIC.
+077100060209           MOVE SPACE TO COMM-AFTER-CUT-OFF.
+077200060209
+077300060209           IF NOT OPEN-FILE
+077400060209              OPEN INPUT BUS-DAY-PRICE-FREQ-RD
+077500060209                   INVESTMENT-SETTLEMENT-CYCLE-RD
+077600110303                   Business-Day-Rd
+077700060209              MOVE "N" TO WS-OPEN-FILE
+077800060209           END-IF.
+077900060209
+078000060209           MOVE ORDER-DATE OF ESG-OE-DTL-REC TO WS-ORDER-DATE.
+078100180109      *RFS176748 Starts
+078200180109175335*    MOVE AS-AT-DATE OF ESG-OE-DTL-REC TO WS-AsAtDate
+078300180109           CALL "RTVPRCDTP"   USING WS-PROCESS-DATE.
+078400180109
+078500180109           IF WS-PROCESS-DATE(1:8) IS NOT NUMERIC
+078600180109              SET INVALID-DATE TO TRUE
+078700180109              MOVE "ORD07" TO COMM-ERROR-PTR
+078800180109           ELSE
+078900180109              MOVE WS-PROCESS-DATE(1:8) TO WS-AsAtDate
+079000180109           END-IF.
+079100180109      *RFS176748 Ends
+079200180109
+079300060209           MOVE ORDER-TYPE OF ESG-OE-DTL-REC TO WS-ORDER-TYPE.
+079400060209           MOVE NETWORK-ID OF ESG-OE-DTL-REC TO WS-NETWORK-ID.
+079500060209           MOVE ACTION-CODE OF ESG-OE-DTL-REC TO WS-ACTION-CODES.
+079600060209           MOVE TRANS-TYPE-REC OF ESG-OE-DTL-REC TO WS-TRANS-TYPE-REC.
+079700060405 29616     MOVE TRANS-TYPE-DET OF ESG-OE-DTL-REC TO WS-TRANS-TYPE-DET.
+079800060209
+079900070514R35952     PERFORM Check-Screen-Edit-Code.
+080000070503
+080100060209       INL-EXIT.
+080200060209           EXIT.
+080300060209
+080400070514R35952 Check-Screen-Edit-Code.
+080500070514  ¦
+080600070514  ¦        INITIALIZE MFAEDTSCP OF lc_ScreenEditsAllowed.
+080700070514  ¦
+080800070514  ¦        MOVE lncc_ScreenCode
+080900070514  ¦             TO Screen-Code OF lc_ScreenEditsAllowed.
+081000070514  ¦        MOVE lncc_EditCode
+081100070514  ¦             TO Edit-Code OF lc_ScreenEditsAllowed.
+081200070514  ¦        MOVE lncc_LevelCode
+081300070514  ¦             TO Level-Code OF lc_ScreenEditsAllowed.
+081400070514  ¦
+081500070514  ¦        CALL "FXSCEDTALW" USING lc_ScreenEditsAllowed,
+081600070514  ¦                                lc_SQLLog,
+081700070514  ¦                                lc_ReturnCode.
+081800070514  ¦
+081900070514  ¦        IF lc_ReturnCode = lncc_00
+082000070514  ¦           SET lncc_SetLtxExistsTrue  TO True
+082100070514  ¦        ELSE
+082200070514  v           SET lncc_SetLtxExistsFalse TO True
+082300070514R35952     END-IF.
+082400070503
+082500060209R29616 GET-CUSTOM-PRICING-TRADE-DATE.
+082600060225R29616     MOVE "F" TO pc_TradeDateMode.
+082700060209R29616     MOVE INVESTMENT-CODE OF INVESTMENT-REC TO
+082800060209R29616                 pc_TradeDateInvestCode.
+082900060320R29616     MOVE WS-BUSINESS-DAY-IN TO pi_TradeDateNewTradeDate.
+083000060209R29616     MOVE TRANS-TYPE-CODE OF TRANS-REC TO
+083100060209R29616                                pc_TradeDateTransCode.
+083200060405 29616     IF pc_TradeDateTransCode = SPACES
+083300060405 29616        IF TRANSFER-TRN
+083400060405 29616           MOVE lncc_TRO TO pc_TradeDateTransCode
+083500060405 29616        ELSE
+083600060405 29616           MOVE lncc_SWO TO pc_TradeDateTransCode
+083700060405 29616        END-IF
+083800060405 29616     END-IF.
+083900060405
+084000060209R29616     MOVE "FundSERV" TO pc_TradeDateUser.
+084100060225R29616     MOVE "W" to pc_TradeDateWireOrDirect.
+084200110303      *Rfs89055 - Start
+084300110303           IF Comm-Esb-Process = "Y"
+084400110303              IF Direct-Order
+084500110303                 MOVE "D" to pc_TradeDateWireOrDirect
+084600110303              END-IF
+08470012120699905         MOVE "O" TO pc_TradeDateMode
+08480012102299891         MOVE USER-ID OF ESG-OE-CLT-REC
+08490012102599891                      TO pc_TradeDateUser
+085000110303           END-IF.
+085100110303      *Rfs89055 - End
+085200060317R29616     MOVE WS-ORDER-TIME-HHMMSS TO  pi_TradeDateTimePlaced.
+085300060209
+085400060220R29616     CALL "FXDTCTRDDT" USING pc_TradeDateMode,
+085500060220R29616                             pc_TradeDateInvestCode,
+085600060220R29616                             pi_TradeDateTradeDate,
+085700060220R29616                             pc_TradeDateTransCode,
+085800060220R29616                             pc_TradeDateUser,
+085900060220R29616                             pc_TradeDateWireOrDirect,
+086000060220R29616                             pi_TradeDateTimePlaced,
+086100060220R29616                             pi_TradeDateNewTradeDate,
+086200060220R29616                             pc_TradeDateErrorCode.
+086300060220R29616
+086400060209R29616     IF nc_TradeDateErrorNone
+086500060209R29616        MOVE pi_TradeDateNewTradeDate TO WS-BUSINESS-DAY-OUT
+086600060209R29616     ELSE
+086700060209R29616        MOVE "Y" TO WS-BUSINESS-DAY-ERROR
+086800060209R29616        MOVE "ORD06" TO COMM-ERROR-PTR
+086900060209R29616     END-IF.
+087000060209
+087001190919      *RFS1016434 Starts
+087002190723       EC-CUSTOM-PRICE-TRADE.
+087003190724
+087004190723           MOVE ORIGINAL-ORDER-DATE OF ESG-OE-DTL-REC TO
+087005190723                Business-Day OF Business-Day-Rec
+087006190724                li_OrdDate.
+087007190724           MOVE INVESTMENT-CODE OF INVESTMENT-REC TO
+087008190724                lc_InvCode.
+087010190724           MOVE TRANS-TYPE-CODE OF TRANS-REC TO
+087011190724                lc_TransTyp.
+087012190723
+087013190802           INITIALIZE li_Count.
+087015190802           EXEC SQL
+087016190802             SELECT COUNT(*)
+087017190802             INTO   :li_Count
+087018190802             FROM   MFABUSDAP
+087019190802             WHERE  BUSINESS_DAY  = :li_OrdDate AND
+087020190802                    ALLOW_TRADING = :lncc_Y
+087021190802           END-EXEC.
+087022190802
+087025190802           IF SQLCODE = 0  AND li_count = 0
+087028190723              MOVE "Y" TO Ws-Business-Day-Error
+087029190802              MOVE "ORD13" TO COMM-ERROR-PTR
+087030190723              GO TO GCTD-EXIT
+087031190723           END-IF.
+087033190723
+087034190723           INITIALIZE li_Count.
+087035190802           EXEC SQL
+087036190723             SELECT COUNT(*)
+087037190723               INTO :li_Count
+087038190802               FROM MFACOCSCP cocscp
+087039190802              WHERE cocscp.Trade_Date = :li_OrdDate
+087040190802           END-EXEC.
+087041190723
+087042190723           IF SQLCODE = ZERO AND li_Count = 0
+087043190723               MOVE "Y" TO Ws-Business-Day-Error
+087044190802               MOVE "ORD14" TO COMM-ERROR-PTR
+087045190723               GO TO GCTD-EXIT
+087046190802           END-IF.
+087047190723
+087048190725           MOVE TRADING-CUTOFF-TIME OF INVESTMENT-REC
+087049190725             TO WS-CUTOFF-TIME-HHMM.
+087050190725
+087051190725           MOVE ZEROES TO WS-CUTOFF-TIME-SS.
+087052190801
+087053190723           IF WS-ORDER-TIME-HHMMSS > WS-TRADING-CUTOFF-TIME
+087054190723           AND WS-ORDER-DATE > AS-AT-DATE OF ESG-OE-DTL-REC
+087055190723             MOVE  "Y" TO COMM-AFTER-CUT-OFF
+087056190723           END-IF.
+087059190802           MOVE li_OrdDate TO WS-BUSINESS-DAY-OUT.
+087060190802
+087061190919      *RFS1016434 Ends
+087100060209       COPY CPYOERES.

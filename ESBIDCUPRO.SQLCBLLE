@@ -1,0 +1,3696 @@
+000100191031      * %ATTR COMMIT(*CHG) DBGVIEW(*SOURCE)
+000200180205      *
+000300191031       IDENTIFICATION DIVISION.
+000400170818       PROGRAM-ID.    ESBIDCUPRO.
+000500170112       AUTHOR.        Ewa Kolasinska-Roj.
+000600170112       INSTALLATION.  L&T Financial Services Technology Inc.
+000700170728       DATE-WRITTEN.  October 2016.
+000800181207       DATE-COMPILED.
+000900170112      ******************************************************************
+001000210129      **   RFS-NUMBER : RFS112371                                      *
+001100170112      **                                                               *
+001200170112      **   DESCRIPTION: This module validates and processes the        *
+001300170112      **                the "Institution Dealer Custom File" XML file. *
+001400170530      **
+001500170112      **   CALLED BY:   ESGDRIVE                                       *
+001600170112      **                                                               *
+001700170112      **   PARAMETERS:  None                                           *
+001800170112      **                                                               *
+001900170726      **   COMMIT(*CHG)                                                *
+002000170112      ******************************************************************
+002100170112      *    C H A N G E   H I S T O R Y                                 *
+002200170112      ******************************************************************
+002300170112      * PROGRAMMER  *DATE OF CHANGE* DESCRIPTION OF CHANGE             *
+002400170112      ******************************************************************
+002500170112      * Ewa K.      * 2016/10/24 * RFS112371- Create module, bound     *
+002600170112      *             *            * into ESBSRVPGM service program,
+002700170112      *             *            * with COMMIT(*CHG).
+002800170112      * Lavanya V   * 2016/12/26 * RFS127127- Recompile for CPYBLKERR
+002900170112      * Lavanya V   * 2017/01/10 * RFS166642- Changing the error codes
+003000170112      *                            as per requirements
+003100200220      * V L Prasanna* 2017/02/17 * RFS166835- Validate "Auth Code"     *
+003200200220      * Ewa K.      *            * against the MFAINVACP table.        *
+003300170321      * Ewa K.      * 2017/03/21 * RFS168893 -Recompile for MFAORDD15P *
+003400170321      *             *            * MFAOELD15P,MFAORDACCP,MFAORLACCP    *
+003500170330      * Ewa K.      * 2017/03/30 * RFS165718 -Recompile for CPYBLKERR  *
+003600170705      * V.L.Prasanna* 2017/07/05 * RFS170628 -GUI BDL - Dealer
+003700210706      *             *            * Commissio Details not $reated
+003800170822      * Lavanya V   * 2017/07/04* RFS163001 - Create log for NFU upd.  *
+003900190222      * Kavya K     * 2019/02/22* RFS181057- Recompile for MFAORDP15P  *
+004000190226      *                         *            MFAORDA15P                *
+004100190603      * Kavya K     * 2019/06/03* RFS182833 - Recompile for MFAORDACCP *
+004200190603      *             *           *            and MFAORLACCP            *
+004300191031      * Mayilsamy D * 2019/10/30* RFS184366 - Recompile                *
+004400200122      * Kavya K     * 2020/01/22* RFS184872-Recompile for MFADLRMSCP   *
+004500200123      *             *           *           and MFAORDA15P             *
+004600200212      * Emmanuel Y  * 2020/02/12* RFS1042284 Request to update Repres  *
+004700200213      *             *           * rejected if no rec in DLRMSCP file   *
+004800200705      * Mayilsamy D * 2020/07/04* RFS186092 - Recompile                *
+004900200826      * Lavanya V   * 2020/08/26* RFS185892 -Recompile for CPYBLKERR   *
+005000201112      * Ewa K.      * 2020/11/12* RFS185174 Recompile for CPWSYSPARM.  *
+005100210629      * Chaya SP    * 2021/06/29* RFS1116414 -Incorrect Institution and*
+005200210629      *             *           * Branch addresses updated by BDL      *
+005300210917      * Chaya SP    * 2021/09/16* RFS1120767 - Address provided for    *
+005400210917      *             *           * Branch/institution                   *
+005500210917      *             *           * not updated through BDL              *
+005600210923      **************************Last************************************
+005700170112       ENVIRONMENT DIVISION.
+005800170112       CONFIGURATION SECTION.
+005900200122       SOURCE-COMPUTER. IBM-AS400.
+006000170112       OBJECT-COMPUTER. IBM-AS400.
+006100170112       SPECIAL-NAMES.
+006200170112           LINKAGE TYPE IS PROCEDURE FOR "ESGADDRESS"
+006300170112           LINKAGE TYPE IS PROCEDURE FOR "ESBRESPONS"
+006400170112           LINKAGE TYPE IS PROCEDURE FOR "GETCTLNUM"
+006500170112           DATA-AREA  IS lc_DATA-MFAESGPARM
+006600170112           LOCAL-DATA IS ld-area
+006700170726163001     DATA-AREA  IS lc_DATA-MFACMPCDP
+006800170713163001     DATA-AREA IS WS-DATA-AREA.
+006900170112
+007000170112       INPUT-OUTPUT SECTION.
+007100170112      * ---------------------------------
+007200170112       FILE-CONTROL.
+007300170112      * ---------------------------------
+007400170112
+007500170112           SELECT ORDER-ENTRY-RESPONSE-DTL-LOG
+007600170112                  ASSIGN TO DATABASE-MFAOELX15P
+007700170112                  ORGANIZATION IS INDEXED
+007800170112                  ACCESS       IS DYNAMIC
+007900170112                  RECORD KEY   IS EXTERNALLY-DESCRIBED-KEY
+008000170112                  WITH DUPLICATES
+008100170112                  FILE STATUS  IS lc_FileStatus.
+008200170112
+008300170112           SELECT NFU-RESPONSE-LOG
+008400170112                  ASSIGN       TO DATABASE-MFANFUR15P
+008500170112                  ORGANIZATION IS SEQUENTIAL
+008600170112                  ACCESS       IS SEQUENTIAL
+008700170112                  FILE STATUS  IS lc_FileStatus.
+008800170112
+008900170112           SELECT NFU-RESPONSE-DTL-LOG
+009000170112                  ASSIGN       TO DATABASE-MFANFUX15P
+009100170112                  ORGANIZATION IS SEQUENTIAL
+009200170112                  ACCESS       IS SEQUENTIAL
+009300170112                  FILE STATUS  IS lc_FileStatus.
+009400170112
+009500170112           SELECT ORDER-ENTRY-DETAIL-LOG
+009600170112                  ASSIGN TO DATABASE-MFAOELE15P
+009700170112                  ORGANIZATION IS INDEXED
+009800170112                  ACCESS       IS DYNAMIC
+009900170112                  RECORD KEY   IS EXTERNALLY-DESCRIBED-KEY
+010000170112                  FILE STATUS  IS lc_FileStatus.
+010100170112
+010200170112           SELECT Institution-Branch-Data-Log
+010300170112                  ASSIGN TO DATABASE-MFAINSBDLP
+010400170112                  ORGANIZATION IS INDEXED
+010500170112                  ACCESS IS DYNAMIC
+010600170112                  RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+010700170112                  FILE STATUS IS lc_FileStatus.
+010800170112
+010900170112           SELECT Institution-Update
+011000170112                  ASSIGN TO DATABASE-Mfainsp
+011100170112                  ORGANIZATION    IS INDEXED
+011200170112                  ACCESS          IS RANDOM
+011300170112                  RECORD KEY      IS EXTERNALLY-DESCRIBED-KEY
+011400170112                  FILE STATUS     IS lc_FileStatus.
+011500170112
+011600170112           SELECT InstitutionBranch-Update
+011700170112                  ASSIGN TO DATABASE-Mfainsbrp
+011800170112                  ORGANIZATION    IS INDEXED
+011900170112                  ACCESS          IS RANDOM
+012000170112                  RECORD KEY      IS EXTERNALLY-DESCRIBED-KEY
+012100170112                  FILE STATUS     IS lc_FileStatus.
+012200170112
+012300170112           SELECT InstBrchAddress-Update
+012400170112                  ASSIGN TO DATABASE-Mfainsbap
+012500170112                  ORGANIZATION    IS INDEXED
+012600170112                  ACCESS          IS RANDOM
+012700170112                  RECORD KEY      IS EXTERNALLY-DESCRIBED-KEY
+012800170112                  FILE STATUS     IS lc_FileStatus.
+012900170112
+013000170112           SELECT Dealer-Rep-Data-Log
+013100170112                  ASSIGN TO DATABASE-MFADERDLP
+013200170112                  ORGANIZATION IS INDEXED
+013300170112                  ACCESS IS DYNAMIC
+013400170112                  RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+013500170112                  WITH DUPLICATES
+013600170112                  FILE STATUS IS lc_FileStatus.
+013700170112
+013800170112           SELECT Dealer-Update
+013900170112                  ASSIGN TO DATABASE-Mfadeap
+014000170112                  ORGANIZATION    IS INDEXED
+014100170112                  ACCESS          IS RANDOM
+014200170112                  RECORD KEY      IS EXTERNALLY-DESCRIBED-KEY
+014300170112                  FILE STATUS     IS lc_FileStatus.
+014400170112
+014500170112           SELECT Dealer-Misc-Update
+014600170112                  ASSIGN TO DATABASE-Mfadeamdp
+014700170112                  ORGANIZATION    IS INDEXED
+014800170112                  ACCESS          IS RANDOM
+014900170112                  RECORD KEY      IS EXTERNALLY-DESCRIBED-KEY
+015000170112                  FILE STATUS     IS lc_FileStatus.
+015100170112
+015200170112           SELECT Dealer-Rep-Update
+015300170112                  ASSIGN TO DATABASE-Mfadearep
+015400170112                  ORGANIZATION    IS INDEXED
+015500170112                  ACCESS          IS RANDOM
+015600170112                  RECORD KEY      IS EXTERNALLY-DESCRIBED-KEY
+015700170112                  FILE STATUS     IS lc_FileStatus.
+015800170112
+015900170112           SELECT Dealer-Rep-Misc-Update
+016000170112                  ASSIGN TO DATABASE-Mfadlrmscp
+016100170112                  ORGANIZATION    IS INDEXED
+016200170112                  ACCESS          IS RANDOM
+016300170112                  RECORD KEY      IS EXTERNALLY-DESCRIBED-KEY
+016400170112                  FILE STATUS     IS lc_FileStatus.
+016500170530
+016600170530      *RFS170628 - Starts
+016700170530           SELECT DEALER-COMMISSIONS
+016800170530                  ASSIGN TO DATABASE-MFADEACMP
+016900170530                  ORGANIZATION    IS INDEXED
+017000170530                  ACCESS          IS RANDOM
+017100170530                  RECORD KEY      IS EXTERNALLY-DESCRIBED-KEY
+017200170530                  FILE STATUS     IS lc_FileStatus.
+017300170530      *RFS170628 - Ends
+017400170713
+017500170713      *RFS163001 Starts
+017600170713           SELECT BLK-NFU-LOG
+017700170713                  ASSIGN TO DATABASE-MFABLKLOGP
+017800170713                  ORGANIZATION IS INDEXED
+017900170713                  ACCESS IS DYNAMIC
+018000170713                  RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+018100170713                  FILE STATUS  IS WS-FILE-STATUS.
+018200170713      *RFS163001 Ends
+018300170112      /
+018400170112       I-O-CONTROL.
+018500170112           COMMITMENT CONTROL FOR Institution-Branch-Data-Log
+018600170112           COMMITMENT CONTROL FOR Institution-Update
+018700170112           COMMITMENT CONTROL FOR InstitutionBranch-Update
+018800170112           COMMITMENT CONTROL FOR InstBrchAddress-Update
+018900170112           COMMITMENT CONTROL FOR Dealer-Rep-Data-Log
+019000170112           COMMITMENT CONTROL FOR Dealer-Update
+019100170112           COMMITMENT CONTROL FOR Dealer-Misc-Update
+019200170112           COMMITMENT CONTROL FOR Dealer-Rep-Update
+019300170530170628     COMMITMENT CONTROL FOR DEALER-COMMISSIONS
+019400170726163001     COMMITMENT CONTROL FOR Dealer-Rep-Misc-Update
+019500170713163001     COMMITMENT CONTROL FOR Blk-Nfu-Log.
+019600170112      /
+019700170112       DATA DIVISION.
+019800170112
+019900170112       FILE SECTION.
+020000170112
+020100170112       FD  ORDER-ENTRY-RESPONSE-DTL-LOG
+020200170112           LABEL RECORDS ARE STANDARD.
+020300170112       01  ORDER-ENTRY-RES-DTL-LOG-REC.
+020400170112                         COPY DD-ALL-FORMATS OF MFAOELX15P.
+020500170112      /
+020600170112       FD  NFU-RESPONSE-LOG
+020700170112           LABEL RECORDS ARE STANDARD.
+020800170112       01  NFU-RESPONSE-LOG-REC.
+020900170112                             COPY DD-ALL-FORMATS OF MFANFUR15P.
+021000170112      /
+021100170112       FD  NFU-RESPONSE-DTL-LOG
+021200170112           LABEL RECORDS ARE STANDARD.
+021300170112       01  NFU-RESPONSE-DTL-LOG-REC.
+021400170112                             COPY DD-ALL-FORMATS OF MFANFUX15P.
+021500170112      /
+021600170112       FD  ORDER-ENTRY-DETAIL-LOG
+021700170112           LABEL RECORDS ARE STANDARD.
+021800170112       01  ORDER-ENTRY-DETAIL-LOG-REC.
+021900170112           COPY DD-ALL-FORMATS OF MFAOELE15P.
+022000170112      /
+022100170112       FD  Institution-Branch-Data-Log
+022200170112           LABEL RECORDS ARE STANDARD.
+022300170112       01  Inst-Branch-Log-Rec. COPY DD-ALL-FORMATS OF MFAINSBDLP.
+022400170112      /
+022500170112       FD  Institution-Update
+022600170112           LABEL RECORDS ARE STANDARD.
+022700170112       01  Institution-UpdateRec.  COPY DD-ALL-FORMATS OF Mfainsp.
+022800170112      /
+022900170112       FD  InstitutionBranch-Update
+023000170112           LABEL RECORDS ARE STANDARD.
+023100170112       01  InstBranch-UpdRec. COPY DD-ALL-FORMATS OF Mfainsbrp.
+023200170112      /
+023300170112       FD  InstBrchAddress-Update
+023400170112           LABEL RECORDS ARE STANDARD.
+023500170112       01  InstBrchAddress-UpdRec. COPY DD-ALL-FORMATS OF Mfainsbap.
+023600170112      /
+023700170112       FD  Dealer-Rep-Data-Log
+023800170112           LABEL RECORDS ARE STANDARD.
+023900170112       01  Dealer-Rep-DATA-LOGRec. COPY DD-ALL-FORMATS OF Mfaderdlp.
+024000170112      /
+024100170112       FD  Dealer-Update
+024200170112           LABEL RECORDS ARE STANDARD.
+024300170112       01  Dealer-UpdateRec.       COPY DD-ALL-FORMATS OF Mfadeap.
+024400170112      /
+024500170112       FD  Dealer-Misc-Update
+024600170112           LABEL RECORDS ARE STANDARD.
+024700170112       01  Dealer-Misc-UpdateRec.  COPY DD-ALL-FORMATS OF Mfadeamdp.
+024800170112      /
+024900170112       FD  Dealer-Rep-Update
+025000170112           LABEL RECORDS ARE STANDARD.
+025100170112       01  DealerRep-UpdateRec.    COPY DD-ALL-FORMATS OF Mfadearep.
+025200170112      /
+025300170112       FD  Dealer-Rep-Misc-Update
+025400170112           LABEL RECORDS ARE STANDARD.
+025500170112       01  DealerRep-Misc-UpdateRec. COPY DD-ALL-FORMATS OF Mfadlrmscp.
+025600170112      /
+025700170530      *RFS170628 - Starts
+025800170530       FD  DEALER-COMMISSIONS
+025900170530           LABEL RECORDS ARE STANDARD.
+026000170530       01  Dealer-CommissionsRec. COPY DD-ALL-FORMATS OF MFADEACMP.
+026100170530      /
+026200170530      *RFS170628 - Ends
+026300170713
+026400170713      *RFS 163001 Starts
+026500170713       FD  BLK-NFU-LOG
+026600170713           LABEL RECORDS ARE STANDARD.
+026700170713       01  BLK-NFU-LOG-REC.  COPY DD-ALL-FORMATS OF MFABLKLOGP.
+026800170713      *RFS 163001 Ends
+026900170112      *****************************************************************
+027000170112      *     W O R K I N G  S T O R A G E  S E C T I O N               *
+027100170112      *****************************************************************
+027200170112       WORKING-STORAGE SECTION.
+027300170112
+027400170112           COPY CPYSQLFLD
+027500170112               REPLACING == "CURRENT_PROGRAM" == BY == "ESBIDCUPRO" ==.
+027600170112
+027700170112       01  lc_Special_Modules.
+027800170112           03 lc_BEDROCKodule            PIC X(10) VALUE "BEDROCK".
+027900170112           03 lc_BEDROCK_Module_Auth     PIC X(1)  VALUE SPACES.
+028000170112              88  lncc_BEDROCK_Setup               VALUE "Y".
+028100170112              88  lncc_BEDROCK_NotSetup            VALUE "N".
+028200170112
+028300170112       01  lc_FileStatus                 PIC X(2)  VALUE SPACES.
+028400170112           88 lncc_FileStatusFound                  VALUE "00".
+028500170112           88 lncc_FileStatusEOF                    VALUE "10".
+028600170112           88 lncc_FileStatusNotFound               VALUE "23".
+028700170112           88 lncc_FileStatusLocked                 VALUE "9D".
+028800170112
+028900170112      * ESGADDRESS parms
+029000170112       01  lc-Addr-Code                  PIC X(01).
+029100170112       01  lc-AddressDetails.
+029200170112           03 lc-Addr-Line-1              PIC X(40).
+029300170112           03 lc-Addr-Line-2              PIC X(40).
+029400170112           03 lc-Addr-Line-3              PIC X(40).
+029500170112           03 lc-City                     PIC X(30).
+029600170112           03 lc-Province                 PIC X(02).
+029700170112           03 lc-Country                  PIC X(03).
+029800170112           03 lc-PostalCode               PIC X(10).
+029900170112           03 lc-AddressRec               PIC X(65).
+030000170112       01  Nfu-Esg-Log-Rec.     COPY DD-ALL-FORMATS OF MFANFULGP.
+030100170112       01 li-AddressNo                    PIC S9(07) COMP-3.
+030200170112       01 lc-AddressFlag.
+030300170112          03 lc-Nfulgp                    PIC X(01).
+030400170112          03 lc-Ivrdlp                    PIC X(01).
+030500170112          03 lc-WriteAddr                 PIC X(01).
+030600170112          03 lc-SameAddress               PIC X(01).
+030700170112       01 lc-TaxCodes.
+030800170112          03 lc-Prov-Tax                  PIC X(03).
+030900170112          03 lc-Country-Tax               PIC X(03).
+031000170112       01 lc-AddressCompare               PIC X(01).
+031100170112
+031200170112       01  lc_conditions.
+031300170112           03 lc_Add_Institution        PIC X(01)  VALUE SPACE.
+031400170112              88 Add_Institution            VALUE "A".
+031500170112              88 Modify_Institution         VALUE "M".
+031600170112
+031700170112           03 lc_Add_InstAddress        PIC X(01)  VALUE SPACE.
+031800170112              88 Modify_InstAddress         VALUE "M".
+031900170112
+032000170112           03 lc_Add_Branch             PIC X(01)  VALUE SPACE.
+032100170112              88 Add_Branch                 VALUE "A".
+032200170112              88 Modify_Branch              VALUE "M".
+032300170112
+032400170112           03 lc_Add_BranchAddr         PIC X(01)  VALUE SPACE.
+032500170112              88 Modify_BranchAddr          VALUE "M".
+032600170112
+032700170112           03 lc_Add_Dealer             PIC X(01)  VALUE SPACE.
+032800170112              88 Add_Dealer                 VALUE "A".
+032900170112              88 Modify_Dealer              VALUE "M".
+033000170112
+033100170112           03 lc_Add_DealerMisc         PIC X(01)  VALUE SPACE.
+033200170112              88 Add_DealerMisc             VALUE "A".
+033300170112              88 Modify_DealerMisc          VALUE "M".
+033400170112
+033500170112           03 lc_Add_DealerSEGLicense   PIC X(01)  VALUE SPACE.
+033600170112              88 Add_DealerSEGLicense       VALUE "A".
+033700170112              88 Modfy_DealerSEGLicense     VALUE "M".
+033800170112
+033900170112           03 lc_Add_Representative     PIC X(01)  VALUE SPACE.
+034000170112              88 Add_Representative         VALUE "A".
+034100170112              88 Modify_Representative      VALUE "M".
+034200170112
+034300170112           03 lc_Add_DealerRepMisc      PIC X(01)  VALUE SPACE.
+034400170112              88 Add_DealerRepMisc          VALUE "A".
+034500170112              88 Modify_DealerRepMisc       VALUE "M".
+034600170112
+034700170112           03 lc_Add_DealerRepSEGLicense PIC X(01)  VALUE SPACE.
+034800170112              88 Add_RepSEGLicense          VALUE "A".
+034900170112              88 Modify_RepSEGLicense       VALUE "M".
+035000170112
+035100170112           03 lc_MFAINSBDLPrwt          PIC X(01)  VALUE SPACE.
+035200170112              88 ncc_MFAINSBDLPrwt          VALUE "Y".
+035300170112
+035400170112           03 lc_MFADERDLPrwt          PIC X(01)  VALUE SPACE.
+035500170112              88 ncc_MFADERDLPrwt           VALUE "Y".
+035600170112
+035700170112       01  WS-ERR-CODE                    PIC X(02) VALUE SPACES.
+035800170112         88  lncc_ErrOk                             VALUE SPACES.
+035900170112         88  lncc_Err01                             VALUE "01".
+036000170112         88  lncc_Err02                             VALUE "02".
+036100170112
+036200170112       01  lc_GetCtlNum.
+036300170112         03  lnc_CTLNFUCode             PIC  X(04)  VALUE "NFU#".
+036400170112         03  li_NfuLinkNo               PIC  S9(09) COMP-3.
+036500170112         03  li-NxtNumber               PIC  S9(09) COMP-3.
+036600170112         03  lc-CTLReturnCode           PIC  X(02)  VALUE SPACES.
+036700210629
+036800210629      *RFS1116414 -Start.
+036900210629       01  lc_GetCtlNum.
+037000210629         03 GCCN-NXT-NUMBER             PIC S9(09) COMP-3.
+037100210629         03 GCCN-RETURN-CODE            PIC X(02).
+037200210629      *RFS1116414 -End.
+037300210629
+037400170112       01  lc_ControlParms.
+037500170112         03  lc_ControlCode             PIC X(4) VALUES "OER#".
+037600170112         03  li_NextNumber              PIC S9(9) COMP-3.
+037700170112         03  lc_ReturnCode              PIC X(2).
+037800170112
+037900170112       01  lc-ldaArea.
+038000170112         05  lc-Filler1                   PIC X(810).
+038100170112         05  lc-DocId                     PIC X(35).
+038200170112         05  lc-Filler2                   PIC X(179).
+038300170112
+038400170112       01 lc_Mfacmpcdp.
+038500170112         03  lc_MgmCode                 PIC  X(03).
+038600170112         03  lc_MgmName                 PIC  X(40).
+038700170112
+038800170112       01  lc-copyBooks.
+038900170112         03  lc-FileName                  PIC  X(02).
+039000170112         03  lncc-XM                      PIC  X(02)  VALUE "XM".
+039100170112
+039200170112       01  WS-FILE-STATUS                 PIC  X(02)  VALUE SPACES.
+039300170112
+039400170112       01  lc_ESGParms.
+039500170112          03 lc_Filler1                 PIC X(166)  VALUE SPACES.
+039600170112          03 lc_VersionNo               PIC X(002)  VALUE SPACES.
+039700170112          03 lc_Filler2                 PIC X(932)  VALUE SPACES.
+039800170112
+039900170112       01  lc_SQLvar_InstBranch.
+040000170112      *Institution
+040100170112         03  lc_Institution_Code          PIC  X(05).
+040200170112         03  lc_Institution_Name          PIC  X(35).
+040300170112         03  lc_Language_Code             PIC  X(01).
+040400170112         03  lc_Branch_Code               PIC  X(05).
+040500170112         03  lc_Business_Type             PIC  X(03).
+040600170112         03  lc_Status                    PIC  X(03).
+040700170112      *Institution-Branch
+040800170112         03  lc_Branch_Name               PIC  X(35).
+040900170112         03  li_AddrNo                    PIC S9(07) COMP-3.
+041000170112         03  li_FAX_Area                  PIC S9(03) COMP-3.
+041100170112         03  li_FAX_Phone                 PIC S9(07) COMP-3.
+041200170112         03  li_Area_Code                 PIC S9(03) COMP-3.
+041300170112         03  li_Phone_No                  PIC S9(07) COMP-3.
+041400170112      *Inst-Branch-Address
+041500170112         03  lc_Inst_City                 PIC  X(30).
+041600170112         03  lc_Inst_Province             PIC  X(03).
+041700170112         03  lc_Inst_PostalCode           PIC  X(12).
+041800170112
+041900170112       01  lc_SQLvar_Dealer.
+042000170112         03  lc_Dealer_Code               PIC  X(04).
+042100170112         03  lc_Dealer_Name               PIC  X(35).
+042200170112         03  lc_Dealer_Inst               PIC  X(35).
+042300170112         03  lc_Dealer_Branch             PIC  X(05).
+042400170112         03  lc_Dealer_Status             PIC  X(01).
+042500170112         03  lc_Dealer_Language           PIC  X(01).
+042600170112         03  li_Dealer_Area_Code          PIC S9(03) COMP-3.
+042700170112         03  li_Dealer_Phone_No           PIC S9(07) COMP-3.
+042800170112         03  li_Dealer_FAX_Area           PIC S9(03) COMP-3.
+042900170112         03  li_Dealer_FAX_Phone          PIC S9(07) COMP-3.
+043000170112         03  lc_Dealer_Settlement         PIC  X(01).
+043100170112         03  lc_Dealer_Money_Mrk_Trd      PIC  X(01).
+043200170112         03  lc_Dealer_Switch_Trading     PIC  X(01).
+043300170112      *Dealer-Misc-Details
+043400170112         03  lc_Dealer_Ext_Tfr_WOR        PIC  X(01).
+043500170112         03  lc_Dealer_Int_Tfr_WOR        PIC  X(01).
+043600170112         03  lc_Dealer_XML_Auth           PIC  X(06).
+043700170112
+043800170112       01  lc_SQLvar_DealerRep.
+043900170112         03  lc_Dealer_Rep_Code           PIC  X(06).
+044000170112         03  lc_Last_Name                 PIC  X(20).
+044100170112         03  lc_First_Name                PIC  X(20).
+044200170112         03  lc_Salutation_Code           PIC  X(04).
+044300170112         03  lc_Initials                  PIC  X(03).
+044400170112         03  lc_Dealer_Rep_Status         PIC  X(02).
+044500170112         03  li_Phone_Ext                 PIC S9(10).
+044600170112         03  lc_MarketingBranch           PIC  X(05).
+044700170112
+044800170112       01  lc_SQLvar_DealerLicense.
+044900170112         03  lc_Province_Code             PIC  X(03).
+045000170112         03  li_Expiry_Date               PIC S9(08).
+045100170112
+045200170112       01  lc_WorkingStorageFields.
+045300170112         03  lc_ValidDate                 PIC  X(01) VALUE SPACES.
+045400170112         03  li_Ind                       PIC  S9(03).
+045500170112         03  lc_Inst_CodeFound            PIC  X(05).
+045600170112         03  li_Count                     PIC  S9(09) COMP-3.
+045700170112         03  lc_Frequency                 PIC  X(02).
+045800170112         03  li_Common                    PIC  ZZZZZZZZZZZ9.99.
+045900170112         03  lc_NewValue                  PIC  X(35).
+046000170112         03  lc_OrigValue                 PIC  X(35).
+046100170112         03  lc_User                      PIC  X(10).
+046200170112         03  lc_DealerSett                PIC  X(01).
+046300170112         03  lc_BusinessType              PIC  X(03).
+046400170112         03  li_SysDate                   PIC S9(09) VALUE 0.
+046500170112         03  li_SysTime                   PIC S9(08) VALUE 0.
+046600170112         03  li_SysTime1 REDEFINES li_SysTime.
+046700170112           05  li_SysTime2                PIC  9(04).
+046800170112           05  FILLER                     PIC  9(04).
+046900170112         03  lc_Investment_Code           PIC  X(05) VALUE SPACES.
+047000170112         03  li_Batch_Date                PIC  S9(09) COMP-3.
+047100170112         03  lc_Batch_Code                PIC  X(04).
+047200170112         03  lc_Msg_Id                    PIC  X(15).
+047300170530170628   03  lc-FreqCode                  PIC  X(02) VALUE " ".
+047400200212      *RFS1042284 Start
+047500200212         03  lc_DlrRepMisc_InfoExistsFlag  PIC X(01)  VALUE SPACE.
+047600200212             88 lb_DlrRepMisc_InfoExists       VALUE "Y".
+047700200212             88 lb_DlrRepMisc_InfoExistsNo  VALUE "N".
+047800200212      *RFS1042284 end
+047900170112
+048000170112       01  lc_Constants.
+048100170112         03  lc_CAN               PIC  X(03)  VALUE "CAN".
+048200170112         03  lc_RecordId          PIC  X(06)  VALUE "INSDRC".
+048300170112         03  lc_OpenFileFlag      PIC  X(01)  VALUE "Y".
+048400170112         03  lnc_INSDTL           PIC  X(08)  VALUE "INSDTL  ".
+048500170112         03  lnc_INSBDTL          PIC  X(08)  VALUE "INSBDTL ".
+048600170112         03  lnc_DELDTL           PIC  X(08)  VALUE "DELDTL  ".
+048700170112         03  lnc_DERDTL           PIC  X(08)  VALUE "DERDTL  ".
+048800170112         03  lnc_BulkOrdrSource   PIC  X(01)  VALUE "B".
+048900170112         03  lnc_F                PIC  X(10)  VALUE "F".
+049000170112         03  lnc_QM               PIC  X(10)  VALUE "?".
+049100170112         03  lnc_PurchWORno       PIC  X(07)  VALUE "0000001".
+049200170112         03  lnc_P                PIC  X(01)  VALUE "P".
+049300170112         03  lnc_S                PIC  X(01)  VALUE "S".
+049400170112         03  lnc_N                PIC  X(01)  VALUE "N".
+049500170112         03  lnc_Y                PIC  X(01)  VALUE "Y".
+049600170530170628   03  lnc_U                PIC  X(01)  VALUE "U".
+049700170707170628   03  lnc_B                PIC  X(01)  VALUE "B".
+049800170530170628   03  lnc_DELCOM           PIC  X(06)  VALUE "DELCOM".
+049900170707170628   03  lnc_QT               PIC  X(02)  VALUE "QT".
+050000170707170628   03  lnc_USD              PIC  X(03)  VALUE "USD".
+050100170707170628   03  lnc_CAD              PIC  X(03)  VALUE "CAD".
+050200170707170628   03  lnc_MED              PIC  X(03)  VALUE "MED".
+050300170707170628   03  lnc_WK               PIC  X(02)  VALUE "WK".
+050400170112         03  lnc_A                PIC  X(01)  VALUE "A".
+050500170112         03  lnc_E                PIC  X(01)  VALUE "E".
+050600170112         03  lnc_99               PIC  X(02)  VALUE "99".
+050700170112         03  lnc_auditStatus_N    PIC  X(01)  VALUE "N".
+050800170112         03  lnc_auditStatus_C    PIC  X(01)  VALUE "C".
+050900170112         03  lnc_Blank            PIC  X(01)  VALUE " ".
+051000170112         03  lnc_eleCde           PIC  X(03)  VALUE SPACE.
+051100170112             88  eleCd_SPACE                  VALUE "  ".
+051200170112             88  eleCd_001                    VALUE "001".
+051300170112             88  eleCd_002                    VALUE "002".
+051400170112
+051500170112       01 lc_ChangeCategory.
+051600170112           03 lc_Change_Category         PIC X(20).
+051700170112           03 lc-Change-Category-New.
+051800170112              05 lc-Change-Category-N1   PIC X(11) VALUE "BULK - NEW ".
+051900170112              05 lc-Change-Category-N2   PIC X(09) VALUE " ".
+052000170112           03 lc-Change-Category-Chg.
+052100170112              05 lc-Change-Category-C1   PIC X(11) VALUE "BULK - CHG ".
+052200170112              05 lc-Change-Category-C2   PIC X(09) VALUE " ".
+052300170112
+052400170112        01 li_ValDate             PIC 9(08) VALUE 0.
+052500170112        01 li_ValDateR REDEFINES li_ValDate.
+052600170112           03 li_CCYY             PIC 9(04).
+052700170112           03 li_MMDD             PIC 9(04).
+052800170112
+052900170112      * WS - Record declarations
+053000170112       01  lf_Institution.
+053100170112          04  lf_InstitutionRec.
+053200170112              COPY DD-ALL-FORMATS OF MFAINSP.
+053300170112
+053400170112       01  lf_Institution-Branch.
+053500170112          04  lf_InstitutionBrchRec.
+053600170112              COPY DD-ALL-FORMATS OF MFAINSBRP.
+053700170112
+053800170112       01  lf_Inst-Branch-Address.
+053900170112          04  lf_Inst-Branch-AddressRec.
+054000170112              COPY DD-ALL-FORMATS OF MFAINSBAP.
+054100170112
+054200170112       01  lf_Dealer.
+054300170112          04  lf_DealerRec.
+054400170112              COPY DD-ALL-FORMATS OF MFADEAP.
+054500170112
+054600170112       01  lf_DealerMiscDetails.
+054700170112          04  lf_DealerMiscDetailsRec.
+054800170112              COPY DD-ALL-FORMATS OF MFADEAMDP.
+054900170112
+055000170112       01  lf_DealerRep.
+055100170112          04  lf_DealerRepRec.
+055200170112              COPY DD-ALL-FORMATS OF MFADEAREP.
+055300170112
+055400170112       01  lf_DealerRepMisc.
+055500170112          04  lf_DealerRepMiscRec.
+055600170112              COPY DD-ALL-FORMATS OF MFADLRMSCP.
+055700170112
+055800170530      *RFS170628 - Starts
+055900170530       01  lf_DealerCommissionsCAD.
+056000170530          04  lf_DealerCommissionsCADRec.
+056100170530              COPY DD-ALL-FORMATS OF MFADEACMP
+056200170530              REPLACING CURRENCY  BY CURRENCY-DDS.
+056300170530
+056400170530
+056500170530       01  lf_DealerCommissionsUSD.
+056600170530          04  lf_DealerCommissionsUSDRec.
+056700170530              COPY DD-ALL-FORMATS OF MFADEACMP
+056800170530              REPLACING CURRENCY  BY CURRENCY-DDS.
+056900170530      *RFS170628 - Starts
+057000170530
+057100170112           EXEC SQL
+057200170112               INCLUDE SQLCA
+057300170112           END-EXEC.
+057400170112
+057500170112      * COPYBOOK declaration
+057600170112
+057700170112        COPY CPYOE15.
+057800170112        COPY CPYOE15FLD.
+057900170112        COPY CPYESBRECS.
+058000170112        COPY CPYESGERR.
+058100170112        COPY CPYOERESWS.
+058200170112        COPY CPYESBFLDS.
+058300170112        COPY CPYBLKERR.
+058400170112        COPY CPYADDRREC.
+058500170112
+058600170112      *****************************************************************
+058700170112      *         L I N K A G E    S E C T I O N                        *
+058800170112      *****************************************************************
+058900170112       LINKAGE SECTION.
+059000170112
+059100170112      *****************************************************************
+059200170112      *        P R O C E D U R E   D I V I S I O N                    *
+059300170112      *****************************************************************
+059400170112       PROCEDURE DIVISION.
+059500170112
+059600170112      *****************************************************************
+059700170112       MainLine.
+059800170112           EXEC SQL
+059900170112             WHENEVER SQLERROR CONTINUE
+060000170112           END-EXEC.
+060100170112
+060200170112           EXEC SQL
+060300170112             WHENEVER NOT FOUND CONTINUE
+060400170112           END-EXEC.
+060500170112
+060600170112           PERFORM InitialLogic.
+060700170112           PERFORM DetailProcessing.
+060800170112           PERFORM Termination.
+060900170112      /
+061000170112      *****************************************************************
+061100170112       InitialLogic.
+061200170112
+061300170112           SET lncc_ErrOk TO TRUE.
+061400170112           INITIALIZE lc_WorkingStorageFields, lc_conditions,
+061500170112                      lc_SQLvar_InstBranch,    lc_SQLvar_Dealer,
+061600170112                      lc_SQLvar_DealerRep,     lc_SQLvar_DealerLicense,
+061700170112                      lc_Add_DealerRepSEGLicense.
+061800170112           ACCEPT li_SysTime  FROM TIME.
+061900170112           ACCEPT li_SysDate  FROM DATE YYYYMMDD.
+062000170112           ACCEPT lc_MgmCode FROM lc_DATA-MFACMPCDP FOR "MFACMPCDP".
+062100210920      *RFS1116414 Start.
+062200210920      ** Get a new Address No for Inst. Address under the Initial-logic
+062300210920           CALL "GETCNCTLNM" USING GCCN-NXT-NUMBER,
+062400210920                                   GCCN-RETURN-CODE
+062500210920           END-CALL.
+062600210920
+062700210920      *RFS1120767 - Start.
+062800210920           EXEC SQL
+062900210920             DROP TABLE WRKADDP
+063000210920           END-EXEC.
+063100210920      *RFS1120767 - End.
+063200210920
+063300210920
+063400210920           EXEC SQL
+063500210920120767*      CREATE TABLE WRKADDP LIKE MFAADDP
+063600210920120767       CREATE TABLE QTEMP/WRKADDP LIKE MFAADDP
+063700210920           END-EXEC.
+063800210920      *RFS1116414 End.
+063900210920
+064000170112      * RFS166642 starts
+064100170112           IF lc_OpenFileFlag  = lnc_Y
+064200170112              MOVE lnc_N TO lc_OpenFileFlag
+064300170112              PERFORM Open-Files
+064400170112           END-IF.
+064500170112      * RFS166642 Ends
+064600170112
+064700170112      * Reject if "BEDROCK" module is not set up
+064800170112           PERFORM Special-Module-Authorization.
+064900170112           IF lncc_BEDROCK_NotSetup
+065000170112              MOVE lc-InvalidData-375 TO COMM-RETURN-DESC
+065100170112              MOVE "IDC01" TO COMM-ERROR-PTR
+065200170112              PERFORM RejectRequest
+065300170112           END-IF.
+065400170112
+065500170112      * RFS166642 starts
+065600170112      *    IF lc_OpenFileFlag  = lnc_Y
+065700170112      *       MOVE lnc_N TO lc_OpenFileFlag
+065800170112      *       PERFORM Open-Files
+065900170112      *    END-IF.
+066000170112      * RFS166642 Ends
+066100170112      *Update LDA for IWA process/triggers
+066200170112           ACCEPT  lc-ldaArea FROM ld-area.
+066300170112           INITIALIZE lc-DocId.
+066400170112           EVALUATE TRUE
+066500170112            WHEN Msg-Id of BLK-Institution-ExtRec NOT = SPACES
+066600170112                 MOVE Image-Document-Id of BLK-Institution-ExtRec
+066700170112                 TO lc-DocId
+066800170112            WHEN Msg-Id of BLK-Inst-Branch-ExtRec NOT = SPACES
+066900170112                 MOVE Image-Document-Id of BLK-Inst-Branch-ExtRec
+067000170112                 TO lc-DocId
+067100170112            WHEN Msg-Id of BLK-Dealer-ExtRec NOT = SPACES
+067200170112                 MOVE Image-Document-Id of BLK-Dealer-ExtRec
+067300170112                 TO lc-DocId
+067400170112            WHEN Msg-Id of BLK-SEGLicence-ExtRec NOT = SPACES
+067500170112                 MOVE Image-Document-Id of BLK-SEGLicence-ExtRec
+067600170112                 TO lc-DocId
+067700170112            WHEN Msg-Id of BLK-DealerRep-ExtRec NOT = SPACES
+067800170112                 MOVE Image-Document-Id of BLK-DealerRep-ExtRec
+067900170112                 TO lc-DocId
+068000170112            WHEN Msg-Id of BLK-SEGLicence-ExtRec NOT = SPACES
+068100170112                 MOVE Image-Document-Id of BLK-SEGLicence-ExtRec
+068200170112                 TO lc-DocId
+068300170112           END-EVALUATE.
+068400170112
+068500170112           DISPLAY lc-ldaArea UPON ld-area.
+068600170112
+068700170112      *****************************************************************
+068800170112       DetailProcessing.
+068900170112
+069000170112            IF Msg-Id of BLK-Institution-ExtRec NOT = SPACES
+069100170112               INITIALIZE lc_MFAINSBDLPrwt
+069200170112               PERFORM ValidateInstitution
+069300170112               IF Indx-Rej = 0
+069400170112                 IF Add_Institution
+069500170112                    PERFORM AddInstitution
+069600170112                 ELSE
+069700170112                  IF Modify_Institution OR Modify_InstAddress
+069800170112                    PERFORM UpdateInstitution
+069900170112                  END-IF
+070000170112                 END-IF
+070100170112               END-IF
+070200170112            END-IF.
+070300170112            IF Msg-Id of BLK-Inst-Branch-ExtRec NOT = SPACES
+070400170112               INITIALIZE lc_Add_Institution, lc_MFAINSBDLPrwt,
+070500170112                          lc_Add_InstAddress
+070600170112               PERFORM ValidateBranch
+070700170112               IF Indx-Rej = 0
+070800170112                 If Add_Branch
+070900170112                    PERFORM AddBranch
+071000170112                 ELSE
+071100170112                   IF Modify_Branch OR Modify_BranchAddr
+071200170112                     PERFORM UpdateBranch
+071300170112                   END-IF
+071400170112                 END-IF
+071500170112               END-IF
+071600170112            END-IF.
+071700170112            IF Msg-Id of BLK-Dealer-ExtRec NOT = SPACES
+071800170112               INITIALIZE lc_MFADERDLPrwt
+071900170112               PERFORM ValidateDealer
+072000170112               IF Indx-Rej = 0
+072100170112                 If Add_Dealer
+072200170112                    PERFORM AddDealer
+072300170112                 ELSE
+072400170112                  IF Modify_Dealer OR Modify_DealerMisc
+072500170112                    PERFORM UpdateDealer
+072600170112                  END-IF
+072700170112                 END-IF
+072800170112               END-IF
+072900170112            END-IF.
+073000170112            IF Msg-Id of BLK-SEGLicence-ExtRec          NOT = SPACES
+073100170112               AND Dealer-Code of BLK-SEGLicence-ExtRec NOT = SPACES
+073200170112               PERFORM ValidateDealerSEGLicense
+073300170112               IF Indx-Rej = 0
+073400170112                 IF Add_DealerSEGLicense
+073500170112                    PERFORM AddDealerSEGLicense
+073600170112                 ELSE
+073700170112                   IF Modfy_DealerSEGLicense
+073800170112                      PERFORM UpdateDealerSEGLicense
+073900170112                   END-IF
+074000170112                 END-IF
+074100170112               END-IF
+074200170112            END-IF.
+074300170112            IF Msg-Id of BLK-DealerRep-ExtRec NOT = SPACES
+074400170112               INITIALIZE lc_Add_Dealer, lc_MFADERDLPrwt
+074500170112               PERFORM ValidateRepresentative
+074600170112               IF Indx-Rej = 0
+074700200304042284           IF Add_Representative OR Add_DealerMisc
+074800200304                    PERFORM AddRepresentative
+074900170112                 ELSE
+075000170112                  IF Modify_Representative OR Modify_DealerRepMisc
+075100170112                    PERFORM UpdateRepresentative
+075200170112                  END-IF
+075300170112                 END-IF
+075400170112               END-IF
+075500170112            END-IF.
+075600170112            IF Msg-Id of BLK-SEGLicence-ExtRec NOT = SPACES
+075700170112               AND Dealer-Code-Rep of BLK-SEGLicence-ExtRec
+075800170112               NOT = SPACES
+075900170112               PERFORM ValidateRepSEGLicense
+076000170112               IF Indx-Rej = 0
+076100170112                 IF Add_RepSEGLicense
+076200170112                    PERFORM AddRepSEGLicense
+076300170112                 ELSE
+076400170112                   IF Modify_RepSEGLicense
+076500170112                      PERFORM UpdateRepSEGLicense
+076600170112                   END-IF
+076700170112                 END-IF
+076800170112               END-IF
+076900170112            END-IF.
+077000170112
+077100170112      **************** Institution Section ****************************
+077200170112      *
+077300170112       ValidateInstitution.
+077400170112
+077500170112           INITIALIZE li_Count, lc_Add_Institution, lc_User,
+077600170112                      lc_BusinessType, lc_Add_InstAddress,
+077700170112                      lc_Add_BranchAddr.
+077800170112           MOVE User-Id OF BLK-Institution-ExtRec TO lc_User.
+077900170112
+078000170112      * Institution Code is mandatory
+078100170112           IF Institution-Code OF BLK-Institution-ExtRec = SPACES
+078200170112              MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+078300170112              MOVE "IDC02"               TO COMM-ERROR-PTR
+078400170112              PERFORM RejectRequest
+078500170112           END-IF.
+078600170112
+078700170112      *Check if Institution already set up.
+078800170112           PERFORM PopulateTempInstRec.
+078900170112
+079000170112           EXEC SQL
+079100170112              SELECT Count(1)
+079200170112              INTO   :li_Count
+079300170112              FROM   MFAINSP
+079400170112              WHERE INSTITUTION_CODE  = :lc_Institution_Code
+079500170112           END-EXEC.
+079600170112
+079700170112           MOVE SQLSTATE TO lc_sqlStates.
+079800170112           EVALUATE TRUE
+079900170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+080000170112              PERFORM CheckInstDetails
+080100170112            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+080200170112              SET Add_Institution TO TRUE
+080300170112            WHEN OTHER
+080400170112               MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+080500170112               MOVE "IDC03"               TO COMM-ERROR-PTR
+080600170112               PERFORM RejectRequest
+080700170112           END-EVALUATE.
+080800170112
+080900170112           IF Add_Institution
+081000170112              IF Status-DDS OF BLK-Institution-ExtRec = SPACES
+081100170112                 MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+081200170112                 MOVE "IDC04"               TO COMM-ERROR-PTR
+081300170112                 PERFORM RejectRequest
+081400170112              END-IF
+081500170112              IF Language-Code OF BLK-Institution-ExtRec = SPACES
+081600170112                 MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+081700170112                 MOVE "IDC05"               TO COMM-ERROR-PTR
+081800170112                 PERFORM RejectRequest
+081900170112              END-IF
+082000170112              IF Branch-Code   OF BLK-Institution-ExtRec = SPACES
+082100170112                 MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+082200170112                 MOVE "IDC06"               TO COMM-ERROR-PTR
+082300170112                 PERFORM RejectRequest
+082400170112              END-IF
+082500170112              IF Addr-Line1     OF BLK-Institution-ExtRec = SPACES
+082600170112                 MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+082700170112                 MOVE "IDC07"               TO COMM-ERROR-PTR
+082800170112                 PERFORM RejectRequest
+082900170112              END-IF
+083000170112              IF City          OF BLK-Institution-ExtRec = SPACES
+083100170112                 MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+083200170112                 MOVE "IDC08"               TO COMM-ERROR-PTR
+083300170112                 PERFORM RejectRequest
+083400170112              END-IF
+083500170112              IF Province-Code OF BLK-Institution-ExtRec = SPACES
+083600170112                 MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+083700170112                 MOVE "IDC09"               TO COMM-ERROR-PTR
+083800170112                 PERFORM RejectRequest
+083900170112              END-IF
+084000170112              IF Country-Code  OF BLK-Institution-ExtRec = SPACES
+084100170112                 MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+084200170112                 MOVE "IDC10"               TO COMM-ERROR-PTR
+084300170112                 PERFORM RejectRequest
+084400170112              END-IF
+084500170112              IF Postal-Code   OF BLK-Institution-ExtRec = SPACES
+084600170112                 MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+084700170112                 MOVE "IDC11"               TO COMM-ERROR-PTR
+084800170112                 PERFORM RejectRequest
+084900170112              END-IF
+085000170112              IF Business-Type OF BLK-Institution-ExtRec NOT = SPACES
+085100170112                 MOVE Business-Type OF BLK-Institution-ExtRec
+085200170112                   TO lc_BusinessType
+085300170112                 PERFORM ValidateBusinessType
+085400170112              END-IF
+085500170112           END-IF.
+085600170112
+085700170112      *****************************************************************
+085800170112       PopulateTempInstRec.
+085900170112
+086000170112           INITIALIZE lc_SQLvar_InstBranch.
+086100170112
+086200170112           MOVE Institution-Code OF BLK-Institution-ExtRec
+086300170112             TO lc_Institution_Code.
+086400170112           IF Override-Inst-Name OF BLK-Institution-ExtRec NOT = SPACES
+086500170112              MOVE Override-Inst-Name OF BLK-Institution-ExtRec
+086600170112                TO lc_Institution_Name
+086700170112           ELSE
+086800170112              MOVE Institution-Name   OF BLK-Institution-ExtRec
+086900170112                TO lc_Institution_Name
+087000170112           END-IF.
+087100170112           MOVE Language-Code      OF BLK-Institution-ExtRec
+087200170112             TO lc_Language_Code.
+087300170112           MOVE Branch-Code        OF BLK-Institution-ExtRec
+087400170112             TO lc_Branch_Code.
+087500170112           MOVE Business-Type      OF BLK-Institution-ExtRec
+087600170112             TO lc_Business_Type.
+087700170112           MOVE Status-DDS         OF BLK-Institution-ExtRec
+087800170112             TO lc_Status.
+087900170112           MOVE CITY               OF BLK-Institution-ExtRec
+088000170112             TO lc_Inst_City.
+088100170112           MOVE Province-Code      OF BLK-Institution-ExtRec
+088200170112             TO lc_Inst_Province.
+088300170112           MOVE Postal-Code        OF BLK-Institution-ExtRec
+088400170112             TO lc_Inst_PostalCode.
+088500170112
+088600170112      *****************************************************************
+088700170112       CheckInstDetails.
+088800170112
+088900170112           INITIALIZE li_Count.
+089000170112           EXEC SQL
+089100170112              SELECT Count(1)
+089200170112              INTO   :li_Count
+089300170112              FROM   MFAINSP
+089400170112              WHERE INSTITUTION_CODE     = :lc_Institution_Code
+089500170112                AND (INSTITUTION_NAME    = :lc_Institution_Name
+089600170112                 OR :lc_Institution_Name = " ")
+089700170112                AND (LANGUAGE_CODE       = :lc_Language_Code
+089800170112                 OR :lc_Language_Code    = " ")
+089900170112                AND (BRANCH_CODE         = :lc_Branch_Code
+090000170112                 OR :lc_Branch_Code      = " ")
+090100170112                AND (BUSINESS_TYPE       = :lc_Business_Type
+090200170112                 OR :lc_Business_Type    = " ")
+090300170112                AND (STATUS              = :lc_Status
+090400170112                 OR :lc_Status           = " ")
+090500170112           END-EXEC.
+090600170112
+090700170112           MOVE SQLSTATE TO lc_sqlStates.
+090800170112           EVALUATE TRUE
+090900170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+091000170112              IF lc_Branch_Code NOT = SPACES
+091100170112                 PERFORM CheckMFAINSBAP
+091200170112              END-IF
+091300170112            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+091400170112              SET Modify_Institution   TO TRUE
+091500170112            WHEN OTHER
+091600170112               MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+091700170112               MOVE "IDC12"               TO COMM-ERROR-PTR
+091800170112               PERFORM RejectRequest
+091900170112           END-EVALUATE.
+092000170112
+092100170112           IF Override-Inst-Addrl1 OF BLK-Institution-ExtRec
+092200170112              NOT = SPACES OR
+092300170112              Override-Inst-Addrl2 OF BLK-Institution-ExtRec
+092400170112              NOT = SPACES
+092500170112               SET Modify_InstAddress TO TRUE
+092600170112           END-IF.
+092700170112
+092800170112      *****************************************************************
+092900170112       CheckMFAINSBAP.
+093000170112
+093100170112           INITIALIZE li_Count.
+093200170112           EXEC SQL
+093300170112              SELECT Count(1)
+093400170112              INTO   :li_Count
+093500170112              FROM   MFAINSBAP
+093600170112              WHERE INSTITUTION_CODE     = :lc_Institution_Code
+093700170112                AND BRANCH_CODE          = :lc_Branch_Code
+093800170112                AND (CITY                = :lc_Inst_City
+093900170112                 OR :lc_Inst_City        = " ")
+094000170112                AND (PROVINCE_CODE       = :lc_Inst_Province
+094100170112                 OR :lc_Inst_Province    = " ")
+094200170112                AND (POSTAL_CODE         = :lc_Inst_PostalCode
+094300170112                 OR :lc_Inst_PostalCode  = " ")
+094400170112           END-EXEC.
+094500170112
+094600170112           MOVE SQLSTATE TO lc_sqlStates.
+094700170112           EVALUATE TRUE
+094800170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+094900170112              CONTINUE
+095000170112            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+095100170112              SET Modify_InstAddress TO TRUE
+095200170112            WHEN OTHER
+095300170112               MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+095400170112               MOVE "IDC13"               TO COMM-ERROR-PTR
+095500170112               PERFORM RejectRequest
+095600170112           END-EVALUATE.
+095700170112
+095800170112      *****************************************************************
+095900170112       CheckMFAINSBAPBranch.
+096000170112
+096100170112           INITIALIZE li_Count.
+096200170112           EXEC SQL
+096300170112              SELECT Count(1)
+096400170112              INTO   :li_Count
+096500170112              FROM   MFAINSBAP
+096600170112              WHERE INSTITUTION_CODE     = :lc_Institution_Code
+096700170112                AND BRANCH_CODE          = :lc_Branch_Code
+096800170112                AND (CITY                = :lc_Inst_City
+096900170112                 OR :lc_Inst_City        = " ")
+097000170112                AND (PROVINCE_CODE       = :lc_Inst_Province
+097100170112                 OR :lc_Inst_Province    = " ")
+097200170112                AND (POSTAL_CODE         = :lc_Inst_PostalCode
+097300170112                 OR :lc_Inst_PostalCode  = " ")
+097400170112           END-EXEC.
+097500170112
+097600170112           MOVE SQLSTATE TO lc_sqlStates.
+097700170112           EVALUATE TRUE
+097800170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+097900170112              CONTINUE
+098000170112            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+098100170112              SET Modify_BranchAddr  TO TRUE
+098200170112            WHEN OTHER
+098300170112166642*        MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+098400170112166642         MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+098500170112               MOVE "IDC14"               TO COMM-ERROR-PTR
+098600170112               PERFORM RejectRequest
+098700170112           END-EVALUATE.
+098800170112
+098900170112      *****************************************************************
+099000170112       AddInstitution.
+099100170112
+099200170112           INITIALIZE MFAINSP    OF lf_InstitutionRec
+099300170112                      MFAINSBRP  OF lf_InstitutionBrchRec
+099400170112                      MFAINSBAP  OF lf_Inst-Branch-AddressRec.
+099500170112
+099600170112           MOVE CORR WRKINSTIT OF BLK-Institution-ExtRec
+099700170112             TO MFAINSP        OF lf_InstitutionRec.
+099800170112           MOVE CORR WRKINSTIT OF BLK-Institution-ExtRec
+099900170112             TO MFAINSBRP      OF lf_InstitutionBrchRec.
+100000170112           MOVE CORR WRKINSTIT OF BLK-Institution-ExtRec
+100100170112             TO MFAINSBAP      OF lf_Inst-Branch-AddressRec.
+100200170112           IF Override-Inst-Name OF BLK-Institution-ExtRec NOT = SPACES
+100300170112              MOVE Override-Inst-Name OF BLK-Institution-ExtRec
+100400170112                TO Institution-Name   OF lf_InstitutionRec
+100500170112           END-IF.
+100600170112      ** Address details
+100700170112           PERFORM Get-InstBranchAddress.
+100800170112           IF li-AddressNo > 0
+100900210629116414*      COMPUTE Addr-No OF lf_InstitutionBrchRec = li-AddressNo
+101000210629116414       COMPUTE Addr-No OF lf_InstitutionBrchRec = GCCN-NXT-NUMBER
+101100170112           ELSE
+101200170112             MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+101300170112             MOVE "IDC15"               TO COMM-ERROR-PTR
+101400170112             PERFORM RejectRequest
+101500170112           END-IF.
+101600170112
+101700170112           PERFORM InsertMFAINSP.
+101800170112           PERFORM InsertMFAINSBRP.
+101900170112           PERFORM InsertMFAINSBAP.
+102000170112           PERFORM InsertMFAINADDP.
+102100170112
+102200170112      *****************************************************************
+102300170112       UpdateInstitution.
+102400170112
+102500170112           INITIALIZE MFAINSP    OF Institution-UpdateRec,
+102600170112                      MFAINSBRP  OF InstBranch-UpdRec,
+102700170112                      MFAINSBAP  OF InstBrchAddress-UpdRec.
+102800170112
+102900170112           MOVE Institution-Code OF BLK-Institution-ExtRec
+103000170112             TO Institution-Code OF Institution-UpdateRec.
+103100170112           READ Institution-Update
+103200170112            INVALID KEY
+103300170112               INITIALIZE MFAINSP OF Institution-UpdateRec
+103400170112               MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+103500170112               MOVE "IDC16"               TO COMM-ERROR-PTR
+103600170112               PERFORM RejectRequest
+103700170112            NOT INVALID KEY
+103800170112              IF Institution-Code OF BLK-Institution-ExtRec
+103900170112               = Institution-Code OF Institution-UpdateRec
+104000170112                 IF Modify_Institution
+104100170112                    PERFORM Rewrite-Institution
+104200170112                 END-IF
+104300170112                 MOVE Institution-Code OF Institution-UpdateRec
+104400170112                   TO Institution-Code OF InstBranch-UpdRec
+104500170112                      Institution-Code OF InstBrchAddress-UpdRec
+104600170112                 MOVE Branch-Code OF Institution-UpdateRec
+104700170112                   TO Branch-Code OF InstBranch-UpdRec
+104800170112                      Branch-Code OF InstBrchAddress-UpdRec
+104900170112                 READ InstitutionBranch-Update
+105000170112                  INVALID KEY
+105100170112                    INITIALIZE MFAINSBRP OF InstBranch-UpdRec
+105200170112                    MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+105300170112                    MOVE "IDC17"               TO COMM-ERROR-PTR
+105400170112                    PERFORM RejectRequest
+105500170112                  NOT INVALID KEY
+105600170112                    READ InstBrchAddress-Update
+105700170112                    INVALID KEY
+105800170112                      INITIALIZE MFAINSBAP OF InstBrchAddress-UpdRec
+105900170112                      MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+106000170112                      MOVE "IDC18"            TO COMM-ERROR-PTR
+106100170112                      PERFORM RejectRequest
+106200170112                    NOT INVALID KEY
+106300170112                      PERFORM Rewrite-Inst-Branch
+106400170112                    END-READ
+106500170112                 END-READ
+106600170112               END-IF
+106700170112           END-READ.
+106800170112
+106900170112      *****************************************************************
+107000170112       Rewrite-Institution.
+107100170112
+107200170112      *If the override field is not blank then the corresponding field
+107300170112      *must be updated; otherwise, no change is required.
+107400170112           IF Override-Inst-Name OF BLK-Institution-ExtRec NOT = SPACES
+107500170112              MOVE Override-Inst-Name OF BLK-Institution-ExtRec
+107600170112               TO Institution-Name    OF Institution-UpdateRec
+107700170112           ELSE
+107800170112             IF Institution-Name OF BLK-Institution-ExtRec NOT = SPACES
+107900170112              MOVE Institution-Name   OF BLK-Institution-ExtRec
+108000170112               TO Institution-Name    OF Institution-UpdateRec
+108100170112             END-IF
+108200170112           END-IF.
+108300170112           IF Language-Code      OF BLK-Institution-ExtRec NOT = SPACES
+108400170112              MOVE Language-Code OF BLK-Institution-ExtRec
+108500170112                TO Language-Code OF Institution-UpdateRec
+108600170112           END-IF.
+108700170112      * Change the head office of institution into another branch,
+108800170112      * only if it has already been set up, exists in MFAINSBRP.
+108900170112           IF Branch-Code OF BLK-Institution-ExtRec NOT = SPACES
+109000170112              EXEC SQL
+109100170112                 SELECT BRANCH_CODE
+109200170112                 INTO   :lc_Branch_Code
+109300170112                 FROM   MFAINSBRP
+109400170112                 WHERE  INSTITUTION_CODE  = :lc_Institution_Code
+109500170112                   AND  BRANCH_CODE       = :lc_Branch_Code
+109600170112              END-EXEC
+109700170112
+109800170112              MOVE SQLSTATE TO lc_sqlStates
+109900170112              EVALUATE TRUE
+110000170112               WHEN lncc_sqlSuccessful
+110100170112                MOVE Branch-Code      OF BLK-Institution-ExtRec
+110200170112                  TO Branch-Code      OF Institution-UpdateRec
+110300170112               WHEN OTHER
+110400170112                  MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+110500170112                  MOVE "IDC19"               TO COMM-ERROR-PTR
+110600170112                  PERFORM RejectRequest
+110700170112              END-EVALUATE
+110800170112           END-IF.
+110900170112           IF Business-Type OF BLK-Institution-ExtRec NOT = SPACES
+111000170112              MOVE Business-Type OF BLK-Institution-ExtRec
+111100170112                TO Business-Type OF Institution-UpdateRec
+111200170112                   lc_BusinessType
+111300170112              PERFORM ValidateBusinessType
+111400170112           END-IF.
+111500170112           IF Status-DDS OF BLK-Institution-ExtRec NOT = SPACES
+111600170112              MOVE Status-DDS    OF BLK-Institution-ExtRec
+111700170112                TO Status-DDS    OF Institution-UpdateRec
+111800170112           END-IF.
+111900170112
+112000170112           REWRITE Institution-UpdateRec
+112100170112            INVALID KEY
+112200170112              DISPLAY "ESBIDCUPRO: ERR REWRITE MFAINSP"
+112300170112              DISPLAY "STATUS: " lc_FileStatus
+112400170112            NOT INVALID KEY
+112500170112              IF NOT ncc_MFAINSBDLPrwt
+112600170112                 PERFORM WriteMFAINSBDLP
+112700170112              END-IF
+112800170112           END-REWRITE.
+112900170112
+113000170112      *****************************************************************
+113100170112        Rewrite-Inst-Branch.
+113200170112
+113300170112           IF Modify_Institution
+113400170112             IF Language-Code OF BLK-Institution-ExtRec NOT = SPACES
+113500170112               MOVE Language-Code  OF BLK-Institution-ExtRec
+113600170112                 TO Language-Code  OF InstBranch-UpdRec
+113700170112             END-IF
+113800170112             IF Status-DDS    OF BLK-Institution-ExtRec NOT = SPACES
+113900170112               MOVE Status-DDS     OF BLK-Institution-ExtRec
+114000170112                 TO Status-DDS     OF InstBranch-UpdRec
+114100170112             END-IF
+114200170112           END-IF.
+114300170112
+114400170112           IF Modify_Branch
+114500170112             IF Override-BR-Name  OF BLK-Inst-Branch-ExtRec
+114600170112                NOT = SPACES
+114700170112                MOVE Override-BR-Name OF BLK-Inst-Branch-ExtRec
+114800170112                  TO Branch-Name      OF InstBranch-UpdRec
+114900170112             ELSE
+115000170112               IF Branch-Name     OF BLK-Inst-Branch-ExtRec
+115100170112                 NOT = SPACES
+115200170112                 MOVE Branch-Name OF BLK-Inst-Branch-ExtRec
+115300170112                   TO Branch-Name OF InstBranch-UpdRec
+115400170112               END-IF
+115500170112             END-IF
+115600170112             IF Language-Code    OF BLK-Inst-Branch-ExtRec NOT = SPACES
+115700170112               MOVE Language-Code   OF BLK-Inst-Branch-ExtRec
+115800170112                 TO Language-Code   OF InstBranch-UpdRec
+115900170112             END-IF
+116000170112             IF FAX-Area         OF BLK-Inst-Branch-ExtRec NOT = ZEROES
+116100170112               COMPUTE FAX-Area  OF InstBranch-UpdRec
+116200170112                = FAX-Area       OF BLK-Inst-Branch-ExtRec
+116300170112             END-IF
+116400170112             IF FAX-Phone        OF BLK-Inst-Branch-ExtRec NOT = ZEROES
+116500170112               COMPUTE FAX-Phone OF InstBranch-UpdRec
+116600170112                = FAX-Phone      OF BLK-Inst-Branch-ExtRec
+116700170112             END-IF
+116800170112             IF Area-Code        OF BLK-Inst-Branch-ExtRec NOT = ZEROES
+116900170112               COMPUTE Area-Code OF InstBranch-UpdRec
+117000170112                = Area-Code      OF BLK-Inst-Branch-ExtRec
+117100170112             END-IF
+117200170112             IF Phone-No         OF BLK-Inst-Branch-ExtRec NOT = ZEROES
+117300170112               COMPUTE Phone-No  OF InstBranch-UpdRec
+117400170112                = Phone-No       OF BLK-Inst-Branch-ExtRec
+117500170112             END-IF
+117600170112             IF Status-DDS       OF BLK-Inst-Branch-ExtRec NOT = SPACES
+117700170112                MOVE Status-DDS  OF BLK-Inst-Branch-ExtRec
+117800170112                  TO Status-DDS  OF InstBranch-UpdRec
+117900170112             END-IF
+118000170112           END-IF.
+118100170112      ** Address details
+118200170112           IF Modify_InstAddress OR Modify_BranchAddr
+118300170112              PERFORM Get-InstBranchAddress
+118400170112              IF li-AddressNo > 0
+118500210629116414*         COMPUTE Addr-No OF InstBranch-UpdRec = li-AddressNo
+118600210629116414          COMPUTE Addr-No OF InstBranch-UpdRec = GCCN-NXT-NUMBER
+118700170112              ELSE
+118800170112                IF Modify_InstAddress
+118900170112                   MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+119000170112                ELSE
+119100170112                   MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+119200170112                END-IF
+119300170112                MOVE "IDC20"            TO COMM-ERROR-PTR
+119400170112                PERFORM RejectRequest
+119500170112              END-IF
+119600170112           END-IF.
+119700170112
+119800170112           REWRITE InstBranch-UpdRec
+119900170112            INVALID KEY
+120000170112              DISPLAY "ESBIDCUPRO: ERR REWRITE MFAINSBRP"
+120100170112              DISPLAY "STATUS: " lc_FileStatus
+120200170112            NOT INVALID KEY
+120300170112              IF Modify_InstAddress OR Modify_BranchAddr
+120400170112                OR Modify_Branch
+120500170112                PERFORM RewriteInstBranchAddress
+120600170112              END-IF
+120700170112              IF Modify_InstAddress OR Modify_BranchAddr
+120800170112                PERFORM InsertMFAINADDP
+120900170112              END-IF
+121000170112              IF NOT ncc_MFAINSBDLPrwt
+121100170112                 PERFORM WriteMFAINSBDLP
+121200170112              END-IF
+121300170112           END-REWRITE.
+121400170112
+121500170112      *****************************************************************
+121600170112        RewriteInstBranchAddress.
+121700170112
+121800170112           IF Modify_InstAddress
+121900170112             IF City        OF BLK-Institution-ExtRec NOT = SPACES
+122000170112               MOVE City    OF BLK-Institution-ExtRec
+122100170112                 TO City    OF InstBrchAddress-UpdRec
+122200170112             END-IF
+122300170112             IF Province-Code    OF BLK-Institution-ExtRec NOT = SPACES
+122400170112               MOVE Province-Code OF BLK-Institution-ExtRec
+122500170112                 TO Province-Code OF InstBrchAddress-UpdRec
+122600170112             END-IF
+122700170112             IF Postal-Code      OF BLK-Institution-ExtRec NOT = SPACES
+122800170112               MOVE Postal-Code  OF BLK-Institution-ExtRec
+122900170112                 TO Postal-Code  OF InstBrchAddress-UpdRec
+123000170112             END-IF
+123100170112           END-IF.
+123200170112
+123300170112           IF Modify_BranchAddr
+123400170112             IF Override-BR-Name   OF BLK-Inst-Branch-ExtRec
+123500170112                NOT = SPACES
+123600170112                MOVE Override-BR-Name OF BLK-Inst-Branch-ExtRec
+123700170112                  TO Branch-Name      OF InstBrchAddress-UpdRec
+123800170112             ELSE
+123900170112               IF Branch-Name     OF BLK-Inst-Branch-ExtRec
+124000170112                 NOT = SPACES
+124100170112                 MOVE Branch-Name OF BLK-Inst-Branch-ExtRec
+124200170112                   TO Branch-Name OF InstBrchAddress-UpdRec
+124300170112               END-IF
+124400170112             END-IF
+124500170112             IF City        OF BLK-Inst-Branch-ExtRec NOT = SPACES
+124600170112               MOVE City    OF BLK-Inst-Branch-ExtRec
+124700170112                 TO City    OF InstBrchAddress-UpdRec
+124800170112             END-IF
+124900170112             IF Province-Code OF BLK-Inst-Branch-ExtRec NOT = SPACES
+125000170112               MOVE Province-Code OF BLK-Inst-Branch-ExtRec
+125100170112                 TO Province-Code OF InstBrchAddress-UpdRec
+125200170112             END-IF
+125300170112             IF Postal-Code   OF BLK-Inst-Branch-ExtRec NOT = SPACES
+125400170112               MOVE Postal-Code   OF BLK-Inst-Branch-ExtRec
+125500170112                 TO Postal-Code   OF InstBrchAddress-UpdRec
+125600170112             END-IF
+125700170112           END-IF.
+125800170112
+125900170112           IF Modify_Branch
+126000170112             IF Override-BR-Name   OF BLK-Inst-Branch-ExtRec
+126100170112                NOT = SPACES
+126200170112                MOVE Override-BR-Name OF BLK-Inst-Branch-ExtRec
+126300170112                  TO Branch-Name      OF InstBrchAddress-UpdRec
+126400170112             ELSE
+126500170112               IF Branch-Name     OF BLK-Inst-Branch-ExtRec
+126600170112                 NOT = SPACES
+126700170112                 MOVE Branch-Name OF BLK-Inst-Branch-ExtRec
+126800170112                   TO Branch-Name OF InstBrchAddress-UpdRec
+126900170112               END-IF
+127000170112             END-IF
+127100170112           END-IF.
+127200170112
+127300170112           REWRITE InstBrchAddress-UpdRec
+127400170112            INVALID KEY
+127500170112              DISPLAY "ESBIDCUPRO: ERR REWRITE MFAINSBAP"
+127600170112              DISPLAY "STATUS: " lc_FileStatus
+127700170112            NOT INVALID KEY
+127800170112              CONTINUE
+127900170112           END-REWRITE.
+128000170112
+128100170112      *****************************************************************
+128200170112       Get-InstBranchAddress.
+128300170112
+128400170112           INITIALIZE MFAORDF15P OF Esg-Address-Rec.
+128500170112           IF Add_Institution OR Modify_InstAddress
+128600170112              PERFORM InstSectionAddr
+128700170112           END-IF.
+128800170112           IF Add_Branch OR Modify_BranchAddr
+128900170112              PERFORM InstBranchSectionAddr
+129000170112           END-IF.
+129100170112           INITIALIZE     lc-Addr-Code.
+129200170112           MOVE lnc_N     TO lc-Nfulgp.
+129300170112           MOVE lnc_N     TO lc-Ivrdlp.
+129400170112           MOVE lnc_Y     TO lc-WriteAddr.
+129500170112           MOVE lnc_N     TO lc-SameAddress.
+129600170112           PERFORM Call-ESGADDRESS.
+129700170112
+129800170112      * Update the Hold Mail flag to 'N'.
+129900170112           IF li-AddressNo > 0
+130000170112              EXEC SQL
+130100170112                 UPDATE MFAADDP
+130200170112                   SET HOLD_MAIL = :lnc_N
+130300170112                 WHERE
+130400170112                   ADDR_NO = :li-AddressNo
+130500170112              END-EXEC
+130600170112
+130700170112              MOVE SQLSTATE TO lc_sqlStates
+130800170112              IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+130900170112               IF Add_Institution OR Modify_InstAddress
+131000170112                  MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+131100170112               ELSE
+131200170112                  MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+131300170112               END-IF
+131400170112               MOVE "IDC21"                  TO COMM-ERROR-PTR
+131500170112               PERFORM RejectRequest
+131600170112              END-IF
+131700170112           END-IF.
+131800170112
+131900170112      *****************************************************************
+132000170112       InstSectionAddr.
+132100170112
+132200170112           INITIALIZE lc-AddressDetails.
+132300170112           IF Override-Inst-Addrl1      OF BLK-Institution-ExtRec
+132400170112              NOT = SPACES
+132500170112              MOVE Override-Inst-Addrl1 OF BLK-Institution-ExtRec
+132600170112                TO lc-Addr-Line-1
+132700170112           ELSE
+132800170112              MOVE Addr-Line1           OF BLK-Institution-ExtRec
+132900170112                TO lc-Addr-Line-1
+133000170112           END-IF.
+133100170112           IF Override-Inst-Addrl2      OF BLK-Institution-ExtRec
+133200170112              NOT = SPACES
+133300170112              MOVE Override-Inst-Addrl2 OF BLK-Institution-ExtRec
+133400170112                TO lc-Addr-Line-2
+133500170112           ELSE
+133600170112              MOVE Addr-Line2           OF BLK-Institution-ExtRec
+133700170112                TO lc-Addr-Line-2
+133800170112           END-IF.
+133900170112           MOVE Addr-Line3      OF BLK-Institution-ExtRec
+134000170112             TO lc-Addr-Line-3.
+134100170112           MOVE City            OF BLK-Institution-ExtRec
+134200170112             TO lc-City.
+134300170112           MOVE Province-Code   OF BLK-Institution-ExtRec
+134400170112             TO lc-Province.
+134500170112           MOVE Country-Code    OF BLK-Institution-ExtRec
+134600170112             TO lc-Country.
+134700170112           MOVE Postal-Code     OF BLK-Institution-ExtRec
+134800170112             TO lc-PostalCode.
+134900170112
+135000170112      ******************* Branch  Section *****************************
+135100170112       ValidateBranch.
+135200170112
+135300170112           INITIALIZE li_Count, lc_User,
+135400170112                      lc_Add_Branch, lc_Add_BranchAddr.
+135500170112           MOVE User-Id OF BLK-Inst-Branch-ExtRec TO lc_User.
+135600170112
+135700170112      * Institution and Branch Codes are mandatory
+135800170112           IF Institution-Code  OF BLK-Inst-Branch-ExtRec = SPACES
+135900170112              OR Branch-Code    OF BLK-Inst-Branch-ExtRec = SPACES
+136000170112              MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+136100170112              MOVE "IDC22"               TO COMM-ERROR-PTR
+136200170112              PERFORM RejectRequest
+136300170112           END-IF.
+136400170112
+136500170112           PERFORM PopulateTempInstBrchRec.
+136600170112
+136700170112      *Check if valid Institution is provided
+136800170112           EXEC SQL
+136900170112              SELECT Count(1)
+137000170112              INTO   :li_Count
+137100170112              FROM   MFAINSP
+137200170112              WHERE INSTITUTION_CODE  = :lc_Institution_Code
+137300170112           END-EXEC.
+137400170112
+137500170112           MOVE SQLSTATE TO lc_sqlStates.
+137600170112           EVALUATE TRUE
+137700170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+137800170112              CONTINUE
+137900170112            WHEN OTHER
+138000170112               MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+138100170112               MOVE "IDC23"               TO COMM-ERROR-PTR
+138200170112               PERFORM RejectRequest
+138300170112           END-EVALUATE.
+138400170112
+138500170112      *Check if Branch already exists for the Institution.
+138600170112           INITIALIZE li_Count.
+138700170112           EXEC SQL
+138800170112              SELECT Count(1)
+138900170112              INTO   :li_Count
+139000170112              FROM   MFAINSBRP
+139100170112              WHERE  INSTITUTION_CODE  = :lc_Institution_Code
+139200170112                AND  BRANCH_CODE       = :lc_Branch_Code
+139300170112           END-EXEC.
+139400170112
+139500170112           MOVE SQLSTATE TO lc_sqlStates.
+139600170112           EVALUATE TRUE
+139700170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+139800170112              PERFORM CheckInstBrchDetails
+139900170112            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+140000170112              SET Add_Branch TO TRUE
+140100170112            WHEN OTHER
+140200170112               MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+140300170112               MOVE "IDC24"               TO COMM-ERROR-PTR
+140400170112               PERFORM RejectRequest
+140500170112           END-EVALUATE.
+140600170112
+140700170112           IF Add_Branch
+140800170112              IF Branch-Name        OF BLK-Inst-Branch-ExtRec = SPACES
+140900170112                 MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+141000170112                 MOVE "IDC25"               TO COMM-ERROR-PTR
+141100170112                 PERFORM RejectRequest
+141200170112              END-IF
+141300170112              IF Status-DDS        OF BLK-Inst-Branch-ExtRec = SPACES
+141400170112                 MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+141500170112                 MOVE "IDC26"               TO COMM-ERROR-PTR
+141600170112                 PERFORM RejectRequest
+141700170112              END-IF
+141800170112              IF Language-Code     OF BLK-Inst-Branch-ExtRec = SPACES
+141900170112                 MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+142000170112                 MOVE "IDC27"               TO COMM-ERROR-PTR
+142100170112                 PERFORM RejectRequest
+142200170112              END-IF
+142300170112              IF Addr-Line1        OF BLK-Inst-Branch-ExtRec = SPACES
+142400170112                 MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+142500170112                 MOVE "IDC28"               TO COMM-ERROR-PTR
+142600170112                 PERFORM RejectRequest
+142700170112              END-IF
+142800170112              IF City              OF BLK-Inst-Branch-ExtRec = SPACES
+142900170112                 MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+143000170112                 MOVE "IDC29"               TO COMM-ERROR-PTR
+143100170112                 PERFORM RejectRequest
+143200170112              END-IF
+143300170112              IF Province-Code     OF BLK-Inst-Branch-ExtRec = SPACES
+143400170112                 MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+143500170112                 MOVE "IDC30"               TO COMM-ERROR-PTR
+143600170112                 PERFORM RejectRequest
+143700170112              END-IF
+143800170112              IF Country-Code     OF  BLK-Inst-Branch-ExtRec = SPACES
+143900170112                 MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+144000170112                 MOVE "IDC31"               TO COMM-ERROR-PTR
+144100170112                 PERFORM RejectRequest
+144200170112              END-IF
+144300170112              IF Postal-Code     OF BLK-Inst-Branch-ExtRec = SPACES
+144400170112                 MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+144500170112                 MOVE "IDC32"               TO COMM-ERROR-PTR
+144600170112                 PERFORM RejectRequest
+144700170112              END-IF
+144800170112           END-IF.
+144900170112
+145000170112      *****************************************************************
+145100170112       PopulateTempInstBrchRec.
+145200170112
+145300170112           INITIALIZE lc_SQLvar_InstBranch.
+145400170112
+145500170112           MOVE Institution-Code OF BLK-Inst-Branch-ExtRec
+145600170112             TO lc_Institution_Code.
+145700170112           MOVE Branch-Code      OF BLK-Inst-Branch-ExtRec
+145800170112             TO lc_Branch_Code.
+145900170112           IF Override-BR-Name   OF BLK-Inst-Branch-ExtRec NOT = SPACES
+146000170112              MOVE Override-BR-Name OF BLK-Inst-Branch-ExtRec
+146100170112                TO lc_Branch_Name
+146200170112           ELSE
+146300170112              MOVE Branch-Name    OF BLK-Inst-Branch-ExtRec
+146400170112                TO lc_Branch_Name
+146500170112           END-IF.
+146600170112           MOVE Language-Code     OF BLK-Inst-Branch-ExtRec
+146700170112             TO lc_Language_Code.
+146800170112           COMPUTE li_FAX_Area =
+146900170112             FAX-Area             OF BLK-Inst-Branch-ExtRec.
+147000170112           COMPUTE li_FAX_Phone =
+147100170112             FAX-Phone            OF BLK-Inst-Branch-ExtRec.
+147200170112           COMPUTE li_Area_Code =
+147300170112             Area-Code            OF BLK-Inst-Branch-ExtRec.
+147400170112           COMPUTE li_Phone_No =
+147500170112             Phone-No             OF BLK-Inst-Branch-ExtRec.
+147600170112           MOVE Status-DDS        OF BLK-Inst-Branch-ExtRec
+147700170112             TO lc_Status.
+147800170112           MOVE CITY              OF BLK-Inst-Branch-ExtRec
+147900170112             TO lc_Inst_City.
+148000170112           MOVE Province-Code     OF BLK-Inst-Branch-ExtRec
+148100170112             TO lc_Inst_Province.
+148200170112           MOVE Postal-Code       OF BLK-Inst-Branch-ExtRec
+148300170112             TO lc_Inst_PostalCode.
+148400170112
+148500170112      *****************************************************************
+148600170112       CheckInstBrchDetails.
+148700170112
+148800170112           INITIALIZE li_Count.
+148900170112           EXEC SQL
+149000170112              SELECT Count(1)
+149100170112              INTO   :li_Count
+149200170112              FROM  MFAINSBRP
+149300170112              WHERE INSTITUTION_CODE = :lc_Institution_Code
+149400170112                AND BRANCH_CODE      = :lc_Branch_Code
+149500170112                AND (BRANCH_NAME      = :lc_Branch_Name
+149600170112                 OR :lc_Branch_Name   = " ")
+149700170112                AND (LANGUAGE_CODE    = :lc_Language_Code
+149800170112                 OR :lc_Language_Code = " ")
+149900170112                AND (FAX_AREA         = :li_FAX_Area
+150000170112                 OR :li_FAX_Area      = 0)
+150100170112                AND (FAX_PHONE        = :li_FAX_Phone
+150200170112                 OR :li_FAX_Phone     = 0)
+150300170112                AND (AREA_CODE        = :li_Area_Code
+150400170112                 OR :li_Area_Code     = 0)
+150500170112                AND (PHONE_NO         = :li_Phone_No
+150600170112                 OR :li_Phone_No      = 0)
+150700170112                AND (STATUS           = :lc_Status
+150800170112                 OR :lc_Status        = " ")
+150900170112           END-EXEC.
+151000170112
+151100170112           MOVE SQLSTATE TO lc_sqlStates.
+151200170112           EVALUATE TRUE
+151300170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+151400170112              PERFORM CheckMFAINSBAPBranch
+151500170112            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+151600170112              SET Modify_Branch TO TRUE
+151700170112            WHEN OTHER
+151800170112               MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+151900170112               MOVE "IDC33"               TO COMM-ERROR-PTR
+152000170112               PERFORM RejectRequest
+152100170112           END-EVALUATE.
+152200170112
+152300170112           IF Override-Br-AddrL1 OF BLK-Inst-Branch-ExtRec
+152400170112              NOT = SPACES
+152500170112              OR Override-BR-AddrL2 OF BLK-Inst-Branch-ExtRec
+152600170112              NOT = SPACES
+152700170112              SET Modify_BranchAddr TO TRUE
+152800170112           END-IF.
+152900170112
+153000170112      *****************************************************************
+153100170112       AddBranch.
+153200170112
+153300170112           INITIALIZE MFAINSBRP  OF lf_InstitutionBrchRec
+153400170112                      MFAINSBAP  OF lf_Inst-Branch-AddressRec.
+153500170112
+153600170112           MOVE CORR WRKINSBRP OF BLK-Inst-Branch-ExtRec
+153700170112             TO MFAINSBRP      OF lf_InstitutionBrchRec.
+153800170112           MOVE CORR WRKINSBRP OF BLK-Inst-Branch-ExtRec
+153900170112             TO MFAINSBAP      OF lf_Inst-Branch-AddressRec.
+154000170112           IF Override-BR-Name   OF BLK-Inst-Branch-ExtRec NOT = SPACES
+154100170112              MOVE Override-BR-Name OF BLK-Inst-Branch-ExtRec
+154200170112                TO Branch-Name      OF lf_InstitutionBrchRec
+154300170112                   Branch-Name      OF lf_Inst-Branch-AddressRec
+154400170112           END-IF.
+154500170112      ** Address details
+154600170112           PERFORM Get-InstBranchAddress.
+154700170112           IF li-AddressNo > 0
+154800210629116414*      COMPUTE Addr-No OF lf_InstitutionBrchRec = li-AddressNo
+154900210629116414       COMPUTE Addr-No OF lf_InstitutionBrchRec = GCCN-NXT-NUMBER
+155000170112           ELSE
+155100170112             MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+155200170112             MOVE "IDC34"               TO COMM-ERROR-PTR
+155300170112             PERFORM RejectRequest
+155400170112           END-IF
+155500170112
+155600170112           PERFORM InsertMFAINSBRP.
+155700170112           PERFORM InsertMFAINSBAP.
+155800170112           PERFORM InsertMFAINADDP.
+155900170112
+156000170112      *****************************************************************
+156100170112       UpdateBranch.
+156200170112
+156300170112           INITIALIZE MFAINSBRP  OF InstBranch-UpdRec,
+156400170112                      MFAINSBAP  OF InstBrchAddress-UpdRec.
+156500170112
+156600170112           MOVE Institution-Code OF BLK-Inst-Branch-ExtRec
+156700170112             TO Institution-Code OF InstBranch-UpdRec
+156800170112                Institution-Code OF InstBrchAddress-UpdRec.
+156900170112           MOVE Branch-Code      OF BLK-Inst-Branch-ExtRec
+157000170112             TO Branch-Code      OF InstBranch-UpdRec
+157100170112                Branch-Code      OF InstBrchAddress-UpdRec.
+157200170112           READ InstitutionBranch-Update
+157300170112            INVALID KEY
+157400170112              MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+157500170112              MOVE "IDC35"               TO COMM-ERROR-PTR
+157600170112              PERFORM RejectRequest
+157700170112            NOT INVALID KEY
+157800170112              READ InstBrchAddress-Update
+157900170112              INVALID KEY
+158000170112                MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+158100170112                MOVE "IDC36"               TO COMM-ERROR-PTR
+158200170112                PERFORM RejectRequest
+158300170112              NOT INVALID KEY
+158400170112                PERFORM Rewrite-Inst-Branch
+158500170112              END-READ
+158600170112           END-READ.
+158700170112
+158800170112      *****************************************************************
+158900170112       InstBranchSectionAddr.
+159000170112
+159100170112           INITIALIZE lc-AddressDetails.
+159200170112           IF Override-BR-AddrL1      OF BLK-Inst-Branch-ExtRec
+159300170112              NOT = SPACES
+159400170112              MOVE Override-BR-AddrL1 OF BLK-Inst-Branch-ExtRec
+159500170112                TO lc-Addr-Line-1
+159600170112           ELSE
+159700170112              MOVE Addr-Line1         OF BLK-Inst-Branch-ExtRec
+159800170112                TO lc-Addr-Line-1
+159900170112           END-IF.
+160000170112           IF Override-BR-AddrL2      OF BLK-Inst-Branch-ExtRec
+160100170112              NOT = SPACES
+160200170112              MOVE Override-BR-AddrL2 OF BLK-Inst-Branch-ExtRec
+160300170112                TO lc-Addr-Line-2
+160400170112           ELSE
+160500170112              MOVE Addr-Line2         OF BLK-Inst-Branch-ExtRec
+160600170112                TO lc-Addr-Line-2
+160700170112           END-IF.
+160800170112           MOVE Addr-Line3         OF BLK-Inst-Branch-ExtRec
+160900170112             TO lc-Addr-Line-3.
+161000170112           MOVE City               OF BLK-Inst-Branch-ExtRec
+161100170112             TO lc-City.
+161200170112           MOVE Province-Code      OF BLK-Inst-Branch-ExtRec
+161300170112             TO lc-Province.
+161400170112           MOVE Country-Code       OF BLK-Inst-Branch-ExtRec
+161500170112             TO lc-Country.
+161600170112           MOVE Postal-Code        OF BLK-Inst-Branch-ExtRec
+161700170112             TO lc-PostalCode.
+161800170112
+161900170112      *****************************************************************
+162000170112       InsertMFAINSP.
+162100170112      *****************************************************************
+162200170112
+162300170112           WRITE Institution-UpdateRec FROM
+162400170112               lf_InstitutionRec
+162500170112             INVALID KEY
+162600170112               MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+162700170112               MOVE "IDC37"               TO COMM-ERROR-PTR
+162800170112               PERFORM RejectRequest
+162900170112             NOT INVALID KEY
+163000170112               IF NOT ncc_MFAINSBDLPrwt
+163100170112                 PERFORM WriteMFAINSBDLP
+163200170112               END-IF
+163300170112           END-WRITE.
+163400170112
+163500170112      *****************************************************************
+163600170112       InsertMFAINSBRP.
+163700170112      *****************************************************************
+163800170112
+163900170112           WRITE InstBranch-UpdRec FROM
+164000170112               lf_InstitutionBrchRec
+164100170112             INVALID KEY
+164200170112               IF Add_Institution
+164300170112                  MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+164400170112               ELSE
+164500170112                  MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+164600170112               END-IF
+164700170112               MOVE "IDC38"               TO COMM-ERROR-PTR
+164800170112               PERFORM RejectRequest
+164900170112             NOT INVALID KEY
+165000170112               IF NOT ncc_MFAINSBDLPrwt
+165100170112                 PERFORM WriteMFAINSBDLP
+165200170112               END-IF
+165300170112           END-WRITE.
+165400170112
+165500170112      *****************************************************************
+165600170112       InsertMFAINSBAP.
+165700170112      *****************************************************************
+165800170112
+165900170112           WRITE InstBrchAddress-UpdRec FROM
+166000170112               lf_Inst-Branch-AddressRec
+166100170112             INVALID KEY
+166200170112               IF Add_Institution
+166300170112                  MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+166400170112               ELSE
+166500170112                  MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+166600170112               END-IF
+166700170112               MOVE "IDC39"               TO COMM-ERROR-PTR
+166800170112               PERFORM RejectRequest
+166900170112             NOT INVALID KEY
+167000170112               IF NOT ncc_MFAINSBDLPrwt
+167100170112                 PERFORM WriteMFAINSBDLP
+167200170112               END-IF
+167300170112           END-WRITE.
+167400170112
+167500170112      *****************************************************************
+167600170112       InsertMFAINADDP.
+167700170112      *****************************************************************
+167800170112
+167900210629      *RFS1116414 Start.
+168000210629
+168100210629           EXEC SQL
+168200210916120767*      INSERT INTO WRKADDP
+168300210920120767       INSERT INTO QTEMP/WRKADDP
+168400210920               (Select * from MFAADDP
+168500210920               WHERE ADDR_NO  = :li-AddressNo)
+168600210920               WITH NC
+168700210920           END-EXEC.
+168800210629
+168900210629           EXEC SQL
+169000210916120767*        UPDATE  WRKADDP
+169100210916120767         UPDATE QTEMP/WRKADDP
+169200210629               SET ADDR_NO = :GCCN-NXT-NUMBER
+169300210629               WHERE ADDR_NO = :li-AddressNo
+169400210920               WITH NC
+169500210629           END-EXEC.
+169600210629      *RFS1116414 End.
+169700210629
+169800170112           EXEC SQL
+169900170112              INSERT INTO Mfainaddp
+170000210629      *RFS1116414 Start.
+170100210629      *       (Select * from MFAADDP
+170200210629      *        WHERE ADDR_NO  = :li-AddressNo)
+170300210916120767*        (SELECT * from WRKADDP
+170400210916120767         (SELECT * from QTEMP/WRKADDP
+170500210629               WHERE ADDR_NO = :GCCN-NXT-NUMBER)
+170600210629      *RFS1116414 End.
+170700170112           END-EXEC.
+170800210629116414*    IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+170900210629116414     IF SQLCODE NOT = 0 AND SQLCODE NOT = 100
+171000170112              IF Add_Institution OR Modify_InstAddress
+171100170112                 MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+171200170112              ELSE
+171300170112                 MOVE lc_InvalidBrchSec_U26 TO COMM-RETURN-DESC
+171400170112              END-IF
+171500170112              MOVE "IDC40"               TO COMM-ERROR-PTR
+171600170112              PERFORM RejectRequest
+171700170112           END-IF.
+171800170112
+171900170112      *****************************************************************
+172000170112       WriteMFAINSBDLP.
+172100170112
+172200170112      *The log is written once per section.
+172300170112           INITIALIZE MFAINSBDLP OF Inst-Branch-Log-Rec.
+172400170112           INITIALIZE lc-Change-Category-N2, lc-Change-Category-C2.
+172500170112
+172600170112           IF Add_Institution OR Modify_Institution
+172700170112              OR Modify_InstAddress
+172800170112              MOVE Institution-Code        OF BLK-Institution-ExtRec
+172900170112                TO Institution-Code        OF Inst-Branch-Log-Rec
+173000170112              IF Add_Institution
+173100170112                 MOVE Branch-Code OF BLK-Institution-ExtRec
+173200170112                   TO Institution-Branch-Code OF Inst-Branch-Log-Rec
+173300170112              ELSE
+173400170112                 MOVE Branch-Code OF Institution-UpdateRec
+173500170112                   TO Institution-Branch-Code OF Inst-Branch-Log-Rec
+173600170112              END-IF
+173700170112              MOVE lnc_INSDTL
+173800170112                TO Screen-Code             OF Inst-Branch-Log-Rec,
+173900170112                  lc-Change-Category-N2, lc-Change-Category-C2
+174000170112           END-IF.
+174100170112
+174200170112           IF Add_Branch OR Modify_Branch OR Modify_BranchAddr
+174300170112              MOVE Institution-Code OF BLK-Inst-Branch-ExtRec
+174400170112                TO Institution-Code OF Inst-Branch-Log-Rec
+174500170112              MOVE Branch-Code             OF BLK-Inst-Branch-ExtRec
+174600170112                TO Institution-Branch-Code OF Inst-Branch-Log-Rec
+174700170112              MOVE lnc_INSBDTL
+174800170112                TO Screen-Code OF Inst-Branch-Log-Rec
+174900170112                  lc-Change-Category-N2, lc-Change-Category-C2
+175000170112           END-IF.
+175100170112
+175200170112           If Add_Institution OR Add_Branch
+175300170112              MOVE lnc_auditStatus_N
+175400170112                TO Audit-Status OF Inst-Branch-Log-Rec
+175500170112              SET  eleCd_001    TO TRUE
+175600170112              MOVE lc-Change-Category-New
+175700170112                TO Change-Category OF Inst-Branch-Log-Rec
+175800170112           END-IF.
+175900170112
+176000170112           IF Modify_Institution    OR Modify_Branch
+176100170112              OR Modify_InstAddress OR Modify_BranchAddr
+176200170112              MOVE lnc_auditStatus_C
+176300170112                TO Audit-Status OF Inst-Branch-Log-Rec
+176400170112              SET  eleCd_002    TO TRUE
+176500170112              MOVE lc-Change-Category-Chg
+176600170112                TO Change-Category OF Inst-Branch-Log-Rec
+176700170112           END-IF.
+176800170112
+176900170112           MOVE lnc_eleCde TO Element-Code OF Inst-Branch-Log-Rec.
+177000170112           MOVE li_SysDate TO Audit-Date   OF Inst-Branch-Log-Rec.
+177100170112           MOVE li_SysTime TO Log-Time     OF Inst-Branch-Log-Rec.
+177200170112           MOVE lc_User    TO Audit-User   OF Inst-Branch-Log-Rec.
+177300170112
+177400170112           WRITE Inst-Branch-Log-Rec
+177500170112           INVALID KEY
+177600170112              DISPLAY "ESBIDCUPRO: ERR WRITE MFAINSBDLP"
+177700170112              DISPLAY "STATUS: " lc_FileStatus
+177800170112           NOT INVALID KEY
+177900170112              SET ncc_MFAINSBDLPrwt TO TRUE
+178000170112           END-WRITE.
+178100170112
+178200170112      ******************** Dealer Section *****************************
+178300170112       ValidateDealer.
+178400170112
+178500170112           INITIALIZE li_Count, lc_Add_Dealer, lc_Add_DealerMisc,
+178600170112                      lc_User.
+178700170112           MOVE User-Id OF BLK-Dealer-ExtRec TO lc_User.
+178800170112
+178900170112      * Institution and Dealer Code is mandatory
+179000170112           IF Dealer-Code OF BLK-Dealer-ExtRec = SPACES
+179100170112              MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+179200170112              MOVE "IDC41"                 TO COMM-ERROR-PTR
+179300170112              PERFORM RejectRequest
+179400170112           END-IF.
+179500170112
+179600170112           PERFORM PopulateTempDealerRec.
+179700170112
+179800170112      *Check if Institution already exists.
+179900170112           IF Institution-Code OF BLK-Dealer-ExtRec NOT = SPACES
+180000170112              INITIALIZE li_Count
+180100170112              EXEC SQL
+180200170112                 SELECT Count(1)
+180300170112                 INTO   :li_Count
+180400170112                 FROM  MFAINSP
+180500170112                 WHERE INSTITUTION_CODE = :lc_Dealer_Inst
+180600170112              END-EXEC
+180700170112
+180800170112              MOVE SQLSTATE TO lc_sqlStates
+180900170112              EVALUATE TRUE
+181000170112               WHEN lncc_sqlSuccessful AND li_Count > 0
+181100170112                 CONTINUE
+181200170112               WHEN OTHER
+181300170112                  MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+181400170112                  MOVE "IDC41A"                TO COMM-ERROR-PTR
+181500170112                  PERFORM RejectRequest
+181600170112              END-EVALUATE
+181700170112           END-IF.
+181800170112
+181900170112      *Check if Institution/Branch already exists.
+182000170112           IF Institution-Code OF BLK-Dealer-ExtRec NOT = SPACES
+182100170112              AND Branch-Code  OF BLK-Dealer-ExtRec NOT = SPACES
+182200170112              INITIALIZE li_Count
+182300170112              EXEC SQL
+182400170112                 SELECT Count(1)
+182500170112                 INTO   :li_Count
+182600170112                 FROM  MFAINSBRP
+182700170112                 WHERE INSTITUTION_CODE = :lc_Dealer_Inst
+182800170112                   AND BRANCH_CODE      = :lc_Dealer_Branch
+182900170112              END-EXEC
+183000170112
+183100170112              MOVE SQLSTATE TO lc_sqlStates
+183200170112              EVALUATE TRUE
+183300170112               WHEN lncc_sqlSuccessful AND li_Count > 0
+183400170112                 CONTINUE
+183500170112               WHEN OTHER
+183600170112                  MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+183700170112                  MOVE "IDC41B"                TO COMM-ERROR-PTR
+183800170112                  PERFORM RejectRequest
+183900170112              END-EVALUATE
+184000170112           END-IF.
+184100170112
+184200170223      *RFS166835 Starts
+184300170223           IF XML-Authorization-Code OF BLK-Dealer-ExtRec
+184400170223              NOT = SPACES
+184500170223              PERFORM CheckMFAXMLAUP
+184600170223           END-IF.
+184700170223      *RFS166835 Ends
+184800170223
+184900170112      *Check if Dealer already exists.
+185000170112           INITIALIZE li_Count.
+185100170112           EXEC SQL
+185200170112              SELECT Count(1)
+185300170112              INTO   :li_Count
+185400170112              FROM  MFADEAP
+185500170112              WHERE DEALER_CODE = :lc_Dealer_Code
+185600170112           END-EXEC.
+185700170112
+185800170112           MOVE SQLSTATE TO lc_sqlStates.
+185900170112           EVALUATE TRUE
+186000170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+186100170112              PERFORM CheckDealerDetails
+186200170112            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+186300170112              SET Add_Dealer     TO TRUE
+186400170112              SET Add_DealerMisc TO TRUE
+186500170112            WHEN OTHER
+186600170112               MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+186700170112               MOVE "IDC42"                 TO COMM-ERROR-PTR
+186800170112               PERFORM RejectRequest
+186900170112           END-EVALUATE.
+187000170112
+187100170112           IF Add_Dealer
+187200170112              IF Institution-Code OF BLK-Dealer-ExtRec = SPACES
+187300170112                 MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+187400170112                 MOVE "IDC43"                 TO COMM-ERROR-PTR
+187500170112                 PERFORM RejectRequest
+187600170112              END-IF
+187700170112              IF Branch-Code      OF BLK-Dealer-ExtRec = SPACES
+187800170112                 MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+187900170112                 MOVE "IDC44"                 TO COMM-ERROR-PTR
+188000170112                 PERFORM RejectRequest
+188100170112              END-IF
+188200170223      *RFS166835 Starts
+188300170223      *       IF XML-Authorization-Code OF BLK-Dealer-ExtRec
+188400170223      *          NOT = SPACES
+188500170223      *          PERFORM CheckMFAXMLAUP
+188600170223      *       END-IF
+188700170223      *RFS166835 Ends
+188800170112
+188900170112              IF Dealer-Settlement OF BLK-Dealer-ExtRec = SPACES
+189000170112                 MOVE lnc_N TO lc_Dealer_Settlement
+189100170112              END-IF
+189200170112              PERFORM CheckMFADESMTP
+189300170112           END-IF.
+189400170112
+189500170112      *****************************************************************
+189600170112       PopulateTempDealerRec.
+189700170112
+189800170112           INITIALIZE lc_SQLvar_Dealer.
+189900170112
+190000170112           MOVE Dealer-Code     OF BLK-Dealer-ExtRec TO lc_Dealer_Code.
+190100170112           IF Override-Dlr-Name OF BLK-Dealer-ExtRec NOT = SPACES
+190200170112              MOVE Override-Dlr-Name OF BLK-Dealer-ExtRec
+190300170112                TO lc_Dealer_Name
+190400170112           ELSE
+190500170112              MOVE Dealer-Name       OF BLK-Dealer-ExtRec
+190600170112                TO lc_Dealer_Name
+190700170112           END-IF.
+190800170112           MOVE Institution-Code OF BLK-Dealer-ExtRec
+190900170112             TO lc_Dealer_Inst.
+191000170112           MOVE Branch-Code      OF BLK-Dealer-ExtRec
+191100170112             TO lc_Dealer_Branch.
+191200170112           MOVE Dealer-Status-Code OF BLK-Dealer-ExtRec
+191300170112             TO lc_Dealer_Status.
+191400170112           MOVE Language-Code  OF BLK-Dealer-ExtRec
+191500170112             TO lc_Dealer_Language.
+191600170112           COMPUTE li_Dealer_Area_Code
+191700170112              = Contact-Area  OF BLK-Dealer-ExtRec.
+191800170112           COMPUTE li_Dealer_Phone_No
+191900170112              = Contact-Phone OF BLK-Dealer-ExtRec.
+192000170112           COMPUTE li_Dealer_FAX_Area
+192100170112              = FAX-Area      OF BLK-Dealer-ExtRec.
+192200170112           COMPUTE li_Dealer_FAX_Phone
+192300170112              = FAX-Phone     OF BLK-Dealer-ExtRec.
+192400170112
+192500170112           MOVE Dealer-Settlement OF BLK-Dealer-ExtRec
+192600170112             TO lc_Dealer_Settlement.
+192700170112           MOVE Money-Market-Trading OF BLK-Dealer-ExtRec
+192800170112             TO lc_Dealer_Money_Mrk_Trd.
+192900170112           MOVE Switch-Trading   OF BLK-Dealer-ExtRec
+193000170112             TO lc_Dealer_Switch_Trading.
+193100170112           MOVE Internal-Transfer-WO OF BLK-Dealer-ExtRec
+193200170112             TO lc_Dealer_Int_Tfr_WOR.
+193300170112           MOVE External-Transfer-WO OF BLK-Dealer-ExtRec
+193400170112             TO lc_Dealer_Ext_Tfr_WOR.
+193500170112           MOVE XML-Authorization-Code OF BLK-Dealer-ExtRec
+193600170112             TO lc_Dealer_XML_Auth.
+193700170112
+193800170112      *****************************************************************
+193900170112       CheckDealerDetails.
+194000170112
+194100170112           INITIALIZE li_Count.
+194200170112           EXEC SQL
+194300170112            SELECT Count(1)
+194400170112            INTO   :li_Count
+194500170112            FROM  MFADEAP
+194600170112            WHERE DEALER_CODE      = :lc_Dealer_Code
+194700170112              AND (DEALER_NAME     = :lc_Dealer_Name
+194800170112               OR :lc_Dealer_Name  =  " ")
+194900170112              AND (INSTITUTION_CODE = :lc_Dealer_Inst
+195000170112               OR :lc_Dealer_Inst   =  " ")
+195100170112              AND (BRANCH_CODE      = :lc_Dealer_Branch
+195200170112               OR :lc_Dealer_Branch =  " ")
+195300170112              AND (DEALER_STATUS_CODE = :lc_Dealer_Status
+195400170112               OR :lc_Dealer_Status   =  " ")
+195500170112              AND (LANGUAGE_CODE      = :lc_Dealer_Language
+195600170112               OR :lc_Dealer_Language =  " ")
+195700170112              AND (CONTACT_AREA        = :li_Dealer_Area_Code
+195800170112               OR :li_Dealer_Area_Code = 0)
+195900170112              AND (CONTACT_PHONE       = :li_Dealer_Phone_No
+196000170112               OR :li_Dealer_Phone_No  = 0)
+196100170112              AND (FAX_AREA            = :li_Dealer_FAX_Area
+196200170112               OR :li_Dealer_FAX_Area  = 0)
+196300170112              AND (FAX_PHONE           = :li_Dealer_FAX_Phone
+196400170112               OR :li_Dealer_FAX_Phone = 0)
+196500170112              AND (DEALER_SETTLEMENT    = :lc_Dealer_Settlement
+196600170112               OR :lc_Dealer_Settlement =  " ")
+196700170112              AND (MONEY_MARKET_TRADING    = :lc_Dealer_Money_Mrk_Trd
+196800170112               OR :lc_Dealer_Money_Mrk_Trd = " ")
+196900170112              AND (SWITCH_TRADING           = :lc_Dealer_Switch_Trading
+197000170112               OR :lc_Dealer_Switch_Trading = " ")
+197100170112              END-EXEC.
+197200170112
+197300170112           MOVE SQLSTATE TO lc_sqlStates.
+197400170112           EVALUATE TRUE
+197500170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+197600170112              PERFORM CheckMFADEAMDP
+197700170223166835        IF XML-Authorization-Code OF BLK-Dealer-ExtRec
+197800170223   |             NOT = SPACES
+197900170223   |             PERFORM CheckMFADEAUCP
+198000170223166835        END-IF
+198100170112            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+198200170112              SET Modify_Dealer TO TRUE
+198300170112              PERFORM CheckMFADEAMDP
+198400170112            WHEN OTHER
+198500170112               MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+198600170112               MOVE "IDC45"                 TO COMM-ERROR-PTR
+198700170112               PERFORM RejectRequest
+198800170112           END-EVALUATE.
+198900170112
+199000170112      *****************************************************************
+199100170112       CheckMFADEAMDP.
+199200170112
+199300170112           INITIALIZE li_Count.
+199400170112           EXEC SQL
+199500170112              SELECT Count(1)
+199600170112              INTO   :li_Count
+199700170112              FROM  MFADEAMDP
+199800170112              WHERE DEALER_CODE             = :lc_Dealer_Code
+199900170112                AND (INTERNAL_TRANSFER_WO   = :lc_Dealer_Int_Tfr_WOR
+200000170112                 OR :lc_Dealer_Int_Tfr_WOR  = " ")
+200100170112                AND (EXTERNAL_TRANSFER_WO   = :lc_Dealer_Ext_Tfr_WOR
+200200170112                 OR :lc_Dealer_Ext_Tfr_WOR  = " ")
+200300170223166835*         AND (XML_AUTHORIZATION_CODE = :lc_Dealer_XML_Auth
+200400170223166835*          OR :lc_Dealer_XML_Auth     = " ")
+200500170112              END-EXEC.
+200600170112           MOVE SQLSTATE TO lc_sqlStates.
+200700170112           EVALUATE TRUE
+200800170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+200900170112              CONTINUE
+201000170112            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+201100170112              SET Modify_DealerMisc TO TRUE
+201200170112            WHEN OTHER
+201300170112               MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+201400170112               MOVE "IDC46"                 TO COMM-ERROR-PTR
+201500170112               PERFORM RejectRequest
+201600170112           END-EVALUATE.
+201700170112
+201800170112      *****************************************************************
+201900170112       AddDealer.
+202000170112
+202100170112           INITIALIZE MFADEAP    OF lf_DealerRec,
+202200170112                      MFADEAMDP  OF lf_DealerMiscDetailsRec.
+202300170530170628     INITIALIZE MFADEACMP of lf_DealerCommissionsCADRec,
+202400170530                      MFADEACMP of lf_DealerCommissionsUSDRec.
+202500170112
+202600170112           MOVE CORR WRKDEALER OF BLK-Dealer-ExtRec
+202700170112             TO MFADEAP        OF lf_DealerRec.
+202800170112           MOVE CORR WRKDEALER OF BLK-Dealer-ExtRec
+202900170112             TO MFADEAMDP      OF lf_DealerMiscDetailsRec.
+203000170112
+203100170112           MOVE lc_Dealer_Name TO Dealer-Name OF lf_DealerRec.
+203200170112      * Dealer tbl - default values
+203300170112           IF Dealer-Status-Code   OF BLK-Dealer-ExtRec = SPACES
+203400170112              MOVE lnc_A TO Dealer-Status-Code OF lf_DealerRec
+203500170112           END-IF.
+203600170112           IF Language-Code        OF BLK-Dealer-ExtRec = SPACES
+203700170112              MOVE lnc_E TO Language-Code OF lf_DealerRec
+203800170112           END-IF.
+203900170112           IF Dealer-Settlement    OF BLK-Dealer-ExtRec = SPACES
+204000170112              MOVE lnc_N TO Dealer-Settlement OF lf_DealerRec
+204100170112           END-IF.
+204200170112           IF Money-Market-Trading OF BLK-Dealer-ExtRec = SPACES
+204300170112              MOVE lnc_N TO Money-Market-Trading OF lf_DealerRec
+204400170112           END-IF.
+204500170112           IF Switch-Trading       OF BLK-Dealer-ExtRec = SPACES
+204600170112              MOVE lnc_N TO Switch-Trading OF lf_DealerRec
+204700170112           END-IF.
+204800170112      *Based on the DELDTL screen's logic, the below was added;
+204900170112           MOVE lnc_N TO IDA OF lf_DealerRec,
+205000170112                         Direct-Deposit          OF lf_DealerRec,
+205100170112                         Legal-Documents-On-File OF lf_DealerRec.
+205200170112           MOVE lnc_PurchWORno
+205300170112             TO Purchase-Wire-Order-No OF lf_DealerRec.
+205400170112           MOVE lnc_QM
+205500170112             TO EDIT1       OF lf_DealerRec,
+205600170112                EDIT2       OF lf_DealerRec,
+205700170112                EDIT3       OF lf_DealerRec,
+205800170112                EDIT4       OF lf_DealerRec,
+205900170112                ACCT-EDIT01 OF lf_DealerRec,
+206000170112                ACCT-EDIT02 OF lf_DealerRec,
+206100170112                ACCT-EDIT03 OF lf_DealerRec,
+206200170112                ACCT-EDIT04 OF lf_DealerRec,
+206300170112                ACCT-EDIT05 OF lf_DealerRec,
+206400170112                ACCT-EDIT06 OF lf_DealerRec,
+206500170112                ACCT-EDIT07 OF lf_DealerRec,
+206600170112                ACCT-EDIT08 OF lf_DealerRec,
+206700170112                ACCT-EDIT09 OF lf_DealerRec,
+206800170112                ACCT-EDIT10 OF lf_DealerRec,
+206900170112                ACCT-EDIT11 OF lf_DealerRec,
+207000170112                ACCT-EDIT12 OF lf_DealerRec,
+207100170112                ACCT-EDIT13 OF lf_DealerRec,
+207200170112                ACCT-EDIT14 OF lf_DealerRec,
+207300170112                ACCT-EDIT15 OF lf_DealerRec.
+207400170112
+207500170112      *DEALER-MISC-DETAILS tbl's default values
+207600170112           IF Internal-Transfer-WO OF BLK-Dealer-ExtRec = SPACES
+207700170112              MOVE lnc_N TO Internal-Transfer-WO
+207800170112                OF lf_DealerMiscDetailsRec
+207900170112           END-IF.
+208000170112           IF External-Transfer-WO OF BLK-Dealer-ExtRec = SPACES
+208100170112              MOVE lnc_N TO External-Transfer-WO
+208200170112                OF lf_DealerMiscDetailsRec
+208300170112           END-IF.
+208400170112      *Based on the DELDTL screen's logic the below was added;
+208500170112           MOVE lnc_N
+208600170112             TO COMMISSION-REBATE      OF lf_DealerMiscDetailsRec,
+208700170112                MASTER-ACCT-PROCESS    OF lf_DealerMiscDetailsRec,
+208800170112                REP-ON-DELETE-DEFAULT  OF lf_DealerMiscDetailsRec.
+208900170223
+209000170223      *RFS166835 Starts
+209100170223      *XML-Authorization-Code of WRKDEALER is used to populate
+209200170223      *Investment-Authorization-Code of MFADEAUCP
+209300170223           MOVE SPACES TO XML-Authorization-Code
+209400170223                    OF lf_DealerMiscDetailsRec.
+209500170223      *RFS166835 Ends
+209600170112
+209700170530      * RFS170628 - Starts
+209800170530           INITIALIZE lc-FreqCode.
+209900170530           EXEC SQL
+210000170530             SELECT FREQUENCY_CODE
+210100170530             INTO   :lc-FreqCode
+210200170530             FROM   MFAFRQALP
+210300170530             WHERE  SCREEN_CODE = :lnc_DELCOM
+210400170530                    AND DEFAULT_FLAG = :lnc_Y
+210500170530           END-EXEC.
+210600170530
+210700170530           MOVE SQLSTATE TO lc_sqlStates
+210800170530           EVALUATE TRUE
+210900170530            WHEN lncc_sqlSuccessful
+211000170530              MOVE lc-FreqCode  TO SRV-FREQUENCY-CODE  OF
+211100170530                             lf_DealerCommissionsCADRec
+211200170530                                   SRV-FREQUENCY-CODE  OF
+211300170530                             lf_DealerCommissionsUSDRec
+211400170707            WHEN OTHER
+211500170707              MOVE lnc_QT TO  SRV-FREQUENCY-CODE  OF
+211600170530                             lf_DealerCommissionsCADRec
+211700170530                             SRV-FREQUENCY-CODE  OF
+211800170530                             lf_DealerCommissionsUSDRec
+211900170530           END-EVALUATE.
+212000170530
+212100170530
+212200170530           INITIALIZE li_Count.
+212300170530           EXEC SQL
+212400170530             SELECT COUNT(1)
+212500170530             INTO   :li_Count
+212600170530             FROM   MFACOPSCP
+212700170530             WHERE  COMM_BONUS_SOURCE = :lnc_U
+212800170530           END-EXEC.
+212900170530
+213000170530           MOVE SQLSTATE TO lc_sqlStates.
+213100170530              IF li_Count = 1
+213200170530              MOVE "U"   TO  COMM-BONUS-SOURCE OF
+213300170530                             lf_DealerCommissionsCADRec
+213400170530                             COMM-BONUS-SOURCE OF
+213500170530                             lf_DealerCommissionsUSDRec
+213600170530              ELSE
+213700170530              MOVE "N"   TO  COMM-BONUS-SOURCE OF
+213800170530                             lf_DealerCommissionsCADRec
+213900170530                             COMM-BONUS-SOURCE OF
+214000170530                             lf_DealerCommissionsUSDRec
+214100170530              END-IF.
+214200170530
+214300170530      *Populating the values for the CAD Currency
+214400170530           MOVE  DEALER-CODE OF lf_DealerRec  TO
+214500170530                 DEALER-CODE OF lf_DealerCommissionsCADRec.
+214600170707           MOVE  lnc_CAD TO  CURRENCY-DDS OF lf_DealerCommissionsCADRec.
+214700170707           MOVE  lnc_WK  TO  REG-FREQUENCY-CODE OF
+214800170530                           lf_DealerCommissionsCADRec.
+214900170707           MOVE  lnc_B   TO  REG-REPORT-SETTLEMENT OF
+215000170530                           lf_DealerCommissionsCADRec.
+215100170530           MOVE  ZEROS TO  SRV-DLR-THRESHOLD     OF
+215200170530                           lf_DealerCommissionsCADRec.
+215300170530           MOVE  ZEROS TO  SRV-REP-THRESHOLD     OF
+215400170530                           lf_DealerCommissionsCADRec.
+215500170707           MOVE  lnc_MED TO  SRV-REPORT-OPTION     OF
+215600170530                           lf_DealerCommissionsCADRec.
+215700170707           MOVE  lnc_MED TO  REPORT-OPTION         OF
+215800170530                           lf_DealerCommissionsCADRec.
+215900170707           MOVE  lnc_B   TO  REPORT-SETTLEMENT   OF
+216000170530                           lf_DealerCommissionsCADRec.
+216100170707           MOVE  lnc_Y   TO  REPORT-ZERO-COMM    OF
+216200170530                           lf_DealerCommissionsCADRec.
+216300170530           MOVE  BRANCH-CODE of lf_DealerRec   TO BRANCH-CODE OF
+216400170530                           lf_DealerCommissionsCADRec.
+216500170530
+216600170530      *Populating the values for the USD Currency
+216700170707           MOVE CORR MFADEACMP of lf_DealerCommissionsCADRec  TO
+216800170707                     MFADEACMP of lf_DealerCommissionsUSDRec.
+216900170707           MOVE  lnc_USD TO  CURRENCY-DDS OF lf_DealerCommissionsUSDRec.
+217000170530
+217100170530           Perform InsertMFADEACMP-CAD.
+217200170530           Perform InsertMFADEACMP-USD.
+217300170530      *RFS170628 - ENDS
+217400170530
+217500170530
+217600170530
+217700170112           PERFORM InsertMFADEAP.
+217800170112           PERFORM InsertMFADEAMDP.
+217900170223
+218000170223      *RFS166835 Starts
+218100170223           IF XML-Authorization-Code OF BLK-Dealer-ExtRec NOT = SPACES
+218200170223              PERFORM InsertMFADEAUCP
+218300170223           END-IF.
+218400170223      *RFS166835 Ends
+218500170112
+218600170112      *****************************************************************
+218700170112       UpdateDealer.
+218800170112
+218900170112           INITIALIZE MFADEAP    OF Dealer-UpdateRec,
+219000170112                      MFADEAMDP  OF Dealer-Misc-UpdateRec.
+219100170112
+219200170112           IF Modify_Dealer
+219300170112             MOVE Dealer-Code OF BLK-Dealer-ExtRec
+219400170112               TO Dealer-Code OF Dealer-UpdateRec
+219500170112             READ Dealer-Update
+219600170112              INVALID KEY
+219700170112                 INITIALIZE MFADEAP OF Dealer-UpdateRec
+219800170112                 MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+219900170112                 MOVE "IDC47"                 TO COMM-ERROR-PTR
+220000170112                 PERFORM RejectRequest
+220100170112              NOT INVALID KEY
+220200170112                IF Dealer-Code OF BLK-Dealer-ExtRec
+220300170112                 = Dealer-Code OF Dealer-UpdateRec
+220400170112                   PERFORM Rewrite-Dealer
+220500170112                END-IF
+220600170112             END-READ
+220700170112           END-IF.
+220800170112
+220900170112           IF Modify_DealerMisc
+221000170112             MOVE Dealer-Code OF BLK-Dealer-ExtRec
+221100170112               TO Dealer-Code OF Dealer-Misc-UpdateRec
+221200170112             READ Dealer-Misc-Update
+221300170112              INVALID KEY
+221400170112                 INITIALIZE MFADEAMDP  OF Dealer-Misc-UpdateRec
+221500170112                 MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+221600170112                 MOVE "IDC48"                 TO COMM-ERROR-PTR
+221700170112                 PERFORM RejectRequest
+221800170112              NOT INVALID KEY
+221900170112                IF Dealer-Code OF BLK-Dealer-ExtRec
+222000170112                 = Dealer-Code OF Dealer-Misc-UpdateRec
+222100170112                   PERFORM Rewrite-DealerMisc
+222200170112                END-IF
+222300170112             END-READ
+222400170112           END-IF.
+222500170530      *RFS170628 - Starts
+222600170530      *****************************************************************
+222700170530       InsertMFADEACMP-CAD.
+222800170530
+222900170530           WRITE Dealer-CommissionsRec FROM
+223000170530               lf_DealerCommissionsCADRec
+223100170530             INVALID KEY
+223200170530               MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+223300170530               MOVE "IDC90"                 TO COMM-ERROR-PTR
+223400170530               PERFORM RejectRequest
+223500170530           END-WRITE.
+223600170530
+223700170530      *****************************************************************
+223800170530      *****************************************************************
+223900170530       InsertMFADEACMP-USD.
+224000170530
+224100170530           WRITE Dealer-CommissionsRec FROM
+224200170530               lf_DealerCommissionsUSDRec
+224300170530             INVALID KEY
+224400170530               MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+224500170530               MOVE "IDC91"                 TO COMM-ERROR-PTR
+224600170530               PERFORM RejectRequest
+224700170530           END-WRITE.
+224800170530
+224900170530      *****************************************************************
+225000170530      *RFS170628 - Ends
+225100170112
+225200170112      *****************************************************************
+225300170112       InsertMFADEAP.
+225400170112
+225500170112           WRITE Dealer-UpdateRec FROM
+225600170112               lf_DealerRec
+225700170112             INVALID KEY
+225800170112               MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+225900170112               MOVE "IDC49"                 TO COMM-ERROR-PTR
+226000170112               PERFORM RejectRequest
+226100170112             NOT INVALID KEY
+226200170112               IF NOT ncc_MFADERDLPrwt
+226300170112                 PERFORM WriteMFADERDLP
+226400170112               END-IF
+226500170112           END-WRITE.
+226600170112
+226700170112      *****************************************************************
+226800170112       InsertMFADEAMDP.
+226900170112
+227000170112           WRITE Dealer-Misc-UpdateRec FROM
+227100170112               lf_DealerMiscDetailsRec
+227200170112             INVALID KEY
+227300170112               MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+227400170112               MOVE "IDC50"                 TO COMM-ERROR-PTR
+227500170112               PERFORM RejectRequest
+227600170112             NOT INVALID KEY
+227700170112               IF NOT ncc_MFADERDLPrwt
+227800170112                 PERFORM WriteMFADERDLP
+227900170112               END-IF
+228000170112           END-WRITE.
+228100170112
+228200170112      *****************************************************************
+228300170112       Rewrite-Dealer.
+228400170112
+228500170112           IF Override-Dlr-Name OF BLK-Dealer-ExtRec NOT = SPACES
+228600170112              MOVE Override-Dlr-Name OF BLK-Dealer-ExtRec
+228700170112                TO Dealer-Name       OF Dealer-UpdateRec
+228800170112           ELSE
+228900170112              IF Dealer-Name    OF BLK-Dealer-ExtRec NOT = SPACES
+229000170112               MOVE Dealer-Name      OF BLK-Dealer-ExtRec
+229100170112                 TO Dealer-Name      OF Dealer-UpdateRec
+229200170112              END-IF
+229300170112           END-IF.
+229400170112           IF Institution-Code OF BLK-Dealer-ExtRec  NOT = SPACES
+229500170112              MOVE Institution-Code OF BLK-Dealer-ExtRec
+229600170112                TO Institution-Code OF Dealer-UpdateRec
+229700170112           END-IF.
+229800170112           IF Branch-Code      OF BLK-Dealer-ExtRec  NOT = SPACES
+229900170112              MOVE Branch-Code      OF BLK-Dealer-ExtRec
+230000170112                TO Branch-Code      OF Dealer-UpdateRec
+230100170112           END-IF.
+230200170112           IF Dealer-Status-Code OF BLK-Dealer-ExtRec NOT = SPACES
+230300170112              MOVE Dealer-Status-Code OF BLK-Dealer-ExtRec
+230400170112                TO Dealer-Status-Code OF Dealer-UpdateRec
+230500170112           END-IF.
+230600170112           IF Language-Code     OF BLK-Dealer-ExtRec NOT = SPACES
+230700170112              MOVE Language-Code      OF BLK-Dealer-ExtRec
+230800170112                TO Language-Code      OF Dealer-UpdateRec
+230900170112           END-IF.
+231000170112           IF Contact-Area      OF BLK-Dealer-ExtRec NOT = ZEROES
+231100170112              COMPUTE Contact-Area  OF Dealer-UpdateRec
+231200170112                    = Contact-Area  OF BLK-Dealer-ExtRec
+231300170112           END-IF.
+231400170112           IF Contact-Phone     OF BLK-Dealer-ExtRec NOT = ZEROES
+231500170112              COMPUTE Contact-Phone OF Dealer-UpdateRec
+231600170112                    = Contact-Phone OF BLK-Dealer-ExtRec
+231700170112           END-IF.
+231800170112           IF FAX-Area          OF BLK-Dealer-ExtRec NOT = ZEROES
+231900170112              COMPUTE FAX-Area     OF Dealer-UpdateRec
+232000170112                    = FAX-Area     OF BLK-Dealer-ExtRec
+232100170112           END-IF.
+232200170112           IF FAX-Phone         OF BLK-Dealer-ExtRec NOT = ZEROES
+232300170112              COMPUTE FAX-Phone     OF Dealer-UpdateRec
+232400170112                    = FAX-Phone     OF BLK-Dealer-ExtRec
+232500170112           END-IF.
+232600170112
+232700170112           IF Dealer-Settlement OF BLK-Dealer-ExtRec NOT = SPACES
+232800170112              PERFORM CheckMFADESMTP
+232900170112              MOVE Dealer-Settlement OF BLK-Dealer-ExtRec
+233000170112                TO Dealer-Settlement OF Dealer-UpdateRec
+233100170112           END-IF.
+233200170112           IF Money-Market-Trading OF BLK-Dealer-ExtRec NOT = SPACES
+233300170112              MOVE Money-Market-Trading OF BLK-Dealer-ExtRec
+233400170112                TO Money-Market-Trading OF Dealer-UpdateRec
+233500170112           END-IF.
+233600170112           IF Switch-Trading      OF BLK-Dealer-ExtRec NOT = SPACES
+233700170112              MOVE Switch-Trading OF BLK-Dealer-ExtRec
+233800170112                TO Switch-Trading OF Dealer-UpdateRec
+233900170112           END-IF.
+234000170112
+234100170112           REWRITE Dealer-UpdateRec
+234200170112            INVALID KEY
+234300170112              DISPLAY "ESBIDCUPRO: ERR REWRITE MFADEAP"
+234400170112              DISPLAY "STATUS: " lc_FileStatus
+234500170112            NOT INVALID KEY
+234600170112              IF NOT ncc_MFADERDLPrwt
+234700170112                 PERFORM WriteMFADERDLP
+234800170112              END-IF
+234900170223166835        IF XML-Authorization-Code OF BLK-Dealer-ExtRec
+235000170223   |             NOT = SPACES
+235100170223   |             PERFORM InsertMFADEAUCP
+235200170223166835        END-IF
+235300170112           END-REWRITE.
+235400170112
+235500170112      *****************************************************************
+235600170112       Rewrite-DealerMisc.
+235700170112
+235800170112           IF Internal-Transfer-WO OF BLK-Dealer-ExtRec NOT = SPACES
+235900170112              MOVE Internal-Transfer-WO OF BLK-Dealer-ExtRec
+236000170112                TO Internal-Transfer-WO OF Dealer-Misc-UpdateRec
+236100170112           END-IF.
+236200170112           IF External-Transfer-WO OF BLK-Dealer-ExtRec NOT = SPACES
+236300170112              MOVE External-Transfer-WO OF BLK-Dealer-ExtRec
+236400170112                TO External-Transfer-WO OF Dealer-Misc-UpdateRec
+236500170112           END-IF.
+236600170223      *RFS166835 Start
+236700170223      *    IF XML-Authorization-Code OF BLK-Dealer-ExtRec NOT = SPACES
+236800170223      *       PERFORM CheckMFAXMLAUP
+236900170223      *       MOVE XML-Authorization-Code OF BLK-Dealer-ExtRec
+237000170223      *         TO XML-Authorization-Code OF Dealer-Misc-UpdateRec
+237100170223      *    END-IF.
+237200170223      *RFS166835 End
+237300170112
+237400170112           REWRITE Dealer-Misc-UpdateRec
+237500170112            INVALID KEY
+237600170112              DISPLAY "ESBIDCUPRO: ERR REWRITE MFADEAMDP"
+237700170112              DISPLAY "STATUS: " lc_FileStatus
+237800170112            NOT INVALID KEY
+237900170112              IF NOT ncc_MFADERDLPrwt
+238000170112                 PERFORM WriteMFADERDLP
+238100170112              END-IF
+238200170112           END-REWRITE.
+238300170112
+238400170112      *****************************************************************
+238500170112       WriteMFADERDLP.
+238600170112           INITIALIZE MFADERDLP OF Dealer-Rep-Data-LogRec.
+238700170112           INITIALIZE lc-Change-Category-N2, lc-Change-Category-C2.
+238800170112
+238900170112           IF Add_Dealer OR Modify_Dealer OR Add_DealerMisc
+239000170112              OR Modify_DealerMisc
+239100170112              MOVE CORR WRKDEALER OF BLK-Dealer-ExtRec
+239200170112                     TO MFADERDLP OF Dealer-Rep-Data-LogRec
+239300170112              MOVE lnc_DELDTL
+239400170112                TO Screen-Code OF Dealer-Rep-Data-LogRec,
+239500170112                  lc-Change-Category-N2, lc-Change-Category-C2
+239600170112           END-IF.
+239700170112
+239800170112           IF Add_Representative OR Modify_Representative
+239900170112              OR Modify_DealerRepMisc
+240000170112              MOVE CORR WRKDEAREP OF BLK-DealerRep-ExtRec
+240100170112                     TO MFADERDLP OF Dealer-Rep-Data-LogRec
+240200170112              MOVE lnc_DERDTL
+240300170112166642*         TO Screen-Code OF Inst-Branch-Log-Rec
+240400170112166642          TO Screen-Code OF Dealer-Rep-Data-LogRec,
+240500170112                  lc-Change-Category-N2, lc-Change-Category-C2
+240600170112           END-IF.
+240700170112
+240800170112           If Add_Dealer OR Add_Representative OR Add_DealerMisc
+240900170112              MOVE lnc_auditStatus_N
+241000170112                TO Audit-Status    OF Dealer-Rep-Data-LogRec
+241100170112              SET  eleCd_001       TO TRUE
+241200170112              MOVE lc-Change-Category-New
+241300170112                TO Change-Category OF Dealer-Rep-Data-LogRec
+241400170112           END-IF.
+241500170112           IF Modify_Dealer        OR Modify_Representative
+241600170112              OR Modify_DealerMisc OR Modify_DealerRepMisc
+241700170112              MOVE lnc_auditStatus_C
+241800170112                TO Audit-Status    OF Dealer-Rep-Data-LogRec
+241900170112              SET  eleCd_002       TO TRUE
+242000170112              MOVE lc-Change-Category-Chg
+242100170112                TO Change-Category OF Dealer-Rep-Data-LogRec
+242200170112           END-IF.
+242300170112
+242400170112           MOVE lnc_eleCde TO Element-Code OF Dealer-Rep-Data-LogRec.
+242500170112           MOVE li_SysDate TO Audit-Date   OF Dealer-Rep-Data-LogRec.
+242600170112           MOVE li_SysTime TO Log-Time     OF Dealer-Rep-Data-LogRec.
+242700170112           MOVE lc_User    TO Audit-User   OF Dealer-Rep-Data-LogRec.
+242800170112
+242900170112           WRITE Dealer-Rep-Data-LogRec
+243000170112           INVALID KEY
+243100170112              DISPLAY "ESBIDCUPRO: ERR WRITE MFADERDLP"
+243200170112              DISPLAY "STATUS: " lc_FileStatus
+243300170112           NOT INVALID KEY
+243400170112              SET ncc_MFADERDLPrwt TO TRUE
+243500170112           END-WRITE.
+243600170112
+243700170112      ******************** Dealer Rep Section *************************
+243800170112       ValidateRepresentative.
+243900170112
+244000170112           INITIALIZE li_Count, lc_Add_Representative,
+244100170112                      lc_User,  lc_Add_DealerRepMisc,
+244200200212042284                lc_DlrRepMisc_InfoExistsFlag,
+244300170112                      lc_Add_Dealer, lc_Add_DealerMisc.
+244400170112           MOVE User-Id OF BLK-DealerRep-ExtRec TO lc_User.
+244500170112
+244600200218      *RFS1042284 Start
+244700200218      * Fields specific to DlrRepMisc file
+244800200218           IF Phone-Ext-10 OF BLK-DealerRep-ExtRec NOT = ZEROES
+244900200218               SET lb_DlrRepMisc_InfoExists TO TRUE
+245000200218           END-IF.
+245100200218      *RFS1042284 end
+245200170112      * Dealer Code & Rep are mandatory
+245300170112           IF Dealer-Code     OF BLK-DealerRep-ExtRec = SPACES OR
+245400170112              Dealer-Rep-Code OF BLK-DealerRep-ExtRec = SPACES
+245500170112              MOVE lc_InvalidRepSec_U29 TO COMM-RETURN-DESC
+245600170112              MOVE "IDC51"              TO COMM-ERROR-PTR
+245700170112              PERFORM RejectRequest
+245800170112           END-IF.
+245900170112
+246000170112           PERFORM PopulateTempRepRec.
+246100170112
+246200170112      *Check if Dealer already exists.
+246300170112           INITIALIZE li_Count.
+246400170112           EXEC SQL
+246500170112              SELECT Count(1)
+246600170112              INTO   :li_Count
+246700170112              FROM  MFADEAP
+246800170112              WHERE DEALER_CODE = :lc_Dealer_Code
+246900170112           END-EXEC.
+247000170112
+247100170112           MOVE SQLSTATE TO lc_sqlStates
+247200170112           EVALUATE TRUE
+247300170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+247400170112              CONTINUE
+247500170112            WHEN OTHER
+247600170112               MOVE lc_InvalidRepSec_U29 TO COMM-RETURN-DESC
+247700170112               MOVE "IDC51A"             TO COMM-ERROR-PTR
+247800170112               PERFORM RejectRequest
+247900170112           END-EVALUATE.
+248000170112
+248100170112      *Check if Breanch  already exists.
+248200170112           IF Branch-Code OF BLK-DealerRep-ExtRec NOT = SPACES
+248300170112              INITIALIZE li_Count
+248400170112              EXEC SQL
+248500170112                 SELECT Count(1)
+248600170112                 INTO   :li_Count
+248700170112                 FROM  MFAINSBRP
+248800170112                 WHERE BRANCH_CODE = :lc_Dealer_Branch
+248900170112              END-EXEC
+249000170112
+249100170112              MOVE SQLSTATE TO lc_sqlStates
+249200170112              EVALUATE TRUE
+249300170112               WHEN lncc_sqlSuccessful AND li_Count > 0
+249400170112                 CONTINUE
+249500170112               WHEN OTHER
+249600170112                  MOVE lc_InvalidRepSec_U29 TO COMM-RETURN-DESC
+249700170112                  MOVE "IDC51A"             TO COMM-ERROR-PTR
+249800170112                  PERFORM RejectRequest
+249900170112              END-EVALUATE
+250000170112           END-IF.
+250100170112
+250200170112      *Check if Dealer/Rep already exists.
+250300170112           INITIALIZE li_Count.
+250400170112           EXEC SQL
+250500170112              SELECT Count(1)
+250600170112              INTO   :li_Count
+250700170112              FROM  MFADEAREP
+250800170112              WHERE DEALER_CODE     = :lc_Dealer_Code
+250900170112                AND DEALER_REP_CODE = :lc_Dealer_Rep_Code
+251000170112           END-EXEC.
+251100170112
+251200170112           MOVE SQLSTATE TO lc_sqlStates.
+251300170112           EVALUATE TRUE
+251400170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+251500170112              PERFORM CheckDealerRepDetails
+251600170112            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+251700170112              SET Add_Representative TO TRUE
+251800200304042284        PERFORM CheckMFADLRMSCP
+251900170112            WHEN OTHER
+252000170112               MOVE lc_InvalidRepSec_U29 TO COMM-RETURN-DESC
+252100170112               MOVE "IDC52"              TO COMM-ERROR-PTR
+252200170112               PERFORM RejectRequest
+252300170112           END-EVALUATE.
+252400170112
+252500170112      *****************************************************************
+252600170112       PopulateTempRepRec.
+252700170112
+252800170112           INITIALIZE lc_SQLvar_DealerRep, lc_SQLvar_Dealer.
+252900170112
+253000170112           MOVE Dealer-Code     OF BLK-DealerRep-ExtRec
+253100170112             TO lc_Dealer_Code.
+253200170112           MOVE Dealer-Rep-Code OF BLK-DealerRep-ExtRec
+253300170112             TO lc_Dealer_Rep_Code.
+253400170112           MOVE Branch-Code     OF BLK-DealerRep-ExtRec
+253500170112             TO lc_Dealer_Branch.
+253600170112           MOVE Dealer-Rep-Status  OF BLK-DealerRep-ExtRec
+253700170112             TO lc_Dealer_Rep_Status.
+253800170112           MOVE Salutation-Code  OF BLK-DealerRep-ExtRec
+253900170112             TO lc_Salutation_Code.
+254000170112           IF Override-Rep-Fname OF BLK-DealerRep-ExtRec NOT = SPACES
+254100170112              MOVE Override-Rep-Fname OF BLK-DealerRep-ExtRec
+254200170112                TO lc_First_Name
+254300170112           ELSE
+254400170112              MOVE First-Name    OF BLK-DealerRep-ExtRec
+254500170112                TO lc_First_Name
+254600170112           END-IF.
+254700170112           MOVE Initials         OF BLK-DealerRep-ExtRec
+254800170112             TO lc_Initials.
+254900170112           IF Override-Rep-Lname OF BLK-DealerRep-ExtRec NOT = SPACES
+255000170112              MOVE Override-Rep-Lname OF BLK-DealerRep-ExtRec
+255100170112                TO lc_Last_Name
+255200170112           ELSE
+255300170112              MOVE Last-Name     OF BLK-DealerRep-ExtRec
+255400170112                TO lc_Last_Name
+255500170112           END-IF.
+255600170112           MOVE Language-Code    OF BLK-DealerRep-ExtRec
+255700170112             TO lc_Dealer_Language.
+255800170112
+255900170112           COMPUTE li_Dealer_Area_Code =
+256000170112             Area-Code           OF BLK-DealerRep-ExtRec.
+256100170112           COMPUTE li_Dealer_Phone_No =
+256200170112             Phone-No            OF BLK-DealerRep-ExtRec.
+256300170112           COMPUTE li_Phone_Ext =
+256400170112             Phone-Ext-10        OF BLK-DealerRep-ExtRec.
+256500170112           COMPUTE li_Dealer_FAX_Area =
+256600170112             FAX-Area            OF BLK-DealerRep-ExtRec.
+256700170112           COMPUTE li_Dealer_FAX_Phone =
+256800170112             FAX-Phone           OF BLK-DealerRep-ExtRec.
+256900170112
+257000170112           MOVE Marketting-Branch-Code OF BLK-DealerRep-ExtRec
+257100170112             TO lc_MarketingBranch.
+257200170112
+257300170112      *****************************************************************
+257400170112       CheckDealerRepDetails.
+257500170112
+257600170112           INITIALIZE li_Count.
+257700170112           EXEC SQL
+257800170112              SELECT Count(1)
+257900170112              INTO   :li_Count
+258000170112              FROM  MFADEAREP
+258100170112              WHERE DEALER_CODE           = :lc_Dealer_Code
+258200170112                AND DEALER_REP_CODE       = :lc_Dealer_Rep_Code
+258300170112                AND (LAST_NAME            = :lc_Last_Name
+258400170112                 OR :lc_Last_Name         = " ")
+258500170112                AND (FIRST_NAME           = :lc_First_Name
+258600170112                 OR :lc_First_Name        = " ")
+258700170112                AND (SALUTATION_CODE      = :lc_Salutation_Code
+258800170112                 OR :lc_Salutation_Code   = " ")
+258900170112                AND (INITIALS             = :lc_Initials
+259000170112                 OR :lc_Initials          = " ")
+259100170112                AND (LANGUAGE_CODE        = :lc_Dealer_Language
+259200170112                 OR :lc_Dealer_Language   = " ")
+259300170112                AND (AREA_CODE            = :li_Dealer_Area_Code
+259400170112                 OR :li_Dealer_Area_Code  = 0)
+259500170112                AND (PHONE_NO             = :li_Dealer_Phone_No
+259600170112                 OR :li_Dealer_Phone_No   = 0)
+259700170112                AND (FAX_AREA             = :li_Dealer_FAX_Area
+259800170112                 OR :li_Dealer_FAX_Area   = 0)
+259900170112                AND (FAX_PHONE            = :li_Dealer_FAX_Phone
+260000170112                 OR :li_Dealer_FAX_Phone  = 0)
+260100170112                AND (BRANCH_CODE          = :lc_Dealer_Branch
+260200170112                 OR :lc_Dealer_Branch     = " ")
+260300170112                AND (MARKETTING_BRANCH_CODE = :lc_MarketingBranch
+260400170112                 OR :lc_MarketingBranch     = " ")
+260500170112                AND (DEALER_REP_STATUS      = :lc_Dealer_Rep_Status
+260600170112                 OR :lc_Dealer_Rep_Status   = " ")
+260700170112              END-EXEC.
+260800170112
+260900170112           MOVE SQLSTATE TO lc_sqlStates.
+261000170112           EVALUATE TRUE
+261100170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+261200170112              PERFORM CheckMFADLRMSCP
+261300170112            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+261400170112              SET Modify_Representative TO TRUE
+261500170112              PERFORM CheckMFADLRMSCP
+261600170112            WHEN OTHER
+261700170112               MOVE lc_InvalidRepSec_U29 TO COMM-RETURN-DESC
+261800170112               MOVE "IDC53"              TO COMM-ERROR-PTR
+261900170112               PERFORM RejectRequest
+262000170112           END-EVALUATE.
+262100170112
+262200170112      *****************************************************************
+262300170112       CheckMFADLRMSCP.
+262400170112
+262500170112           INITIALIZE li_Count.
+262600170112           EXEC SQL
+262700170112              SELECT Count(1)
+262800170112              INTO   :li_Count
+262900170112              FROM  MFADLRMSCP
+263000170112              WHERE DEALER_CODE     = :lc_Dealer_Code
+263100170112                AND DEALER_REP_CODE = :lc_Dealer_Rep_Code
+263200200304042284*         AND (PHONE_EXT_10 = :li_Phone_Ext OR :li_Phone_Ext = 0)
+263300170112              END-EXEC.
+263400170112           MOVE SQLSTATE TO lc_sqlStates.
+263500170112           EVALUATE TRUE
+263600170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+263700200304042284*       CONTINUE
+263800200304042284        IF lb_DlrRepMisc_InfoExists
+263900200304   |             SET Modify_DealerRepMisc   TO TRUE
+264000200304042284        END-IF
+264100170112            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+264200200212042284*       SET Modify_DealerRepMisc   TO TRUE
+264300200218042284        IF lb_DlrRepMisc_InfoExists
+264400200304   |             SET Add_DealerMisc TO TRUE
+264500200218042284        END-IF
+264600170112            WHEN OTHER
+264700170112               MOVE lc_InvalidRepSec_U29 TO COMM-RETURN-DESC
+264800170112               MOVE "IDC54"              TO COMM-ERROR-PTR
+264900170112               PERFORM RejectRequest
+265000170112           END-EVALUATE.
+265100170112
+265200170112      *****************************************************************
+265300170112       AddRepresentative.
+265400170112
+265500170112           INITIALIZE MFADEAREP  OF lf_DealerRepRec,
+265600170112                      MFADLRMSCP OF lf_DealerRepMiscRec.
+265700170112
+265800170112           MOVE CORR WRKDEAREP OF BLK-DealerRep-ExtRec
+265900170112             TO MFADEAREP      OF lf_DealerRepRec.
+266000170112           MOVE CORR WRKDEAREP OF BLK-DealerRep-ExtRec
+266100170112             TO MFADLRMSCP     OF lf_DealerRepMiscRec.
+266200170112
+266300170112           IF Dealer-Rep-Status OF BLK-DealerRep-ExtRec NOT = SPACES
+266400170112              MOVE Dealer-Rep-Status  OF BLK-DealerRep-ExtRec
+266500170112                TO Dealer-Rep-Status  OF lf_DealerRepRec
+266600170112           ELSE
+266700170112              MOVE lnc_A TO Dealer-Rep-Status OF lf_DealerRepRec
+266800170112           END-IF.
+266900170112           MOVE lc_First_Name TO First-Name OF lf_DealerRepRec.
+267000170112           MOVE lc_Last_Name  TO Last-Name  OF lf_DealerRepRec.
+267100170112
+267200200304042284     IF Add_Representative
+267300170112           WRITE DealerRep-UpdateRec FROM
+267400170112                lf_DealerRepRec
+267500170112             INVALID KEY
+267600170112                MOVE lc_InvalidRepSec_U29 TO COMM-RETURN-DESC
+267700170112                MOVE "IDC55"              TO COMM-ERROR-PTR
+267800170112                PERFORM RejectRequest
+267900170112             NOT INVALID KEY
+268000170112              IF NOT ncc_MFADERDLPrwt
+268100170112                PERFORM WriteMFADERDLP
+268200170112              END-IF
+268300170112           END-WRITE.
+268400170112
+268500200212042284     IF Add_DealerMisc
+268600170112           WRITE DealerRep-Misc-UpdateRec FROM
+268700170112                lf_DealerRepMiscRec
+268800170112             INVALID KEY
+268900170112                MOVE lc_InvalidRepSec_U29 TO COMM-RETURN-DESC
+269000170112                MOVE "IDC57"            TO COMM-ERROR-PTR
+269100170112                PERFORM RejectRequest
+269200170112             NOT INVALID KEY
+269300170112              IF NOT ncc_MFADERDLPrwt
+269400170112                PERFORM WriteMFADERDLP
+269500170112              END-IF
+269600170112           END-WRITE.
+269700170112
+269800170112      *****************************************************************
+269900170112       UpdateRepresentative.
+270000170112
+270100200218           INITIALIZE MFADEAREP  OF DealerRep-UpdateRec
+270200200219042284*               MFADLRMSCP OF DealerRep-Misc-UpdateRec
+270300170112
+270400170112           IF Modify_Representative
+270500170112             MOVE Dealer-Code     OF BLK-DealerRep-ExtRec
+270600170112               TO Dealer-Code     OF DealerRep-UpdateRec
+270700170112             MOVE Dealer-Rep-Code OF BLK-DealerRep-ExtRec
+270800170112               TO Dealer-Rep-Code OF DealerRep-UpdateRec
+270900170112             READ Dealer-Rep-Update
+271000170112              INVALID KEY
+271100170112                 INITIALIZE MFADEAREP OF DealerRep-UpdateRec
+271200170112                 MOVE lc_InvalidRepSec_U29 TO COMM-RETURN-DESC
+271300170112                 MOVE "IDC58"            TO COMM-ERROR-PTR
+271400170112                 PERFORM RejectRequest
+271500170112              NOT INVALID KEY
+271600170112                IF Dealer-Code OF BLK-DealerRep-ExtRec
+271700170112                 = Dealer-Code OF DealerRep-UpdateRec
+271800170112                AND Dealer-Rep-Code OF BLK-DealerRep-ExtRec
+271900170112                  = Dealer-Rep-Code OF DealerRep-UpdateRec
+272000170112                   PERFORM Rewrite-DealerRep
+272100170112                END-IF
+272200170112             END-READ
+272300170112           END-IF.
+272400170112
+272500170112           IF Modify_DealerRepMisc
+272600200219042284       INITIALIZE MFADLRMSCP OF DealerRep-Misc-UpdateRec
+272700170112             MOVE Dealer-Code     OF BLK-DealerRep-ExtRec
+272800170112               TO Dealer-Code     OF DealerRep-Misc-UpdateRec
+272900170112             MOVE Dealer-Rep-Code OF BLK-DealerRep-ExtRec
+273000170112               TO Dealer-Rep-Code OF DealerRep-Misc-UpdateRec
+273100170112             READ Dealer-Rep-Misc-Update
+273200170112              INVALID KEY
+273300170112                 INITIALIZE MFADLRMSCP OF DealerRep-Misc-UpdateRec
+273400170112                 MOVE lc_InvalidRepSec_U29 TO COMM-RETURN-DESC
+273500170112                 MOVE "IDC59"              TO COMM-ERROR-PTR
+273600170112                 PERFORM RejectRequest
+273700170112              NOT INVALID KEY
+273800170112                IF Dealer-Code       OF BLK-DealerRep-ExtRec
+273900170112                 = Dealer-Code       OF DealerRep-Misc-UpdateRec
+274000170112                 AND Dealer-Rep-Code OF BLK-DealerRep-ExtRec
+274100170112                   = Dealer-Rep-Code OF DealerRep-Misc-UpdateRec
+274200200212042284           AND lb_DlrRepMisc_InfoExists
+274300170112                   PERFORM Rewrite-DealerRepMisc
+274400170112                END-IF
+274500170112             END-READ
+274600170112           END-IF.
+274700200219      *RFS1042284 Start
+274800200219           IF Add_DealerMisc
+274900200219              INITIALIZE MFADLRMSCP OF lf_DealerRepMiscRec
+275000200219              MOVE CORR WRKDEAREP OF BLK-DealerRep-ExtRec
+275100200219                   TO MFADLRMSCP     OF lf_DealerRepMiscRec
+275200200219              WRITE DealerRep-Misc-UpdateRec FROM lf_DealerRepMiscRec
+275300200219              INVALID KEY
+275400200219                   MOVE lc_InvalidRepSec_U29 TO COMM-RETURN-DESC
+275500200219                   MOVE "IDC83"            TO COMM-ERROR-PTR
+275600200219                   PERFORM RejectRequest
+275700200219              END-WRITE
+275800200219           END-IF.
+275900200219      *RFS1042284 end
+276000170112
+276100170112      *****************************************************************
+276200170112       Rewrite-DealerRep.
+276300170112
+276400170112           IF Branch-Code OF BLK-DealerRep-ExtRec NOT = SPACES
+276500170112              MOVE Branch-Code OF BLK-DealerRep-ExtRec
+276600170112                TO Branch-Code OF DealerRep-UpdateRec
+276700170112           END-IF.
+276800170112           IF Dealer-Rep-Status OF BLK-DealerRep-ExtRec NOT = SPACES
+276900170112              MOVE Dealer-Rep-Status OF BLK-DealerRep-ExtRec
+277000170112                TO Dealer-Rep-Status OF DealerRep-UpdateRec
+277100170112           END-IF.
+277200170112           IF Salutation-Code OF BLK-DealerRep-ExtRec NOT = SPACES
+277300170112              MOVE Salutation-Code   OF BLK-DealerRep-ExtRec
+277400170112                TO Salutation-Code   OF DealerRep-UpdateRec
+277500170112           END-IF.
+277600170112           IF Override-Rep-Fname OF BLK-DealerRep-ExtRec NOT = SPACES
+277700170112              MOVE Override-Rep-Fname OF BLK-DealerRep-ExtRec
+277800170112                TO First-Name         OF DealerRep-UpdateRec
+277900170112           ELSE
+278000170112              IF First-Name      OF BLK-DealerRep-ExtRec NOT = SPACES
+278100170112               MOVE First-Name        OF BLK-DealerRep-ExtRec
+278200170112                 TO First-Name        OF DealerRep-UpdateRec
+278300170112              END-IF
+278400170112           END-IF.
+278500170112           IF Initials OF BLK-DealerRep-ExtRec NOT = SPACES
+278600170112              MOVE Initials          OF BLK-DealerRep-ExtRec
+278700170112                TO Initials          OF DealerRep-UpdateRec
+278800170112           END-IF.
+278900170112           IF Override-Rep-Lname OF BLK-DealerRep-ExtRec NOT = SPACES
+279000170112              MOVE Override-Rep-Lname OF BLK-DealerRep-ExtRec
+279100170112                TO Last-Name          OF DealerRep-UpdateRec
+279200170112           ELSE
+279300170112              IF Last-Name   OF BLK-DealerRep-ExtRec NOT = SPACES
+279400170112               MOVE Last-Name       OF BLK-DealerRep-ExtRec
+279500170112                 TO Last-Name       OF DealerRep-UpdateRec
+279600170112              END-IF
+279700170112           END-IF.
+279800170112           IF Language-Code OF BLK-DealerRep-ExtRec NOT = SPACES
+279900170112              MOVE Language-Code    OF BLK-DealerRep-ExtRec
+280000170112                TO Language-Code    OF DealerRep-UpdateRec
+280100170112           END-IF.
+280200170112           IF Area-Code OF BLK-DealerRep-ExtRec NOT = ZEROES
+280300170112              COMPUTE Area-Code OF DealerRep-UpdateRec
+280400170112                    = Area-Code OF BLK-DealerRep-ExtRec
+280500170112           END-IF.
+280600170112           IF Phone-No OF BLK-DealerRep-ExtRec NOT = ZEROES
+280700170112              COMPUTE Phone-No  OF DealerRep-UpdateRec
+280800170112                    = Phone-No  OF BLK-DealerRep-ExtRec
+280900170112           END-IF.
+281000170112           IF FAX-Area OF BLK-DealerRep-ExtRec NOT = ZEROES
+281100170112              COMPUTE FAX-Area OF DealerRep-UpdateRec
+281200170112                    = FAX-Area OF BLK-DealerRep-ExtRec
+281300170112           END-IF.
+281400170112           IF FAX-Phone OF BLK-DealerRep-ExtRec NOT = ZEROES
+281500170112              COMPUTE FAX-Phone OF DealerRep-UpdateRec
+281600170112                    = FAX-Phone OF BLK-DealerRep-ExtRec
+281700170112           END-IF.
+281800170112
+281900170112           IF Marketting-Branch-Code OF BLK-DealerRep-ExtRec
+282000170112              NOT = SPACES
+282100170112              MOVE Marketting-Branch-Code OF BLK-DealerRep-ExtRec
+282200170112                TO Marketting-Branch-Code OF DealerRep-UpdateRec
+282300170112           END-IF.
+282400170112
+282500170112           REWRITE DealerRep-UpdateRec
+282600170112            INVALID KEY
+282700170112              DISPLAY "ESBIDCUPRO: ERR REWRITE MFADEAREP"
+282800170112              DISPLAY "STATUS: " lc_FileStatus
+282900170112            NOT INVALID KEY
+283000170112              IF NOT ncc_MFADERDLPrwt
+283100170112                 PERFORM WriteMFADERDLP
+283200170112              END-IF
+283300170112           END-REWRITE.
+283400170112
+283500170112      *****************************************************************
+283600170112       Rewrite-DealerRepMisc.
+283700170112
+283800170112           IF Phone-Ext-10 OF BLK-DealerRep-ExtRec NOT = ZEROES
+283900170112              COMPUTE Phone-Ext-10 OF DealerRep-Misc-UpdateRec
+284000170112                    = Phone-Ext-10 OF BLK-DealerRep-ExtRec
+284100170112
+284200170112              REWRITE DealerRep-Misc-UpdateRec
+284300170112               INVALID KEY
+284400170112                 DISPLAY "ESBIDCUPRO: ERR REWRITE MFADLRMSCP"
+284500170112                 DISPLAY "STATUS: " lc_FileStatus
+284600170112               NOT INVALID KEY
+284700170112                 IF NOT ncc_MFADERDLPrwt
+284800170112                    PERFORM WriteMFADERDLP
+284900170112                 END-IF
+285000170112              END-REWRITE
+285100170112           END-IF.
+285200170112
+285300170112      **************** Dealer SEG License ****************************
+285400170112       ValidateDealerSEGLicense.
+285500170112
+285600170112           INITIALIZE li_Count, lc_Add_DealerSEGLicense,
+285700170112                      lc_SQLvar_DealerLicense, lc_SQLvar_Dealer.
+285800170112
+285900170112      * Dealer Code and Province are mandatory.
+286000170112      * This logic is executed when Dealer Code is provided.
+286100170112           IF Province-Code OF BLK-SEGLicence-ExtRec = SPACES
+286200170112              MOVE lc_InvalidDlrSegSec_U28 TO COMM-RETURN-DESC
+286300170112              MOVE "IDC60"                 TO COMM-ERROR-PTR
+286400170112              PERFORM RejectRequest
+286500170112           END-IF.
+286600170112
+286700170112           PERFORM PopulateTempDealerLic.
+286800170112
+286900170112      *Check if Dealer exists.
+287000170112           INITIALIZE li_Count.
+287100170112           EXEC SQL
+287200170112              SELECT Count(1)
+287300170112              INTO   :li_Count
+287400170112              FROM  MFADEAP
+287500170112              WHERE DEALER_CODE = :lc_Dealer_Code
+287600170112           END-EXEC.
+287700170112
+287800170112           MOVE SQLSTATE TO lc_sqlStates.
+287900170112           EVALUATE TRUE
+288000170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+288100170112               CONTINUE
+288200170112            WHEN OTHER
+288300170112               MOVE lc_InvalidDlrSegSec_U28 TO COMM-RETURN-DESC
+288400170112               MOVE "IDC60A"                TO COMM-ERROR-PTR
+288500170112               PERFORM RejectRequest
+288600170112           END-EVALUATE.
+288700170112
+288800170112      *Check if Dealer's license already exists.
+288900170112           INITIALIZE li_Count.
+289000170112           EXEC SQL
+289100170112              SELECT Count(1)
+289200170112              INTO   :li_Count
+289300170112              FROM  MFADELPLP
+289400170112              WHERE DEALER_CODE   = :lc_Dealer_Code
+289500170112                AND PROVINCE_CODE = :lc_Province_Code
+289600170112           END-EXEC.
+289700170112
+289800170112           MOVE SQLSTATE TO lc_sqlStates.
+289900170112           EVALUATE TRUE
+290000170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+290100170112               PERFORM CheckDealerLicense
+290200170112            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+290300170112               SET Add_DealerSEGLicense TO TRUE
+290400170112            WHEN OTHER
+290500170112               MOVE lc_InvalidDlrSegSec_U28 TO COMM-RETURN-DESC
+290600170112               MOVE "IDC61"                 TO COMM-ERROR-PTR
+290700170112               PERFORM RejectRequest
+290800170112           END-EVALUATE.
+290900170112
+291000170112           IF Add_DealerSEGLicense OR Modfy_DealerSEGLicense
+291100170112              IF Dealer-Code   OF BLK-SEGLicence-ExtRec = SPACES
+291200170112              OR Province-Code OF BLK-SEGLicence-ExtRec = SPACES
+291300170112              OR Expiry-Date   OF BLK-SEGLicence-ExtRec = ZEROES
+291400170112                 MOVE lc_InvalidDlrSegSec_U28 TO COMM-RETURN-DESC
+291500170112                 MOVE "IDC62"                 TO COMM-ERROR-PTR
+291600170112                 PERFORM RejectRequest
+291700170112              END-IF
+291800170112
+291900170112              COMPUTE li_ValDate = Expiry-Date OF BLK-SEGLicence-ExtRec
+292000170112              PERFORM ValidateDate
+292100170112              IF lc_ValidDate = lnc_N
+292200170112                 MOVE lc_InvalidDlrSegSec_U28 TO COMM-RETURN-DESC
+292300170112                 MOVE "IDC63"                 TO COMM-ERROR-PTR
+292400170112                 PERFORM RejectRequest
+292500170112              END-IF
+292600170112
+292700170112      * Province must be a valid Canadian Province
+292800170112              INITIALIZE li_Count
+292900170112              EXEC SQL
+293000170112                 SELECT Count(1)
+293100170112                 INTO   :li_Count
+293200170112                 FROM  MFAPRVCDP
+293300170112                 WHERE COUNTRY_CODE  = :lc_CAN
+293400170112                   AND PROVINCE_CODE = :lc_Province_Code
+293500170112              END-EXEC
+293600170112              MOVE SQLSTATE TO lc_sqlStates
+293700170112              EVALUATE TRUE
+293800170112               WHEN lncc_sqlSuccessful AND li_Count > 0
+293900170112                  CONTINUE
+294000170112               WHEN OTHER
+294100170112                  MOVE lc_InvalidDlrSegSec_U28 TO COMM-RETURN-DESC
+294200170112                  MOVE "IDC63A"                TO COMM-ERROR-PTR
+294300170112                  PERFORM RejectRequest
+294400170112              END-EVALUATE
+294500170112           END-IF.
+294600170112
+294700170112      *****************************************************************
+294800170112       PopulateTempDealerLic.
+294900170112
+295000170112           MOVE Dealer-Code   OF BLK-SEGLicence-ExtRec
+295100170112             TO lc_Dealer_Code.
+295200170112           MOVE Province-Code OF BLK-SEGLicence-ExtRec
+295300170112             TO lc_Province_Code.
+295400170112           COMPUTE li_Expiry_Date = Expiry-Date
+295500170112             OF BLK-SEGLicence-ExtRec.
+295600170112
+295700170112      *****************************************************************
+295800170112       CheckDealerLicense.
+295900170112
+296000170112           INITIALIZE li_Count.
+296100170112           EXEC SQL
+296200170112              SELECT Count(1)
+296300170112              INTO   :li_Count
+296400170112              FROM  MFADELPLP
+296500170112              WHERE DEALER_CODE   = :lc_Dealer_Code
+296600170112                AND PROVINCE_CODE = :lc_Province_Code
+296700170112                AND EXPIRY_DATE   = :li_Expiry_Date
+296800170112           END-EXEC.
+296900170112
+297000170112           MOVE SQLSTATE TO lc_sqlStates.
+297100170112           EVALUATE TRUE
+297200170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+297300170112               CONTINUE
+297400170112            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+297500170112               SET Modfy_DealerSEGLicense TO TRUE
+297600170112            WHEN OTHER
+297700170112               MOVE lc_InvalidDlrSegSec_U28 TO COMM-RETURN-DESC
+297800170112               MOVE "IDC64"                 TO COMM-ERROR-PTR
+297900170112               PERFORM RejectRequest
+298000170112           END-EVALUATE.
+298100170112
+298200170112      *****************************************************************
+298300170112       AddDealerSEGLicense.
+298400170112
+298500170112           EXEC SQL
+298600170112              INSERT INTO MFADELPLP
+298700170112              VALUES(:lc_Dealer_Code,
+298800170112                     :lc_Province_Code,
+298900170112                     :li_Expiry_Date
+299000170112                     )
+299100170112           END-EXEC.
+299200170112
+299300170112           MOVE SQLSTATE TO lc_sqlStates.
+299400170112           IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+299500170112              MOVE lc_InvalidDlrSegSec_U28 TO COMM-RETURN-DESC
+299600170112              MOVE "IDC65"                 TO COMM-ERROR-PTR
+299700170112              PERFORM RejectRequest
+299800170112           END-IF.
+299900170112
+300000170112      *****************************************************************
+300100170112       UpdateDealerSEGLicense.
+300200170112
+300300170112           EXEC SQL
+300400170112              UPDATE MFADELPLP
+300500170112                 SET EXPIRY_DATE   = :li_Expiry_Date
+300600170112               WHERE DEALER_CODE   = :lc_Dealer_Code
+300700170112                 AND PROVINCE_CODE = :lc_Province_Code
+300800170112           END-EXEC.
+300900170112
+301000170112           MOVE SQLSTATE TO lc_sqlStates.
+301100170112           IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+301200170112              MOVE lc_InvalidDlrSegSec_U28 TO COMM-RETURN-DESC
+301300170112              MOVE "IDC66"                TO COMM-ERROR-PTR
+301400170112              PERFORM RejectRequest
+301500170112           END-IF.
+301600170112
+301700170112      **************** Dealer Rep SEG License *************************
+301800170112       ValidateRepSEGLicense.
+301900170112
+302000170112           INITIALIZE li_Count, lc_SQLvar_Dealer,
+302100170112                      lc_SQLvar_DealerLicense, lc_SQLvar_DealerRep,
+302200170112                      lc_SQLvar_DealerLicense,
+302300170112                      lc_Add_DealerRepSEGLicense,
+302400170112                      lc_Add_DealerSEGLicense.
+302500170112
+302600170112      *  Dealer Code, Rep and Province are mandatory
+302700170112           IF Dealer-Rep-Code    OF BLK-SEGLicence-ExtRec = SPACES
+302800170112           OR Province-Code-Rep  OF BLK-SEGLicence-ExtRec = SPACES
+302900170112              MOVE lc_InvalidRepSegSec_U30 TO COMM-RETURN-DESC
+303000170112              MOVE "IDC67"                 TO COMM-ERROR-PTR
+303100170112              PERFORM RejectRequest
+303200170112           END-IF.
+303300170112
+303400170112           PERFORM PopulateTempDealerRepLic.
+303500170112
+303600170112      *Check if Dealer & rep exists
+303700170112           INITIALIZE li_Count.
+303800170112           EXEC SQL
+303900170112              SELECT Count(1)
+304000170112              INTO   :li_Count
+304100170112              FROM  MFADEAREP
+304200170112              WHERE DEALER_CODE     = :lc_Dealer_Code
+304300170112                AND DEALER_REP_CODE = :lc_Dealer_Rep_Code
+304400170112           END-EXEC.
+304500170112
+304600170112           MOVE SQLSTATE TO lc_sqlStates.
+304700170112           EVALUATE TRUE
+304800170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+304900170112              CONTINUE
+305000170112            WHEN OTHER
+305100170112               MOVE lc_InvalidRepSegSec_U30 TO COMM-RETURN-DESC
+305200170112               MOVE "IDC67A"           TO COMM-ERROR-PTR
+305300170112               PERFORM RejectRequest
+305400170112           END-EVALUATE.
+305500170112
+305600170112      *Check if Dealer's license already exists.
+305700170112           INITIALIZE li_Count.
+305800170112           EXEC SQL
+305900170112              SELECT Count(1)
+306000170112              INTO   :li_Count
+306100170112              FROM  MFADERPLP
+306200170112              WHERE DEALER_CODE     = :lc_Dealer_Code
+306300170112                AND DEALER_REP_CODE = :lc_Dealer_Rep_Code
+306400170112                AND PROVINCE_CODE   = :lc_Province_Code
+306500170112           END-EXEC.
+306600170112
+306700170112           MOVE SQLSTATE TO lc_sqlStates.
+306800170112           EVALUATE TRUE
+306900170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+307000170112              PERFORM CheckDealerRepLicense
+307100170112            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+307200170112              SET Add_RepSEGLicense TO TRUE
+307300170112            WHEN OTHER
+307400170112               MOVE lc_InvalidRepSegSec_U30 TO COMM-RETURN-DESC
+307500170112               MOVE "IDC68"            TO COMM-ERROR-PTR
+307600170112               PERFORM RejectRequest
+307700170112           END-EVALUATE.
+307800170112
+307900170112           IF Add_RepSEGLicense OR Modify_RepSEGLicense
+308000170112             IF Dealer-Code-Rep      OF BLK-SEGLicence-ExtRec = SPACES
+308100170112                OR Dealer-Rep-Code   OF BLK-SEGLicence-ExtRec = SPACES
+308200170112                OR Province-Code-Rep OF BLK-SEGLicence-ExtRec = SPACES
+308300170112                OR Expiry-Date-Rep   OF BLK-SEGLicence-ExtRec = ZEROES
+308400170112                   MOVE lc_InvalidRepSegSec_U30 TO COMM-RETURN-DESC
+308500170112                   MOVE "IDC69" TO COMM-ERROR-PTR
+308600170112                   PERFORM RejectRequest
+308700170112             END-IF
+308800170112
+308900170112             COMPUTE li_ValDate = Expiry-Date-Rep
+309000170112                  OF BLK-SEGLicence-ExtRec
+309100170112             PERFORM ValidateDate
+309200170112             IF lc_ValidDate = lnc_N
+309300170112                MOVE lc_InvalidDlrSegSec_U28 TO COMM-RETURN-DESC
+309400170112                MOVE "IDC70"                 TO COMM-ERROR-PTR
+309500170112                PERFORM RejectRequest
+309600170112             END-IF
+309700170112
+309800170112      * Province must be a valid Canadian Province
+309900170112              INITIALIZE li_Count
+310000170112              EXEC SQL
+310100170112                 SELECT Count(1)
+310200170112                 INTO   :li_Count
+310300170112                 FROM  MFAPRVCDP
+310400170112                 WHERE COUNTRY_CODE  = :lc_CAN
+310500170112                   AND PROVINCE_CODE = :lc_Province_Code
+310600170112              END-EXEC
+310700170112              MOVE SQLSTATE TO lc_sqlStates
+310800170112              EVALUATE TRUE
+310900170112               WHEN lncc_sqlSuccessful AND li_Count > 0
+311000170112                  CONTINUE
+311100170112               WHEN OTHER
+311200170112                  MOVE lc_InvalidRepSegSec_U30 TO COMM-RETURN-DESC
+311300170112                  MOVE "IDC69A"           TO COMM-ERROR-PTR
+311400170112                  PERFORM RejectRequest
+311500170112              END-EVALUATE
+311600170112           END-IF.
+311700170112
+311800170112      *****************************************************************
+311900170112       PopulateTempDealerRepLic.
+312000170112
+312100170112           MOVE Dealer-Code-Rep OF BLK-SEGLicence-ExtRec
+312200170112             TO lc_Dealer_Code.
+312300170112           MOVE Dealer-Rep-Code OF BLK-SEGLicence-ExtRec
+312400170112             TO lc_Dealer_Rep_Code.
+312500170112           MOVE Province-Code-Rep OF BLK-SEGLicence-ExtRec
+312600170112             TO lc_Province_Code.
+312700170112           COMPUTE li_Expiry_Date = Expiry-Date-Rep
+312800170112             OF BLK-SEGLicence-ExtRec.
+312900170112
+313000170112      *****************************************************************
+313100170112       CheckDealerRepLicense.
+313200170112
+313300170112           INITIALIZE li_Count.
+313400170112           EXEC SQL
+313500170112              SELECT Count(1)
+313600170112              INTO   :li_Count
+313700170112              FROM  MFADERPLP
+313800170112              WHERE DEALER_CODE     = :lc_Dealer_Code
+313900170223166835*         AND DEALER_REP_CODE = :lc_Dealer_Code
+314000170223166835          AND DEALER_REP_CODE = :lc_Dealer_Rep_Code
+314100170112                AND PROVINCE_CODE   = :lc_Province_Code
+314200170112                AND EXPIRY_DATE     = :li_Expiry_Date
+314300170112           END-EXEC.
+314400170112
+314500170112           MOVE SQLSTATE TO lc_sqlStates.
+314600170112           EVALUATE TRUE
+314700170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+314800170112               CONTINUE
+314900170112            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+315000170112               SET Modify_RepSEGLicense     TO TRUE
+315100170112            WHEN OTHER
+315200170112               MOVE lc_InvalidRepSegSec_U30 TO COMM-RETURN-DESC
+315300170112               MOVE "IDC71"                 TO COMM-ERROR-PTR
+315400170112               PERFORM RejectRequest
+315500170112           END-EVALUATE.
+315600170112
+315700170112      *****************************************************************
+315800170112       AddRepSEGLicense.
+315900170112
+316000170112           EXEC SQL
+316100170112              INSERT INTO MFADERPLP
+316200170112              VALUES(:lc_Dealer_Code,
+316300170112                     :lc_Dealer_Rep_Code,
+316400170112                     :lc_Province_Code,
+316500170112                     :li_Expiry_Date
+316600170112                     )
+316700170112           END-EXEC.
+316800170112
+316900170112           MOVE SQLSTATE TO lc_sqlStates.
+317000170112           IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+317100170112              MOVE lc_InvalidRepSegSec_U30 TO COMM-RETURN-DESC
+317200170112              MOVE "IDC72"                 TO COMM-ERROR-PTR
+317300170112              PERFORM RejectRequest
+317400170112           END-IF.
+317500170112
+317600170112      *****************************************************************
+317700170112       UpdateRepSEGLicense.
+317800170112
+317900170112           EXEC SQL
+318000170112              UPDATE MFADERPLP
+318100170112                 SET EXPIRY_DATE     = :li_Expiry_Date
+318200170112               WHERE DEALER_CODE     = :lc_Dealer_Code
+318300170112                 AND DEALER_REP_CODE = :lc_Dealer_Rep_Code
+318400170112                 AND PROVINCE_CODE   = :lc_Province_Code
+318500170112           END-EXEC.
+318600170112
+318700170112           MOVE SQLSTATE TO lc_sqlStates.
+318800170112           IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+318900170112              MOVE lc_InvalidRepSegSec_U30 TO COMM-RETURN-DESC
+319000170112              MOVE "IDC73"                 TO COMM-ERROR-PTR
+319100170112              PERFORM RejectRequest
+319200170112           END-IF.
+319300170112
+319400170112      *****************************************************************
+319500170112       ValidateBusinessType.
+319600170112
+319700170112           INITIALIZE li_Count.
+319800170112           EXEC SQL
+319900170112              SELECT Count(1)
+320000170112              INTO   :li_Count
+320100170112              FROM   MFABUSTYP
+320200170112              WHERE  BUSINESS_TYPE = :lc_BusinessType
+320300170112           END-EXEC.
+320400170112
+320500170112           MOVE SQLSTATE TO lc_sqlStates.
+320600170112           EVALUATE TRUE
+320700170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+320800170112              CONTINUE
+320900170112            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+321000170112               MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+321100170112               MOVE "IDC74"               TO COMM-ERROR-PTR
+321200170112               PERFORM RejectRequest
+321300170112            WHEN OTHER
+321400170112               MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+321500170112               MOVE "IDC75"               TO COMM-ERROR-PTR
+321600170112               PERFORM RejectRequest
+321700170112           END-EVALUATE.
+321800170112
+321900170112      *****************************************************************
+322000170112       CheckMFADESMTP.
+322100170112
+322200170112           INITIALIZE li_Count.
+322300170112           EXEC SQL
+322400170112              SELECT Count(1)
+322500170112              INTO   :li_Count
+322600170112              FROM  MFADESMTP
+322700170112              WHERE DEALER_SETTLEMENT = :lc_Dealer_Settlement
+322800170112           END-EXEC.
+322900170112
+323000170112           MOVE SQLSTATE TO lc_sqlStates
+323100170112           EVALUATE TRUE
+323200170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+323300170112              CONTINUE
+323400170112            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+323500170112166642*        MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+323600170112166642         MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+323700170112               MOVE "IDC76"               TO COMM-ERROR-PTR
+323800170112               PERFORM RejectRequest
+323900170112            WHEN OTHER
+324000170112               MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+324100170112               MOVE "IDC77"                 TO COMM-ERROR-PTR
+324200170112               PERFORM RejectRequest
+324300170112           END-EVALUATE.
+324400170112
+324500170112      *****************************************************************
+324600170112       CheckMFAXMLAUP.
+324700170112
+324800170112           INITIALIZE li_Count.
+324900170112           EXEC SQL
+325000170112              SELECT Count(1)
+325100170112              INTO   :li_Count
+325200170223166835*       FROM  MFAXMLAUP
+325300170223166835*       WHERE XML_AUTHORIZATION_CODE = :lc_Dealer_XML_Auth
+325400170223166835        FROM  MFAINVACP
+325500170223166835        WHERE INVESTMENT_AUTHORIZATION_CODE = :lc_Dealer_XML_Auth
+325600170112           END-EXEC.
+325700170112
+325800170112           MOVE SQLSTATE TO lc_sqlStates
+325900170112           EVALUATE TRUE
+326000170112            WHEN lncc_sqlSuccessful AND li_Count > 0
+326100170112              CONTINUE
+326200170112            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+326300170112166642*        MOVE lc_InvalidInstSec_U25 TO COMM-RETURN-DESC
+326400170112166642         MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+326500170112               MOVE "IDC78"               TO COMM-ERROR-PTR
+326600170112               PERFORM RejectRequest
+326700170112            WHEN OTHER
+326800170112               MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+326900170112               MOVE "IDC79"                 TO COMM-ERROR-PTR
+327000170112               PERFORM RejectRequest
+327100170112           END-EVALUATE.
+327200170112
+327300170112      *****************************************************************
+327400170112       GetNFULinkNo.
+327500170112
+327600170112           INITIALIZE lc-CTLReturnCode, li_NfuLinkNo.
+327700170112           CALL "GETCTLNUM" USING lnc_CTLNFUCode,
+327800170112                                  li-NxtNumber,
+327900170112                                  lc-CTLReturnCode
+328000170112           IF lc-CTLReturnCode = "99"
+328100170112              MOVE ERR-DBASE-NOT-AVAILAB TO COMM-RETURN-DESC
+328200170112              MOVE "IDC80" TO COMM-ERROR-PTR
+328300170112              PERFORM RejectRequest
+328400170112           ELSE
+328500170112              COMPUTE li_NfuLinkNo = li-NxtNumber
+328600170112           END-IF.
+328700170112
+328800170223      *RFS166835 Starts
+328900170223      *****************************************************************
+329000170223       CheckMFADEAUCP.
+329100170223
+329200170223           INITIALIZE li_Count.
+329300170223           EXEC SQL
+329400170223              SELECT Count(1)
+329500170223              INTO   :li_Count
+329600170223              FROM  MFADEAUCP
+329700170223              WHERE DEALER_CODE = :lc_Dealer_Code
+329800170223                AND INVESTMENT_AUTHORIZATION_CODE = :lc_Dealer_XML_Auth
+329900170223              END-EXEC.
+330000170223
+330100170223           MOVE SQLSTATE TO lc_sqlStates.
+330200170223           EVALUATE TRUE
+330300170223            WHEN lncc_sqlSuccessful AND li_Count > 0
+330400170223              CONTINUE
+330500170223            WHEN (lncc_sqlSuccessful OR lncc_sqlEnd) AND li_Count = 0
+330600170223              SET Modify_Dealer     TO TRUE
+330700170223            WHEN OTHER
+330800170223               MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+330900170223               MOVE "IDC81"                 TO COMM-ERROR-PTR
+331000170223               PERFORM RejectRequest
+331100170223           END-EVALUATE.
+331200170223
+331300170223      *****************************************************************
+331400170223       InsertMFADEAUCP.
+331500170223
+331600170223           EXEC SQL
+331700170223           INSERT INTO MFADEAUCP
+331800170223                 (DEALER_CODE
+331900170223                 ,INVESTMENT_AUTHORIZATION_CODE)
+332000170223           VALUES(:lc_Dealer_Code
+332100170223                 ,:lc_Dealer_XML_Auth)
+332200170223           END-EXEC.
+332300170223
+332400170223           MOVE SQLSTATE TO lc_sqlStates.
+332500170223           IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+332600170223              AND NOT lncc_sqlDuplicate
+332700170223              MOVE lc_InvalidDealerSec_U27 TO COMM-RETURN-DESC
+332800170223              MOVE "IDC82"                 TO COMM-ERROR-PTR
+332900170223              PERFORM RejectRequest
+333000170223           END-IF.
+333100170223      *RFS166835 Ends
+333200170223
+333300170112      *****************************************************************
+333400170112       Special-Module-Authorization.
+333500170112
+333600170112           MOVE SPACES TO lc_BEDROCK_Module_Auth
+333700170112           CALL   "RTVMODAUTH"  USING lc_BEDROCKodule
+333800170112                                      lc_BEDROCK_Module_Auth.
+333900170112           CANCEL "RTVMODAUTH".
+334000170112
+334100170112      *****************************************************************
+334200170112       Call-ESGADDRESS.
+334300170112
+334400170112           INITIALIZE li-AddressNo.
+334500170112           INITIALIZE MFANFULGP OF Nfu-Esg-Log-Rec.
+334600170112           CALL "ESGADDRESS" USING lc-Addr-Code,
+334700170112                                   lc-AddressDetails,
+334800170112                                   Nfu-Esg-Log-Rec,
+334900170112                                   lc-AddressFlag,
+335000170112                                   li-AddressNo,
+335100170112                                   lc-TaxCodes,
+335200170112                                   lc-AddressCompare.
+335300170112      *    CANCEL "ESGADDRESS".
+335400170112
+335500170112      *****************************************************************
+335600170112       ValidateDate.
+335700170112
+335800170112           INITIALIZE lc_ValidDate.
+335900170112           IF li_ValDate NOT = 0
+336000170112              IF FUNCTION TEST-DATE-TIME
+336100170112                 (li_ValDate DATE "@Y%m%d") = B"1"
+336200170112                 MOVE lnc_Y TO lc_ValidDate
+336300170112              ELSE
+336400170112                 MOVE lnc_N TO lc_ValidDate
+336500170112              END-IF
+336600170112           END-IF.
+336700170112
+336800170112      *****************************************************************
+336900170112       GetOerLink.
+337000170112
+337100170112           INITIALIZE lc_ReturnCode, li_NextNumber.
+337200170112
+337300170112           CALL "GETCTLNUM" USING lc_ControlCode,
+337400170112                                  li_NextNumber,
+337500170112                                  lc_ReturnCode.
+337600170112
+337700170112      *****************************************************************
+337800170112       Open-Files.
+337900170112
+338000170112           OPEN I-O Institution-Update
+338100170112           IF lc_FileStatus NOT = ZEROES
+338200170112              DISPLAY "ESBIDCUPRO: ERR OPEN MFAINSP"
+338300170112              DISPLAY "STATUS: " lc_FileStatus
+338400170112           END-IF.
+338500170112
+338600170112           OPEN I-O InstitutionBranch-Update
+338700170112           IF lc_FileStatus NOT = ZEROES
+338800170112              DISPLAY "ESBIDCUPRO: ERR OPEN MFAINSBRP"
+338900170112              DISPLAY "STATUS: " lc_FileStatus
+339000170112           END-IF.
+339100170112
+339200170112           OPEN I-O InstBrchAddress-Update
+339300170112           IF lc_FileStatus NOT = ZEROES
+339400170112              DISPLAY "ESBIDCUPRO: ERR OPEN MFAINSBAP"
+339500170112              DISPLAY "STATUS: " lc_FileStatus
+339600170112           END-IF.
+339700170112
+339800170112           OPEN I-O Institution-Branch-Data-Log
+339900170112           IF lc_FileStatus NOT = ZEROES
+340000170112              DISPLAY "ERR OPEN MFAINSBDLP"
+340100170112              DISPLAY "STATUS =" lc_FileStatus
+340200170112           END-IF.
+340300170112
+340400170112           OPEN I-O Dealer-Rep-Data-Log
+340500170112           IF lc_FileStatus NOT = ZEROES
+340600170112              DISPLAY "ERR OPEN MFADERDLP"
+340700170112              DISPLAY "STATUS =" lc_FileStatus
+340800170112           END-IF.
+340900170112
+341000170112           OPEN I-O Dealer-Update
+341100170112           IF lc_FileStatus NOT = ZEROES
+341200170112              DISPLAY "ERR OPEN MFADEAP"
+341300170112              DISPLAY "STATUS =" lc_FileStatus
+341400170112           END-IF.
+341500170112
+341600170112           OPEN I-O Dealer-Misc-Update
+341700170112           IF lc_FileStatus NOT = ZEROES
+341800170112              DISPLAY "ERR OPEN MFADEAMDP"
+341900170112              DISPLAY "STATUS =" lc_FileStatus
+342000170112           END-IF.
+342100170112
+342200170112           OPEN I-O Dealer-Rep-Update
+342300170112           IF lc_FileStatus NOT = ZEROES
+342400170112              DISPLAY "ERR OPEN MFADEAP"
+342500170112              DISPLAY "STATUS =" lc_FileStatus
+342600170112           END-IF.
+342700170112
+342800170112           OPEN I-O Dealer-Rep-Misc-Update
+342900170112           IF lc_FileStatus NOT = ZEROES
+343000200219042284        DISPLAY "ERR OPEN MFADLRMSCP"
+343100170112              DISPLAY "STATUS =" lc_FileStatus
+343200170112           END-IF.
+343300170112
+343400170112           OPEN I-O ORDER-ENTRY-RESPONSE-DTL-LOG.
+343500170112           IF lc_FileStatus NOT = ZEROES
+343600170112              DISPLAY "ERR OPEN ORDER-ENTRY-RESPONSE-DTL-LOG"
+343700170112              DISPLAY lc_FileStatus
+343800170112           END-IF.
+343900170112
+344000170112           OPEN I-O ORDER-ENTRY-DETAIL-LOG.
+344100170112           IF lc_FileStatus NOT = ZEROES
+344200170112              DISPLAY "ERR OPEN ORDER-ENTRY-DETAIL-LOG"
+344300170112              DISPLAY lc_FileStatus
+344400170112           END-IF.
+344500170112
+344600170530      *RFS170628 -Starts
+344700170530           OPEN I-O DEALER-COMMISSIONS.
+344800170530           IF lc_FileStatus NOT = ZEROES
+344900170530              DISPLAY "ERR OPEN DEALER-COMMISSIONS"
+345000170530              DISPLAY lc_FileStatus
+345100170530           END-IF.
+345200170530      *RFS170628 -Ends
+345300170112           OPEN EXTEND NFU-RESPONSE-LOG.
+345400170112           IF lc_FileStatus NOT = ZEROES
+345500170112              DISPLAY "ERR OPEN WHILE NFU RESPONSE LOG"
+345600170112              DISPLAY lc_FileStatus
+345700170112           END-IF.
+345800170112
+345900170112           OPEN EXTEND NFU-RESPONSE-DTL-LOG.
+346000170112           IF lc_FileStatus NOT = ZEROES
+346100170112              DISPLAY "ERR OPEN WHILE NFU RESPONSE DTL LOG"
+346200170112              DISPLAY lc_FileStatus
+346300170112           END-IF.
+346400170713
+346500170713      * RFS 163001 Starts
+346600170713           OPEN I-O BLK-NFU-LOG.
+346700170713           IF WS-FILE-STATUS NOT = ZEROES
+346800170713              DISPLAY "ERR OPEN WHILE NFU LOG"
+346900170713              DISPLAY WS-FILE-STATUS
+347000170713           END-IF.
+347100170713      * RFS 163001 Ends
+347200170112
+347300170112      *****************************************************************
+347400170112       LogBLKInstitution.
+347500170112           MOVE CORR WRKINSTIT    OF BLK-Institution-ExtRec
+347600170112             TO Wrknfur15p OF Nfu-Response-Rec.
+347700170112           MOVE Image-Document-Id OF BLK-Institution-ExtRec
+347800170112             TO Doc-Id     OF Nfu-Response-Rec.
+347900170112           MOVE Msg-Id     OF BLK-Institution-ExtRec
+348000170112             TO Source-Number-2   OF Nfu-Response-Rec.
+348100170112      *****************************************************************
+348200170112       LogBLKInstitutionBranch.
+348300170112           MOVE CORR WRKINSBRP    OF BLK-Inst-Branch-ExtRec
+348400170112             TO Wrknfur15p OF Nfu-Response-Rec.
+348500170112           MOVE Image-Document-Id OF BLK-Inst-Branch-ExtRec
+348600170112             TO Doc-Id     OF Nfu-Response-Rec.
+348700170112           MOVE Msg-Id     OF BLK-Inst-Branch-ExtRec
+348800170112             TO Source-Number-2   OF Nfu-Response-Rec.
+348900170112      *****************************************************************
+349000170112       LogBLKDealer.
+349100170112           MOVE CORR WRKDEALER    OF BLK-Dealer-ExtRec
+349200170112             TO Wrknfur15p OF Nfu-Response-Rec.
+349300170112           MOVE Image-Document-Id OF BLK-Dealer-ExtRec
+349400170112             TO Doc-Id     OF Nfu-Response-Rec.
+349500170112           MOVE Msg-Id     OF BLK-Dealer-ExtRec
+349600170112             TO Source-Number-2   OF Nfu-Response-Rec.
+349700170112      *****************************************************************
+349800170112       LogSegLicence.
+349900170112           MOVE CORR WRKSEGLIC    OF BLK-SEGLicence-ExtRec
+350000170112             TO Wrknfur15p OF Nfu-Response-Rec.
+350100170112           MOVE Image-Document-Id OF BLK-SEGLicence-ExtRec
+350200170112             TO Doc-Id     OF Nfu-Response-Rec.
+350300170112           MOVE Msg-Id     OF BLK-SEGLicence-ExtRec
+350400170112             TO Source-Number-2   OF Nfu-Response-Rec.
+350500170112      *****************************************************************
+350600170112       LogBLKDealerRep.
+350700170112           MOVE CORR WRKDEAREP    OF BLK-DealerRep-ExtRec
+350800170112             TO Wrknfur15p OF Nfu-Response-Rec.
+350900170112           MOVE Image-Document-Id OF BLK-DealerRep-ExtRec
+351000170112             TO Doc-Id     OF Nfu-Response-Rec.
+351100170112           MOVE Msg-Id     OF BLK-DealerRep-ExtRec
+351200170112             TO Source-Number-2   OF Nfu-Response-Rec.
+351300170112
+351400210917
+351500170713      * RFS163001 Starts
+351600170713      * ---------------------------------
+351700170713       WriteMFABLKLOGP.
+351800170713      * ---------------------------------
+351900170713           INITIALIZE MFABLKLOGP OF BLK-NFU-LOG-REC.
+352000170803
+352100170713           MOVE lc-RES-MsgKey
+352200170713             TO Msg-Id OF Blk-Nfu-Log-Rec
+352300170713           MOVE lc_User
+352400170726             TO Audit-User OF Blk-Nfu-Log-Rec
+352500170713           MOVE lc_RecordId to lx_Record-Id
+352600170810
+352700170810           EVALUATE TRUE
+352800170810              WHEN Dealer-Code OF BLK-Dealer-ExtRec
+352900170810                   NOT = SPACES
+353000170810                 MOVE Dealer-Code OF BLK-Dealer-ExtRec
+353100170810                   TO Dealer-Code OF Blk-Nfu-Log-Rec
+353200170810              WHEN Dealer-Code OF BLK-SEGLicence-ExtRec
+353300170810                   NOT = SPACES
+353400170810                 MOVE Dealer-Code OF BLK-SEGLicence-ExtRec
+353500170810                   TO Dealer-Code OF Blk-Nfu-Log-Rec
+353600170810              WHEN Dealer-Code OF BLK-DealerRep-ExtRec
+353700170810                   NOT = SPACES
+353800170810                 MOVE Dealer-Code OF BLK-DealerRep-ExtRec
+353900170810                   TO Dealer-Code OF Blk-Nfu-Log-Rec
+354000170810              WHEN Dealer-Code-Rep OF BLK-SEGLicence-ExtRec
+354100170810                   NOT = SPACES
+354200170810                 MOVE Dealer-Code-Rep OF BLK-SEGLicence-ExtRec
+354300170810                   TO Dealer-Code OF Blk-Nfu-Log-Rec
+354400170810           END-EVALUATE.
+354500170810
+354600170810           EVALUATE TRUE
+354700170810              WHEN Dealer-Rep-Code OF BLK-DealerRep-ExtRec
+354800170810                   NOT = SPACES
+354900170810                 MOVE Dealer-Rep-Code OF BLK-DealerRep-ExtRec
+355000170810                   TO Dealer-Rep-Code OF Blk-Nfu-Log-Rec
+355100170810              WHEN Dealer-Rep-Code OF BLK-SEGLicence-ExtRec
+355200170810                   NOT = SPACES
+355300170810                 MOVE Dealer-Rep-Code OF BLK-SEGLicence-ExtRec
+355400170810                   TO Dealer-Rep-Code OF Blk-Nfu-Log-Rec
+355500170810           END-EVALUATE.
+355600170810
+355700170810           EVALUATE TRUE
+355800170810              WHEN Branch-Code OF BLK-Institution-ExtRec
+355900170810                   NOT = SPACES
+356000170810                 MOVE Branch-Code OF BLK-Institution-ExtRec
+356100170810                   TO Branch-Code OF Blk-Nfu-Log-Rec
+356200170810              WHEN Branch-Code OF BLK-Inst-Branch-ExtRec
+356300170810                   NOT = SPACES
+356400170810                 MOVE Branch-Code OF BLK-Inst-Branch-ExtRec
+356500170810                   TO Branch-Code OF Blk-Nfu-Log-Rec
+356600170810              WHEN Branch-Code OF BLK-Dealer-ExtRec
+356700170810                   NOT = SPACES
+356800170810                 MOVE Branch-Code OF BLK-Dealer-ExtRec
+356900170810                   TO Branch-Code OF Blk-Nfu-Log-Rec
+357000170810              WHEN Branch-Code OF BLK-DealerRep-ExtRec
+357100170810                   NOT = SPACES
+357200170810                 MOVE Branch-Code OF BLK-DealerRep-ExtRec
+357300170810                   TO Branch-Code OF Blk-Nfu-Log-Rec
+357400170810           END-EVALUATE.
+357500170810
+357600170810           EVALUATE TRUE
+357700170810              WHEN Institution-Code OF BLK-Institution-ExtRec
+357800170810                   NOT = SPACES
+357900170810                 MOVE Institution-Code OF BLK-Institution-ExtRec
+358000170810                   TO Institution-Code OF Blk-Nfu-Log-Rec
+358100170810              WHEN Institution-Code OF BLK-Inst-Branch-ExtRec
+358200170810                   NOT = SPACES
+358300170810                 MOVE Institution-Code OF BLK-Inst-Branch-ExtRec
+358400170810                   TO Institution-Code OF Blk-Nfu-Log-Rec
+358500170810              WHEN Institution-Code OF BLK-Dealer-ExtRec
+358600170810                   NOT = SPACES
+358700170810                 MOVE Institution-Code OF BLK-Dealer-ExtRec
+358800170810                   TO Institution-Code OF Blk-Nfu-Log-Rec
+358900170810           END-EVALUATE.
+359000170810
+359100170713           PERFORM Insert_MFABLKLOGP.
+359200170713      * RFS163001 Ends
+359300170713
+359400170112      *****************************************************************
+359500170112       RejectRequest.
+359600170112           MOVE lnc_99        TO COMM-RETURN-CODE.
+359700170112           PERFORM Esg-Rejection THRU Erj-Exit.
+359800170112           PERFORM Termination.
+359900170112
+360000170112      *****************************************************************
+360100170112       Termination.
+360200170112
+360300170112           INITIALIZE Wrknfur15p OF Nfu-Response-Rec.
+360400170112           EVALUATE TRUE
+360500170112            WHEN Msg-Id of BLK-Institution-ExtRec NOT = SPACES
+360600170112              PERFORM LogBLKInstitution
+360700170112            WHEN Msg-Id of BLK-Inst-Branch-ExtRec NOT = SPACES
+360800170112              PERFORM LogBLKInstitutionBranch
+360900170112            WHEN Msg-Id of BLK-Dealer-ExtRec NOT = SPACES
+361000170112              PERFORM LogBLKDealer
+361100170112            WHEN Msg-Id of BLK-SEGLicence-ExtRec NOT = SPACES
+361200170112              PERFORM LogSegLicence
+361300170112            WHEN Msg-Id of BLK-DealerRep-ExtRec NOT = SPACES
+361400170112              PERFORM LogBLKDealerRep
+361500170112           END-EVALUATE.
+361600170112
+361700170112           MOVE lc_MgmCode
+361800170112             TO Management-Company-Code OF Nfu-Response-Rec.
+361900170112           MOVE lnc_BulkOrdrSource
+362000170112             TO Order-Source OF Nfu-Response-Rec.
+362100170112           MOVE li_SysDate
+362200170112             TO Log-Process-Date OF Nfu-Response-Rec.
+362300170112           MOVE li_SysTime
+362400170112             TO Log-Time OF Nfu-Response-Rec.
+362500170112           MOVE lnc_F
+362600170112             TO Response-Source OF Nfu-Response-Rec.
+362700170112
+362800170112      **** Update MFANFUR15P and MFANFUX15P log files
+362900170112
+363000170112           PERFORM WRITE-NFU-RESPONSE-LOGS.
+363100170112
+363200170112      **** Update MFAOELX15P log files
+363300170112           MOVE CORR MFANFUX15P OF NFU-RESPONSE-DTL-LOG
+363400170112                 TO  MFAOELX15P OF ORDER-ENTRY-RES-DTL-LOG-REC.
+363500170112
+363600170112           PERFORM GetOerLink.
+363700170112
+363800170112           MOVE li_NextNumber
+363900170112             TO OE-OER-LINK OF ORDER-ENTRY-RES-DTL-LOG-REC.
+364000170112
+364100170112           WRITE ORDER-ENTRY-RES-DTL-LOG-REC
+364200170112                INVALID KEY
+364300170112                   DISPLAY "ENT-RES-DTL-LOG-REC"
+364400170112                           "STATUS=" lc_FileStatus
+364500170112           END-WRITE.
+364600170112
+364700170713
+364800170112      *--- Send response to data queue
+364900170112           INITIALIZE lc-RES-Process
+365000170112                      lc-RES-RecId
+365100170112                      lc-RES-MsgKey
+365200170112                      lc-RES-MsgDtl.
+365300170112
+365400170112           MOVE Comm-Process-Option TO lc-RES-Process.
+365500170112           MOVE lc_RecordId         TO lc-RES-RecId.
+365600170112           EVALUATE TRUE
+365700170112            WHEN Msg-Id of BLK-Institution-ExtRec NOT = SPACES
+365800170112              MOVE Msg-Id OF BLK-Institution-ExtRec TO lc-RES-MsgKey
+365900170112            WHEN Msg-Id of BLK-Inst-Branch-ExtRec NOT = SPACES
+366000170112              MOVE Msg-Id OF BLK-Inst-Branch-ExtRec TO lc-RES-MsgKey
+366100170112            WHEN Msg-Id of BLK-Dealer-ExtRec      NOT = SPACES
+366200170112              MOVE Msg-Id OF BLK-Dealer-ExtRec      TO lc-RES-MsgKey
+366300170112            WHEN Msg-Id of BLK-SEGLicence-ExtRec  NOT = SPACES
+366400170112              MOVE Msg-Id OF BLK-SEGLicence-ExtRec  TO lc-RES-MsgKey
+366500170112            WHEN Msg-Id of BLK-DealerRep-ExtRec   NOT = SPACES
+366600170112              MOVE Msg-Id OF BLK-DealerRep-ExtRec   TO lc-RES-MsgKey
+366700170112           END-EVALUATE.
+366800170112
+366900170112           PERFORM ResponseMainSetup.
+367000170112
+367100170112           MOVE lc-ResponseNfu TO lc-RES-MsgDtl.
+367200170112
+367300170112           CALL "ESBRESPONS" USING lc-RES-Process,
+367400170112                                   lc-RES-RecId,
+367500170112                                   lc-RES-MsgKey,
+367600170112                                   lc-RES-MsgDtl.
+367700170728
+367800170728163001*--- Insert logs into MFABLKLOGP file
+367900170728163001     IF INDX-REJ = 0
+368000170728163001        PERFORM WriteMFABLKLOGP
+368100170728163001     END-IF.
+368200170728
+368300170112           IF Indx-Rej > 0
+368400170112              ROLLBACK
+368500170112           ELSE
+368600170112              COMMIT
+368700170112           END-IF.
+368800170112           GOBACK.
+368900170112
+369000170112      *****************************************************************
+369100170112           COPY CPYNFURSP.
+369200170112           COPY CPYNFULGP.
+369300170112           COPY CPYOERES.
+369400170112           COPY CPYSQLRTN.
+369500170713163001     COPY CPYNFUUPD.
+369600170112

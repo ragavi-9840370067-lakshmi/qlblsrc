@@ -1,0 +1,1282 @@
+000100181010       IDENTIFICATION DIVISION.
+000200181010       PROGRAM-ID.    SQLSTD.
+000300181010       AUTHOR.        Swathi J.
+000400181010       INSTALLATION.  JEWELSTONE SYSTEMS INC.
+000500190205       DATE-WRITTEN.  July 2018.
+000600190527       DATE-COMPILED.
+000700181108      ******************************************************************
+000800181108      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE              *
+000900181108      ******************************************************************
+001000181024      * This New Program is called by JOBT5R3                          *
+001100181010      ******************************************************************
+001200181024      * Swathi J   * 2018/07/30   * RFS180116 - created the new program.
+001300181025      * Daisy Ly   * 2018/10/24   * RFS180116                          .
+001400181025      *            *              * -drop all table before creating    .
+001500181025      *            *              * -insert SFT5F, SFT5SUM, SFT5S at   .
+001600181025      *            *              *  investment code level             .
+001700181026      * Daisy Ly   * 2018/10/26   * RFS176735 - add chg from qtp       .
+001800181228
+001900181228      * M K SINDHU * 2018/12/27   * RFS1007659 incorrect no of slip    *
+002000181228      *            *              * generated
+002100190123      * B Vergara  * 2019/01/23   * rfs182418 -YE18 Data mapping error *
+002200190128      * Bathuu L   * 2019/01/29   * RFS182317 - Improve performance.   *
+002300190205      * S Ragavi   * 2019/02/05   * RFS1009272 - YE18 - T5/R3 XML      *
+002400190205      *            *              * - Manual slips -Wrong name in T5   *
+002500190205      *            *              *   and missing Tag in R3            *
+002600190223      * B Vergara  * 2019/02/23   * 182855 -YE18 T5 XML <summ_cnt>     *
+002700190223      *                           * issue
+002800190322      * Bathuu L   * 2019/03/21   * RFS182870 - Remove payer-no linkage*
+002900190322      *                           * in summary files.
+003000190322      * Bathuu L   * 2019/03/13   * RFS183080 - Fix box 30 amount in   *
+003100190322      *                           * summary record.
+003200191204      * Gomathi S  * 2019/12/03   * RFS184739-CRA 2019 Schema Changes  *
+003300200704      * Mayilsamy D* 2020/07/04   * RFS186092 - Recompile              *
+003400200819      * Poojasri M * 2020/08/19   * RFS186465 - DMC for RFS1101020     *
+003500210803      * B Vergara  * 2021/08/03   * RFS1118957 - Recompile             *
+003501210929      * Gomathi S  * 2021/09/28   * RFS1121214 - Recompile             *
+003600181010      ******************************************************************
+003700181010       ENVIRONMENT DIVISION.
+003800181010       CONFIGURATION SECTION.
+003900181010       SOURCE-COMPUTER. IBM-AS400.
+004000181010       OBJECT-COMPUTER. IBM-AS400.
+004100181010       SPECIAL-NAMES. LOCAL-DATA IS WS-LOCAL,
+004200191204           DATA-AREA IS WS-DTAARA-MFACMPCDP.
+004300181010      *
+004400181010       INPUT-OUTPUT SECTION.
+004500181010       FILE-CONTROL.
+004600181010
+004700181010       DATA DIVISION.
+004800181010       FILE SECTION.
+004900181010      * ---------------------------------
+005000181010       WORKING-STORAGE SECTION.
+005100181010      * ---------------------------------
+005200181108      * Replace "SQLSTD" with the name of Current Program
+005300181010          COPY CPYSQLFLD
+005400181010               REPLACING == "CURRENT_PROGRAM" == BY == "SQLSTD" ==.
+005500181010      *
+005600181010           EXEC SQL
+005700181010             INCLUDE SQLCA
+005800181010           END-EXEC.
+005900181010      *
+006000181010       01 lc_Mfacmpcdp.
+006100181010          03 lc_MgmtCode                     PIC  X(03).
+006200181010          03 FILLER                          PIC  X(40).
+006300181010
+006400181108      * Working variables
+006500181010       01 LC-FORM-CODE          PIC X(10).
+006600181010       01 lc_LanguageCode       PIC X(01).
+006700181025       01 lc_LangCodeREVE       PIC X(01).
+006800181025       01 lc_LangCodeREVF       PIC X(01).
+006900181024       01 lc-InstLangCode       PIC X(01).
+007000181010       01 LI-FROM-DATE          PIC S9(08).
+007100181010       01 LI-TO-DATE            PIC S9(08).
+007200181010       01 LI-TAX-PERIOD         PIC S9(08).
+007300181010       01 LI-CURR-YEAR          PIC S9(04).
+007400181010       01 LI-BOX-16-SEQ         PIC X(10).
+007500181010       01 lc-FORM-TYPE          PIC X(1).
+007600181010       01 lc-FILE-TYPE          PIC X(1).
+007700181010       01 lc-FUNDS-GROUP        PIC X(3).
+007800181010       01 lc-RUN-TYPE           PIC X(1).
+007900181010       01 lc_SYSDATE.
+008000181010          05  CurrentYear       PIC 9(4).
+008100181010          05  CurrentMonth      PIC 99.
+008200181010          05  CurrentDay        PIC 99.
+008300181010       01 LNC_E                 PIC X(1) Values 'E'.
+008400181010       01 lI_TOTAL_NO_REC       PIC S9(7).
+008500190223182855*01 lI_TOTAL_NO_RECSUM    PIC S9(7).
+008600190223182855 01 lI_TOTAL_NO_RECSUM    PIC S9(6).
+008700181010
+008800181010       01  lc_Error-Desc.
+008900181010
+009000181010           03  lc_ErrCodeDescr01            PIC X(80)
+009100181016                  VALUE "Error in insert SFT5GN Original".
+009200181010           03  lc_ErrCodeDescr02            PIC X(80)
+009300181016                  VALUE "Error in insert SFT5GN Amend".
+009400181010           03  lc_ErrCodeDescr03            PIC X(80)
+009500181016                  VALUE "Error in insert SFT5GN Cancel".
+009600181010           03  lc_ErrCodeDescr04            PIC X(80)
+009700181016                  VALUE "Error in insert SFT5BOX".
+009800181010           03  lc_ErrCodeDescr05            PIC X(80)
+009900181010                  VALUE "Error in insert SFT4RIFH".
+010000181010           03  lc_ErrCodeDescr06            PIC X(80)
+010100181016                    VALUE "Error in insert SFT5SUM".
+010200181010           03  lc_ErrCodeDescr07            PIC X(80)
+010300181010                    VALUE "Error in insert SFT4RIFS".
+010400181010           03  lc_ErrCodeDescr08            PIC X(80)
+010500181010                    VALUE "Error in insert SFT4RIFD".
+010600181010           03  lc_ErrCodeDescr09            PIC X(80)
+010700181010                    VALUE "Error in Count Records Query".
+010800181010           03  lc_ErrCodeDescr10            PIC X(80)
+010900181010                    VALUE "Error in insert MFAACFMDP".
+011000181025           03  lc_ErrCodeDescr11            PIC X(80)
+011100181025                    VALUE "Error in insert MFAACFMDP2".
+011200190128      *RFS182317 - Start
+011300190128           03  lc_ErrCodeDescr12            PIC X(80)
+011400190128                    VALUE "Error in insert SFTXFRMAV".
+011500190128      *RFS182317 - End
+011600190128
+011700181010
+011800181010      * Error Codes, Uniquely Identify where the error happened
+011900181010       01 WS-ERR-CODE                       PIC X(02) VALUE SPACES.
+012000181010          88 WS-ERR-OK                          VALUE SPACES.
+012100181010          88 WS-ERR-01                          VALUE "01".
+012200181010          88 WS-ERR-02                          VALUE "02".
+012300181010          88 WS-ERR-03                          VALUE "03".
+012400181010          88 WS-ERR-04                          VALUE "04".
+012500181010          88 WS-ERR-05                          VALUE "05".
+012600181010          88 WS-ERR-06                          VALUE "06".
+012700181010          88 WS-ERR-07                          VALUE "07".
+012800181010          88 WS-ERR-08                          VALUE "08".
+012900181010          88 WS-ERR-09                          VALUE "09".
+013000181010          88 WS-ERR-10                          VALUE "10".
+013100181025          88 WS-ERR-11                          VALUE "11".
+013200190128      *RFS182317 - Start
+013300190128          88 WS-ERR-12                          VALUE "12".
+013400190128      *RFS182317 - End
+013500181010      *   ...............
+013600181010       01  lc_LDA                                  PIC X(1024).
+013700181010      * =================================
+013800181010       PROCEDURE DIVISION.
+013900181010      * =================================
+014000181010      * ---------------------------------
+014100181010       MAIN-PROCESS.
+014200181010      * ---------------------------------
+014300181108      ********************************
+014400181108      * This code should be in every *
+014500181108      * SQL program                  *
+014600181108      ********************************
+014700181108           EXEC SQL
+014800181010              WHENEVER SQLERROR   CONTINUE
+014900181010           END-EXEC.
+015000181010      *
+015100181010           PERFORM INITIAL-LOGIC
+015200181010           PERFORM PROCESS-DETAIL
+015300181010           PERFORM END-JOB.
+015400181010      * ---------------------------------
+015500181010       INITIAL-LOGIC.
+015600181010      * ---------------------------------
+015700181010           ACCEPT  lc_LDA  FROM WS-LOCAL.
+015800181010           ACCEPT  lc_SYSDATE  FROM DATE YYYYMMDD
+015900181010
+016000181010           SET WS-ERR-OK       TO TRUE.
+016100181025           EXEC SQL
+016200181025             DROP  TABLE SFT5GN
+016300181025           END-EXEC.
+016400181010
+016500181010           EXEC SQL
+016600181016             CREATE TABLE SFT5GN
+016700181010             (
+016800181010              FORM_SEQ_NO           NUMERIC (18),
+016900181010              D_RECORD_TYPE_CODE    CHAR (01)
+017000181010             )
+017100181010           END-EXEC.
+017200181010
+017300181025           EXEC SQL
+017400181025             DROP   TABLE SFT5F
+017500181024           END-EXEC.
+017600181024
+017700181010           EXEC SQL
+017800181024            CREATE TABLE SFT5F
+017900181010            (
+018000181012              D_RECORD_TYPE_TRANS                      CHAR (3)
+018100181012             ,T_DATA_TYPE                              CHAR (1)
+018200181012             ,ALPHA_TRANS                              CHAR (2)
+018300181012             ,NUMIC_TRANS                              NUMERIC (6)
+018400181012             ,SER_BUR_OPT                              CHAR (1)
+018500181012             ,D_TOTAL_SUMMARY_RECORDS                  NUMERIC (6)
+018600181023             ,TRANS_NAME1                              CHAR (30)
+018700181023             ,TRANS_NAME2                              CHAR (30)
+018800181012             ,TRANS_ADDR1                              CHAR (45)
+018900181012             ,TRANS_ADDR2                              CHAR (45)
+019000181012             ,TRANS_CITY                               CHAR (20)
+019100181012             ,TRANS_PROV                               CHAR (20)
+019200181012             ,TRANS_COUNTRY                            CHAR (20)
+019300181012             ,TRANS_POSTAL                             CHAR (20)
+019400181012             ,TECH_CONTACT_NAME                        CHAR (22)
+019500181012             ,TECH_CONTACT_PHN_AREA                    NUMERIC (3)
+019600181012             ,TECH_CONTACT_PHN_NO                      NUMERIC (7)
+019700181012             ,TRANS_LANGUAGE                           CHAR (1)
+019800181010           )
+019900181010           END-EXEC.
+020000181010
+020100181024           EXEC SQL
+020200181025             DROP   TABLE SFT5D
+020300181024           END-EXEC.
+020400181024
+020500181010           EXEC SQL
+020600181016           CREATE TABLE SFT5D
+020700181010           (
+020800181012              T_RECORD_TYPE_TRANS                      CHAR (3)
+020900181012             ,T_RECIPIENT_LAST_NAME                    CHAR (20)
+021000181116             ,T_RECIPIENT_FIRST_NAME                   CHAR (12)
+021100181116             ,T_RECIPIENT_INITIALS                     CHAR (1)
+021200181012             ,T_RECIPIENT_LAST_NAME2                   CHAR (20)
+021300181116             ,T_RECIPIENT_FIRST_NAME2                  CHAR (12)
+021400181116             ,T_RECIPIENT_INITIALS2                    CHAR (1)
+021500181012             ,T_SOCIAL_INSURANCE_NO                    NUMERIC (9)
+021600191203184739*      ,T_BUSINESS_NUMBER                        NUMERIC (9)
+021700191203184739       ,T_BUSINESS_NUMBER                        CHAR (15)
+021800181116             ,T_INSTITUTION_NAME1                      CHAR (30)
+021900181116             ,T_INSTITUTION_NAME2                      CHAR (30)
+022000181116             ,T_ADDRESS_LINE1                          CHAR (30)
+022100181116             ,T_ADDRESS_LINE2                          CHAR (30)
+022200181116             ,T_RECIPIENT_CITY                         CHAR (28)
+022300181012             ,T_RECIPIENT_PROVINCE                     CHAR (2)
+022400181012             ,T_RECIPIENT_COUNTRY                      CHAR (3)
+022500181012             ,T_RECIPIENT_POSTAL_CODE                  CHAR (10)
+022600181012             ,T_FILER_IDENTIFIER                       CHAR (15)
+022700181012             ,T_RECIPIENT_BANK_TRANSIT_NO              CHAR (8)
+022800181012             ,T_ACCOUNT_NO12                           CHAR (12)
+022900181024             ,ACTUAL_AMT_DIVIDENDS                     DECIMAL (11,2)
+023000181024             ,TAXABLE_AMT_DIVIDENDS                    DECIMAL (11,2)
+023100181024             ,FEDERAL_DIVIDEND_TAX_CREDIT              DECIMAL (11,2)
+023200181024             ,INTEREST_CANADIAN_SOURCES                DECIMAL (13,2)
+023300181024             ,OTHER_INCOME                             DECIMAL (11,2)
+023400181024             ,FOREIGN_INCOME                           DECIMAL (11,2)
+023500181024             ,FOREIGN_TAX_PAID                         DECIMAL (11,2)
+023600181024             ,ROYALTIES_CANADIAN_SOURCES               DECIMAL (11,2)
+023700181024             ,CAPITAL_GAINS_3                          DECIMAL (11,2)
+023800181024             ,ACCRUED_INCOME_ANNUITIES                 DECIMAL (11,2)
+023900181024             ,ALLOWANCE_DEDUCTION                      DECIMAL (11,2)
+024000181012             ,T_REPORT_ID                              CHAR (1)
+024100181012             ,T_RECIPIENT_TYPE                         CHAR (1)
+024200181012             ,T_FOREIGN_CURRENCY_INDICATOR             CHAR (3)
+024300181024             ,CAPITAL_GAINS_1                          DECIMAL (11,2)
+024400181024             ,CAPITAL_GAINS_2                          DECIMAL (11,2)
+024500181012             ,D_RECORD_TYPE_CODE                       CHAR (01)
+024600181012             ,FORM_SEQ_NO                              NUMERIC (18)
+024700181012             ,INVESTMENT_CODE                          CHAR (5)
+024800181012             ,REQUEST_CODE                             CHAR (10)
+024900181012             ,T_INVESTOR_TYPE                          CHAR (3)
+025000181024             ,ACTUAL_AMT_ELIG_DVD                      DECIMAL (11,2)
+025100181024             ,TAXABLE_AMT_ELIG_DVD                     DECIMAL (11,2)
+025200181024             ,FEDERAL_ELIG_DVD_TAX_CREDIT              DECIMAL (11,2)
+025300181012             ,T_RCPNT_TRUST_ACCT_ALPHA                 CHAR (1)
+025400181012             ,T_RCPNT_TRUST_ACCT_NUMERIC               CHAR (8)
+025500181026176735       ,ACCR_INT_AMT                             DECIMAL (11,2)
+025600181012           )
+025700181010           END-EXEC.
+025800181010
+025900181024           EXEC SQL
+026000181025             DROP   TABLE SFT5S
+026100181024           END-EXEC.
+026200181024
+026300181010           EXEC SQL
+026400181016           CREATE TABLE SFT5S
+026500181010           (
+026600181012              RECORD_TYPE_TRANS                        CHAR (3)
+026700181012             ,PAYER_ID                                 CHAR (15)
+026800181024             ,T_PAYER_NAME1                            CHAR (30)
+026900181012             ,T_PAYER_NAME2                            CHAR (30)
+027000181012             ,T_PAYER_NAME3                            CHAR (30)
+027100181012             ,PAYER_ADDR1                              CHAR (30)
+027200181012             ,PAYER_ADDR2                              CHAR (30)
+027300181012             ,T_PAYER_CITY                             CHAR (28)
+027400181012             ,PAYER_PROV                               CHAR (2)
+027500181012             ,T_PAYER_COUNTRY                          CHAR (3)
+027600181012             ,PAYER_POSTAL                             CHAR (10)
+027700181012             ,T_ACCOUNTING_CONTACT                     CHAR (22)
+027800181012             ,T_ACCOUNTING_CONTACT_AREA                NUMERIC (3)
+027900181012             ,T_ACCOUNTING_CONTACT_PHN_NO              NUMERIC (7)
+028000181012             ,FILER_BANK_TRANSIT_NO                    CHAR (8)
+028100181012             ,G_YEAR                                   NUMERIC (4)
+028200181024             ,TOTAL_ACTUAL_AMT_DIV                     DECIMAL (13,2)
+028300181024             ,TOTAL_TAXABLE_AMT_DIV                    DECIMAL (13,2)
+028400181024             ,TOTAL_FED_DIVIDEND_TAX_CR                DECIMAL (13,2)
+028500181024             ,TOTAL_INT_CANADA_SOURCE                  DECIMAL (15,2)
+028600181024             ,TOTAL_OTHER_INCOME                       DECIMAL (13,2)
+028700181024             ,TOTAL_FOREIGN_INCOME                     DECIMAL (13,2)
+028800181024             ,TOTAL_FOREIGN_TAX_PAID                   DECIMAL (13,2)
+028900181024             ,TOTAL_ROYALTIES_CAN_SOURCES              DECIMAL (13,2)
+029000181024             ,TOTAL_CAPITAL_GAINS_DIV                  DECIMAL (13,2)
+029100181024             ,TOTAL_ACCRUAL_INCOME                     DECIMAL (13,2)
+029200181024             ,TOTAL_ALLOWANCE_DEDUCTION                DECIMAL (13,2)
+029300181012             ,TOTAL_NO_RECORDS                         NUMERIC (7)
+029400181012             ,RECIPIENT_BUSINESS_NUMBER                CHAR (15)
+029500181012             ,D_ACCOUNT_CONTACT_EXT                    NUMERIC (7)
+029600181012             ,G_FORM_TYPE                              CHAR (01)
+029700181012             ,INVESTMENT_CODE                          CHAR (5)
+029800181024             ,TOTAL_ACTUAL_AMT_EDIV                    DECIMAL (13,2)
+029900181024             ,TOTAL_TAXABLE_AMT_EDIV                   DECIMAL (13,2)
+030000181024             ,TOTAL_FED_DIVIDEND_ETAX_CR               DECIMAL (13,2)
+030100181010           )
+030200181010           END-EXEC.
+030300181010
+030400181024           EXEC SQL
+030500181025             DROP   TABLE SFT5SUM
+030600181024           END-EXEC.
+030700181024
+030800181010           EXEC SQL
+030900181016           CREATE TABLE SFT5SUM
+031000181010           (
+031100181012              RECORD_TYPE_TRANS                        CHAR (3)
+031200181012             ,PAYER_ID                                 CHAR (15)
+031300181024             ,T_PAYER_NAME1                            CHAR (30)
+031400181012             ,T_PAYER_NAME2                            CHAR (30)
+031500181012             ,T_PAYER_NAME3                            CHAR (30)
+031600181012             ,PAYER_ADDR1                              CHAR (30)
+031700181012             ,PAYER_ADDR2                              CHAR (30)
+031800181012             ,T_PAYER_CITY                             CHAR (28)
+031900181012             ,PAYER_PROV                               CHAR (2)
+032000181012             ,T_PAYER_COUNTRY                          CHAR (3)
+032100181012             ,PAYER_POSTAL                             CHAR (10)
+032200181012             ,T_ACCOUNTING_CONTACT                     CHAR (22)
+032300181012             ,T_ACCOUNTING_CONTACT_AREA                NUMERIC (3)
+032400181012             ,T_ACCOUNTING_CONTACT_PHN_NO              NUMERIC (7)
+032500181012             ,FILER_BANK_TRANSIT_NO                    CHAR (8)
+032600181012             ,G_YEAR                                   NUMERIC (4)
+032700181024             ,TOTAL_ACTUAL_AMT_DIV                     DECIMAL (13,2)
+032800181024             ,TOTAL_TAXABLE_AMT_DIV                    DECIMAL (13,2)
+032900181024             ,TOTAL_FED_DIVIDEND_TAX_CR                DECIMAL (13,2)
+033000181024             ,TOTAL_INT_CANADA_SOURCE                  DECIMAL (15,2)
+033100181024             ,TOTAL_OTHER_INCOME                       DECIMAL (13,2)
+033200181024             ,TOTAL_FOREIGN_INCOME                     DECIMAL (13,2)
+033300181024             ,TOTAL_FOREIGN_TAX_PAID                   DECIMAL (13,2)
+033400181024             ,TOTAL_ROYALTIES_CAN_SOURCES              DECIMAL (13,2)
+033500181024             ,TOTAL_CAPITAL_GAINS_DIV                  DECIMAL (13,2)
+033600181024             ,TOTAL_ACCRUAL_INCOME                     DECIMAL (13,2)
+033700181024             ,TOTAL_ALLOWANCE_DEDUCTION                DECIMAL (13,2)
+033800181012             ,TOTAL_NO_RECORDS                         NUMERIC (7)
+033900181012             ,RECIPIENT_BUSINESS_NUMBER                CHAR (15)
+034000181024             ,TOTAL_ACTUAL_AMT_EDIV                    DECIMAL (13,2)
+034100181024             ,TOTAL_TAXABLE_AMT_EDIV                   DECIMAL (13,2)
+034200181024             ,TOTAL_FED_DIVIDEND_ETAX_CR               DECIMAL (13,2)
+034300181012           )
+034400181010           END-EXEC.
+034500190128
+034600190128      *RFS182317 - Start
+034700190128           EXEC SQL
+034800190128             DROP  TABLE SFTXFRMAV
+034900190128           END-EXEC.
+035000190128
+035100190128           EXEC SQL
+035200190128             CREATE TABLE SFTXFRMAV
+035300190128                 AS (SELECT * FROM MFATXFRMAV) WITH NO DATA
+035400190128           END-EXEC.
+035500190128      *RFS182317 - End
+035600190128
+035700181010      * ---------------------------------
+035800181010       PROCESS-DETAIL.
+035900181010      * ---------------------------------
+036000181108
+036100181010           PERFORM DATE-PROCESSING.
+036200181010             IF lc-FORM-TYPE = "O"
+036300181010                 PERFORM GET-ORIGINAL-RECORDS
+036400181010             END-IF.
+036500181010             IF lc-FORM-TYPE = "A"
+036600181010                 PERFORM GET-AMENDED-RECORDS
+036700181010             END-IF.
+036800181010             IF lc-FORM-TYPE = "A"
+036900181010                 PERFORM GET-CANCELLED-RECORDS
+037000181010             END-IF.
+037100181010
+037200190128      *RFS182317 - Start
+037300190128           PERFORM INSERT-SFTXFRMAV.
+037400190128      *RFS182317 - End
+037500190128
+037600181010           PERFORM Get-Language-Code.
+037700181016           PERFORM INSERT-SFT5BOX.
+037800181016           PERFORM INSERT-SFT5D.
+037900181010           PERFORM COUNT-RECORDS.
+038000190123      * rfs182418 - begin
+038100190123      *    PERFORM INSERT-SFT5S.
+038200190123      *    PERFORM INSERT-SFT5SUM.
+038300190123      *    PERFORM INSERT-SFT5F.
+038400190124           IF LI_TOTAL_NO_REC > 0 THEN
+038500190123              PERFORM INSERT-SFT5S
+038600190123              PERFORM INSERT-SFT5SUM
+038700190123              PERFORM INSERT-SFT5F
+038800190123           END-IF.
+038900190123      * rfs182418 - end
+039000181025           IF lc-RUN-TYPE = "U"
+039100181025              PERFORM INSERT-MFAACFMDP
+039200181025           END-IF.
+039300190223182855*    MOVE LI_TOTAL_NO_RECSUM TO lc_LDA(65:8).
+039400190223182855     MOVE LI_TOTAL_NO_RECSUM TO lc_LDA(65:6).
+039500181101           DISPLAY lc_LDA  UPON WS-LOCAL.
+039600181010      * ---------------------------------
+039700181010         DATE-PROCESSING.
+039800181010      * ---------------------------------
+039900181010             MOVE lc_LDA(1:10) TO LC-FORM-CODE.
+040000181010             MOVE lc_LDA(49:8)  TO LI-FROM-DATE.
+040100181010             MOVE lc_LDA(57:8)  TO LI-TO-DATE.
+040200181010             MOVE lc_LDA(30:1) TO lc-FORM-TYPE.
+040300181010             MOVE lc_LDA(40:8)  TO LI-TAX-PERIOD.
+040400181010             MOVE lc_LDA(601:1) TO lc-FILE-TYPE.
+040500181010             MOVE lc_LDA(100:3) TO lc-FUNDS-GROUP.
+040600181010             MOVE CurrentYear  TO LI-CURR-YEAR.
+040700181010             MOVE lc_LDA(48:1) TO lc-RUN-TYPE.
+040800181010      * ---------------------------------
+040900181010         GET-ORIGINAL-RECORDS.
+041000181010      * ---------------------------------
+041100181010           EXEC SQL
+041200181016             INSERT INTO SFT5GN
+041300181010             SELECT
+041400181010             CASE WHEN  FRM.A_FORM_SEQ_NO > 0  AND
+041500181010                        FRM.A_FORM_STATUS <> "C"
+041600181010                  THEN FRM.A_FORM_SEQ_NO
+041700181010                  WHEN FRM.A_FORM_SEQ_NO = 0
+041800181010                  THEN FRM.FORM_SEQ_NO
+041900181010                  ELSE 0 END AS SEQ_NO,
+042000181010                  "O" AS REC_TYPE
+042100181010
+042200181010             FROM MFATXFXMLV FRM
+042300181010
+042400181010             WHERE FRM.FORM_CODE = :LC-FORM-CODE         AND
+042500181010                   FRM.LAST_UPDATE_DATE BETWEEN
+042600181010                   :LI-FROM-DATE AND :LI-TO-DATE           AND
+042700181010                    FRM.FORM_ORIGINAL_OR_DUPLICATE = "O"   AND
+042800181010                   FRM.TAX_PERIOD = :LI-TAX-PERIOD       AND
+042900181010                   (FRM.MANUAL_TAX_SLIP_INDICATOR <> "Y" OR
+043000181010                   (FRM.MANUAL_TAX_SLIP_INDICATOR = "Y"  AND
+043100181010                   ZONED(SUBSTR(DIGITS(FRM.TAX_PERIOD),2,4),4,0)
+043200181010                   < :LI-CURR-YEAR))                      AND
+043300181010                   FRM.VALID_SLIP = "Y"
+043400181010                   AND FRM.XML_TYPE = "O"
+043500181010           END-EXEC.
+043600181010
+043700181016           MOVE SQLSTATE TO Ws-Sql-States.
+043800181016
+043900181010           EVALUATE TRUE
+044000181010           WHEN lncc_sqlSuccessful OR lncc_sqlEnd OR
+044100181010                lncc_sqlWarning
+044200181010                CONTINUE
+044300181010           WHEN OTHER
+044400181010                SET  WS-ERR-01           TO TRUE
+044500181010                MOVE lc_ErrCodeDescr01   TO lc_Error-Desc
+044600181010                PERFORM SQL-FAIL-PROCESS
+044700181010           END-EVALUATE.
+044800181010      * ---------------------------------
+044900181010         GET-AMENDED-RECORDS.
+045000181010      * ---------------------------------
+045100181010           EXEC SQL
+045200181016             INSERT INTO SFT5GN
+045300181010             SELECT  FRM.FORM_SEQ_NO,
+045400181010                     "A"
+045500181010
+045600181010             FROM MFATXFXMLV FRM
+045700181010
+045800181010             WHERE FRM.FORM_CODE = :LC-FORM-CODE         AND
+045900181010                   FRM.LAST_UPDATE_DATE BETWEEN
+046000181010                   :LI-FROM-DATE AND :LI-TO-DATE           AND
+046100181010                   FRM.TAX_PERIOD = :LI-TAX-PERIOD       AND
+046200181010                   (FRM.MANUAL_TAX_SLIP_INDICATOR <> "Y" OR
+046300181010                   (FRM.MANUAL_TAX_SLIP_INDICATOR = "Y"  AND
+046400181010                   ZONED(SUBSTR(DIGITS(FRM.TAX_PERIOD),2,4),4,0)
+046500181010                   < :LI-CURR-YEAR))                      AND
+046600181010                   FRM.VALID_SLIP = "Y"
+046700181010                   AND FRM.XML_TYPE = "A"
+046800181010
+046900181010             GROUP BY FRM.FORM_SEQ_NO
+047000181010           END-EXEC.
+047100181010
+047200181016           MOVE SQLSTATE TO Ws-Sql-States.
+047300181016
+047400181010           EVALUATE TRUE
+047500181010           WHEN lncc_sqlSuccessful OR lncc_sqlEnd OR
+047600181010                lncc_sqlWarning
+047700181010                CONTINUE
+047800181010           WHEN OTHER
+047900181010                SET  WS-ERR-02           TO TRUE
+048000181010                MOVE lc_ErrCodeDescr02   TO lc_Error-Desc
+048100181010                PERFORM SQL-FAIL-PROCESS
+048200181010           END-EVALUATE.
+048300181010      * ---------------------------------
+048400181010         GET-CANCELLED-RECORDS.
+048500181010      * ---------------------------------
+048600181010           EXEC SQL
+048700181016             INSERT INTO SFT5GN
+048800181010             SELECT  FRM.FORM_SEQ_NO,
+048900181010                     "C"
+049000181010
+049100181010             FROM MFATXFXMLV FRM
+049200181010
+049300181010             WHERE FRM.FORM_CODE = :LC-FORM-CODE         AND
+049400181010                   FRM.LAST_UPDATE_DATE BETWEEN
+049500181010                   :LI-FROM-DATE AND :LI-TO-DATE           AND
+049600181010                   FRM.TAX_PERIOD = :LI-TAX-PERIOD        AND
+049700181010                   (FRM.MANUAL_TAX_SLIP_INDICATOR <> "Y" OR
+049800181010                   (FRM.MANUAL_TAX_SLIP_INDICATOR = "Y"  AND
+049900181010                   ZONED(SUBSTR(DIGITS(FRM.TAX_PERIOD),2,4),4,0)
+050000181010                   < :LI-CURR-YEAR))                      AND
+050100181010                   FRM.VALID_SLIP = "Y"
+050200181010                   AND FRM.XML_TYPE = "C"
+050300181010
+050400181010             GROUP BY FRM.FORM_SEQ_NO
+050500181010           END-EXEC.
+050600181010
+050700181016           MOVE SQLSTATE TO Ws-Sql-States.
+050800181016
+050900181010           EVALUATE TRUE
+051000181010           WHEN lncc_sqlSuccessful OR lncc_sqlEnd OR
+051100181010                lncc_sqlWarning
+051200181010                CONTINUE
+051300181010           WHEN OTHER
+051400181010                SET  WS-ERR-03           TO TRUE
+051500181010                MOVE lc_ErrCodeDescr03   TO lc_Error-Desc
+051600181010                PERFORM SQL-FAIL-PROCESS
+051700181010           END-EVALUATE.
+051800181010
+051900181010      * ---------------------------------
+052000181010        Get-Language-Code.
+052100181010      * ---------------------------------
+052200181010              ACCEPT lc_Mfacmpcdp FROM WS-DTAARA-MFACMPCDP
+052300181010                                   FOR "MFACMPCDP".
+052400181010
+052500181010              EXEC SQL
+052600181010                SELECT LANGUAGE_CODE
+052700181010                  Into :lc_LanguageCode
+052800181010
+052900181010                  FROM MFAINSP
+053000181010                Where INSTITUTION_CODE = :lc_MgmtCode
+053100181010              Fetch First row only
+053200181010              END-EXEC.
+053300181010
+053400181010              MOVE SQLSTATE TO lc_SqlStates
+053500181010              IF NOT lncc_sqlSuccessful OR
+053600181010                 lc_LanguageCode = Spaces
+053700181010                 MOVE lnc_E  TO lc_LanguageCode
+053800181010              END-IF.
+053900181025
+054000181025              EXEC SQL
+054100181025                SELECT LANGUAGE_CODE
+054200181025                  Into :lc_LangCodeREVE
+054300181025
+054400181025                  FROM MFAREVP
+054500181025                Where LANGUAGE_CODE = "E"
+054600181025              Fetch First row only
+054700181025              END-EXEC.
+054800181025
+054900181025              EXEC SQL
+055000181025                SELECT COALESCE(LANGUAGE_CODE," ")
+055100181025                  Into :lc_LangCodeREVF
+055200181025
+055300181025                  FROM MFAREVP
+055400181025                Where LANGUAGE_CODE = "F"
+055500181025              Fetch First row only
+055600181025              END-EXEC.
+055700181025
+055800181025            IF (lc_LanguageCode = "E" AND lc_LangCodeREVE  = "E")
+055900181025               OR  lc_LangCodeREVF  = " "
+056000181025              MOVE "E" TO lc_LanguageCode
+056100181025            ELSE
+056200181025              MOVE "F" TO lc_LanguageCode
+056300181025            END-IF.
+056400181010
+056500181010      * ---------------------------------
+056600181016         INSERT-SFT5BOX.
+056700181010      * ---------------------------------
+056800181010
+056900181010            EXEC SQL
+057000181016              CREATE TABLE SFT5BOX AS
+057100181025              (SELECT
+057200181010            FRM.FORM_SEQ_NO as FORM_SEQ_NO,
+057300181023            FRMDV.INVESTMENT_CODE,
+057400181030            FRMDV.ACCOUNT_NO,
+057500181030            FRMDV.FORM_CODE,
+057600181030            FRMDV.FORM_ORIGINAL_OR_DUPLICATE,
+057700181011            CASE WHEN AMT10.FORM_FIELD_SEQ_NO = 2
+057800181011                 THEN AMT10.FORM_FIELD_SEQ_NO
+057900181011                 ELSE 0 END AS T_BOX_10_SEQ,
+058000181011            CASE WHEN AMT10.FORM_FIELD_SEQ_NO = 2
+058100181011                 THEN ABS(AMT10.FORM_FIELD_AMOUNT)
+058200181011                 ELSE 0 END AS T_BOX_10,
+058300181011            CASE WHEN AMT11.FORM_FIELD_SEQ_NO = 3
+058400181011                 THEN AMT11.FORM_FIELD_SEQ_NO
+058500181023                 ELSE 0 END AS T_BOX_11_SEQ,
+058600181011            CASE WHEN AMT11.FORM_FIELD_SEQ_NO = 3
+058700181011                 THEN ABS(AMT11.FORM_FIELD_AMOUNT)
+058800181011                 ELSE 0 END AS T_BOX_11,
+058900181011            CASE WHEN AMT12.FORM_FIELD_SEQ_NO = 4
+059000181011                 THEN AMT12.FORM_FIELD_SEQ_NO
+059100181011                 ELSE 0 END AS T_BOX_12_SEQ,
+059200181011            CASE WHEN AMT12.FORM_FIELD_SEQ_NO = 4
+059300181011                 THEN ABS(AMT12.FORM_FIELD_AMOUNT)
+059400181011                 ELSE 0 END AS T_BOX_12,
+059500181011            CASE WHEN AMT13.FORM_FIELD_SEQ_NO = 5
+059600181011                 THEN AMT13.FORM_FIELD_SEQ_NO
+059700181011                 ELSE 0 END AS T_BOX_13_SEQ,
+059800181011            CASE WHEN AMT13.FORM_FIELD_SEQ_NO = 5
+059900181011                 THEN ABS(AMT13.FORM_FIELD_AMOUNT)
+060000181011                 ELSE 0 END AS T_BOX_13,
+060100181011            CASE WHEN AMT14.FORM_FIELD_SEQ_NO = 6
+060200181011                 THEN AMT14.FORM_FIELD_SEQ_NO
+060300181011                 ELSE 0 END AS T_BOX_14_SEQ,
+060400181011            CASE WHEN AMT14.FORM_FIELD_SEQ_NO = 6
+060500181011                 THEN ABS(AMT14.FORM_FIELD_AMOUNT)
+060600181011                 ELSE 0 END AS T_BOX_14,
+060700181011            CASE WHEN AMT15.FORM_FIELD_SEQ_NO = 7
+060800181011                 THEN AMT15.FORM_FIELD_SEQ_NO
+060900181011                 ELSE 0 END AS T_BOX_15_SEQ,
+061000181011            CASE WHEN AMT15.FORM_FIELD_SEQ_NO = 7
+061100181011                 THEN ABS(AMT15.FORM_FIELD_AMOUNT)
+061200181011                 ELSE 0 END AS T_BOX_15,
+061300181011            CASE WHEN AMT16.FORM_FIELD_SEQ_NO = 8
+061400181011                 THEN AMT16.FORM_FIELD_SEQ_NO
+061500181011                 ELSE 0 END AS T_BOX_16_SEQ,
+061600181011            CASE WHEN AMT16.FORM_FIELD_SEQ_NO = 8
+061700181011                 THEN ABS(AMT16.FORM_FIELD_AMOUNT)
+061800181011                 ELSE 0 END AS T_BOX_16,
+061900181011            CASE WHEN AMT18.FORM_FIELD_SEQ_NO = 9
+062000181011                 THEN AMT18.FORM_FIELD_SEQ_NO
+062100181011                 ELSE 0 END AS T_BOX_18_SEQ,
+062200181011            CASE WHEN AMT18.FORM_FIELD_SEQ_NO = 9
+062300181011                 THEN ABS(AMT18.FORM_FIELD_AMOUNT)
+062400181011                 ELSE 0 END AS T_BOX_18,
+062500181011            CASE WHEN AMT40.FORM_FIELD_SEQ_NO = 10
+062600181011                 THEN AMT40.FORM_FIELD_SEQ_NO
+062700181011                 ELSE 0 END AS T_BOX_40_SEQ,
+062800181011            CASE WHEN AMT40.FORM_FIELD_SEQ_NO = 10
+062900181011                 THEN ABS(AMT40.FORM_FIELD_AMOUNT)
+063000181011                 ELSE 0 END AS T_BOX_40,
+063100181011            CASE WHEN AMT41.FORM_FIELD_SEQ_NO = 11
+063200181011                 THEN AMT41.FORM_FIELD_SEQ_NO
+063300181011                 ELSE 0 END AS T_BOX_41_SEQ,
+063400181011            CASE WHEN AMT41.FORM_FIELD_SEQ_NO = 11
+063500181011                 THEN ABS(AMT41.FORM_FIELD_AMOUNT)
+063600181011                 ELSE 0 END AS T_BOX_41,
+063700181011            CASE WHEN AMT24.FORM_FIELD_SEQ_NO = 49
+063800181011                 THEN AMT24.FORM_FIELD_SEQ_NO
+063900181011                 ELSE 0 END AS T_BOX_24_SEQ,
+064000181011            CASE WHEN AMT24.FORM_FIELD_SEQ_NO = 49
+064100181011                 THEN ABS(AMT24.FORM_FIELD_AMOUNT)
+064200181011                 ELSE 0 END AS T_BOX_24,
+064300181011            CASE WHEN AMT25.FORM_FIELD_SEQ_NO = 50
+064400181011                 THEN AMT25.FORM_FIELD_SEQ_NO
+064500181011                 ELSE 0 END AS T_BOX_25_SEQ,
+064600181011            CASE WHEN AMT25.FORM_FIELD_SEQ_NO = 50
+064700181011                 THEN ABS(AMT25.FORM_FIELD_AMOUNT)
+064800181011                 ELSE 0 END AS T_BOX_25,
+064900181011            CASE WHEN AMT26.FORM_FIELD_SEQ_NO = 51
+065000181011                 THEN AMT26.FORM_FIELD_SEQ_NO
+065100181011                 ELSE 0 END AS T_BOX_26_SEQ,
+065200181011            CASE WHEN AMT26.FORM_FIELD_SEQ_NO = 51
+065300181011                 THEN ABS(AMT26.FORM_FIELD_AMOUNT)
+065400181011                 ELSE 0 END AS T_BOX_26,
+065500181011            CASE WHEN AMT19.FORM_FIELD_SEQ_NO = 13
+065600181011                 THEN AMT19.FORM_FIELD_SEQ_NO
+065700181011                 ELSE 0 END AS T_BOX_19_SEQ,
+065800181011            CASE WHEN AMT19.FORM_FIELD_SEQ_NO = 13
+065900181011                 THEN ABS(AMT19.FORM_FIELD_AMOUNT)
+066000181011                 ELSE 0 END AS T_BOX_19
+066100181026176735     ,CASE WHEN AMT30.FORM_FIELD_SEQ_NO = 30
+066200181026176735           THEN ABS(AMT30.FORM_FIELD_AMOUNT)
+066300181026176735           ELSE 0 END AS T_BOX_30
+066400181016            FROM SFT5GN FRM
+066500181030            LEFT OUTER JOIN MFATXFRMDV FRMDV ON
+066600181030            FRM.FORM_SEQ_NO = FRMDV.FORM_SEQ_NO
+066700181011
+066800190128      *RFS182317 - Start
+066900190128      *     LEFT OUTER JOIN MFATXFRMAV AMT10 ON
+067000190128            LEFT OUTER JOIN SFTXFRMAV AMT10 ON
+067100190128      *RFS182317 - End
+067200181011                AMT10.FORM_SEQ_NO = FRM.FORM_SEQ_NO
+067300181011            AND AMT10.FORM_FIELD_SEQ_NO = 2
+067400181011
+067500190128      *RFS182317 - Start
+067600190128      *     LEFT OUTER JOIN MFATXFRMAV AMT11 ON
+067700190128            LEFT OUTER JOIN SFTXFRMAV AMT11 ON
+067800190128      *RFS182317 - End
+067900181011                AMT11.FORM_SEQ_NO = FRM.FORM_SEQ_NO
+068000181011            and AMT11.FORM_FIELD_SEQ_NO = 3
+068100181010
+068200190128      *RFS182317 - Start
+068300190128      *     LEFT OUTER JOIN MFATXFRMAV AMT12 ON
+068400190128            LEFT OUTER JOIN SFTXFRMAV AMT12 ON
+068500190128      *RFS182317 - End
+068600181011                AMT12.FORM_SEQ_NO = FRM.FORM_SEQ_NO
+068700181011            and AMT12.FORM_FIELD_SEQ_NO = 4
+068800181010
+068900190128      *RFS182317 - Start
+069000190128      *     LEFT OUTER JOIN MFATXFRMAV AMT13 ON
+069100190128            LEFT OUTER JOIN SFTXFRMAV AMT13 ON
+069200190128      *RFS182317 - End
+069300181011                AMT13.FORM_SEQ_NO = FRM.FORM_SEQ_NO
+069400181011            and AMT13.FORM_FIELD_SEQ_NO = 5
+069500181010
+069600190128      *RFS182317 - Start
+069700190128      *     LEFT OUTER JOIN MFATXFRMAV AMT14 ON
+069800190128            LEFT OUTER JOIN SFTXFRMAV AMT14 ON
+069900190128      *RFS182317 - End
+070000181011                AMT14.FORM_SEQ_NO = FRM.FORM_SEQ_NO
+070100181011            AND AMT14.FORM_FIELD_SEQ_NO = 6
+070200181010
+070300190128      *RFS182317 - Start
+070400190128      *     LEFT OUTER JOIN MFATXFRMAV AMT15 ON
+070500190128            LEFT OUTER JOIN SFTXFRMAV AMT15 ON
+070600190128      *RFS182317 - End
+070700181011                AMT15.FORM_SEQ_NO = FRM.FORM_SEQ_NO
+070800181011            AND AMT15.FORM_FIELD_SEQ_NO = 7
+070900181010
+071000190128      *RFS182317 - Start
+071100190128      *     LEFT OUTER JOIN MFATXFRMAV AMT16 ON
+071200190128            LEFT OUTER JOIN SFTXFRMAV AMT16 ON
+071300190128      *RFS182317 - End
+071400181011                AMT16.FORM_SEQ_NO = FRM.FORM_SEQ_NO
+071500181011            AND AMT16.FORM_FIELD_SEQ_NO = 8
+071600181010
+071700190128      *RFS182317 - Start
+071800190128      *     LEFT OUTER JOIN MFATXFRMAV AMT18 ON
+071900190128            LEFT OUTER JOIN SFTXFRMAV AMT18 ON
+072000190128      *RFS182317 - End
+072100181011            AMT18.FORM_SEQ_NO = FRM.FORM_SEQ_NO
+072200181023            AND AMT18.FORM_FIELD_SEQ_NO = 9
+072300181010
+072400190128      *RFS182317 - Start
+072500190128      *     LEFT OUTER JOIN MFATXFRMAV AMT40 ON
+072600190128            LEFT OUTER JOIN SFTXFRMAV AMT40 ON
+072700190128      *RFS182317 - End
+072800181011            AMT40.FORM_SEQ_NO = FRM.FORM_SEQ_NO
+072900181023             AND AMT40.FORM_FIELD_SEQ_NO = 10
+073000181010
+073100190128      *RFS182317 - Start
+073200190128      *     LEFT OUTER JOIN MFATXFRMAV AMT41  ON
+073300190128            LEFT OUTER JOIN SFTXFRMAV AMT41  ON
+073400190128      *RFS182317 - End
+073500181011            AMT41.FORM_SEQ_NO = FRM.FORM_SEQ_NO
+073600181011            AND AMT41.FORM_FIELD_SEQ_NO = 11
+073700181010
+073800190128      *RFS182317 - Start
+073900190128      *     LEFT OUTER JOIN MFATXFRMAV AMT24  ON
+074000190128            LEFT OUTER JOIN SFTXFRMAV AMT24  ON
+074100190128      *RFS182317 - End
+074200181011            AMT24.FORM_SEQ_NO = FRM.FORM_SEQ_NO
+074300181011            AND AMT24.FORM_FIELD_SEQ_NO = 49
+074400181010
+074500190128      *RFS182317 - Start
+074600190128      *     LEFT OUTER JOIN MFATXFRMAV AMT25 ON
+074700190128            LEFT OUTER JOIN SFTXFRMAV AMT25 ON
+074800190128      *RFS182317 - End
+074900181011            AMT25.FORM_SEQ_NO = FRM.FORM_SEQ_NO
+075000181023            AND AMT25.FORM_FIELD_SEQ_NO = 50
+075100181010
+075200190128      *RFS182317 - Start
+075300190128      *     LEFT OUTER JOIN MFATXFRMAV AMT26 ON
+075400190128            LEFT OUTER JOIN SFTXFRMAV AMT26 ON
+075500190128      *RFS182317 - End
+075600181011            AMT26.FORM_SEQ_NO = FRM.FORM_SEQ_NO
+075700181023            AND AMT26.FORM_FIELD_SEQ_NO = 51
+075800181010
+075900190128      *RFS182317 - Start
+076000190128      *     LEFT OUTER JOIN MFATXFRMAV AMT19 ON
+076100190128            LEFT OUTER JOIN SFTXFRMAV AMT19 ON
+076200190128      *RFS182317 - End
+076300181011            AMT19.FORM_SEQ_NO = FRM.FORM_SEQ_NO
+076400181023            AND AMT19.FORM_FIELD_SEQ_NO =13
+076500181010
+076600190128      *RFS182317 - Start
+076700190128176735*     LEFT OUTER JOIN MFATXFRMAV AMT30 ON
+076800190128            LEFT OUTER JOIN SFTXFRMAV AMT30 ON
+076900190128      *RFS182317 - End
+077000181029176735      AMT30.FORM_SEQ_NO = FRM.FORM_SEQ_NO
+077100181030            AND AMT30.FORM_FIELD_SEQ_NO =30)
+077200181023
+077300181010            WITH DATA
+077400181010            END-EXEC.
+077500181010
+077600181016           MOVE SQLSTATE TO Ws-Sql-States.
+077700181016
+077800181010           EVALUATE TRUE
+077900181010           WHEN lncc_sqlSuccessful OR lncc_sqlEnd OR
+078000181010                lncc_sqlWarning
+078100181010                CONTINUE
+078200181010           WHEN OTHER
+078300181010                SET  WS-ERR-04           TO TRUE
+078400181010                MOVE lc_ErrCodeDescr04   TO lc_Error-Desc
+078500181010                PERFORM SQL-FAIL-PROCESS
+078600181010           END-EVALUATE.
+078700181010
+078800181010      * ---------------------------------
+078900181024        INSERT-SFT5F.
+079000181010      * ---------------------------------
+079100181010            EXEC SQL
+079200181024              INSERT INTO SFT5F
+079300181012              SELECT "905"
+079400181010                    ,DATA_TYPE
+079500181010                    ,ALPHA_TRANSMITTOR
+079600181010                    ,NUMERIC_TRANSMITTOR
+079700181010                    ,SERVICE_BUREAU_OPTION
+079800181101                    ,1
+079900181010                    ,TRANSMITTOR_NAME1
+080000181010                    ,TRANSMITTOR_NAME2
+080100181010                    ,TRANSMITTOR_ADDRESS1
+080200181010                    ,TRANSMITTOR_ADDRESS2
+080300181010                    ,TRANSMITTOR_CITY
+080400181010                    ,TRANSMITTOR_PROV
+080500181010                    ,TRANSMITTOR_COUNTRY
+080600181010                    ,TRANSMITTOR_POSTAL
+080700181010                    ,TECHNICAL_CONTACT_NAME
+080800181010                    ,TECHNICAL_CONTACT_PHN_AREA
+080900181010                    ,TECHNICAL_CONTACT_PHN_NO
+081000181010                    ,LANGUAGE_CODE
+081100181010
+081200181010              From MFAREVP  REVP
+081300181010            Where
+081400181010              REVP.FORM_CODE     = :LC-FORM-CODE  AND
+081500181010              REVP.LANGUAGE_CODE = :lc_LanguageCode
+081600181010             FETCH FIRST ROW ONLY
+081700181010            END-EXEC
+081800181010
+081900181016           MOVE SQLSTATE TO Ws-Sql-States.
+082000181016
+082100181010           EVALUATE TRUE
+082200181010           WHEN lncc_sqlSuccessful OR lncc_sqlEnd OR
+082300181010                lncc_sqlWarning
+082400181010                CONTINUE
+082500181010           WHEN OTHER
+082600181010                SET  WS-ERR-05           TO TRUE
+082700181010                MOVE lc_ErrCodeDescr05   TO lc_Error-Desc
+082800181010                PERFORM SQL-FAIL-PROCESS
+082900181010           END-EVALUATE.
+083000181010
+083100181010      * ---------------------------------
+083200181016        INSERT-SFT5SUM.
+083300181010      * ---------------------------------
+083400181010
+083500181010            EXEC SQL
+083600181016              INSERT INTO SFT5SUM
+083700181024              SELECT  MAX("381")
+083800181024                 ,MAX(CASE WHEN EMPLOYER_NUMBER > " "
+083900181012                      AND :LI-TAX-PERIOD >= 20090101
+084000181012                      THEN EMPLOYER_NUMBER
+084100181024                      ELSE FILER_IDENTIFIER END)
+084200181030                   ,MAX(COALESCE(SUBSTR(INVNMP.INVESTMENT_NAME_LONG,
+084300181030                      1,30)," "))
+084400181012                     ," "
+084500181024                    ,MAX(PAYER_NAME1)
+084600181024                    ,MAX(PAYER_ADDRESS1)
+084700181024                    ,MAX(PAYER_ADDRESS2)
+084800181024                    ,MAX(PAYER_CITY)
+084900181024                    ,MAX(PAYER_PROVINCE)
+085000181024                    ,MAX(PAYER_COUNTRY)
+085100181024                    ,MAX(PAYER_POSTAL_CODE)
+085200181024                    ,MAX(ACCOUNTING_CONTACT)
+085300181228      *RFS 1007659 START
+085400181228      *              ,MAX(ACCOUNTING_CONTACT_AREA)
+085500181228      *              ,MAX(ACCOUNTING_CONTACT_PHN_NO)
+085600181228                     ,MAX(CAST(ACCOUNTING_CONTACT_AREA AS NUMERIC(03)))
+085700181228                   ,MAX(CAST(ACCOUNTING_CONTACT_PHN_NO AS NUMERIC(07)))
+085800181228      *RFS 1007659 END
+085900181012                    ," "
+086000181024                    ,MAX(SUBSTR(:LI-TAX-PERIOD,1,4))
+086100181012                    ,SUM(T_BOX_10)
+086200181012                    ,SUM(T_BOX_11)
+086300181012                    ,SUM(T_BOX_12)
+086400181026176735*             ,SUM(T_BOX_13)
+086500190322      *RFS183080 - Start
+086600190322176735*             ,SUM(T_BOX_13 + T_BOX_30)
+086700190322                    ,SUM(T_BOX_13)
+086800190322      *RFS183080 - End
+086900181012                    ,SUM(T_BOX_14)
+087000181012                    ,SUM(T_BOX_15)
+087100181012                    ,SUM(T_BOX_16)
+087200181012                    ,0
+087300181012                    ,SUM(T_BOX_40+T_BOX_41+T_BOX_18)
+087400181012                    ,SUM(T_BOX_19)
+087500181012                    ,0
+087600181024                    ,DEC(COUNT(*),7,0)
+087700181024                    ,MAX(COALESCE(INVTF.REGISTRATION_NO," "))
+087800181012                    ,SUM(T_BOX_24)
+087900181012                    ,SUM(T_BOX_25)
+088000181012                    ,SUM(T_BOX_26)
+088100181016              From SFT5BOX  BOX
+088200181012              INNER JOIN MFAREVP REVP ON
+088300181012              BOX.FORM_CODE = REVP.FORM_CODE
+088400181024              AND REVP.LANGUAGE_CODE = :lc_LanguageCode
+088500181012              LEFT OUTER JOIN MFAINVNMP INVNMP ON
+088600181012              BOX.INVESTMENT_CODE = INVNMP.INVESTMENT_CODE
+088700181012              AND INVNMP.LANGUAGE_CODE = :LC_LANGUAGECODE
+088800181012              LEFT OUTER JOIN MFAINVTFP INVTF ON
+088900181030              INVTF.FORM_CODE = REVP.FORM_CODE AND
+089000181030              BOX.INVESTMENT_CODE = INVTF.INVESTMENT_CODE
+089100190321      *RFS182870 - Start
+089200190321      *       AND INVTF.FILE_NUMBER_OF_PAYER =
+089300190321      *             REVP.FILE_NUMBER_OF_PAYER
+089400190321      *RFS182870 - End
+089500181030              GROUP BY BOX.INVESTMENT_CODE
+089600181012            END-EXEC
+089700181010
+089800181016           MOVE SQLSTATE TO Ws-Sql-States.
+089900181016
+090000181010           EVALUATE TRUE
+090100181010           WHEN lncc_sqlSuccessful OR lncc_sqlEnd OR
+090200181010                lncc_sqlWarning
+090300181010                CONTINUE
+090400181010           WHEN OTHER
+090500181010                SET  WS-ERR-06           TO TRUE
+090600181010                MOVE lc_ErrCodeDescr06   TO lc_Error-Desc
+090700181010                PERFORM SQL-FAIL-PROCESS
+090800181010           END-EVALUATE.
+090900181010
+091000181010      * ---------------------------------
+091100181016        INSERT-SFT5S.
+091200181010      * ---------------------------------
+091300181010
+091400181010            EXEC SQL
+091500181016              INSERT INTO SFT5S
+091600181024              SELECT MAX("381")
+091700181024                 ,MAX(CASE WHEN EMPLOYER_NUMBER > " "
+091800181011                      AND :LI-TAX-PERIOD >= 20090101
+091900181011                      THEN EMPLOYER_NUMBER
+092000181024                      ELSE FILER_IDENTIFIER END)
+092100181024                 ,MAX(COALESCE(SUBSTR(INVNMP.INVESTMENT_NAME_LONG
+092200181024                     ,1,30)," "))
+092300181010                     ," "
+092400181024                    ,MAX(PAYER_NAME1)
+092500181024                    ,MAX(PAYER_ADDRESS1)
+092600181024                    ,MAX(PAYER_ADDRESS2)
+092700181024                    ,MAX(PAYER_CITY)
+092800181024                    ,MAX(PAYER_PROVINCE)
+092900181024                    ,MAX(PAYER_COUNTRY)
+093000181024                    ,MAX(PAYER_POSTAL_CODE)
+093100181024                    ,MAX(ACCOUNTING_CONTACT)
+093200181228      *RFS 1007659 START
+093300181228      *              ,MAX(ACCOUNTING_CONTACT_AREA)
+093400181228      *              ,MAX(ACCOUNTING_CONTACT_PHN_NO)
+093500181228                    ,MAX(CAST(ACCOUNTING_CONTACT_AREA AS NUMERIC(03)))
+093600181228                  ,MAX(CAST(ACCOUNTING_CONTACT_PHN_NO AS NUMERIC(07)))
+093700181228      *RFS 1007659 END
+093800181011                    ," "
+093900181024                    ,MAX(SUBSTR(:LI-TAX-PERIOD,1,4))
+094000181011                    ,SUM(T_BOX_10)
+094100181011                    ,SUM(T_BOX_11)
+094200181011                    ,SUM(T_BOX_12)
+094300181026176735*             ,SUM(T_BOX_13)
+094400190322      *RFS183080 - Start
+094500190322176735*             ,SUM(T_BOX_13 + T_BOX_30)
+094600190322                    ,SUM(T_BOX_13)
+094700190322      *RFS183080 - End
+094800181011                    ,SUM(T_BOX_14)
+094900181011                    ,SUM(T_BOX_15)
+095000181011                    ,SUM(T_BOX_16)
+095100181011                    ,0
+095200181011                    ,SUM(T_BOX_40+T_BOX_41+T_BOX_18)
+095300181011                    ,SUM(T_BOX_19)
+095400181011                    ,0
+095500181025                    ,DEC(COUNT(*),7,0)
+095600181024                    ,MAX(COALESCE(INVTF.REGISTRATION_NO," "))
+095700181024                    ,MAX(ACCOUNTING_CONTACT_PHN_EXT)
+095800181024                    ,MAX(:lc-FORM-TYPE)
+095900181011                    ,BOX.INVESTMENT_CODE
+096000181011                    ,SUM(T_BOX_24)
+096100181010                    ,SUM(T_BOX_25)
+096200181010                    ,SUM(T_BOX_26)
+096300181010
+096400181016              From SFT5BOX  BOX
+096500181010              INNER JOIN MFAREVP REVP ON
+096600181010              BOX.FORM_CODE = REVP.FORM_CODE
+096700181024              AND REVP.LANGUAGE_CODE = :lc_LanguageCode
+096800181010              LEFT OUTER JOIN MFAINVNMP INVNMP ON
+096900181010              BOX.INVESTMENT_CODE = INVNMP.INVESTMENT_CODE
+097000181010              AND INVNMP.LANGUAGE_CODE = :LC_LANGUAGECODE
+097100181010              LEFT OUTER JOIN MFAINVTFP INVTF ON
+097200181030              INVTF.FORM_CODE = REVP.FORM_CODE   AND
+097300181030              BOX.INVESTMENT_CODE = INVTF.INVESTMENT_CODE
+097400190321      *RFS182870 - Start
+097500190321      *       AND INVTF.FILE_NUMBER_OF_PAYER =
+097600190321      *             REVP.FILE_NUMBER_OF_PAYER
+097700190321      *RFS182870 - End
+097800181016              GROUP BY
+097900181023                       BOX.INVESTMENT_CODE
+098000181010            END-EXEC
+098100181010
+098200181016           MOVE SQLSTATE TO Ws-Sql-States.
+098300181016
+098400181010           EVALUATE TRUE
+098500181010           WHEN lncc_sqlSuccessful OR lncc_sqlEnd OR
+098600181010                lncc_sqlWarning
+098700181010                CONTINUE
+098800181010           WHEN OTHER
+098900181010                SET  WS-ERR-07           TO TRUE
+099000181010                MOVE lc_ErrCodeDescr07   TO lc_Error-Desc
+099100181010                PERFORM SQL-FAIL-PROCESS
+099200181010           END-EVALUATE.
+099300181010
+099400181024            EXEC SQL
+099500181024              SELECT COUNT(*)
+099600181024              INTO :LI_TOTAL_NO_RECSUM
+099700181024              FROM SFT5S
+099800181024            END-EXEC.
+099900181024
+100000181024           MOVE SQLSTATE TO Ws-Sql-States.
+100100181010      * ---------------------------------
+100200181016        INSERT-SFT5D.
+100300181010      * ---------------------------------
+100400181010            EXEC SQL
+100500181016              INSERT INTO SFT5D
+100600181025              SELECT          "180"
+100700181010                    ,CASE
+100800181016                     WHEN FRM.FORM_CODE = "T5"
+100900181010                      AND FRM.TENTSEQ1 = 0
+101000181010                     THEN COALESCE(IVRP.LAST_NAME, " ")
+101100190205009272*              ELSE FRM.LAST_NAME
+101200190205009272               ELSE FRM.LNAME1
+101300181010                     END
+101400181010                    ,CASE
+101500181016                     WHEN FRM.FORM_CODE = "T5"
+101600181010                      AND FRM.TENTSEQ1 = 0
+101700181116                     THEN COALESCE(SUBSTR(IVRP.FIRST_NAME,1,12), " ")
+101800190205009272*              ELSE SUBSTR(FRM.FIRST_NAME, 1,12)
+101900190205009272               ELSE SUBSTR(TRIM(FRM.FNAME1), 1,12)
+102000181010                     END
+102100181010                    ,CASE
+102200181016                     WHEN FRM.FORM_CODE = "T5"
+102300181010                      AND FRM.TENTSEQ1 = 0
+102400190205                     THEN COALESCE(SUBSTR(IVRP.INITIALS,1,1), " ")
+102500190205009272*              ELSE SUBSTR(FRM.INITIALS,1,1)
+102600190205009272               ELSE SUBSTR(TRIM(FRM.INITIALS1),1,1)
+102700181010                     END
+102800181010                     ,FRM.LNAME2
+102900181116                     ,SUBSTR(FRM.FNAME2,1,12)
+103000181116                     ,SUBSTR(FRM.INITIALS2,1,1)
+103100181011                    ,CASE
+103200181016                     WHEN FRM.FORM_CODE = "T5"
+103300181011                      AND FRM.SIN1 <> 111111118
+103400181011                     AND FRM.SIN1 <> 999999998
+103500181011                     AND FRM.INVESTOR_CATEGORY <> "C"
+103600181011                     THEN FRM.SIN1
+103700181011                     ELSE 0 END
+103800181024      *             ,CASE WHEN IVRBNP.INVESTOR_NO > 0
+103900181024      *              AND FRM.INVESTOR_CATEGORY IN ("C", "T")
+104000181024      *              AND FRM.RECIPIENT_TYPE IN ("3","4","5")
+104100181024      *              THEN IVRBNP.BUSINESS_NUMBER_CCRA
+104200181024      *              ELSE 0  END
+104300191203      *RFS184739-Starts.
+104400191203      *              ,0
+104500191203                    ,CASE
+104600191203                     WHEN COALESCE(IVRBNP.INVESTOR_NO,0) > 0
+104700191216                      AND FRM.INVESTOR_CATEGORY IN ("C")
+104800191203                      AND FRM.RECIPIENT_TYPE IN ("3","4","5")
+104900191203                      THEN IVRBNP.BUSINESS_NUMBER_CCRA
+105000191203                      ELSE " " END
+105100191203      *RFS184739-Ends.
+105200181010                     ,CASE WHEN FRM.IVRTYP_RECIPIENT_TYPE <> "1"
+105300181010                     AND FRM.TENTSEQ1 = 0
+105400181116                     THEN SUBSTR(FRM.LEGAL_NAME,1,30)
+105500181010                     ELSE " " END
+105600181010                     ,CASE WHEN FRM.IVRTYP_RECIPIENT_TYPE <> "1"
+105700181010                     AND FRM.TENTSEQ1 = 0
+105800181116                     THEN SUBSTR(FRM.LEGAL_NAME_2,1,30)
+105900181010                     ELSE " " END
+106000181116                    ,SUBSTR(FRM.ADDR_LINE1,1,30)
+106100181116                    ,SUBSTR(FRM.ADDR_LINE2,1,30)
+106200181228      * RFS 1007659 START
+106300181228      *             ,FRM.CITY
+106400181228      *             ,FRM.PROVINCE_CODE
+106500181228      *             ,FRM.COUNTRY_CODE
+106600181228      *             ,FRM.POSTAL_CODE
+106700181228                    ,SUBSTR(FRM.CITY,1,28)
+106800181228                    ,SUBSTR(FRM.PROVINCE_CODE,1,2)
+106900181228                    ,SUBSTR(FRM.COUNTRY_CODE,1,3)
+107000181228                    ,SUBSTR(FRM.POSTAL_CODE,1,10)
+107100181228      *  RFS 1007659 END
+107200181116                    ,CASE WHEN REVP.EMPLOYER_NUMBER > " "
+107300181023                     AND :LI-TAX-PERIOD >= 20090101
+107400181116                     THEN REVP.EMPLOYER_NUMBER
+107500181116                     ELSE REVP.FILER_IDENTIFIER END
+107600181011                    ," "
+107700181011                    ,CASE WHEN
+107800181011                     COALESCE(DEAMDP.MASTER_ACCT_PROCESS," ") = "Y"
+107900181011                     AND MACCP.MASTER_ACCOUNT_NO    <> 0
+108000181011                     THEN CAST(MACCP.MASTER_ACCOUNT_NO AS CHAR(9))
+108100181011                     ELSE CAST(FRM.ACCOUNT_NO AS CHAR(9))
+108200181011                     END
+108300181116                    ,T5BOX.T_BOX_10
+108400181116                    ,T5BOX.T_BOX_11
+108500181116                    ,T5BOX.T_BOX_12
+108600181116                    ,T5BOX.T_BOX_13
+108700181116                    ,T5BOX.T_BOX_14
+108800181116                    ,T5BOX.T_BOX_15
+108900181116                    ,T5BOX.T_BOX_16
+109000181010                    ,0
+109100181116                    ,T5BOX.T_BOX_18
+109200181116                    ,T5BOX.T_BOX_19
+109300181010                    ,0
+109400181011                    ,"0"
+109500181011                    ,FRM.RECIPIENT_TYPE
+109600181011                    ,"CAD"
+109700181116                    ,T5BOX.T_BOX_40
+109800181116                    ,T5BOX.T_BOX_41
+109900181016                    ,T5GN.D_RECORD_TYPE_CODE
+110000181016                    ,T5GN.FORM_SEQ_NO
+110100181011                    ,FRM.INVESTMENT_CODE
+110200181011                    ,FRM.REQUEST_CODE
+110300181011                    ,FRM.IVRTYP_RECIPIENT_TYPE
+110400181116                    ,T5BOX.T_BOX_24
+110500181116                    ,T5BOX.T_BOX_25
+110600181116                    ,T5BOX.T_BOX_26
+110700181023                    ,CASE WHEN IVRBNP.INVESTOR_NO > 0
+110800181011                     AND FRM.INVESTOR_CATEGORY = "T"
+110900181011                     AND FRM.RECIPIENT_TYPE = "4"
+111000181011                     THEN SUBSTR(IVRBNP.BUSINESS_NUMBER_CCRA,1,1)
+111100181011                     ELSE " " END
+111200181023                    ,CASE WHEN IVRBNP.INVESTOR_NO > 0
+111300181011                     AND FRM.INVESTOR_CATEGORY = "T"
+111400181011                     AND FRM.RECIPIENT_TYPE = "4"
+111500181011                     THEN SUBSTR(IVRBNP.BUSINESS_NUMBER_CCRA,2,8)
+111600181011                     ELSE " " END
+111700181116176735              ,T5BOX.T_BOX_30
+111800181016              FROM SFT5GN T5GN
+111900181010              INNER JOIN MFATXFRMDV FRM ON
+112000181016              FRM.FORM_SEQ_NO = T5GN.FORM_SEQ_NO
+112100210903               INNER JOIN MFAREVP REVP ON
+112200210903              FRM.FORM_CODE = REVP.FORM_CODE  AND
+112300210903              REVP.LANGUAGE_CODE = :lc_LanguageCode
+112400181016               INNER JOIN SFT5BOX T5BOX ON
+112500181016               T5BOX.FORM_SEQ_NO = T5GN.FORM_SEQ_NO
+112600181010               LEFT OUTER JOIN MFAIVRP IVRP ON
+112700181010               IVRP.INVESTOR_NO = FRM.INVESTOR_NO
+112800181010               LEFT OUTER JOIN MFAIVRBNP IVRBNP ON
+112900181010               IVRP.INVESTOR_NO = IVRBNP.INVESTOR_NO
+113000181011               LEFT OUTER JOIN MFADEAMDP DEAMDP ON
+113100181011               FRM.DEALER_CODE = DEAMDP.DEALER_CODE
+113200181011               LEFT OUTER JOIN MFAMACCP MACCP   ON
+113300181011               FRM.ACCOUNT_NO  = MACCP.ACCOUNT_NO
+113400181010            END-EXEC
+113500181010
+113600181016           MOVE SQLSTATE TO Ws-Sql-States.
+113700181016
+113800181010           EVALUATE TRUE
+113900181010           WHEN lncc_sqlSuccessful OR lncc_sqlEnd OR
+114000181010                lncc_sqlWarning
+114100181010                CONTINUE
+114200181010           WHEN OTHER
+114300181010                SET  WS-ERR-08           TO TRUE
+114400181010                MOVE lc_ErrCodeDescr08   TO lc_Error-Desc
+114500181010                PERFORM SQL-FAIL-PROCESS
+114600181010           END-EVALUATE.
+114700181010
+114800181010      * ---------------------------------
+114900181010        COUNT-RECORDS.
+115000181010      * ---------------------------------
+115100181010            EXEC SQL
+115200181010              SELECT COUNT(*)
+115300181010              INTO :LI_TOTAL_NO_REC
+115400181016              FROM SFT5D
+115500181010            END-EXEC.
+115600181024
+115700181016           MOVE SQLSTATE TO Ws-Sql-States.
+115800181016
+115900181010           EVALUATE TRUE
+116000181010           WHEN lncc_sqlSuccessful OR lncc_sqlEnd OR
+116100181010                lncc_sqlWarning
+116200181010                CONTINUE
+116300181010           WHEN OTHER
+116400181010                SET  WS-ERR-09           TO TRUE
+116500181010                MOVE lc_ErrCodeDescr09   TO lc_Error-Desc
+116600181010                PERFORM SQL-FAIL-PROCESS
+116700181010           END-EVALUATE.
+116800181010
+116900181010      * ---------------------------------
+117000181010        INSERT-MFAACFMDP.
+117100181010      * ---------------------------------
+117200181010            EXEC SQL
+117300181025              INSERT INTO MFAACFMDP
+117400181025              SELECT SFT5D.FORM_SEQ_NO
+117500181025                    ,1
+117600181025                    ,SFT5D.T_RECIPIENT_LAST_NAME1
+117700181025                    ,SFT5D.T_RECIPIENT_FIRST_NAME1
+117800181025                    ,SFT5D.T_RECIPIENT_INITIALS1
+117900181025                    ,0
+118000181025                    ," "
+118100181025                    ," "
+118200181025                    ," "
+118300181025                    ," "
+118400181025                    ,0
+118500200819186465              ,0
+118600181025              FROM SFT5D  SFT5D
+118700181025              INNER JOIN MFATXFRMDV FRM ON
+118800181030                FRM.FORM_SEQ_NO =SFT5D.FORM_SEQ_NO
+118900181025                AND FRM.IVRTYP_RECIPIENT_TYPE IN ("1", "2")
+119000181025                AND FRM.MANUAL_TAX_SLIP_INDICATOR <> "Y"
+119100181025              WHERE  SFT5D.D_RECORD_TYPE_CODE <> "C"
+119200181010            END-EXEC
+119300181010
+119400181016           MOVE SQLSTATE TO Ws-Sql-States.
+119500181016
+119600181010           EVALUATE TRUE
+119700181010           WHEN lncc_sqlSuccessful OR lncc_sqlEnd OR
+119800181010                lncc_sqlWarning
+119900181010                CONTINUE
+120000181010           WHEN OTHER
+120100181010                SET  WS-ERR-10           TO TRUE
+120200181010                MOVE lc_ErrCodeDescr10   TO lc_Error-Desc
+120300181010                PERFORM SQL-FAIL-PROCESS
+120400181010           END-EVALUATE.
+120500181025
+120600181025            EXEC SQL
+120700181025              INSERT INTO MFAACFMDP
+120800181025              SELECT SFT5D.FORM_SEQ_NO
+120900181025                    ,2
+121000181025                    ,SFT5D.T_RECIPIENT_LAST_NAME2
+121100181025                    ,SFT5D.T_RECIPIENT_FIRST_NAME2
+121200181025                    ,SFT5D.T_RECIPIENT_INITIALS2
+121300181025                    ,0
+121400181025                    ," "
+121500181025                    ," "
+121600181025                    ," "
+121700181025                    ," "
+121800181025                    ,0
+121900200819186465              ,0
+122000181025              FROM SFT5D  SFT5D
+122100181025              INNER JOIN MFATXFRMDV FRM ON
+122200181030                FRM.FORM_SEQ_NO =SFT5D.FORM_SEQ_NO
+122300181025                AND FRM.IVRTYP_RECIPIENT_TYPE IN ("1", "2")
+122400181025                AND FRM.MANUAL_TAX_SLIP_INDICATOR <> "Y"
+122500181025              WHERE  SFT5D.D_RECORD_TYPE_CODE <> "C"
+122600181025               AND (T_RECIPIENT_LAST_NAME2 <> " " OR
+122700181025                    T_RECIPIENT_FIRST_NAME2 <> " " OR
+122800181025                    T_RECIPIENT_INITIALS2   <> " ")
+122900181025            END-EXEC
+123000181025
+123100181025           MOVE SQLSTATE TO Ws-Sql-States.
+123200181025
+123300181025           EVALUATE TRUE
+123400181025           WHEN lncc_sqlSuccessful OR lncc_sqlEnd OR
+123500181025                lncc_sqlWarning
+123600181025                CONTINUE
+123700181025           WHEN OTHER
+123800181025                SET  WS-ERR-11           TO TRUE
+123900181025                MOVE lc_ErrCodeDescr10   TO lc_Error-Desc
+124000181025                PERFORM SQL-FAIL-PROCESS
+124100181025           END-EVALUATE.
+124200181010
+124300190128      *RFS182317 - Start
+124400190128      * ---------------------------------
+124500190128        INSERT-SFTXFRMAV.
+124600190128      * ---------------------------------
+124700190128            EXEC SQL
+124800190128              INSERT INTO SFTXFRMAV
+124900190128              SELECT TXFRMAV.*
+125000190128              FROM MFATXFRMAV TXFRMAV
+125100190128              INNER JOIN SFT5GN FRM ON
+125200190128                TXFRMAV.FORM_SEQ_NO = FRM.FORM_SEQ_NO
+125300190128            END-EXEC.
+125400190128
+125500190128            MOVE SQLSTATE TO Ws-Sql-States.
+125600190128
+125700190128            EVALUATE TRUE
+125800190128            WHEN lncc_sqlSuccessful OR lncc_sqlEnd OR
+125900190128                 lncc_sqlWarning
+126000190128                 CONTINUE
+126100190128            WHEN OTHER
+126200190128                 SET  WS-ERR-12           TO TRUE
+126300190128                 MOVE lc_ErrCodeDescr12   TO lc_Error-Desc
+126400190128                 PERFORM SQL-FAIL-PROCESS
+126500190128            END-EVALUATE.
+126600190128      *RFS182317 - End
+126700190128
+126800181010      * ---------------------------------
+126900181010       END-JOB.
+127000181010      * ---------------------------------
+127100181010           GOBACK.
+127200181010      * ---------------------------------
+127300181010       SQL-FAIL-PROCESS.
+127400181010      * ---------------------------------
+127500181010             PERFORM DSP-ERROR.
+127600181108      * ---------------------------------
+127700181108      * ---------------------------------
+127800181010      *DSP-ERROR.
+127900181108      * ---------------------------------
+128000181010          COPY CPYSQLRTN.
+128100181010      *

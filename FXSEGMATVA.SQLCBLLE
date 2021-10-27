@@ -1,0 +1,3032 @@
+000100210816      * %ATTR DBGVIEW(*SOURCE) CLOSQLCSR(*ENDACTGRP)
+000200070329       IDENTIFICATION DIVISION.
+000300070329       PROGRAM-ID.    FXSEGMATVA.
+000400210823       AUTHOR.        Frank Hong.
+000500070329       INSTALLATION.  Citigroup Fund Services Canada.
+000600201007       DATE-WRITTEN.  March 29, 2007.
+000700201007       DATE-COMPILED.
+000800070329      *****************************************************************
+000900200824      **   RFS-NUMBER : RFS-37754                                      *
+001000070329      **                                                               *
+001100070329      **   DESCRIPTION: Calculate GMV & GDV when contract matures.     *
+001200070329      **                                                               *
+001300210820      **   CALLED BY:   N/A                                            *
+001400070329      **                                                               *
+001500070329      **   PARAMETERS:                                                 *
+001600070329      **   INPUT     :  Account Number                                 *
+001700101126      **                Contract Number                                *
+001800070329      **                Mode (M for GMV, D for GDV, B for both)        *
+001900070329      **   OUTPUT    :  Guaranteed Maturity Value                      *
+002000070329      **                Guaranteed Death Value                         *
+002100070329      **                Return Code
+002200070329      **                                                               *
+002300070329      *****************************************************************
+002400070329      *****************************************************************
+002500070329      *    C H A N G E   H I S T O R Y
+002600070329      *****************************************************************
+002700070329      ******************************************************************
+002800070329      * PROGRAMMER  *DATE OF CHANGE* DESCRIPTION OF CHANGE             *
+002900070329      ******************************************************************
+003000070329      * Frank Hong  * 2007/03/29 * RFS 37754 - New.                    *
+003100071015      * Abdi Hassan * 2007/05/11 * RFS43469 - IP Maturity phase 2      *
+003200070613      *             *            * - Add mode "C", "A", "E", and "F"   *
+003300070613      *             *            * - Add Current market value          *
+003400071015      * Abdi Hassan * 2007/07/11 * RFS39466 - IP Maturity phase 2      *
+003500071127      * Pawel A.    * 2007/11/27 * RFS 45845 - Recompile only
+003600080110      * Emmanuel Yal* 2008/01/10 * RFS47227 - Recompile only
+003700080506      * Bojana J.   * 2008/05/06 * RFS 51776 - Recompile.
+003800080610      *Emmanuel Yala* 2008/06/10 * RFS52779 - GLWB Joint Annuitant
+003900080610      *             *            * Call function FXACCANUIT to get
+004000080610      *             *            * the younger Annuitant's DOB
+004100080818      *Fatema Haji  * 2008/08/18 * RFS 55960 - Recompile (MFAACCONP).
+004200090218      * Lev O       * 2008/12/01 * RFS55414 - change interface to      ng
+004300090218      *             *            *   FXACCANUIT.                       ng
+004400090429      * Lev O      * 2009/04/29   * RFS68409 - recompiled.
+004500090615      * Gary Xia   * 2009/06/15   * RFS57388 - Get reset schedule code
+004600090615      *            *              * from MFAGDTHCSP.
+004700091103      * Lev O      * 2009/11/03   * RFS63637 - modification for the
+004800091103      *            *              *    maturity death process.
+004900101126      * TCS        *  2010/11/26  * RFS85912 - To report correct death
+005000101201      *            *              *   benefit percentage  and
+005100101201      *            *              *   V6R1 Changes
+005200110223      * Emmanuel Y.*  2011/02/23  * RFS91599 - Recompile for 80605
+005300110705      * Prince     *  2011/06/27  * RFS88038 - To calculate AWD Amounts
+005400110930      * Nasra F    * 2011/09/22   * RFS100978- Rollback 88038 - code is*
+005500110930      *            *              * in RFS100978/PHKQSRC               *
+005600111201      * Asritha S  *  2011/09/12  * RFS96530 - calculate Guarantee
+005700111201      *            *              * Maturity Value,Death Val,Maturity
+005800111201      *            *              *  percentage,Death Percentage.
+005900111201      * Pawel A    *  2011/11/28  * RFS103474 - Correct percentage
+006000111201      *            *              * calculation for years to maturity
+006100111025      * Pawel A.   * 2011/09/30   * RFS101037- Reinstate 88038         *
+006200111209      * Richard S. * 2011/12/09   * RFS103515- do not retrieve dth %age*
+006300111209      *            *              * from the override schedule as this
+006400111209      *            *              * sched is meant only for new contract
+006500111215      * Pawel A    *  2011/12/14  * RFS103976 - Leap year Feb 29 date
+006600111215      *            *              * verification
+006700120618      * NAGA       *  2012/06/18  * RFS110341 - Guaranteed Death
+006800120618      *            *              * Benefit incorrect in Annuitant
+006900120618      *            *              * Death Benefit (ACCCADTH) screen
+007000120813      * Thilaga K  * 2012/08/06   * RFS107585 - Maturity and Death
+007100120813      *            *              * Benefits Amount Enhancements
+007200121009      * Venkatesh C* 2012/10/08   * RFS107679 - Original Maturity
+007300121009      *            *              * Date Enhancement
+007400130104      * Ambikapathy* 2012/12/18   * RFS112135 - Recompile MFASGSTOP
+007500130301      * Vinsfy J   * 2013/01/08   * RFS112967 - Income Plan maturity
+007600130301      *            *              *             processing.
+007700130401      * NAGA       * 2013/03/07   * RFS111788 - Defect#30910
+007800130401      * Ganbold L  * 2013/03/07   * RFS119993 - Recompile
+007900130510      * Venkatesh C* 2013/05/02   * RFS108944 - Deposit Maturity
+008000130712      *            *              * enhancement
+008100130712      * Michael Fan* 2013/07/04   * RFS99973  - Handle GBV and GDV
+008200130712      *            *              * separately. Avoid calculation of
+008300130712      *            *              * GDV when reset type is GBV.
+008400130712      * Venkatesh C* 2013/06/25   * RFS124523 - Fix for incorrect
+008500130712      *            *              * maturity percentage
+008600130725      * NAGA       * 2013/07/23   * RFS124906 - New RRIF account does
+008700130725      *            *              * not have correct Maturity
+008800130725      *            *              * Guraranteed percentage
+008900130725      *            *              * and value
+009000130716      * Abhisek M  * 2013/07/16   * RFS110904 - Guarantee Benefit
+009100130716      *            *              * for Nominee Payout Account
+009200130916      * Andy Chan  * 2013/08/30   * RFS127401 - New mode added
+009300130916      * Geeta S.   * 2013/06/20   * RFS 119237 - Fix existing GDV
+009400130916      *            *              * calculation problem
+009500140206      * Deepika A  * 2013/08/21   * RFS121426 - Changed the program
+009600140206      *            *              * to add investment code to the
+009700140206      *            *              * linkage to provide contract inv
+009800140206      *            *              * level GMV,GDV,MV
+009900131003      * Pawel A.   * 2013/09/21   * RFS 127566 - Issues related to
+010000131003      *            *              * E Maturity and GDV in extracxt
+010100131003      * Waldi R.   * 2013/09/26   * RFS 128370 - Price check is req.
+010200131003      *            *              * when program is called in "K" mode.
+010300140116      * Uma C      * 2013/12/24   * RFS130295 - Defect fix for RFS110904
+010400140116      *            *              * - Incorrect death benefit guarantee
+010500140116      *            *              * values reported in the GENCLUE CONI
+010600140116      *            *              * extract.
+010700140313      * Thilaga K  * 2014/02/14   * RFS129785 -REDUCE THE GDV AT AGE 80
+010800140313      *            *              * WHEN GDV TRACKED SEPARATELY.
+010900140313      *            *              * WHEN GDV TRACKED SEPARATELY.
+011000140313      * Boopathy D * 2014/03/12   * RFS132733 - Recompile.
+011100140320      * Ewa K.     * 2014/03/12   * RFS123837 - Calculate GBV & GDV for
+011200140320      *            *              * all funds of the account/contract
+011300140507      * Thilaga K  * 2014/05/07   * RFS134936 - Recompile for MFAACCNNP
+011400140609      * Tamilselvi G* 2014/06/15  * RFS136713 - Fix for incorrect
+011500140609      *            *              * GDV Value.
+011600140613      * Ramya K    * 2014/03/24   * RFS124070 - Final Topup Date
+011700140613      *            *              * on an income plan account
+011800140618      * Manjusha V * 2014/04/01   * RFS129902 -Recompile for CPGLWBRULE
+011900140618      * Thilaga K  * 2014/06/18   * RFS118472 -Recompile for CPGLWBRULE
+012000140623      * TamilSelvi * 2014/06/03   * RFS137220 - Recompile for MFAGDTHCSP
+012100140826      * Nagamnai S * 2014/08/13   * RFS139007 - Recompile for CPGLWBRULE
+012200141224      * TamilSelvi  *2014/12/24  * RFS143805 - Recompile for MFAGDTVAP
+012300150512      * Thilaga K  * 2015/05/07   * RFS145136 - Recompile for MFAACCNNP
+012400160615      * Richard S. * 2016/03/14   * RFS157138 - performance tuning
+012500160615      *            *              * Bind all modules being called.
+012600160615      *            *              * Created module for CALCDUR.
+012700170103
+012800170103      * Digvijay   *  2016/12/28  * RFS 165027 - Optimization of
+012900170103      *            *              * runtime - changing compiler option
+013000170103      *            *              * and commenting CANCEL              *
+013100170922      * Joel Dsouza*  2017/09/20  * RFS 172387 - Changed age threshold *
+013200170922      *            *              * condition used while fetching      *
+013300170922      *            *              * Guaranteed Death Percent           *
+013400180604      * Amrutha V  *  2018/06/01  * RFS1002047 - Code modified to make *
+013500180604      *            *              * correct the Maturity Guarantee     *
+013600190226      * Kavya K    *  2019/02/25  * RFS181057 - Recompile for MFAACMDP *
+013700190821      * Niranjan   *  2019/08/12  * RFS1017009 - Maturity Final Top Up *
+013800190821      *            *              * Resets for Elite issue             *
+013900200327      * Ashwini B  * 2020/02/05   * RFS185365 - Recompile for MFATRCODP*
+014000200313      * Sasikumar  *  2020/03/12  * RFS1016198 - To calculate correct  *
+014100200313      *            *              * maturity % based on the grace period
+014200200330      * Chaya SP   *  2020/03/25  * RFS185170 - Recompile for MFAGDTHCSP *
+014300200413      * Sasikumar B* 2020/04/13   * RFS185170 - DJT Seg Fund Migration
+014400200413      *            *              * - Gap Development - Managing
+014500200413      *            *              * Optional Rider
+014600200422      * Kamal T    * 2020/04/20   * RFS185169 - Account level GLWB
+014700200422      *            *              * enhancements - Introduce new mode to
+014800200422      *            *              * get GWA payments at account level
+014900200501      * Kirthigaa S*  2020/04/17  * RFS186069 - Recompile for MFAACMDP *
+015000200507      *                                       Recompile for MFACMATAGP *
+015100200609      * Rajesh R   * 2020/05/22   * RFS184052 - Recompile for MFAACCONP*
+015200210602      * Surendran C* 2020/05/21   * RFS184676 -Death Benifit Guarantee *
+015300200824      *            *              * % changes                           *
+015400200824      * Vignesh    * 2020/06/10   * RFS185171 - Recompile for
+015500200824      *            *              * MFAACLBENP.
+015600200824      * Ashwini B  * 2020/06/20   * RFS184676 - Recompile for MFAGDTHVP*
+015700200824      * Chaya sp   * 2020/07/01   * RFS186302 - Changed Qualifier for
+015800200824      *            *              * GUAR_DEATH_VALUE,GUAR_BASE_VALUE
+015900200824      *            *              *as part of MFAACCONP DMC change.
+016000200824      * Vignesh    *  2020/06/25  * RFS183812 - Recompile for MFASGSTOP
+016100200824      * CHAYA SP   * 2020/07/08   * RFS185172 - Recompile for MFAGMATVP*
+016200200824      * M K SINDHU * 2020/07/08   * RFS185172 - Recompile for MFACMATAGP
+016300200824      *            *              * MFAGDTHCSP, MFAGDTHVP and MFATRCODP
+016400200824      * Ashwini B  * 2020/07/21   * RFS185176 - Recompile for MFAACCCRP
+016500200824      *            *              * and MFAALWRSTP
+016600200824      * Rajesh R   * 2020/07/31   * RFS184052 - Modified program to
+016700200824      *            *              * include TGDV edit code and activity
+016800200824      *            *              * log check for death percent override
+016900200824      * Kamal T    * 2020/06/11   * RFS185172 - Added new mode for     *
+017000200824      *            *              * account level death benefit based  *
+017100200824      *            *              * MDBA and gradins at account level  *
+017200201007      * Ashwini B  * 2020/10/07   * RFS1101414 - To process topup in   *
+017300201007      *            *              * income accounts on final topup     *
+017400201116      * Kavya K    * 2020/10/13   * RFS186497 - Recompile for MFAACMDP *
+017500201221      * Chaya SP   * 2020/10/19   * RFS180721 - Recompile for MFATRCODP
+017600201221      *                           * and MFAACLBENP
+017700201224      * VIGNESH    * 2020/11/12   * RFS185455 -Recompile for MFAALWRSTP*
+017800210217      * Chaya SP   * 2021/01/11   * RFS1107840 -Class L - Annuitant over
+017900210217      *                           *age 80 incorrect display of guarantee
+018000210217      * Ashwini B  * 2021/02/15   * RFS187046 - Recompile for MFAACLBENP
+018100210217      * VIGNESH    * 2021/01/18   * RFS185894 -Account Maturity Dates*
+018200210217      * Kavin      * 2021/02/17   * RFS186290 - Recompile only
+018300210308      * Kamal T    * 2021/02/09   * RFS186290 - Changes to distinguish *
+018400210308      *            *              * MDBA products to set maturity guar *
+018500210308      *            *              * as 0 based on multi type rule      *
+018600210602      * Ashwini B  * 2021/06/01   * RFS1115030 - Account Guaranteed Death
+018700210602      *            *              * Benefit Value is incorrectly calculated
+018800210602      *            *              * for accounts with more than 500 contracts
+018900210707      * Vignesh    * 2021/07/07  * RFS187254 - Recompile for MFATRCOD
+019000210816      * Kamal T    * 2021/08/16   * RFS1118592 - FXACCANUIT call for   *
+019100210816      *            *              * RFCNMAGE retreival is not required *
+019200210816      *            *              * as it is redundant                 *
+019300210823      * Thilaga K  * 2021/08/20   * RFS1118605 - JOBSEGCMT performance *
+019400210823      *            *              * issue. Retrun Annuitant DOB in     *
+019500210823      *            *              * pi_tradedate to avoid call to      *
+019600210823      *            *              * FXACCANUIT from SEGDTEXTV.         *
+019601211013      * Kavin      * 2021/08/04   * RFS187471 - Guaranteed Death
+019602211013      *            *              * Percent stamped on the Contract
+019603211013      *            *              * will be used if Apply % at deposit TD
+019604211013      *            *              * is set to Yes in Guar.Dth schedule
+019605211013      *            *              * for the concerned contracts
+019606211013      * Niranjan   * 2021/10/11   * RFS1121799 - Don't use pi_TradeDate*
+019607211013      *            *              * for Date of birth                  *
+019700180604      ******************************************************************
+019800070329
+019900210823       ENVIRONMENT DIVISION.
+020000070329       CONFIGURATION SECTION.
+020100201007       SOURCE-COMPUTER. IBM-AS400.
+020200070329       OBJECT-COMPUTER. IBM-AS400.
+020300070329       SPECIAL-NAMES.
+020400130717110904 LINKAGE TYPE IS PROCEDURE FOR "FXSUMAWDT"
+020500160615157138 LINKAGE TYPE IS PROCEDURE FOR "FXACCANUIT"
+020600160615157138 LINKAGE TYPE IS PROCEDURE FOR "VALDATEFMT"
+020700160615157138 LINKAGE TYPE IS PROCEDURE FOR "CALCDUR"
+020800210816      * RFS1118592 - Begin
+020900210816       LINKAGE TYPE IS PROCEDURE FOR "FXSCEDTALW"
+021000210816       LINKAGE TYPE IS PROCEDURE FOR "FXCHKGDTHV"
+021100210816      * RFS1118592 - End
+021101211013187471 LINKAGE TYPE IS PROCEDURE FOR "FXGDTHVSCV"      
+021200210118112967                DATA-AREA IS WS-DTAARA-MFAPRCDTP
+021300210118185894                DATA-AREA IS WS-DTAARA-MFASEGPARM.
+021400070329
+021500070329       INPUT-OUTPUT SECTION.
+021600070613       FILE-CONTROL.
+021700070613
+021800070329       DATA DIVISION.
+021900070329       WORKING-STORAGE SECTION.
+022000070329           Copy Cpysqlfld
+022100070329               REPLACING == "CURRENT_PROGRAM" == BY == "FXSEGMATVA" ==.
+022200070329
+02230008061052779      COPY CPACCANUIT.
+02240011063088038      COPY CPGLWBRULE.
+022500080610
+022600070329           EXEC SQL
+022700070329             INCLUDE SQLCA
+022800070329           END-EXEC.
+022900070329
+023000070329       01  Constants.
+023100070329           03  lncc_Active                       PIC X(01) VALUE "A".
+023200070329           03  lncc_Primary                      PIC X(01) VALUE "P".
+023300070329           03  lncc_Spaces                       PIC X(10) VALUE " ".
+023400070613R39466     03 lncc_ProgramCode            PIC X(08) VALUE "SEGMATST".
+023500070613  ¦        03 lncc_ProgramAction          PIC X(10) VALUE "DEFAULT".
+023600070613  ¦        03 lncc_99                     PIC X(02) VALUE "99".
+023700070613  ¦        03  lncc_Space                 PIC X(01) VALUE " ".
+023800070613R39466     03 lncc_Y                      PIC X(01) VALUE "Y".
+023900110803R88038     03 lncc_O                      PIC X(01) VALUE "O".
+024000110630R88038     03 lncc_GLWB                   PIC X(04) VALUE "GLWB".
+024100110630R88038     03 lncc_SEL                    PIC X(03) VALUE "SEL".
+024200110630R88038     03 lncc_TRO                    PIC X(03) VALUE "TRO".
+024300110630R88038     03 lncc_SWO                    PIC X(03) VALUE "SWO".
+024400110706R88038     03 lnci_MaxFetchRec            PIC S9(3) VALUE 200.
+024500130718110904     03 lncc_GBV                    PIC X(03) VALUE "GBV".
+024600130718110904     03 lncc_GDV                    PIC X(03) VALUE "GDV".
+024700130718110904     03 lncc_3                      PIC X(01) VALUE "3".
+024800130718110904     03 lncc_5                      PIC X(01) VALUE "5".
+024900140218129785     03 lncc_B                      PIC X(01) VALUE "B".
+025000140227129785     03 lncc_G                      PIC X(01) VALUE "G".
+025100200611185172     03 lncc_C                      PIC X(01) VALUE "C".
+025200200714185172     03 lncc_MDB                    PIC X(03) VALUE "MDB".
+025300210308186290     03 lncc_9                      PIC X(01) VALUE "9".
+025400210308186290     03 lncc_2                      PIC X(01) VALUE "2".
+025500210308186290     03 lncc_N                      PIC X(01) VALUE "N".
+025600140227
+025700070613       01  lb_Indicators.
+025800070613           03  ind1                       PIC S9(4) BINARY.
+025900070613
+026000070329       01  WorkingStorageFields.
+026100091103      * RFS63637 - Begin
+026200091103           03  li_dod                       PIC S9(09) COMP-3 VALUE 0.
+026300091103           03  li_deathAge                  PIC S9(03)        VALUE 0.
+026400091103      * RFS63637 - End
+026500070329           03  li_AccountNo                      PIC S9(09).
+026600070329           03  li_ContractNo                     PIC S9(09).
+026700070329           03  li_StartDate                      PIC S9(08).
+026800070329           03  lc_AccountTypeCode                PIC X(05).
+026900070404           03  li_AnnuitantDateOfBirth           PIC S9(08).
+027000070329           03  li_AnnuitantAge                   PIC S9(03).
+027100200611      *RFS184676 Starts
+027200200722185172*    03  li_AnnuitantAge_GDth              PIC S9(03).
+027300200722185172     03  li_AnnuitantAge_GDth              PIC S9(03)V9(04).
+027400200722           03  li_DepAge                         PIC S9(03).
+027500200722           03  ld_DepAgeEndDate                  FORMAT DATE "@Y%m%d".
+027600200722           03  ld_DepAgeStartDate                FORMAT DATE "@Y%m%d".
+027700200611      *RFS184676 Ends
+027800140228129785     03  li_AgeThreshold                   PIC S9(03).
+027900070404           03  li_SysDate                        PIC S9(08) COMP-3.
+028000070329           03  lc_GuarMatSchedCode               PIC X(05).
+028100070330           03  lc_GuarDthSchedCode               PIC X(05).
+028200070404           03  ln_ContractGuaranteePercent       PIC S9(05)V9(02).
+028300070329           03  ln_GuaranteePercent               PIC S9(05)V9(02).
+028400070413           03  ln_TotGuarMatValue                PIC S9(13)V9(04).
+028500070413           03  ln_TotGuarDthValue                PIC S9(13)V9(04).
+028600070613R39466     03  lc_ExchangeRateType               PIC X(01).
+028700070613  ¦        03  li_UnitPrice                      PIC S9(4)V9(05).
+028800070613  ¦        03  li_CurrMarketValue                PIC S9(11)V9(02).
+028900070613  ¦        03  li_TradeDate                      PIC S9(08).
+029000070613  ¦        03  lc_ProcessMode                    PIC X(01).
+029100131003      * RFS 128370 - begins.
+029200131003R39466*        88 TradeDateRequired              VALUE "A" "C" "E" "F".
+029300131003               88 TradeDateRequired        VALUE "A" "C" "E" "F" "K".
+029400131003      * RFS 128370 - ends.
+029500110628      * RFS88038 Start
+029600110630           03  ln_Guar-Withdrawal-Amt      PIC S9(11)V9(02) COMP-3.
+029700110629           03  ln_Guar-Withdrawal-Exs      PIC S9(11)V9(02) COMP-3.
+029800110629           03  li_Placement-Date           PIC S9(09) COMP-3.
+029900110629           03  li_Trans-No                 PIC S9(09) COMP-3.
+030000110629           03  lc_Trans-Type-Code          PIC X(03).
+030100110630           03  lc_Transfer-GWB-FIEB        PIC X(01).
+030200110630           03  lc_Trans-Origin-Code        PIC X(03).
+030201211011           03  lc_Contr-Redem-Code         PIC X(06).
+030400110706           03  ln_Tot-Guar-Withdrawal-Amt  PIC S9(13)V9(02).
+030500110706           03  ln_Tot-Guar-Withdrawal-Exs  PIC S9(13)V9(02).
+030600110630           03  lc_Investment-Series-Code   PIC X(05).
+030700110630           03  li_Eligible-Date            PIC S9(08).
+030800110630           03  li_TRNP-Account-No,         PIC S9(09).
+030900110630           03  li_TRCODP-Contract-No       PIC S9(09).
+031000110630           03  lc_ACCONP-Investment-Series PIC X(05).
+031100110630           03  lc_Series-Type              PIC X(04).
+031200110629           03  li_NoOfRowsFetched          PIC S9(03) VALUE 0.
+031300110629           03  li_Counter                  PIC S9(03) VALUE 0.
+031400130328112967     03  li_NbrOfRecordFound         PIC S9(03) VALUE 0.
+031500130510108944     03  lc_MaturityRule             PIC X(3) VALUE SPACES.
+031600130717      *RFS110904 - Start
+031700130717           03  lc_GuarBenefitEligible      PIC X(1) VALUE SPACES.
+031800130717           03  ln_AwdCarriedOver           PIC S9(11)V9(02) COMP-3.
+031900130717           03  ln_AwdGDVCarriedOver        PIC S9(11)V9(02) COMP-3.
+032000130717           03  lc_AccountTypeRule          PIC X(1) VALUE SPACES.
+032100140206121426     03  lc_InvestmentCode           PIC X(05) VALUE SPACES.
+032200130717      * RFS110904 - End
+032300140212129785     03  lc_GdvTrackRule             PIC X(01) VALUE SPACES.
+032400201009101414     03  lc-viaMatProc               PIC X(02).
+032500130301      *RFS112967- Begin
+032600130301       01  lc_FinalTopUpValues.
+032700130301           03  lc_AcctTypeCode             PIC X(05) VALUE SPACES.
+032800130301           03  lc_ProvOfAgreement          PIC X(03) VALUE SPACES.
+032900130301           03  lc_NomAcctType              PIC X(05) VALUE SPACES.
+033000130301           03  lc_InvSeries                PIC X(05) VALUE SPACES.
+033100140613      *RFS124070 Start.
+033200140613           03  ld_AccMaturityDate          PIC S9(9) VALUE 0.
+033300140613           03  ld_FinalTopupDate           PIC S9(9) VALUE 0.
+033400140613           03  ld_ContractMaturityDate     PIC S9(9) VALUE 0.
+033500140613      *RFS124070 End.
+033600130301           03  lc_ResetCateg               PIC X(01) VALUE SPACES.
+033700130301               88  lb_ResetMaturity                  VALUE "M".
+033800130301           03  lc_DisallowMatBen           PIC X(01) VALUE SPACES.
+033900130301               88  lb_DisallowMatBen_Yes             VALUE "Y".
+034000200611      * RFS185172 - Begin
+034100200630       01  li_MDBA_Infl                PIC S9(11)V9(02) COMP-3 VALUE 0.
+034200200630       01  li_MDBA_NonInfl             PIC S9(11)V9(02) COMP-3 VALUE 0.
+034300200630       01  li_AccGuarDthBen            PIC S9(11)V9(02) COMP-3 VALUE 0.
+034400200630       01  li_NoOfContracts            PIC S9(03) VALUE 0.
+034500200630       01  li_ContractCounter          PIC S9(03) VALUE 0.
+034600200717       01  lc_ResetType                PIC X(03) VALUE SPACES.
+034700200721       01  ln_DepositAge               PIC S9(02)V9(04) VALUE 0.
+034800200714       01  li_ContMatDate              PIC S9(09) VALUE 0.
+034900200714       01  li_AccMatDate               PIC S9(09) VALUE 0.
+035000200611
+035100200630       01  ltb_AccContrTableCur.
+035200200630           03  ltb_AccContrTable OCCURS 500 TIMES.
+035300200630              05  ltb_ContractNo       PIC S9(09) VALUE 0.
+035400200630
+035500200824       01  lnci_NoOfRowsAccCon         PIC S9(03) VALUE 500.
+035600200824      * RFS185172 - End
+035700210308      * RFS186290 - Begin
+035800210308       01  lc_MultiTypeRule            PIC X(01) VALUE SPACES.
+035900210308       01  lc_MatMinYrsCMDRule         PIC X(01) VALUE SPACES.
+036000210308       01  li_MaturityMinYears         PIC S9(05) VALUE ZEROS.
+036100210308       01  lc_ProvinceCode             PIC X(02) VALUE SPACES.
+036200210308       01  lc_InvCode                  PIC X(05) VALUE SPACES.
+036300210308       01  ld_FormattedStartDate       FORMAT DATE "@Y%m%d".
+036400210308       01  ld_FormattedEndDate         FORMAT DATE "@Y%m%d".
+036500210816       01  ld_AnnuitantAge             PIC S9(03)  VALUE ZEROS.
+036600210308       01  li_FirstContrStartDate      PIC S9(09) VALUE 0.
+036700210308      * RFS186290 - End
+036800200824
+036900130301       01  lc_MFAPRCDTP.
+037000130301           03  ld_AsAtDate-C PIC X(08) VALUE ZERO.
+037100130301           03  ld_AsAtDate REDEFINES ld_AsAtDate-C PIC S9(08).
+037200130301
+037300130301      *RFS112967- End
+037400111201
+037500110705       01  Tables.
+037600110628           03  ltb_FetchGWATable.
+037700110705               05  ltb_FetchGWA                OCCURS 200 TIMES.
+037800110629                   07  ltb_Guar-Withdrawal-Amt PIC S9(11)V9(02) COMP-3.
+037900200611                   07  ltb_Guar-Withdrawal-Exs PIC S9(11)V9(02) COMP-3.
+038000110629                   07  ltb_Placement-Date      PIC S9(09) COMP-3.
+038100110629                   07  ltb_Trans-No            PIC S9(09) COMP-3.
+038200110629                   07  ltb_Trans-Type-Code     PIC X(03).
+038300110629                   07  ltb_Trans-Origin-Code   PIC X(03).
+038400110629                   07  ltb_Contr-Redem-Code    PIC X(06).
+038500110705
+038600110705           03  ltb_IndicatorsTable.
+038700110705               05  ltb_Indicators              OCCURS 200 TIMES.
+038800110705                   07  ltb_Indicator           PIC S9(04) BINARY
+038900110706                                               OCCURS   2 TIMES.
+039000110627       01  Flags.
+039100110630           03  lb_EndOfCursorFlag              PIC 1.
+039200110630               88  lb_EndOfCursorTrue                 VALUE B"1".
+039300110630               88  lb_EndOfCursorFalse                VALUE B"0".
+039400130301      *RFS112967- Begin.
+039500130301           03  lb_FinalTopUpFlag             PIC 1.
+039600130301               88  lb_FinalTopUp_True                 VALUE B"1".
+039700130301               88  lb_FinalTopUp_False                VALUE B"0".
+039800130301           03  lb_ContinueCheckFlag          PIC 1.
+039900130301               88  lb_ContinueCheck_True              VALUE B"1".
+040000130301               88  lb_ContinueCheck_False             VALUE B"0".
+040100130328           03  lb_PerfectMatchFlag           PIC 1.
+040200130328               88  lb_PerfectMatch_Yes                VALUE B"1".
+040300130328               88  lb_PerfectMatch_No                 VALUE B"0".
+040400130301      *RFS112967- End.
+040500200824      *RFS184052 - Start
+040600200824           03  lb_EditCodeTGDVflag           PIC 1.
+040700200824               88  lb_EditCodeTGDVYes                 VALUE B"1".
+040800200824               88  lb_EditCodeTGDVNo                  VALUE B"0".
+040900200824           03  lb_ActivityLogFlag            PIC 1.
+041000200824               88  lb_GDVLog_Yes                      VALUE B"1".
+041100200824               88  lb_GDVLog_No                       VALUE B"0".
+041200200824      *RFS184052 - End
+041300200824      * RFS185172 - Begin
+041400200824           03  lb_ProcessExistingFlag        PIC 1.
+041500200824               88  lb_ProcessExistingYes              VALUE B"1".
+041600200824               88  lb_ProcessExistingNo               VALUE B"0".
+041700200824      * RFS185172 - End
+041800210217      * RFS1107840 - Start.
+041900210217           03  lb_EditCodeDTHOVRflag         PIC 1.
+042000210217               88  lb_EditCodeDTHOVRYes               VALUE B"1".
+042100210217               88  lb_EditCodeDTHOVRNo                VALUE B"0".
+042200210217      * RFS1107840 - END.
+042300210308      * RFS186290 - Begin
+042400210308           03 lc_DBGGradingExistFlag         PIC X(01).
+042500210308              88 lb_DBGGradingExistFlagYes   VALUE "Y".
+042600210308              88 lb_DBGGradingExistFlagNo    VALUE "N".
+042700210308           03 lc_FirstContractAftRollover    PIC X(01).
+042800210308              88 lb_FirstContractAftRolloverYes VALUE "Y".
+042900210308              88 lb_FirstContractAftRolloverNo  VALUE "N".
+043000210308      * RFS186290 - End
+043001211013      * RFS187471 - Starts
+043002211013           03 lb_DepTDDthPercentFlag         PIC X(01) VALUE SPACES.
+043003211013              88 lb_DepTDDthPercentYes       VALUE "Y".
+043004211013              88 lb_DepTDDthPercentNo        VALUE "N".
+043005211013      * RFS187471 - End
+043100110628      * Error Codes, Uniquely Identify where the error happened
+043200110630       01 Ws-Err-Code                          PIC X(02) VALUE SPACES.
+043300110630          88 lncc_Err_OK                                 VALUE SPACES.
+043400110630          88 lncc_Err01                                  VALUE "01".
+043500110630          88 lncc_Err02                                  VALUE "02".
+043600130301112967    88 lncc_Err03                                  VALUE "03".
+043700200422185169    88 lncc_Err04                                  VALUE "04".
+043800200714      * RFS185172 - Begin
+043900200714          88 lncc_Err05                                  VALUE "05".
+044000200714          88 lncc_Err06                                  VALUE "06".
+044100200714          88 lncc_Err07                                  VALUE "07".
+044200200714          88 lncc_Err08                                  VALUE "08".
+044300200714          88 lncc_Err09                                  VALUE "09".
+044400210119185894    88 lncc_Err10                                  VALUE "10".
+044500210119185894    88 lncc_Err11                                  VALUE "11".
+044600210302185894    88 lncc_Err12                                  VALUE "12".
+044700210302185894    88 lncc_Err13                                  VALUE "13".
+044800210308186290    88 lncc_Err14                                  VALUE "14".
+044900210308186290    88 lncc_Err15                                  VALUE "15".
+045000210308186290    88 lncc_Err16                                  VALUE "16".
+045100210308186290    88 lncc_Err17                                  VALUE "17".
+045200200714      * RFS185172 - End
+045300110627
+045400110630      * WS-ERR-01
+045500110630       01  lncc_ErrorOpeningCursor    PIC X(45)
+045600110629              VALUE "Error while creating cursor GWACUR".
+045700110630      * WS-ERR-02
+045800110630       01  lncc_FetchErrGWA           PIC X(45)
+045900110629              VALUE "Error while Fetching cursor GWACUR".
+046000110627      * RFS88038 End
+046100130301      * RFS112967-Begin
+046200130301      * WS-ERR-03
+046300130301       01  lncc_ErrFinalTopUp         PIC X(45)
+046400130301              VALUE "Error while checking final Top up".
+046500130301      * RFS112967-End
+046600200422185169 01  lncc_ErrorMFAACLBENP       PIC X(45)
+046700200630185169        VALUE "Error while retrieving account benefit".
+046800200714      * RFS185172 - Begin
+046900200714       01  lncc_ErrorOpenAcctContrCur PIC X(45)
+047000200714              VALUE "Error while Opening Account Contract cur".
+047100200714       01  lncc_ErrorFetchingAcctContr PIC X(45)
+047200200714              VALUE "Error while fetching Account Contract cur".
+047300200714       01  lncc_ErrorCloseAcctContCur  PIC X(45)
+047400200714              VALUE "Error while closing Account Contract cur".
+047500200714       01  lncc_ErrorFetchingResetType PIC X(45)
+047600200714              VALUE "Error while fetching MDB Reset Type ".
+047700200714       01  lncc_ErrorFetchingMatDate   PIC X(45)
+047800200714              VALUE "Error while fetching Maturity Date".
+047900210119185894 01  lncc_ErrorFetchingLIBRider  PIC X(45)
+048000210119185894        VALUE "Error while fetching LIB Rider".
+048100210119185894 01  lncc_ErrorProcessedMatReset PIC X(45)
+048200210211185894        VALUE "Error while fetching processed Maturity Reset".
+048300210302185894 01  lncc_ErrorFetchingmfaacconip PIC X(45)
+048400210302185894        VALUE "Error while fetching mfaacconip".
+048500210302185894 01  lncc_ErrorGLWBdefmatopt PIC X(45)
+048600210302185894        VALUE "Error while fetching GLWDdefmatopt".
+048700210308186290 01  lncc_ErrorFetchingDBGGrading PIC X(45)
+048800210308186290        VALUE "Error while fetching DBG Grading".
+048900210308186290 01  lncc_ErrFetchingInvCode      PIC X(45)
+049000210308186290        VALUE "Error while fetching Inv Code".
+049100210308186290 01  lncc_ErrFetchingMatDetails   PIC X(45)
+049200210308186290        VALUE "Error while fetching Maturity Details".
+049300210308186290 01  lncc_ErrFirstContrDetails    PIC X(45)
+049400210308186290        VALUE "Error while fetching First Contr Details".
+049500200714      * RFS185172 - End
+049600111201
+049700111201      * RFS96530 BEGIN
+049800111201       01  ld_StartDate               PIC S9(08).
+049900111201       01  ld_MaturityDate            PIC S9(08).
+050000111201103474 01  li_MatDateReduce           PIC S9(08).
+050100111201       01  ld_NewDate                 PIC S9(08).
+050200111201       01  li_FullYears               PIC S9(04).
+050300111201       01  lnc_One                    PIC 9(1) VALUE 1.
+050400111201       01  li_RemainingDays           PIC S9(04).
+050500111201       01  li_DaysLeft                PIC 9(04).
+050600111201       01  WD-CCYYMMDD         FORMAT DATE "@Y%m%d".
+050700111214      * RFS 103976 Start
+050800111214       01  VALDATEFMT_Parms.
+050900111214           02  lc_TestDate               PIC X(8).
+051000111214           02  li_TestDateNm REDEFINES lc_TestDate PIC S9(08).
+051100111214           02  lc_TestDate_Flag          PIC X(1).
+051200111214               88 lc_DatOK                        VALUE "Y".
+051300111214               88 lc_DatNotOK                     VALUE "N".
+051400111214      * RFS 103976 End
+051500180822      *RFS1002047 Starts
+051600180822       01  lc_InvStructCode            PIC X(05) VALUE SPACES.
+051700180822       01  lc_InvCodeS                 PIC X(05) VALUE SPACES.
+051800180822       01  lncc_ACINVG                 PIC X(06) VALUE "ACINVG".
+051900180822      *RFS1002047 Ends
+052000210217107840 01 lc_EditCodeDTHOVR            PIC X(06) VALUE "DTHOVR".
+052100210217107840 01 lc_ScreenCodeUPDCONT         PIC X(08) VALUE "UPDCONT".
+052200200824      *RFS184052 - Starts*
+052300200824       01  Parameters.
+052400200824           02  FXSCEDTALW_Parms.
+052500200824               03  lc_ScreenEditsAllowed.
+052600200824                                      COPY DD-ALL-FORMATS OF MFAEDTSCP.
+052700200824               03  lc_InEditSqllog     PIC X(01) VALUE "N".
+052800200824               03  lc_InReturnCode     PIC X(02).
+052900200824                   88  lnc_ReturnCodeOK   VALUE "00".
+053000200824       01  lc_EditCodeTGDV             PIC X(06) VALUE "TGDV".
+053100200824       01  lc_ScreenCodeACCCDTL        PIC X(08) VALUE "ACCCDTL".
+053200200824       01  lnc_LevelCodeControl        PIC X(01) VALUE "C".
+053300200824       01  lc_Dth_Guar_Chg             PIC X(19) VALUE
+053400200824                                          "Death guarantee Chg".
+053500200824       01  li_TempField                PIC S9(03) VALUE 0.
+053600200824      *RFS184052 - Ends*
+053700111201
+053800111201       COPY DRG2JLS.
+053900111201       COPY CPCALCDUR.
+054000200611      * RFS184676 Starts
+054100200611       COPY CPCHKGDTHV.
+054200200611      * RFS184676 Ends
+054300111201      * RFS96530 END
+054400110628
+054500130717      * RFS110904 - Start
+054600130717       01  pi_SegSAwdAccountNo             PIC S9(09) COMP-3.
+054700130717       01  pi_SegSAwdContractNo            PIC S9(09) COMP-3.
+054800130717       01  pc_SegSAwdResetType             PIC X(3).
+054900130717       01  pc_SegSAwdDate                  PIC S9(09) COMP-3.
+055000130717       01  pn_SegSAwdAmount                PIC S9(11)V9(02) COMP-3.
+055100130717       01  pc-IndependentGDV               PIC X(1).
+055200130717      * RFS110904 - End
+055300130717
+055301211013      * RFS187471 - Starts
+055302211013       01 pc_Schedulecode            PIC X(05).
+055303211013       01 pi_Scheduledate            PIC S9(08).
+055304211013       01 pc_Accounttypecode         PIC X(05).
+055305211013       01 pc_trackingrule            PIC X(01).
+055306211013       01 pc_Annuitantagerule        PIC X(01).
+055307211013       01 pc_Applypercentatdeposittd PIC X(01).
+055308211013      * RFS187471 End
+055309211013
+055400140116130295 01  ln_GBVSAwdAmount                PIC S9(11)V9(02) COMP-3.
+055500140116
+055600210212      * RFS185894 - Start
+055700210119       01 lc_Mfasegparm.
+055800210119         05 FILLER                    PIC X(50).
+055900210119         05 lc_AccountGuarantees      PIC X(01).
+056000210119           88 lb_AccountGuaranteesYes VALUE "Y".
+056100210119           88 lb_AccountGuaranteesNo  VALUE "N".
+056200210119
+056300210119       01 lc_LIBMaturityExist         PIC X(01).
+056400210119           88 lb_LIBMaturityExistYes  VALUE "Y".
+056500210119           88 lb_LIBMaturityExistNo   VALUE "N".
+056600210119
+056700210119       01 lc_LIBMaturity              PIC X(01).
+056800210119           88 lb_LIBMaturityYes       VALUE "Y".
+056900210119           88 lb_LIBMaturityNo        VALUE "N".
+057000210119
+057100210119       01 ld_ElectionDate                  PIC S9(08) VALUE ZERO COMP-3.
+057200210119       01 ld_ExpiryDate                    PIC S9(08) VALUE ZERO COMP-3.
+057300210119       01 li_LIBMaturityCnt                PIC S9(08) VALUE ZERO COMP-3.
+057400210302       01 li_mfaacconipCnt                 PIC S9(08) VALUE ZERO COMP-3.
+057500210302       01 LC_GLWBDEFMATOPT                 PIC X(01)  VALUE SPACES.
+057600210302       01 lncc_SETPOL                      PIC X(06)  VALUE "SETPOL".
+057700210302       01 lncc_Yes                         PIC X(1)   VALUE "Y".         .
+057800210302       01 lncc_No                          PIC X(1)   VALUE "N".
+057900210302       01 LNCC_M                           PIC X(01)  VALUE "M".
+058000210302       01 Lncc_AMT                         PIC X(03)  VALUE "AMT".
+058100210302       01 Lncc_one                         PIC S9(01) VALUE 1.
+058200210212      * RFS185894 - End
+058300210119
+058400210119
+058500070329       LINKAGE SECTION.
+058600070329       COPY CPFXSGMTVA.
+058700070329
+058800070403       PROCEDURE DIVISION USING pi_SegMatValAccountNo
+058900070403                                pi_SegMatValContractNo
+059000070403                                pc_SegMatValMode
+059100140206121426                          pc_SegMatValInvCode
+059200070403                                pi_SegMatValGMV
+059300070403                                pi_SegMatValGDV
+059400070709R39466                          pi_GMPercent
+059500070709  ¦                             pi_GDPercent
+059600070709  ¦                             pi_CurrMarketValue
+059700070613R39466                          pi_TradeDate
+059800070403                                pc_SegMatValReturn.
+059900070403
+060000070329       MAINLINE.
+060100070329           PERFORM InitialLogic.
+060200070329           PERFORM DetailProcess.
+060300070329           PERFORM EndOfProgram.
+060400070329
+060500070329      * ---------------------------------
+060600070329       InitialLogic.
+060700070329      * ---------------------------------
+060800070329           EXEC SQL
+060900070329             WHENEVER SQLERROR CONTINUE
+061000070329           END-EXEC.
+061100070329
+061200070329           EXEC SQL
+061300070329             WHENEVER NOT FOUND CONTINUE
+061400070329           END-EXEC.
+061500070329
+061600070405           INITIALIZE WorkingStorageFields.
+061700140320123837     INITIALIZE ln_GBVSAwdAmount.
+061800210217107840     SET lb_EditCodeDTHOVRNo TO TRUE.
+061900200824      *RFS184052 - START*
+062000200824           SET lb_GDVLog_No      TO TRUE.
+062100200824           SET lb_EditCodeTGDVNo TO TRUE.
+062200200824      *RFS184052 - END *
+062300201007101414     MOVE pc_SegMatValReturn TO lc-viaMatProc.
+062400070329           SET pb_SegMatValReturnOK TO TRUE.
+062500070329           INITIALIZE pi_SegMatValGMV,
+062600070709R39466                pi_GMPercent
+062700070709  ¦                   pi_GDPercent
+062800070613R39466                pi_CurrMarketValue
+062900070329                      pi_SegMatValGDV.
+063000070329
+063100110628R88038     SET lncc_Err_OK     TO TRUE.
+063200210302           INITIALIZE lc_AccountGuarantees.
+063300210302           ACCEPT lc_MfaSegParm FROM WS-DTAARA-MFASEGPARM
+063400210302                                FOR "MFASEGPARM".
+063500110628
+063600070329           COMPUTE li_AccountNo = pi_SegMatValAccountNo.
+063700140218           COMPUTE li_ContractNo = pi_SegMatValContractNo.
+063800140206121426     MOVE    pc_SegMatValInvCode TO lc_InvestmentCode.
+063900070613
+064000070613      **RFS39466 - Begins
+064100070613      *****************************************************************
+064200070613      ** When trade date is required ("A", "C", "E" and "F" mode)      *
+064300131003      ** RFS 128370 - added "K" mode.                                  *
+064400070613      ** then check trade passed and prices, if validation fails       *
+064500070613      ** end the program and return 99                                 *
+064600070613      *****************************************************************
+064700070613           MOVE pc_SegMatValMode TO lc_ProcessMode.
+064800070613           IF TradeDateRequired
+064900070613             IF pi_TradeDate IS NOT NUMERIC
+065000070613               MOVE ZEROES TO pi_TradeDate
+065100070613               SET pb_SegMatValReturnError TO TRUE
+065200070613               PERFORM EndOfProgram
+065300070613             END-IF
+065400070613             COMPUTE li_TradeDate = pi_TradeDate
+065500070613             PERFORM CheckPrices
+065600070613             IF li_UnitPrice = 0
+065700070613               SET pb_SegMatValReturnError TO TRUE
+065800070613               PERFORM EndOfProgram
+065900070613             END-IF
+066000070613           END-IF.
+066100070613      **RFS39466 - Ends
+066200200824      *RFS184052 - Starts*
+066300200824           INITIALIZE MFAEDTSCP OF lc_ScreenEditsAllowed.
+066400200824
+066500200824           MOVE lc_ScreenCodeACCCDTL
+066600200824             TO Screen-Code OF lc_ScreenEditsAllowed.
+066700200824           MOVE lc_EditCodeTGDV
+066800200824             TO Edit-Code OF lc_ScreenEditsAllowed.
+066900200824           MOVE lnc_LevelCodeControl
+067000200824             TO Level-Code OF lc_ScreenEditsAllowed.
+067100070404
+067200200824           CALL "FXSCEDTALW" USING lc_ScreenEditsAllowed,
+067300200824                                   lc_InEditSqllog,
+067400200824                                   lc_InReturnCode.
+067500200824
+067600200824           IF lnc_ReturnCodeOK
+067700200824              SET lb_EditCodeTGDVYes TO TRUE
+067800200824           ELSE
+067900200824              SET lb_EditCodeTGDVNo  TO TRUE
+068000200824           END-IF.
+068100200824      *RFS184052 - Ends*
+068200210217      *RFS1107840 - Start.
+068300210217           MOVE lc_ScreenCodeUPDCONT
+068400210217             TO Screen-Code OF lc_ScreenEditsAllowed.
+068500210217           MOVE lc_EditCodeDTHOVR
+068600210217             TO Edit-Code OF lc_ScreenEditsAllowed.
+068700210217           MOVE lnc_LevelCodeControl
+068800210217             TO Level-Code OF lc_ScreenEditsAllowed.
+068900200824
+069000210217           CALL "FXSCEDTALW" USING lc_ScreenEditsAllowed,
+069100210217                                   lc_InEditSqllog,
+069200210217                                   lc_InReturnCode.
+069300210217
+069400210217           IF lnc_ReturnCodeOK
+069500210217              SET lb_EditCodeDTHOVRYes TO TRUE
+069600210217           ELSE
+069700210217              SET lb_EditCodeDTHOVRNo  TO TRUE
+069800210217           END-IF.
+069900210217      *RFS1107840 - END.
+070000210217
+070100070404           ACCEPT li_SysDate FROM DATE YYYYMMDD.
+070200070405
+070300130301112967     ACCEPT lc_Mfaprcdtp FROM WS-DTAARA-MFAPRCDTP FOR "MFAPRCDTP"
+070400200422185169     IF pb_GWAPaymentsAcctLevel
+070500200422185169       PERFORM GetAccountBenefitDetails
+070600200422185169     ELSE
+070700200422185169*    PERFORM GetAccountAttributes.
+070800200701185172**** For X mode, it will be done per contract in later part ***
+070900200701185172     IF pb_GuarDthBenAccLvl
+071000200824185172      CONTINUE
+071100200701185172     ELSE
+071200200422185169     PERFORM GetAccountAttributes
+071300070405
+071400070405           IF pb_SegMatValReturnOK
+071500070405              PERFORM GetGuarSchedCode
+071600200422185169     END-IF
+071700200701185172     END-IF
+071800200518           END-IF.
+071900070329
+072000210119      *     RFS185894 Starts
+072100210119           IF lb_AccountGuaranteesYes
+072200210119                 PERFORM CheckLIBMaturity
+072300210119           END-IF.
+072400210119      *     RFS185894 Ends
+072500070329      * ---------------------------------
+072600070329       DetailProcess.
+072700070329      * ---------------------------------
+072800070329           EVALUATE TRUE
+072900130916127401***      WHEN pb_SegMatValModeGMV
+073000130916127401         WHEN pb_SegMatValModeGMV or  pb_GuarMatBene
+073100070329                    PERFORM CalculateGMV
+073200130916127401***      WHEN pb_SegMatValModeGDV
+073300130916127401         WHEN pb_SegMatValModeGDV or pb_GuarDthBene
+073400070329                    PERFORM CalculateGDV
+073500070329               WHEN pb_SegMatValModeBoth
+073600070329                    PERFORM CalculateGMV
+073700070329                    PERFORM CalculateGDV
+073800101126R85912         WHEN pb_GuarDthAndCurrMarketCS
+073900130916127401              or pb_GuarDthAndCurrMarketBene
+074000101126  |                 PERFORM CalculateGMV
+074100101126R85912              PERFORM CalculateGDV
+074200070613R39466         WHEN pb_CurrentMarketValueC
+074300070613  ¦                 PERFORM GetExchange
+074400070613  ¦                 PERFORM GetMarketValue
+074500140206      *RFS 121426 - START
+074600140206  ¦   *        WHEN pb_GuarMatDthAndCurrMarketA
+074700140206               WHEN pb_GuarMatDthAndCurrMarketA OR pb_GmvMvGdvPer
+074800140206      *RFS 121426 - END
+074900070613  ¦                 PERFORM GetExchange
+075000070613  ¦                 PERFORM GetMarketValue
+075100070613  ¦                 PERFORM CalculateGDV
+075200070613  ¦                 PERFORM CalculateGMV
+075300070613  ¦            WHEN pb_GuarDthAndCurrMarketE
+075400130916127401              or  pb_GuarDthAndCurrMarketK
+075500070613  ¦                 PERFORM GetExchange
+075600070613  ¦                 PERFORM GetMarketValue
+075700070613  ¦                 PERFORM CalculateGDV
+075800070717  ¦            WHEN pb_GuarMatAndCurrMarketF
+075900070613  ¦                 PERFORM GetExchange
+076000070613  ¦                 PERFORM GetMarketValue
+076100070613R39466              PERFORM CalculateGMV
+076200110627      * RFS88038 Start
+076300110627               WHEN pb_GWAPayments
+076400110627                    PERFORM GetSeriesRules
+076500110627                    PERFORM CreateGWACursor
+076600110627                    PERFORM ProcessGWACursor
+076700110706                    COMPUTE pi_SegMatValGMV =
+076800110706                            ln_Tot-Guar-Withdrawal-Amt +
+076900110706                            ln_Tot-Guar-Withdrawal-Exs
+077000110627      * RFS88038 End
+077100200422      * RFS185169 - Begin
+077200200422               WHEN pb_GWAPaymentsAcctLevel
+077300200422                    PERFORM GetSeriesRules
+077400200422                    PERFORM CreateGWAAcctCursor
+077500200422                    PERFORM ProcessGWAAcctCursor
+077600200422                    COMPUTE pi_SegMatValGMV =
+077700200422                            ln_Tot-Guar-Withdrawal-Amt +
+077800200422                            ln_Tot-Guar-Withdrawal-Exs
+077900200422      * RFS185169 - End
+078000200611      * RFS185172 - Begin
+078100200611               WHEN pb_GuarDthBenAccLvl
+078200200630                    PERFORM GetAccGuarDthBen
+078300200611      * RFS185172 - End
+078400070329           END-EVALUATE.
+078500070329
+078600070329      * ---------------------------------
+078700070329       CalculateGMV.
+078800070329      * ---------------------------------
+078900130301      *RFS112967 - begin
+079000131003127566     INITIALIZE ln_GuaranteePercent,
+079100131003127566                lc_MaturityRule.
+079200130503           PERFORM Check_IF_FinalTopUp.
+079300130301      *    IF pb_SegMatValReturnOK
+079400201019      *    IF pb_SegMatValReturnOK AND lb_FinalTopUp_False
+079500201019      *RFS1101414 Start
+079600201019           IF pb_SegMatValReturnOK AND (lb_FinalTopUp_False OR
+079700201019              lc-viaMatProc = "M")
+079800201019      *RFS1101414 End
+079900130301      *RFS112967 - end
+080000070329              PERFORM GetGuarPercentForGMV
+080100070329           END-IF.
+080200070329
+080300070329           IF pb_SegMatValReturnOK
+080400070329              PERFORM SummaryUpGMV
+080500070329           END-IF.
+080600070405
+080700130916127401***  IF NOT pb_SegMatValModeGMV
+080800130916127401     IF NOT pb_SegMatValModeGMV and not  pb_GuarMatBene
+080900070405              SET pb_SegMatValReturnOK TO TRUE
+081000070405           END-IF.
+081100130301
+081200130301      *RFS112967 - Begin
+081300130301      * ---------------------------------
+081400130301       Check_IF_FinalTopUp.
+081500130301      * ---------------------------------
+081600130301            SET lb_FinalTopUp_True      TO TRUE
+081700130301            SET lb_ContinueCheck_True   TO TRUE
+081800130301            INITIALIZE pi_GMPercent,
+081900130301                       lc_FinalTopUpValues.
+082000130301
+082100130301            EXEC SQL
+082200130301            SELECT
+082300130301                  COALESCE(ACCNTP.Account_Type_Code," "),
+082400131003127566*           COALESCE(CASE WHEN ACCNTP.Province_Of_Agreement <> " "
+082500131003  |   *                    THEN ACCNTP.Province_Of_Agreement
+082600131003  |   *                    ELSE IVRP.Province_Code
+082700131003  |   *                    END," ") ,
+082800131003127566            COALESCE(ACCONP.Contract_Prov,"  "),
+082900140508                  COALESCE(ACCNMP.Account_Type_Code,"  "),
+083000130301                  COALESCE(ACCONP.Investment_Series," "),
+083100140613      *RFS124070 Start.
+083200140613                  COALESCE(ACMDP.ACCOUNT_MATURITY_DATE, 0),
+083300140613                  COALESCE(ACMDP.FINAL_TOPUP_DATE,0),
+083400140613                  COALESCE(ACCONP.MATURITY_DATE,0)
+083500140613      *           COALESCE(ACCCRP.Reset_Category," ")
+083600140613      *RFS124070 End.
+083700130301            INTO
+083800130301                  :lc_AcctTypeCode,
+083900130301                  :lc_ProvOfAgreement,
+084000130301                  :lc_NomAcctType,
+084100130301                  :lc_InvSeries,
+084200140613      *RFS124070 Start.
+084300140613                  :ld_AccMaturityDate,
+084400140613                  :ld_FinalTopupDate,
+084500140613                  :ld_ContractMaturityDate
+084600140613      *           :lc_ResetCateg
+084700140613      *RFS124070 End.
+084800130301            FROM  MFAACCONP ACCONP
+084900130301            INNER JOIN MFAACCNTP ACCNTP                  ON
+085000130301                  ACCONP.Account_No        = ACCNTP.Account_No
+085100130506            INNER JOIN MFAIVRP   IVRP                    ON
+085200130506                  ACCNTP.Investor_No       = IVRP.Investor_No
+085300130301            INNER JOIN MFAACCTYP ACCTYP                  ON
+085400130301                  ACCNTP.ACCOUNT_TYPE_CODE = ACCTYP.ACCOUNT_TYPE_CODE
+085500130301            LEFT OUTER JOIN MFAACCNMP ACCNMP             ON
+085600130301                  ACCNTP.Account_No  = ACCNMP.Account_No
+085700140613      *RFS124070 Start.
+085800140613            LEFT OUTER JOIN MFAACMDP  ACMDP        ON
+085900140613                 ACMDP.Account_No  = ACCONP.Account_No
+086000140613      *RFS124070 End.
+086100140508
+086200130725      * RFS124906 - START
+086300130725      *     LEFT OUTER JOIN MFAACCCRP ACCCRP             ON
+086400140613124070*     INNER JOIN MFAACCCRP ACCCRP                  ON
+086500140613124070*           ACCONP.Account_No  = ACCCRP.Account_No       AND
+086600140613124070*           ACCONP.Contract_No = ACCCRP.Contract_No
+086700130725      *           ACCONP.Contract_No = ACCCRP.Contract_No      AND
+086800130725      *           ACCCRP.Reset_Category  = "M"                 AND
+086900130725      *           ACCCRP.RESET_PROCESSED = "Y"                 AND
+087000130725      *           ACCCRP.Effect_Date <=:ld_AsAtDate            AND
+087100130725      *           ACCCRP.Reversed       <> "Y"
+087200130725      * RFS124906 - End
+087300130301            WHERE
+087400130301                 ACCONP.Account_No   = :li_AccountNo           AND
+087500130725      * RFS124906 - START
+087600130725      *          ACCONP.Contract_No  = :li_ContractNo
+087700140613124070           ACCONP.Contract_No  = :li_ContractNo
+087800140613124070*          ACCONP.Contract_No  = :li_ContractNo          AND
+087900140613124070*          ACCCRP.Reset_Category  = "M"                  AND
+088000140613124070*          ACCCRP.RESET_PROCESSED = "Y"                  AND
+088100140613124070*          ACCCRP.Effect_Date <=:ld_AsAtDate             AND
+088200140613124070*          ACCCRP.Reversed       <> "Y"
+088300130725      * RFS124906 - END
+088400130301               FETCH FIRST ROW ONLY
+088500130301            END-EXEC.
+088600130301
+088700130301           MOVE SQLSTATE TO lc_sqlStates.
+088800130301           EVALUATE TRUE
+088900130301               WHEN lncc_sqlSuccessful
+089000140613      *RFS124070 START.
+089100190821      *R017009      IF ((ld_AccMaturityDate
+089200190821      *R017009                  = ld_ContractMaturityDate) AND
+089300190821      *R017009         ((ld_AccMaturityDate
+089400190821      *R017009                  > ld_FinalTopupDate ) AND
+089500190821      *R017009         (ld_ContractMaturityDate >
+089600190821      *R017009                  ld_FinalTopupDate)) AND
+089700180822      * RFS1002047 - Starts
+089800180822      *                 ld_FinalTopupDate NOT = ZEROES)
+089900190821      *R017009        ((ld_FinalTopupDate NOT = ZEROES) AND
+090000190821      *R017009         (ld_AsAtDate > ld_FinalTopupDate)))
+090100180822      * RFS1002047 - End
+090200190821
+090300201007      *RFS1101414 - Starts
+090400190821      *RFS1017009 Starts
+090500201007      *              IF ((ld_FinalTopupDate NOT = ZEROES) AND
+090600201007      *                 (ld_AsAtDate >= ld_FinalTopupDate))
+090700201007                     IF ((ld_FinalTopupDate NOT = ZEROES) AND
+090800201007                     (ld_AsAtDate = ld_FinalTopupDate AND
+090900201007                        lc-viaMatProc = "M") OR
+091000201007                     (ld_AsAtDate = ld_FinalTopupDate AND
+091100201007                         lc-viaMatProc NOT EQUAL TO "M") OR
+091200201007                     (ld_AsAtDate > ld_FinalTopupDate))
+091300201007      *RFS1101414 - End
+091400201007      *RFS1017009 Ends
+091500190821
+091600140604                    CONTINUE
+091700140613                    ELSE
+091800140613                       SET lb_FinalTopUp_False    TO TRUE
+091900140613                       SET lb_ContinueCheck_False TO TRUE
+092000140613                    END-IF
+092100140613      *RFS124070 END.
+092200130301               WHEN lncc_sqlEnd
+092300130301                    SET lb_FinalTopUp_False    TO TRUE
+092400130301                    SET lb_ContinueCheck_False TO TRUE
+092500130301               WHEN OTHER
+092600130301                    SET  lncc_Err03             TO TRUE
+092700130301                    MOVE lncc_ErrFinalTopUp     TO lc_sqlErrShortDESCR
+092800130301                    PERFORM Dsp-Error
+092900130301           END-EVALUATE.
+093000130301
+093100130301            IF lb_ContinueCheck_True
+093200130301
+093300130328EY           PERFORM Check_PerfectMatch_InCMatag
+093400180604      *RFS1002047 Starts
+093500180604             PERFORM GetStructCode
+093600180604      *RFS1002047 Ends
+093700130328             IF lb_PerfectMatch_Yes
+093800130328              EXEC SQL
+093900130328               SELECT CMATAGP.Disallow_Maturity_Benefit
+094000130328                 INTO :lc_DisallowMatBen
+094100130328                 FROM  MFACMATAGP CMATAGP
+094200130328               WHERE
+094300180604      *RFS1002047 Starts
+094400180604               CMATAGP.INVESTMENT_STRUCTURE_CODE =
+094500180604                                     :lc_InvStructCode AND
+094600180604               CMATAGP.INVESTMENT_SERIES = : lc_InvSeries AND
+094700180604      *RFS1002047 Ends
+094800130328               CMATAGP.Account_Type_Code =:lc_AcctTypeCode  AND
+094900130328               CMATAGP.Nominee_Account_Type = :lc_NomAcctType  AND
+095000130328               CMATAGP.Province_Of_Agreement = :lc_ProvOfAgreement AND
+095100130328               CMATAGP.Disallow_Maturity_Benefit = "Y"
+095200130328
+095300130328               FETCH FIRST ROW ONLY
+095400130328             END-EXEC
+095500130328             ELSE
+095600130328              EXEC SQL
+095700130301               SELECT CMATAGP.Disallow_Maturity_Benefit
+095800130301                 INTO :lc_DisallowMatBen
+095900130301                 FROM  MFACMATAGP CMATAGP
+096000130301               WHERE
+096100180604      *RFS1002047 Starts
+096200180604               CMATAGP.INVESTMENT_STRUCTURE_CODE =
+096300180604                                     :lc_InvStructCode AND
+096400180604               CMATAGP.INVESTMENT_SERIES = : lc_InvSeries AND
+096500180604      *RFS1002047 Ends
+096600130301               CMATAGP.Account_Type_Code =:lc_AcctTypeCode  AND
+096700130301               CMATAGP.Nominee_Account_Type = :lc_NomAcctType  AND
+096800130301              (CMATAGP.Province_Of_Agreement = :lc_ProvOfAgreement OR
+096900130301               CMATAGP.Province_Of_Agreement  = " ")        AND
+097000130301               CMATAGP.Disallow_Maturity_Benefit = "Y"
+097100130301
+097200130328              FETCH FIRST ROW ONLY
+097300130328             END-EXEC
+097400130328            END-IF
+097500130301
+097600130301            END-IF.
+097700130301
+097800130301            IF NOT lb_DisallowMatBen_Yes
+097900130301              SET lb_FinalTopUp_False TO TRUE
+098000130301            END-IF.
+098100130328      * -------------------
+098200130328       Check_PerfectMatch_InCMatag.
+098300130328      * -------------------
+098400130328            SET lb_PerfectMatch_No TO TRUE.
+098500130328            MOVE ZEROES TO li_NbrOfRecordFound.
+098600130328            EXEC SQL
+098700130328               SELECT COUNT(1)
+098800130328                INTO :li_NbrOfRecordFound
+098900130328                FROM  MFACMATAGP CMATAGP
+099000130328               WHERE
+099100130328                CMATAGP.Account_Type_Code =:lc_AcctTypeCode  AND
+099200130328                CMATAGP.Nominee_Account_Type = :lc_NomAcctType  AND
+099300130328                CMATAGP.Province_Of_Agreement = :lc_ProvOfAgreement
+099400130328            END-EXEC.
+099500130328
+099600130506            IF li_NbrOfRecordFound >  0
+099700130328               SET lb_PerfectMatch_Yes TO TRUE
+099800130328            END-IF.
+099900130301      *RFS112967 - end
+100000070329
+100100180604      *RFS1002047 Starts
+100200180604      * -------------------
+100300180604       GetStructCode.
+100400180604      * -------------------
+100500180604            EXEC SQL
+100600180604             SELECT COALESCE(Acccip. Investment_Code, :lncc_Spaces)
+100700180604              INTO :lc_InvCodeS
+100800180604             FROM Mfaacccip Acccip
+100900180604             WHERE Acccip.Account_No  = :li_AccountNo AND
+101000180604                   Acccip.Contract_No = :li_ContractNo
+101100180604             FETCH FIRST ROW ONLY
+101200180604            END-EXEC.
+101300180604
+101400180604           INITIALIZE SQLSTATE, SQLCODE, lc_InvStructCode.
+101500180604
+101600180604            EXEC SQL
+101700180822             SELECT INVESTMENT_STRUCTURE_CODE
+101800180604                  INTO :lc_InvStructCode
+101900180822             FROM MFAISTFNP
+102000180604              WHERE
+102100180822                 INVESTMENT_CODE  = :lc_InvCodeS AND
+102200180822                 FUNCTION_CODE    = :lncc_ACINVG
+102300180604              FETCH FIRST ROW ONLY
+102400180604            END-EXEC.
+102500180604      *RFS1002047 Ends
+102600180604
+102700070329      * ---------------------------------
+102800070329       CalculateGDV.
+102900070329      * ---------------------------------
+103000070329           IF pb_SegMatValReturnOK
+103100140206      *RFS 121426 - START
+103200140206            IF pb_GmvMvGdvPer and pi_GDPercent > 0
+103300140206              MOVE pi_GDPercent  to ln_GuaranteePercent
+103400140206            ELSE
+103500140206      *RFS 121426 - END
+103600070329              PERFORM GetGuarPercentForGDV
+103700140206121426      END-IF
+103800070329           END-IF.
+103900070404
+104000070404           IF pb_SegMatValReturnOK
+104100210308      * RFS186290 - Begin
+104200210308              IF lb_AccountGuaranteesYes
+104300210308                 PERFORM CheckDBGGrading
+104400210308              END-IF
+104500210308      * RFS186290 - End
+104600070404              PERFORM SummaryUpGDV
+104700210531           END-IF.
+104800070329
+104900070329      * ---------------------------------
+105000070329       GetAccountAttributes.
+105100070329      * ---------------------------------
+105200070329           EXEC SQL
+105300070330             SELECT COALESCE(Acconp.Start_Date, 0),
+105400070330                    COALESCE(Acconp.Guarantee_Dth_Percent, 0),
+105500070330                    COALESCE(Accntp.Account_Type_Code, :lncc_Spaces),
+105600091103                    COALESCE(Accnnp.Date_Of_Birth, 0),
+105700091103      * RFS63637 - Begin
+105800110627                    COALESCE(Accnnp.Date_Of_Death, 0),
+105900091103      * RFS63637 - End
+10600011062788038               COALESCE(Acconp.Eligible_Date, 0),
+106100130717      * RFS110904 - Start
+10620013071788038 *             COALESCE(Acconp.Investment_Series, :lncc_Spaces)
+106300130717                    COALESCE(Acconp.Investment_Series, :lncc_Spaces),
+106400130717                    COALESCE(Acconp.GUAR_BENEFIT_ELIGIBLE,:lncc_Spaces),
+106500130717                    COALESCE(Acconp.AWD_CARRIED_OVER, 0),
+106600130717                    COALESCE(Acconp.GDV_AWD_CARRIED_OVER, 0),
+106700200611      * RFS185172 - Begin
+106800200611      *             COALESCE(Acctyp.ACCOUNT_TYPE_RULE, :lncc_Spaces)
+106900200611                    COALESCE(Acctyp.ACCOUNT_TYPE_RULE, :lncc_Spaces),
+107000200611                    COALESCE(Acconp.INFLATION_MDBA, 0),
+107100200611                    COALESCE(Acconp.NON_INFLATION_MDBA, 0)
+107200130717      * RFS110904 - End
+107300070329               INTO :li_StartDate,
+107400070404                    :ln_ContractGuaranteePercent,
+107500070329                    :lc_AccountTypeCode,
+107600091103                    :li_AnnuitantDateOfBirth,
+107700091103      * RFS63637 - Begin
+107800110627                    :li_dod,
+107900091103      * RFS63637 - End
+10800011062888038               :li_Eligible-Date,
+108100130717      * RFS110904 - Start
+10820013071788038 *             :lc_Investment-Series-Code
+108300130717                    :lc_Investment-Series-Code,
+108400130717                    :lc_GuarBenefitEligible,
+108500130717                    :ln_AwdCarriedOver,
+108600130717                    :ln_AwdGDVCarriedOver,
+108700200611      * RFS185172 - Begin
+108800200611      *             :lc_AccountTypeRule
+108900200611                    :lc_AccountTypeRule,
+109000200611                    :li_MDBA_Infl,
+109100200611                    :li_MDBA_NonInfl
+109200200611      * RFS185172 - End
+109300130717      * RFS110904 - End
+109400101201      * RFS85912 - BEGINS
+109500101201      *        FROM Mfaacconp Acconp,
+109600101201      *             Mfaaccntp Accntp
+109700101201               FROM Mfaacconp Acconp
+109800101201                    INNER JOIN Mfaaccntp Accntp ON
+109900101201                    Acconp.Account_No = Accntp.Account_No
+110000101201      * RFS85912 - ENDS
+110100130717      * RFS110904 - Start
+110200130717                    INNER JOIN Mfaacctyp Acctyp ON
+110300130717                    Accntp.Account_Type_Code = Acctyp.Account_Type_Code
+110400130717      * RFS110904 - End
+110500070329                    LEFT OUTER JOIN Mfaaccanp Accanp ON
+110600070329                    Accanp.Account_No = :li_AccountNo               AND
+110700070329                    Accanp.Contract_No = :li_ContractNo             AND
+110800070329                    Accanp.Annuitant_Type_Code = :lncc_Primary
+110900070329                    LEFT OUTER JOIN Mfaaccnnp Accnnp ON
+111000070329                    Accnnp.Account_No = Accanp.Account_No           AND
+111100070329                    Accnnp.Annuitant_Status = :lncc_Active          AND
+111200070329                    Accnnp.Annuitant_Seq_No = Accanp.Annuitant_Seq_No
+111300070329              WHERE Acconp.Account_No = :li_AccountNo               AND
+111400101201                    Acconp.Contract_No = :li_ContractNo
+111500101201R85912*             Accntp.Account_No = Acconp.Account_No
+111600070329              FETCH FIRST ROW ONLY
+111700070329           END-EXEC.
+111800070404
+11190008061052779      PERFORM Get-YoungerAnnuitant-DOB.
+112000080610  |        IF pb_RetriveYes
+112100080610  |           COMPUTE li_AnnuitantDateOfBirth = pi_DateOfBirth
+112101211011      *RFS1121799 Starts
+112200211011118605*       COMPUTE pi_TradeDate            = pi_DateOfBirth
+112201211011      *RFS1121799 Ends
+11230008061052779      END-IF.
+112400080610
+112500070404           INITIALIZE li_AnnuitantAge.
+112600091103
+112700091103      * RFS63637 - Begin: modified logic to use Date of death
+112800091103      *   to calculate the age if Date of death is not zero.
+112900091103           INITIALIZE li_deathAge.
+113000101126           IF li_AnnuitantDateOfBirth NOT = 0
+113100101126             COMPUTE li_AnnuitantAge =
+113200101126                  (li_SysDate - li_AnnuitantDateOfBirth) / 10000
+113300091103             IF li_dod = 0
+113400091103                MOVE li_AnnuitantAge    TO li_deathAge
+113500091103             ELSE
+113600091103                COMPUTE li_deathAge     =
+113700091103                  (li_dod     - li_AnnuitantDateOfBirth) / 10000
+113800091103             END-IF
+113900070404           END-IF.
+114000111201      *RFS96530-BEGIN
+114100130512108944       PERFORM GetGuarSchedCode
+114200130512108944       PERFORM GetMaturityRule
+114300111201             PERFORM GetYearsToMaturity
+114400111201      *RFS96530-END
+114500091103      * -------------------------------------------------------------
+114600091103      *    IF li_AnnuitantDateOfBirth NOT = 0
+114700091103      *       COMPUTE li_AnnuitantAge =
+114800091103      *       (li_SysDate - li_AnnuitantDateOfBirth) / 10000
+114900091103      *    END-IF.
+115000091103      * -------------------------------------------------------------
+115100091103      * RFS63637 - End
+115200091103
+115300070329           MOVE SQLSTATE TO lc_sqlStates.
+115400070329           IF NOT lncc_sqlSuccessful
+115500070329              SET pb_SegMatValReturnError TO TRUE
+115600070329           END-IF.
+115700070329
+115800111201      * RFS96530-BEGIN:function is used to calculate Guarantee
+115900111201      *                Maturity Value, Guarantee Death Value
+116000111201      *-------------------------
+116100111201       GetYearsToMaturity.
+116200111201      *-------------------------
+116300111201           INITIALIZE li_FullYears,
+116400111201                      li_RemainingDays,
+116500111201                      ld_NewDate,
+116600111201                      ld_StartDate,
+116700111201                      ld_MaturityDate.
+116800111201
+116900111201           EXEC SQL
+117000111201             SELECT Start_Date,
+117100121009      * RFS107679 -START
+117200121009      *             Maturity_Date
+117300130510                    CASE WHEN(ORIGINAL_CMD > 0)
+117400130510108944               AND  :lc_MaturityRule = "CMD"
+117500121009                    THEN ORIGINAL_CMD
+117600130510108944              WHEN :lc_MaturityRule = "DMD"
+117700130510108944              THEN DEPOSIT_MATURITY_DATE
+117800121009                    ELSE Maturity_Date
+117900121009                    END
+118000111201               INTO :ld_StartDate,
+118100111201                    :ld_MaturityDate
+118200111201             FROM MFAACCONP
+118300111201             WHERE ACCOUNT_NO = :li_AccountNo
+118400111201             AND CONTRACT_NO = :li_ContractNo
+118500111201           END-EXEC.
+118600111201
+118700111201           INITIALIZE CALCDUR-PARMS-BUFFER.
+118800111201
+118900111201           If  ld_MaturityDate not = 0 and ld_StartDate not = 0
+119000111201            MOVE ld_StartDate TO CALCDUR-START-DATE
+119100111201            MOVE ld_MaturityDate TO CALCDUR-END-DATE
+119200111201
+119300111201            CALL "CALCDUR"    USING CALCDUR-PARMS
+119400111201            MOVE CALCDUR-YEARS TO li_FullYears
+119500111201
+119600111201            IF li_FullYears = 0
+119700111201               MOVE CALCDUR-DAYS TO li_RemainingDays
+119800111201            ELSE
+119900111201               MOVE ld_StartDate TO WD-CCYYMMDD
+120000111201               MOVE FUNCTION ADD-DURATION
+120100111201               (WD-CCYYMMDD YEARS li_FullYears) TO ld_NewDate
+120200111214103976         If ld_NewDate > 0
+120300111214  |              Move ld_NewDate To lc_TestDate
+120400111214  |              PERFORM ValidateDate
+120500111214  |              Move lc_TestDate To ld_NewDate
+120600111214103976         End-If
+120700111201103474*        MOVE ld_NewDate      TO CALCDUR-START-DATE
+120800111201103474*        MOVE ld_MaturityDate  TO CALCDUR-END-DATE
+120900111201103474         Compute li_MatDateReduce = ld_MaturityDate - 10000
+121000111215103976         If li_MatDateReduce > 0
+121100111214  |              Move li_MatDateReduce To lc_TestDate
+121200111214  |              PERFORM ValidateDate
+121300111214  |              Move lc_TestDate To li_MatDateReduce
+121400111215103976         End-If
+121500111201103474         MOVE li_MatDateReduce TO CALCDUR-START-DATE
+121600111201103474         MOVE ld_NewDate       TO CALCDUR-END-DATE
+121700111201
+121800111201               If ld_NewDate not = 0
+121900111201                 CALL "CALCDUR"    USING CALCDUR-PARMS
+122000111201                 MOVE CALCDUR-DAYS  TO li_RemainingDays
+122100111201               End-If
+122200111201            END-IF
+122300111201           END-IF.
+122400111201      *RFS96530-END
+122500080610      * RFS52779 Starts : Getting the younger Annuitant's DOB to
+122600080610      *                   be used as li_AnnuitantDateOfBirth
+122700080610      *-------------------------
+122800080610       Get-YoungerAnnuitant-DOB.
+122900080610      *-------------------------
+123000080610           INITIALIZE pc_AnnuitFlag,       pi_AnnuitAccountNo,
+123100080610                      pi_AnnuitContractNo, pi_AnnSequenceNo,
+123200080610                      pc_AnnuitantStatus,  pi_DateOfBirth
+123300080610                      pc_FirstName,        pc_LastName,
+123400080610                      pc_AnnuitReturnCode.
+123500080610
+123600080610           SET pb_YoungerAnnuit TO TRUE.
+123700080610           COMPUTE pi_AnnuitAccountNo  = li_AccountNo.
+123800080610           CALL "FXACCANUIT" USING pc_AnnuitFlag,
+123900080610                                   pi_AnnuitAccountNo,
+124000080610                                   pi_AnnuitContractNo,
+124100080610                                   pi_AnnSequenceNo,
+124200080610                                   pc_AnnuitantStatus,
+124300080610                                   pi_DateOfBirth,
+124400080610                                   pc_FirstName,
+124500080610                                   pc_LastName,
+124600090218      * RFS55414 - Begin: added new returned parameters
+124700090218                                   pi_socialInsuranceNo,
+124800090218                                   pc_sex,
+124900090218      * RFS55414 - End
+125000080610                                   pc_AnnuitReturnCode.
+125100080610      * RFS52779 Ends
+125200070329      * ---------------------------------
+125300070403       GetGuarSchedCode.
+125400070329      * ---------------------------------
+125500070329           EXEC SQL
+125600070405             SELECT COALESCE(Invsgp.Guar_Mat_Sched_Code, :lncc_Spaces),
+125700070403                    COALESCE(Invsgp.Guar_Death_Sched_Code, :lncc_Spaces)
+125800070405               INTO :lc_GuarMatSchedCode,
+125900070403                    :lc_GuarDthSchedCode
+126000101201      *RFS85912 - BEGINS
+126100101201      *        FROM Mfaacccip Acccip,
+126200101201      *             Mfainvsgp Invsgp
+126300101201               FROM Mfaacccip Acccip
+126400101201               INNER JOIN Mfainvsgp Invsgp
+126500101201               ON   Invsgp.Investment_Code = Acccip.Investment_Code
+126600101201      *RFS85912 - ENDS
+126700070329              WHERE Acccip.Account_No = :li_AccountNo               AND
+126800101201                    Acccip.Contract_No = :li_ContractNo
+126900101201R85912*             Invsgp.Investment_Code = Acccip.Investment_Code
+127000070329              FETCH FIRST ROW ONLY
+127100070329           END-EXEC.
+127200070329
+127300070329           MOVE SQLSTATE TO lc_sqlStates.
+127400070329           IF NOT lncc_sqlSuccessful
+127500070329              SET pb_SegMatValReturnError TO TRUE
+127600070329           END-IF.
+127700070329
+127800070329      * ---------------------------------
+127900070329       GetGuarPercentForGMV.
+128000070329      * ---------------------------------
+128100070709R39466     MOVE ZEROES TO pi_GMPercent.
+128200130510111788     INITIALIZE ln_GuaranteePercent
+128300130510108944                lc_MaturityRule.
+128400210317      * RFS186290 - Begin
+128500210317           INITIALIZE li_MaturityMinYears,
+128600210317                      lc_MatMinYrsCMDRule.
+128700210317           IF lb_AccountGuaranteesYes
+128800210317             PERFORM GetMaturityDetails
+128900210317           END-IF.
+129000210317      * RFS186290 - End
+129100200714      * RFS185172 - Begin
+129200210119      * RFS185894 - Start
+129300210119           SET lb_LIBMaturityNo TO TRUE
+129400210119           IF lb_AccountGuaranteesYes
+129500210302              IF lb_LIBMaturityExistYes
+129600210119                 COMPUTE ln_GuaranteePercent = 0
+129700210119                 SET lb_LIBMaturityYes TO TRUE
+129800210119              END-IF
+129900210119           END-IF.
+130000210119      * RFS185894 - End
+130100200714           SET lb_ProcessExistingNo TO TRUE.
+130200200714           PERFORM CheckMDBAProduct.
+130300200723           PERFORM GetMaturityDate.
+130400200714           IF lc_ResetType = lncc_MDB
+130500210308186290        AND lc_MultiTypeRule = lncc_9
+130600200723              IF li_ContMatDate = li_AccMatDate
+130700200714                COMPUTE ln_GuaranteePercent = 0
+130800200714              ELSE
+130900200714                SET lb_ProcessExistingYes TO TRUE
+131000200714              END-IF
+131100200714           ELSE
+131200200714             SET lb_ProcessExistingYes TO TRUE
+131300200714           END-IF.
+131400210211185894     IF lb_ProcessExistingYes AND lb_LIBMaturityNo
+131500200723
+131600200714             IF li_StartDate > 0 AND
+131700200723                ld_AsAtDate > 0
+131800200721               INITIALIZE ln_DepositAge
+131900200723      *** Below scenario is when CMD is on non-business day and
+132000200723      *** maturity processed on next day, where the deposit age
+132100200723      *** should be as of CMD. Applicable for only 'I' mode.
+132200200723               IF pb_GuarMatBene AND
+132300200723                  li_ContMatDate < ld_AsAtDate AND
+132400200723                  li_AccMatDate  > ld_AsAtDate AND
+132500200723                  li_ContMatDate > 0 AND
+132600200723                  li_AccMatDate > 0
+132700200723                 COMPUTE ln_DepositAge =
+132800200723                    (li_ContMatDate - li_StartDate) / 10000
+132900200723               ELSE
+133000200723                 COMPUTE ln_DepositAge =
+133100200721                    (ld_AsAtDate - li_StartDate) / 10000
+133200200723               END-IF
+133300200714             ELSE
+133400200714               COMPUTE ln_DepositAge = 0
+133500200714             END-IF
+133600200714
+133700200714      * RFS185172 - End
+133800070329           EXEC SQL
+133900070329             SELECT COALESCE(Guarantee_Percent, 0)
+134000130510108944             ,MATURITY_RULE
+134100070329               INTO :ln_GuaranteePercent
+134200130510108944             , :lc_MaturityRule
+134300070329               FROM Mfagmatvp
+134400070329              WHERE Guar_Mat_Sched_Code = :lc_GuarMatSchedCode      AND
+134500070329                    Start_Date <= :li_StartDate                     AND
+134600070329                    End_Date >= :li_StartDate                       AND
+134700070329                    Account_Type_Code = :lc_AccountTypeCode         AND
+134800130528                   (Age_Threshold >= :li_AnnuitantAge               OR
+134900130528                    (Age_Threshold = 0                              AND
+135000130528                     Maturity_rule = "DMD"))                        AND
+135100111201      *RFS96530-BEGIN
+135200111201103474*            ((Years_To_Maturity > :li_FullYears )             OR
+135300111201  |   *             (:li_FullYears = Years_To_Maturity              AND
+135400111201  |   *             :li_RemainingDays > Grace_Period_Days)           OR
+135500111201  |   *             (:li_FullYears = Years_To_Maturity              AND
+135600111201  |   *              Grace_Period_Days = 0 ))                       AND
+135700111201  |                ((Years_To_Maturity -1 > :li_FullYears )          OR
+135800210317      * RFS186290 - Begin
+135900210317                    (:lc_MatMinYrsCMDRule = :lncc_2 AND
+136000210317                     Years_To_Maturity = :li_FullYears)              OR
+136100210317      * RFS186290 - End
+136200111201  |                 (:li_FullYears = Years_To_Maturity -1           AND
+136300200313      *RFS1016198-Begin
+136400200313  |   *             :li_RemainingDays > Grace_Period_Days))         AND
+136500200313                    :li_RemainingDays >= Grace_Period_Days))        AND
+136600200313      *RFS1016198-End
+136700111201103474              Years_To_Maturity <> 0
+136800130510108944              AND ((MATURITY_RULE = "CMD") OR
+136900130510108944                   (MATURITY_RULE = "DMD"))
+137000200730185172              AND (DEPOSIT_AGE_THRESHOLD >= :ln_DepositAge OR
+137100200730185172                   DEPOSIT_AGE_THRESHOLD = 0)
+137200111201      *RFS96530-END
+137300070404              ORDER BY Age_Threshold
+137400200714185172                ,DEPOSIT_AGE_THRESHOLD
+137500070329              FETCH FIRST ROW ONLY
+137600200714185172*    END-EXEC.
+137700200714185172     END-EXEC
+137800070329
+137900200714185172*    MOVE SQLSTATE TO lc_sqlStates.
+138000200714185172     MOVE SQLSTATE TO lc_sqlStates
+138100111201      *RFS96530-BEGIN
+138200111201           IF lncc_sqlEnd
+138300111201           EXEC SQL
+138400111201            SELECT COALESCE(Guarantee_Percent, 0)
+138500130510108944             ,MATURITY_RULE
+138600111201            INTO :ln_GuaranteePercent
+138700130510108944             , :lc_MaturityRule
+138800111201            FROM MFAGMATVP
+138900111201              WHERE Guar_Mat_Sched_Code = :lc_GuarMatSchedCode      AND
+139000111201                    Start_Date <= :li_StartDate                     AND
+139100111201                    End_Date >= :li_StartDate                       AND
+139200111201                    Account_Type_Code = :lc_AccountTypeCode         AND
+139300130522108944*             Age_Threshold >= :li_AnnuitantAge               AND
+139400130528108944             (Age_Threshold  >= :li_AnnuitantAge              OR
+139500130528108944             ( Age_Threshold  = 0                             AND
+139600130528108944               Maturity_Rule  = "DMD"))                       AND
+139700111201                    Years_To_Maturity = 0
+139800200730185172              AND (DEPOSIT_AGE_THRESHOLD >= :ln_DepositAge OR
+139900200730185172                   DEPOSIT_AGE_THRESHOLD = 0)
+140000111201              ORDER BY Age_Threshold
+140100200714185172                ,DEPOSIT_AGE_THRESHOLD
+140200111201              FETCH FIRST ROW ONLY
+140300111201           END-EXEC
+140400111201           MOVE SQLSTATE TO lc_sqlStates
+140500200714185172*    END-IF.
+140600200714185172     END-IF
+140700111201      *RFS96530 END
+140800200811185172*    IF NOT lncc_sqlSuccessful
+140900200811185172     IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+141000200811              SET pb_SegMatValReturnError TO TRUE
+141100200714185172     END-IF
+141200200714           END-IF.
+141300210308      * RFS186290 - Begin
+141400210308           IF lb_AccountGuaranteesYes AND
+141500210317              li_ContMatDate = li_AccMAtDate
+141600210308              PERFORM CheckFirstContrAftRollover
+141700210308              IF lc_MatMinYrsCMDRule = lncc_2 AND
+141800210308                 lb_FirstContractAftRolloverYes AND
+141900210308                 li_FullYears < li_MaturityMinYears
+142000210308
+142100210308                 INITIALIZE ln_GuaranteePercent
+142200210308                            lc_MaturityRule
+142300210308
+142400210308                 EXEC SQL
+142500210308                   SELECT COALESCE(Guarantee_Percent, 0)
+142600210308                          ,MATURITY_RULE
+142700210308                   INTO :ln_GuaranteePercent
+142800210308                      , :lc_MaturityRule
+142900210308                   FROM MFAGMATVP
+143000210308                   WHERE Guar_Mat_Sched_Code = :lc_GuarMatSchedCode
+143100210308                    AND  Start_Date <= :li_StartDate
+143200210308                    AND  End_Date >= :li_StartDate
+143300210308                    AND  Account_Type_Code = :lc_AccountTypeCode
+143400210308                    AND (Age_Threshold  >= :li_AnnuitantAge  OR
+143500210308                         ( Age_Threshold  = 0           AND
+143600210308                           Maturity_Rule  = "DMD"))
+143700210308                    AND  Years_To_Maturity = 0
+143800210308                    AND (DEPOSIT_AGE_THRESHOLD >= :ln_DepositAge OR
+143900210308                         DEPOSIT_AGE_THRESHOLD = 0)
+144000210308                   ORDER BY Age_Threshold
+144100210308                           ,DEPOSIT_AGE_THRESHOLD
+144200210308                   FETCH FIRST ROW ONLY
+144300210308                 END-EXEC
+144400210308
+144500210308                 MOVE SQLSTATE TO lc_sqlStates
+144600210308                 IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+144700210308                   SET pb_SegMatValReturnError TO TRUE
+144800210308                 END-IF
+144900210308              END-IF
+145000210308           END-IF.
+145100210308      * RFS186290 - End
+145200200714R39466     MOVE ln_GuaranteePercent TO pi_GMPercent.
+145300070329
+145400070329      * ---------------------------------
+145500070329       SummaryUpGMV.
+145600070329      * ---------------------------------
+145700070329           INITIALIZE ln_TotGuarMatValue.
+145800070329           EXEC SQL
+145900070911             SELECT COALESCE(
+146000070911                    SUM(Guar_Base_Value * :ln_GuaranteePercent / 100)
+146100070911                    ,0)
+146200070329               INTO :ln_TotGuarMatValue
+146300070329               FROM Mfaacccip
+146400070329              WHERE Account_No = :li_AccountNo                      AND
+146500070329                    Contract_No = :li_ContractNo                    AND
+146600140206      * RFS 121426 - START
+146700140206      *             Curr_Unit_Bal <> 0
+146800140320123837*             Curr_Unit_Bal <> 0                              AND
+146900140206                    (:lc_InvestmentCode = "   "                     OR
+147000140206                    Mfaacccip.Investment_Code = :lc_InvestmentCode)
+147100140206      * RFS 121426 - END
+147200140206           END-EXEC.
+147300070329
+147400070329           MOVE SQLSTATE TO lc_sqlStates.
+147500070329           IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+147600070329              SET pb_SegMatValReturnError TO TRUE
+147700070329           ELSE
+147800130717      * RFS110904 - Start
+147900130916127401     IF (pb_GuarMatBene or pb_GuarDthAndCurrMarketBene) and
+148000130916127401       ((lc_GuarBenefitEligible = lncc_Y)  OR
+148100130916127401        (lc_AccountTypeRule = lncc_3 OR lncc_5))
+148200130916127401***  IF (lc_GuarBenefitEligible = lncc_Y)  OR
+148300130916127401***     (lc_AccountTypeRule = lncc_3 OR lncc_5)
+148400130723
+148500130718              INITIALIZE  pi_SegSAwdAccountNo,
+148600130718                          pi_SegSAwdContractNo,
+148700130718                          pc_SegSAwdResetType,
+148800130718                          pc_SegSAwdDate,
+148900130718                          pn_SegSAwdAmount,
+149000130718                          pc-IndependentGDV
+149100130718
+149200130718              COMPUTE pi_SegSAwdAccountNo  = li_AccountNo
+149300130718              COMPUTE pi_SegSAwdContractNo = li_ContractNo
+149400130718              MOVE  lncc_GBV   TO   pc_SegSAwdResetType
+149500130718              COMPUTE pc_SegSAwdDate       = ld_AsAtDate
+149600130718
+149700130717              CALL "FXSUMAWDT" USING pi_SegSAwdAccountNo,
+149800130717                                     pi_SegSAwdContractNo,
+149900130717                                     pc_SegSAwdResetType,
+150000130717                                     pc_SegSAwdDate,
+150100130717                                     pn_SegSAwdAmount,
+150200130718                                     pc-IndependentGDV
+150300130717
+150400140116130295        MOVE pn_SegSAwdAmount TO ln_GBVSAwdAmount
+150500130717
+150600130718              COMPUTE ln_TotGuarMatValue = ln_TotGuarMatValue -
+150700130718                                           pn_SegSAwdAmount   -
+150800130718                                           ln_AwdCarriedOver
+150900130717            END-IF
+151000130717      * RFS110904 - End
+151100070413              COMPUTE pi_SegMatValGMV ROUNDED= ln_TotGuarMatValue
+151200070329           END-IF.
+151300070330
+151400070329      * ---------------------------------
+151500070329       GetGuarPercentForGDV.
+151600070329      * ---------------------------------
+151700070709R39466     MOVE ZEROES TO pi_GDPercent.
+151800200824      * RFS184052 - Start *
+151900210119      * RFS185894 - Start *
+152000200824           INITIALIZE ln_GuaranteePercent.
+152100210119           SET lb_LIBMaturityNo TO TRUE
+152200210119           IF lb_AccountGuaranteesYes
+152300210302              IF lb_LIBMaturityExistYes
+152400210119                 COMPUTE ln_GuaranteePercent = 0
+152500210119                 SET lb_LIBMaturityYes TO TRUE
+152600210119              END-IF
+152700210119           END-IF.
+152800210119      * RFS185894 - end *
+152900200824           PERFORM CheckActivityLogForGDV.
+152901211013      * RFS187471 - Starts
+152902211013           IF  lb_EditCodeTGDVNo
+152903211013           AND lb_GDVLog_No
+152904211013           AND lb_EditCodeDTHOVRNo
+152905211013               PERFORM GetGDTHVSCV
+152906211013           END-IF.
+152907211013      * RFS187471 - End
+153000070404
+153100210211185894     IF lb_LIBMaturityNo
+153200200824           IF ((lb_EditCodeTGDVYes) OR
+153300210217107840*        (lb_GDVLog_Yes))
+153400210217107840         (lb_GDVLog_Yes) OR
+153401211013      * RFS187471- Starts
+153402211013107840*        (lb_EditCodeDTHOVRYes))
+153403211013               (lb_EditCodeDTHOVRYes)OR
+153404211013               (lb_DepTDDthPercentYes))
+153405211013      * RFS187471 - End
+153600210217
+153700200824             COMPUTE ln_GuaranteePercent
+153800200824                  = ln_ContractGuaranteePercent
+153900210217185894      END-IF
+154000200824      * RFS184052 - End *
+154100111209103515* comment out below lines as this should only be done when
+154200111209103515* new contracts are created and annuitant is over age threshold
+154300111209      *    IF ln_GuaranteePercent = 0 AND
+154400111209R85912*       NOT pb_GuarDTHAndCurrMarketCS
+154500111209      *       PERFORM GetGuarDthPercFromOvr
+154600111209      *    END-IF.
+154700111209103515* end
+154800070330
+154900140220           IF ln_GuaranteePercent = 0
+155000200611      *RFS184676 Starts
+155100200611              COMPUTE li_AnnuitantAge_GDth = li_deathAge
+155200200611              PERFORM DepDthValCheck
+155300200611      *RFS184676 Ends
+155400070330              PERFORM GetGuarDthPerc
+155500210217185894     END-IF
+155600210211185894     END-IF.
+155700070709
+155800070709R39466     MOVE ln_GuaranteePercent TO pi_GDPercent.
+155900070709
+156000111209103515* commented below lines until *end*
+156100070330      * ---------------------------------
+156200111209      *GetGuarDthPercFromOvr.
+156300070330      * ---------------------------------
+156400111209      *    EXEC SQL
+156500111209      *      SELECT COALESCE(Guarantee_Percent, 0)
+156600111209      *        INTO :ln_GuaranteePercent
+156700111209      *        FROM Mfagdtvap
+156800111209      *       WHERE Guar_Death_Sched_Code = :lc_GuarDthSchedCode    AND
+156900111209      *             Start_Date <= :li_StartDate                     AND
+157000111209      *             End_Date >= :li_StartDate                       AND
+157100111209      *             Account_Type_Code = :lc_AccountTypeCode         AND
+157200111209      **RFS63637 - Begin: Replace the age with Death Age
+157300111209      **            Age_Threshold <= :li_AnnuitantAge
+157400111209      *             Age_Threshold <= :li_deathAge
+157500111209      **RFS63637 - End
+157600111209      *       ORDER BY Age_Threshold
+157700111209      *       FETCH FIRST ROW ONLY
+157800111209      *    END-EXEC.
+157900111209      *
+158000111209      *    MOVE SQLSTATE TO lc_sqlStates.
+158100111209      *    IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+158200111209      *       SET pb_SegMatValReturnError TO TRUE
+158300111209      *    END-IF.
+158400111209103515*end*
+158500200611      *RFS184676 Starts
+158600200611      * ---------------------------------
+158700200611       DepDthValCheck.
+158800200611      * ---------------------------------
+158900200722           INITIALIZE li_DepAge,
+159000200722                      pi_AnnAge_GDth,
+159100201113                      pc_AnnAgeRule_GDth,
+159200200722                      pi_DepAge_GDth.
+159300200722           MOVE li_StartDate TO  pd_SchedDate_Gdth.
+159400200722           MOVE lc_GuarDthSchedCode TO pc_SchedCode_GDth.
+159500200722           MOVE lc_AccountTypeCode TO pc_AccType_GDth.
+159600200722           CALL "FXCHKGDTHV" USING pc_SchedCode_GDth,
+159700200722                                   pd_SchedDate_Gdth,
+159800200722                                   pc_AccType_GDth,
+159900200722                                   pi_AnnAge_GDth,
+160000200722                                   pi_DepAge_GDth,
+160100200722                                   pc_DepLvlTracking_GDth,
+160200200722                                   pi_AnnAgeThres_GDth,
+160300200722                                   pi_Percent_GDth,
+160400200722185172*                            pc_TrackingRule_GDth.
+160500200717185172                             pc_TrackingRule_GDth,
+160600200717185172                             pc_AnnAgeRule_GDth.
+160700200611
+160800200823              IF pc_DepLvlTracking_GDth = "Y" AND li_StartDate > 0
+160900200823              AND li_AnnuitantDateOfBirth > 0
+161000200611              COMPUTE li_AnnuitantAge_GDth =
+161100200611                    (li_StartDate - li_AnnuitantDateOfBirth) / 10000
+161200200616      * RFS185172 - Begin
+161300200616              IF pc_AnnAgeRule_GDth NOT = "2"
+161400200616                 COMPUTE li_AnnuitantAge_GDth = FUNCTION
+161500200616                        INTEGER-PART (li_AnnuitantAge_GDth)
+161600200616              END-IF
+161700200616      * RFS185172 - End
+161800200722              MOVE li_StartDate TO ld_DepAgeStartDate
+161900200611              IF li_dod > 0
+162000200722                 MOVE li_dod TO ld_DepAgeEndDate
+162100200611              ELSE
+162200200722                 MOVE ld_AsAtDate TO ld_DepAgeEndDate
+162300200611              END-IF
+162400200722              COMPUTE li_DepAge = FUNCTION FIND-DURATION
+162500200722                      (ld_DepAgeStartDate ld_DepAgeEndDate YEARS)
+162600200611           END-IF.
+162700200611      *RFS184676 Ends
+162800070329
+162900070330      * ---------------------------------
+163000070330       GetGuarDthPerc.
+163100070330      * ---------------------------------
+163200070403           EXEC SQL
+163300140212             SELECT COALESCE(Guarantee_Percent, 0),
+163400140228129785              COALESCE(Gdv_Tracking_Rule, " "),
+163500140228129785              COALESCE(AGE_THRESHOLD, 0)
+163600140212               INTO :ln_GuaranteePercent,
+163700140228                    :lc_GdvTrackRule,
+163800140228                    :li_AgeThreshold
+163900070330               FROM Mfagdthvp
+164000070330              WHERE Guar_Death_Sched_Code = :lc_GuarDthSchedCode    AND
+164100070330                    Start_Date <= :li_StartDate                     AND
+164200070330                    End_Date >= :li_StartDate                       AND
+164300070330                    Account_Type_Code = :lc_AccountTypeCode         AND
+164400091103      * RFS63637 - Begin: Replace the age with Death Age
+164500091103      *             Age_Threshold > :li_AnnuitantAge
+164600170922172387*             Age_Threshold > :li_deathAge
+164700200611      * RFS184676 Starts
+164800200722172387*             Age_Threshold >= :li_deathAge
+164900200722                    Age_Threshold >= :li_AnnuitantAge_GDth          AND
+165000200722                    (DEPOSIT_AGE_THRESHOLD >  :li_DepAge            OR
+165100200722                     DEPOSIT_AGE_THRESHOLD = 0)
+165200091103      * RFS63637 - End
+165300200722      *       ORDER BY Age_Threshold
+165400200722              ORDER BY Age_Threshold,
+165500200722                       DEPOSIT_AGE_THRESHOLD
+165600200611      * RFS184676 Ends
+165700070330              FETCH FIRST ROW ONLY
+165800070330           END-EXEC.
+165900070330
+166000070330           MOVE SQLSTATE TO lc_sqlStates.
+166100070330           IF NOT lncc_sqlSuccessful
+166200070330              SET pb_SegMatValReturnError TO TRUE
+166300070330           END-IF.
+166400070404
+166500200824      *RFS184052 - Start
+166600200824      *----------------------------------
+166700200824       CheckActivityLogForGDV.
+166800200824      *----------------------------------
+166900200824           SET lb_GDVLog_No TO TRUE.
+167000200824           MOVE ZEROES      TO li_TempField.
+167100200824
+167200200824           EXEC SQL
+167300200824             SELECT COUNT(1)
+167400200824             INTO  :li_TempField
+167500200824             FROM  MFACTCLP A
+167600200824             WHERE A.CONTRACT_NO  = :li_ContractNo
+167700200824             AND   A.ACCOUNT_NO   = :li_AccountNo
+167800200824             AND   A.AUDIT_DATE  <= :ld_AsAtDate
+167900200824             AND   A.CHANGE_CATEGORY
+168000200824                                 = :lc_Dth_Guar_Chg
+168100200824             FETCH FIRST ROW ONLY
+168200200824           END-EXEC.
+168300200824
+168400200824           MOVE SQLSTATE TO lc_sqlStates.
+168500200824
+168600200824           EVALUATE TRUE
+168700200824             WHEN lncc_sqlSuccessful
+168800200824               IF li_TempField > 0
+168900200824                SET lb_GDVLog_Yes TO TRUE
+169000200824               END-IF
+169100200824             WHEN lncc_sqlEnd
+169200200824                SET lb_GDVLog_No  TO TRUE
+169300200824             WHEN OTHER
+169400200824                SET pb_SegMatValReturnError TO TRUE
+169500200824           END-EVALUATE.
+169600200824      *RFS184052 - End
+169700070404      * ---------------------------------
+169800070404       SummaryUpGDV.
+169900070404      * ---------------------------------
+170000070404           INITIALIZE ln_TotGuarDthValue.
+170100070404           EXEC SQL
+170200070911             SELECT COALESCE(
+17030009061557388 *        SUM (CASE WHEN Gdv_Sched_Code = :lncc_Spaces
+17040013061157388          SUM (CASE WHEN d1.status is null
+17050013061157388                     and d2.status is null
+170600130611107585                    and d3.reset_type is null
+170700210308186290                    AND ( :lc_AccountGuarantees = :lncc_N OR
+170800210308186290                         ( :lc_AccountGuarantees = :lncc_Y AND
+170900210308186290                           :lc_DBGGradingExistFlag = :lncc_N ) )
+171000200824186302*              THEN Guar_Base_Value * :ln_GuaranteePercent / 100
+171100200824186302        THEN Acccip.Guar_Base_Value * :ln_GuaranteePercent / 100
+171200140227      * RFS129785 - Start
+171300140227      *             ELSE Guar_Death_Value
+171400140227                    ELSE
+171500140227                     CASE
+171600140227                      WHEN :lc_GdvTrackRule = :lncc_G
+171700200824      * RFS186302 - Start.
+171800200824      *               THEN  Guar_Death_Value
+171900200824                      THEN  Acccip.Guar_Death_Value
+172000200824      * RFS186302 - End
+172100140227                      WHEN :lc_GdvTrackRule = :lncc_B
+172200140303      **                 and :li_AnnuitantAge >= :li_AgeThreshold
+172300140227                           THEN
+172400140609      * RFS136713 - Start
+172500140609      **                  Guar_Base_Value * :ln_GuaranteePercent /100
+172600200824      * RFS186302 - Start
+172700200824      *                   Guar_Death_Value * :ln_GuaranteePercent /100
+172800200824                   Acccip.Guar_Death_Value * :ln_GuaranteePercent /100
+172900200824      * RFS186302 - End
+173000140609      * RFS136713 - end
+173100140303                           ELSE
+173200200824      * RFS186302 - Start
+173300200824      *                   Guar_Death_Value
+173400200824                          Acccip.Guar_Death_Value
+173500200824      * RFS186302 - End
+173600140228                     END
+173700140227      *RFS129785 - End
+173800130611                    END), 0)
+173900070404               INTO :ln_TotGuarDthValue
+174000101201      * RFS85912 - BEGINS
+174100101201      *        FROM Mfaacccip Acccip,
+174200101201      *             Mfainvsgp Invsgp
+174300101201               FROM Mfaacccip Acccip
+174400101201               INNER JOIN Mfainvsgp Invsgp
+174500101201                 ON Acccip.Investment_Code = Invsgp.Investment_Code
+174600101201      * RFS85912 - ENDS
+17470009061557388          join mfaaccntp acc
+17480009061557388            on acc.account_no = acccip.account_no
+17490009061557388          join mfaacconp con
+17500009061657388            on con.account_no = acccip.account_no
+17510009061657388           and con.contract_no = acccip.contract_no
+17520013061157388          left outer join mfagdthcsp d1
+17530013061157388            on d1.gdv_sched_code =
+17540013061157388               invsgp.gdv_sched_code
+17550013061157388           and d1.start_date <= con.start_date
+17560013061157388           and d1.end_date >= con.start_date
+175700120618      * RFS110341 - Start
+17580012061857388 *         and d1.reset_type = "GDV"
+175900130611                and ( d1.reset_type = "GDV"
+176000131003127566*         or    d1.reset_type = "GBV"
+176100130611                or   ( d1.reset_type = "GWB"
+176200130611                and  d1.multi_type_rule = "2"))
+176300120618      * RFS110341 - End
+17640013061157388           and d1.account_type_code = acc.account_type_code
+17650013061157388          left outer join mfagdthcsp d2
+17660013061157388            on d2.gdv_sched_code =
+17670013061157388               invsgp.gdv_sched_code
+17680013061157388           and d2.start_date <= con.start_date
+17690013061157388           and d2.end_date >= con.start_date
+177000120618      * RFS110341 - Start
+17710012062057388 *         and d2.reset_type = "GDV"
+177200130611                and ( d2.reset_type = "GDV"
+177300131003127566*         or    d2.reset_type = "GBV"
+177400130611                or   ( d2.reset_type = "GWB"
+177500130611                and  d2.multi_type_rule = "2"))
+177600120618      * RFS110341 - End
+17770013061157388           and d2.account_type_code = ""
+177800120917      * RFS107585 - Starts
+177900130611               left outer join MFAALWRSTP d3
+178000131003127566*          on d3.reset_schedule_code = invsgp.gdv_sched_code
+178100131003127566           on d3.reset_schedule_code = invsgp.Reset_Schedule_Code
+178200130611                and d3.account_type_code   = acc.account_type_code
+178300130611                and d3.start_date <= con.start_date
+178400130611                and d3.end_date   >= con.start_date
+178500130611                and d3.reset_type = "GBV"
+178600130611                and d3.multi_type_rule = "1"
+178700120917      *RFS107585 - Ends
+178800070405              WHERE Acccip.Account_No = :li_AccountNo              AND
+178900070405                    Acccip.Contract_No = :li_ContractNo            AND
+179000140206      *RFS121426 - START
+179100140206      *             Acccip.Curr_Unit_Bal <> 0
+179200140320123837*             Acccip.Curr_Unit_Bal <> 0                      AND
+179300140206                    (:lc_InvestmentCode = "   "                    OR
+179400140206                    acccip.Investment_Code = :lc_InvestmentCode)
+179500140206      *RFS121426 - END
+179600101201R85912*             Acccip.Investment_Code = Invsgp.Investment_Code
+179700070404           END-EXEC.
+179800070404
+179900070404           MOVE SQLSTATE TO lc_sqlStates.
+180000070404           IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+180100070404              SET pb_SegMatValReturnError TO TRUE
+180200070404           ELSE
+180300130718      * RFS110904 - Start
+180400130916127401***     IF (lc_GuarBenefitEligible = lncc_Y)  OR
+180500130916127401***        (lc_AccountTypeRule = lncc_3 OR lncc_5)
+180600140228127401        IF (pb_GuarDthBene or pb_GuarDthAndCurrMarketK
+180700130916127401         or pb_GuarDthAndCurrMarketBene) and
+180800140228127401          ((lc_GuarBenefitEligible = lncc_Y)  OR
+180900130916127401           (lc_AccountTypeRule = lncc_3 OR lncc_5))
+181000130718
+181100130723              INITIALIZE  pi_SegSAwdAccountNo,
+181200130723                          pi_SegSAwdContractNo,
+181300130723                          pc_SegSAwdResetType,
+181400130723                          pc_SegSAwdDate,
+181500130723                          pn_SegSAwdAmount,
+181600130723                          pc-IndependentGDV
+181700130723
+181800130718              COMPUTE pi_SegSAwdAccountNo  = li_AccountNo
+181900130718              COMPUTE pi_SegSAwdContractNo = li_ContractNo
+182000130718              MOVE  lncc_GDV   TO   pc_SegSAwdResetType
+182100130718              COMPUTE pc_SegSAwdDate       = ld_AsAtDate
+182200130718
+182300130718              CALL "FXSUMAWDT" USING pi_SegSAwdAccountNo,
+182400130718                                     pi_SegSAwdContractNo,
+182500130718                                     pc_SegSAwdResetType,
+182600130718                                     pc_SegSAwdDate,
+182700130718                                     pn_SegSAwdAmount,
+182800130718                                     pc-IndependentGDV
+182900130718
+183000130718                IF pc-IndependentGDV  = lncc_Y
+183100140228                   COMPUTE ln_TotGuarDthValue = ln_TotGuarDthValue -
+183200140212                                                   pn_SegSAwdAmount   -
+183300140212                                                   ln_AwdGDVCarriedOver
+183400130718                ELSE
+183500130718                   COMPUTE ln_TotGuarDthValue  = ln_TotGuarDthValue -
+183600140116130295*                                          pn_SegSAwdAmount   -
+183700140116130295                                           ln_GBVSAwdAmount   -
+183800130718                                                 ln_AwdCarriedOver
+183900130718                END-IF
+184000130718              END-IF
+184100130718      * RFS110904 - End
+184200070413              COMPUTE pi_SegMatValGDV ROUNDED= ln_TotGuarDthValue
+184300070404           END-IF.
+184400070613      /
+184500070613      **RFS39466 - Begins
+184600070613      * ---------------------------------
+184700070613      *****************************************************************
+184800070613      ** Get the exchange rate                                         *
+184900070613      *****************************************************************
+185000070613       GetExchange.
+185100070613      * ---------------------------------
+185200070613           EXEC SQL
+185300070613             SELECT COALESCE(Exchange_Rate_Type, " ")
+185400070613               INTO :lc_ExchangeRateType:ind1
+185500070613               FROM Mfaprgerp
+185600070613              WHERE Program_Code   = :lncc_ProgramCode AND
+185700070613                    Program_Action = :lncc_ProgramAction
+185800070613           END-EXEC.
+185900070613
+186000070613           MOVE SQLSTATE TO lc_sqlStates.
+186100070613           IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+186200070613              SET pb_SegMatValReturnError TO TRUE
+186300070613           END-IF.
+186400070613
+186500070613      * ---------------------------------
+186600070613      *****************************************************************
+186700070613      ** Check if fund was priced for the trade date passed            *
+186800070613      *****************************************************************
+186900070613       CheckPrices.
+187000070613      * ---------------------------------
+187100070613           EXEC SQL
+187200070613             SELECT SUM(COALESCE(Invupp.Unit_Price, 0))
+187300070613               INTO :li_UnitPrice:ind1
+187400070613             FROM Mfaacccip acccip
+187500070613               LEFT OUTER JOIN Mfainvupp Invupp  ON
+187600070613                 Invupp.Trade_Date = :li_TradeDate AND
+187700070613                 acccip.Investment_Code = Invupp.Investment_Code AND
+187800070613                 Invupp.Distribution_Flag = :lncc_Space
+187900070613             WHERE
+188000070613               acccip.Account_No = :li_AccountNo  AND
+188100070613               acccip.Contract_No = :li_ContractNo
+188200070613           END-EXEC.
+188300070613
+188400070613           MOVE SQLSTATE TO lc_sqlStates.
+188500070613           IF NOT lncc_sqlSuccessful
+188600070613              SET pb_SegMatValReturnError TO TRUE
+188700070613           END-IF.
+188800070613      * ---------------------------------
+188900070613      *****************************************************************
+189000070613      ** Get Market value of account contract                          *
+189100070613      *****************************************************************
+189200070613       GetMarketValue.
+189300070613      * ---------------------------------
+189400070613           EXEC SQL
+189500070613             SELECT
+189600070613             SUM(DECIMAL(
+189700070613               ROUND(
+189800070613                 acccip.Curr_Unit_Bal
+189900070613                 *
+190000070613                 COALESCE(
+190100070613                   CASE WHEN InvuppY.Unit_Price > 0
+190200070613                     THEN InvuppY.Unit_Price
+190300070613                     ELSE InvuppS.Unit_Price
+190400070613                     END, 0)
+190500070613                 /
+190600070613                 COALESCE( Exrhmp.Exchange_Rate,1)
+190700070613               , 2)
+190800070613               ,13,2)
+190900070613             )
+191000070613             INTO :li_CurrMarketValue:ind1
+191100070613             FROM
+191200070613               Mfaacccip acccip
+191300070613               INNER JOIN Mfainvp invp
+191400070613                  ON acccip.Investment_Code = invp.Investment_Code
+191500070613                LEFT OUTER JOIN Mfainvupp InvuppY
+191600070613                  ON InvuppY.Trade_Date = :li_TradeDate AND
+191700070613                     acccip.Investment_Code = InvuppY.Investment_Code
+191800070613                     AND InvuppY.Distribution_Flag = :lncc_Y
+191900070613                LEFT OUTER JOIN Mfainvupp InvuppS
+192000070613                  ON InvuppS.Trade_Date = :li_TradeDate AND
+192100070613                     acccip.Investment_Code = InvuppS.Investment_Code
+192200070613                     AND InvuppS.Distribution_Flag = :lncc_Space
+192300070613                LEFT OUTER JOIN Mfaexrhmp Exrhmp
+192400070613                  ON Exrhmp.Currency = Invp.Currency AND
+192500070613                     Exrhmp.Trade_Date = :li_TradeDate AND
+192600070613                     Exrhmp.Exchange_Rate_Type = :lc_ExchangeRateType
+192700070613             WHERE
+192800070613               acccip.Account_No = :li_AccountNo AND
+192900140206      *RFS 121426 - START
+193000140206      *        acccip.Contract_No = :li_ContractNo
+193100140206               acccip.Contract_No = :li_ContractNo  AND
+193200140206               (:lc_InvestmentCode = "   "          OR
+193300140206               acccip.Investment_Code = :lc_InvestmentCode)
+193400140206      *RFS 121426 - END
+193500070613           END-EXEC.
+193600070613
+193700070613           MOVE SQLSTATE TO lc_sqlStates.
+193800070613           IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+193900070613             SET pb_SegMatValReturnError TO TRUE
+194000070613           ELSE
+194100070613             COMPUTE pi_CurrMarketValue = li_CurrMarketValue
+194200070613           END-IF.
+194300070613
+194400110627      * RFS39466 - Ends
+194500110627
+194600110627      * RFS88038 - Start
+194700110627      * ---------------------------------
+194800110627       GetSeriesRules.
+194900110627      * ---------------------------------
+195000110627
+195100110630           Initialize pc-InvestmentCode,
+195200110627                      pc-InvestmentSeriesFlag,
+195300110628                      pc-RFGWRULErules,
+195400110627                      pc-RejectionCode
+195500110627
+195600110630           MOVE lc_Investment-Series-Code TO pc-InvestmentSeriesCode
+195700110628
+195800200413185170*    CALL "FXGLWBRULE" USING pc-InvestmentCode
+195900200413  |        CALL "FXGLWBRULE" USING li_AccountNo
+196000200413185170                             pc-InvestmentCode
+196100110627                                   pc-InvestmentSeriesCode
+196200110627                                   pc-InvestmentSeriesFlag
+196300110627                                   pc-RFGWRULErules
+196400110627                                   pc-RejectionCode.
+196500110627
+196600110628           If  NOT pb-ValidRule OR
+196700110628               pc-GLWARateLockingRule NOT =  '2'
+196800110628                GOBACK
+196900110627           End-If.
+197000110627
+197100110628      * ---------------------------------
+197200110628       CreateGWACursor.
+197300110628      * ---------------------------------
+197400110628
+197500110628           EXEC SQL
+197600110628             DECLARE GWACUR CURSOR FOR
+197700110628             SELECT TRCODP.GUAR_WITHDRAWAL_AMOUNT,
+197800110628                    TRCODP.GUAR_WITHDRAWAL_EXCESS,
+197900110628                    TRCODP.PLACEMENT_DATE,
+198000110628                    TRCODP.TRANS_NO,
+198100110629                    TRNP.TRANS_TYPE_CODE,
+198200110629                    TRNP.TRANS_ORIGIN_CODE,
+198300110629                    TRNP.CONTR_REDEM_CODE
+198400110628             FROM   MFATRCODP TRCODP
+198500110628             INNER  JOIN MFATRNP TRNP ON
+198600110628                    TRCODP.PLACEMENT_DATE = TRNP.PLACEMENT_DATE AND
+198700110628                    TRCODP.TRANS_NO       = TRNP.TRANS_NO
+198800110628             WHERE  TRNP.ACCOUNT_NO = :li_AccountNo AND
+198900110630                    TRNP.TRANS_STATUS_CODE IN ("HST", "HSC") AND
+199000110628                    TRNP.REVERSE <> :lncc_Y AND
+199100110630                    TRNP.TRADE_DATE >= :li_Eligible-Date AND
+199200110630                    TRNP.TRANS_TYPE_CODE IN ("SEL","TRO","SWO")AND
+199300110628                    TRCODP.CONTRACT_NO = :li_ContractNo AND
+199400110803                    TRCODP.GWBASE_CALC_METHOD = :lncc_O
+199500110628           END-EXEC.
+199600110628
+199700110628           EXEC SQL
+199800110628                OPEN GWACUR
+199900110628           END-EXEC.
+200000110628      *
+200100110628           MOVE SQLSTATE TO lc_SqlStates.
+200200110628           IF NOT lncc_SqlSuccessful
+200300110630              SET lncc_Err01 TO TRUE
+200400110628              MOVE lncc_ErrorOpeningCursor TO lc_sqlErrShortDESCR
+200500110629              PERFORM SqlFailProcess
+200600110628           END-IF.
+200700110628
+200800110628      * ---------------------------------
+200900110628       ProcessGWACursor.
+201000110628      * ---------------------------------
+201100110628
+201200110628           SET lb_EndOfCursorFalse TO TRUE
+201300110628           PERFORM PROCESS-GWA-RECORDS UNTIL lb_EndOfCursorTrue.
+201400110628
+201500110628      * ---------------------------------
+201600110628       PROCESS-GWA-RECORDS.
+201700110628      * ---------------------------------
+201800110628
+201900110628           INITIALIZE ltb_FetchGWATable.
+202000110628
+202100110628           EXEC SQL
+202200110629             FETCH NEXT FROM GWACUR
+202300110628               FOR :lnci_MaxFetchRec ROWS
+202400110705              INTO :ltb_FetchGWA:ltb_Indicators
+202500110628           END-EXEC.
+202600110628
+202700110628           MOVE SQLSTATE TO lc_sqlStates.
+202800110628           EVALUATE TRUE
+202900110628               WHEN lncc_sqlSuccessful
+203000110628                    COMPUTE li_NoOfRowsFetched = SQLERRD(3)
+203100110628               WHEN lncc_sqlEnd
+203200110628                    SET lb_EndOfCursorTrue TO TRUE
+203300110628                    COMPUTE li_NoOfRowsFetched = SQLERRD(3)
+203400110628               WHEN OTHER
+203500110630                    SET lncc_Err02 TO TRUE
+203600110629                    MOVE lncc_FetchErrGWA  TO lc_sqlErrShortDESCR
+203700110628                    PERFORM SQLFailProcess
+203800110628           END-EVALUATE.
+203900110628
+204000110628           COMPUTE li_Counter = 1.
+204100110629           PERFORM GetGWAAmounts TEST BEFORE
+204200110706             UNTIL li_Counter > li_NoOfRowsFetched.
+204300110628
+204400110629      * ---------------------------------
+204500110629       GetGWAAmounts.
+204600110629      * ---------------------------------
+204700110629
+204800110706           PERFORM SaveArrayFields
+204900110629
+205000110629           IF  lc_Trans-Type-Code = lncc_SEL
+205100110629                COMPUTE ln_Tot-Guar-Withdrawal-Amt =
+205200110629                        ln_Tot-Guar-Withdrawal-Amt +
+205300110706                        ln_Guar-Withdrawal-Amt
+205400110629                COMPUTE ln_Tot-Guar-Withdrawal-Exs =
+205500110629                        ln_Tot-Guar-Withdrawal-Exs +
+205600110706                        ln_Guar-Withdrawal-Exs
+205700110706           END-IF
+205800110629
+205900110629           IF  lc_Trans-Type-Code = lncc_TRO OR
+206000110629               lc_Trans-Type-Code = lncc_SWO
+206100110629                PERFORM GetContractSWI
+206200110630                IF lc_ACCONP-Investment-Series = lncc_Space
+206300110629                    COMPUTE ln_Tot-Guar-Withdrawal-Amt =
+206400110629                            ln_Tot-Guar-Withdrawal-Amt +
+206500110629                            ln_Guar-Withdrawal-Amt
+206600110629                    COMPUTE ln_Tot-Guar-Withdrawal-Exs =
+206700110629                            ln_Tot-Guar-Withdrawal-Exs +
+206800110629                            ln_Guar-Withdrawal-Exs
+206900110629                ELSE
+207000200422185169              IF pb_GWAPaymentsAcctLevel
+207100200422185169                PERFORM GetAccLevelSeriesType
+207200200422185169              ELSE
+207300110629                    PERFORM GetSeriesType
+207400200422185169              END-IF
+207500110629                    IF lc_Series-Type NOT = lncc_GLWB
+207600110629                        COMPUTE ln_Tot-Guar-Withdrawal-Amt =
+207700110629                                ln_Tot-Guar-Withdrawal-Amt +
+207800110629                                ln_Guar-Withdrawal-Amt
+207900110629                        COMPUTE ln_Tot-Guar-Withdrawal-Exs =
+208000110629                                ln_Tot-Guar-Withdrawal-Exs +
+208100110629                                ln_Guar-Withdrawal-Exs
+208200110629                    ELSE
+208300110629                        PERFORM GetTrfOpt
+208400110629                        IF lc_Transfer-GWB-FIEB NOT = lncc_Y
+208500110629                            COMPUTE ln_Tot-Guar-Withdrawal-Amt =
+208600110629                                    ln_Tot-Guar-Withdrawal-Amt +
+208700110629                                    ln_Guar-Withdrawal-Amt
+208800110629                            COMPUTE ln_Tot-Guar-Withdrawal-Exs =
+208900110629                                    ln_Tot-Guar-Withdrawal-Exs +
+209000110706                                    ln_Guar-Withdrawal-Exs
+209100110706                        END-IF
+209200110706                    END-IF
+209300110706                END-IF
+209400110706           END-IF
+209500110629
+209600110706           COMPUTE li_Counter = li_Counter + 1.
+209700110706
+209800110629      * ---------------------------------
+209900110629       SaveArrayFields.
+210000110629      * ---------------------------------
+210100110629
+210200110630           MOVE ltb_Guar-Withdrawal-Amt(li_Counter)  TO
+210300110629                ln_Guar-Withdrawal-Amt
+210400110629           MOVE ltb_Guar-Withdrawal-Exs(li_Counter)  TO
+210500110629                ln_Guar-Withdrawal-Exs
+210600110629           MOVE ltb_Placement-Date(li_Counter)       TO
+210700110629                li_Placement-Date
+210800110629           MOVE ltb_Trans-No(li_Counter)             TO
+210900110629                li_Trans-No
+211000110629           MOVE ltb_Trans-Type-Code(li_Counter)      TO
+211100110629                lc_Trans-Type-Code
+211200110629           MOVE ltb_Trans-Origin-Code(li_Counter)    TO
+211300110630                lc_Trans-Origin-Code
+211400110629           MOVE ltb_Contr-Redem-Code(li_Counter)     TO
+211500110630                lc_Contr-Redem-Code.
+211600110629
+211700110629      * ---------------------------------
+211800110629       GetContractSWI.
+211900110629      * ---------------------------------
+212000110629
+212100110629           EXEC SQL
+212200110629             SELECT TRNP.ACCOUNT_NO,
+212300110629                    TRCODP.CONTRACT_NO,
+212400110629                    ACCONP.INVESTMENT_SERIES
+212500110630             INTO   :li_TRNP-Account-No,
+212600110630                    :li_TRCODP-Contract-No,
+212700110630                    :lc_ACCONP-Investment-Series
+212800110629             FROM   MFATRNTGP TRNTGP
+212900110629             INNER  JOIN MFATRNP TRNP ON
+213000110629                    TRNTGP.PLACEMENT_DATE_2 = TRNP.PLACEMENT_DATE AND
+213100110629                    TRNTGP.TRANS_NO_2       = TRNP.TRANS_NO
+213200110629             INNER  JOIN MFATRCODP TRCODP ON
+213300110629                    TRNTGP.PLACEMENT_DATE_2 = TRCODP.PLACEMENT_DATE AND
+213400110629                    TRNTGP.TRANS_NO_2       = TRCODP.TRANS_NO
+213500110629             INNER  JOIN MFAACCONP ACCONP ON
+213600110630                    TRNP.ACCOUNT_NO         = ACCONP.ACCOUNT_NO AND
+213700110630                    TRCODP.CONTRACT_NO      = ACCONP.CONTRACT_NO
+213800110630             WHERE  TRNTGP.PLACEMENT_DATE   = :li_Placement-Date AND
+213900110630                    TRNTGP.TRANS_NO         = :li_Trans-No AND
+214000110630                    TRNTGP.RELATIONSHIP_TYPE IN ("DSB","DSR","WSB")
+214100110629           END-EXEC.
+214200110629
+214300110629      * ---------------------------------
+214400110630       GetSeriesType.
+214500110629      * ---------------------------------
+214600110629
+214700110629           EXEC SQL
+214800110630             SELECT SUBSTR(SERRLP.Series_Rules, 70, 4)
+214900110630             INTO   :lc_Series-Type
+215000110630             FROM   MFASERRLP SERRLP
+215100110630             WHERE  SERRLP.INVESTMENT_SERIES =
+215200110630                    :lc_ACCONP-Investment-Series
+215300110629           END-EXEC.
+215400110629
+215500110630      * ---------------------------------
+215600110630       GetTrfOpt.
+215700110630      * ---------------------------------
+215800110630
+215900110630           EXEC SQL
+216000110630             SELECT COALESCE(SGSTOP.TRANSFER_GWB_FIEB, " ")
+216100110630             INTO   :lc_Transfer-GWB-FIEB
+216200110630             FROM   MFAACCNTP ACCNTP
+216300110630             LEFT OUTER JOIN MFAACCNMP ACCNMP ON
+216400110630                    ACCNMP.ACCOUNT_NO = ACCNTP.ACCOUNT_NO
+216500110630             LEFT OUTER JOIN MFASGSTOP SGSTOP ON
+216600110630                    SGSTOP.ACCOUNT_TYPE_CODE = ACCNTP.ACCOUNT_TYPE_CODE
+216700110630                    AND
+216800110630                    SGSTOP.NOMINEE_ACCOUNT_TYPE =
+216900110630                    COALESCE(ACCNMP.ACCOUNT_TYPE_CODE," ") AND
+217000110630                    SGSTOP.TRANS_TYPE_CODE  = :lc_Trans-Type-Code AND
+217100110630                    SGSTOP.TRANS_ORIGIN_CODE  = :lc_Trans-Origin-Code
+217200110630                    AND
+217300110630                    SGSTOP.CONTR_REDEM_CODE  = :lc_Contr-Redem-Code
+217400110630             WHERE  ACCNTP.ACCOUNT_NO = :li_TRNP-Account-No
+217500110630           END-EXEC.
+217600110630
+217700111214      * RFS 103976 Start
+217800111214      * ---------------------------------
+217900111214       ValidateDate.
+218000111214      * ---------------------------------
+218100111214
+218200111214            INITIALIZE lc_TestDate_Flag
+218300111214
+218400111214            Perform until lc_DatOK
+218500111214              CALL "VALDATEFMT" USING lc_TestDate
+218600111214                                      lc_TestDate_Flag
+218700111214
+218800111214              If lc_DatNotOK and lc_TestDate not = Spaces and
+218900111214                                 li_TestDateNm not <= 0
+219000111214                  Compute li_TestDateNm = li_TestDateNm - 1
+219100111214              Else
+219200111214                  Move 'Y' to lc_TestDate_Flag
+219300111214              End-If
+219400111214            End-Perform.
+219500111214      * RFS 103976 End
+219600130512      * RFS108944 - Start
+219700130512      * ---------------------------------
+219800130512       GetMaturityRule.
+219900130512      * ---------------------------------
+220000130512
+220100130512
+220200130512           MOVE ZEROES TO pi_GMPercent.
+220300130512           INITIALIZE ln_GuaranteePercent
+220400130512                      lc_MaturityRule.
+220500130512           EXEC SQL
+220600130725      * RFS 124906 - Start
+220700130725      *      SELECT COALESCE(Guarantee_Percent, 0)
+220800130725      *            ,MATURITY_RULE
+220900130725      *        INTO :ln_GuaranteePercent
+221000130725      *            , :lc_MaturityRule
+221100130725             SELECT MATURITY_RULE
+221200130725               INTO  :lc_MaturityRule
+221300130725      * RFS 124906 - End
+221400130512               FROM Mfagmatvp
+221500130512              WHERE Guar_Mat_Sched_Code = :lc_GuarMatSchedCode      AND
+221600130512                    Start_Date <= :li_StartDate                     AND
+221700130512                    End_Date >= :li_StartDate                       AND
+221800130512                    Account_Type_Code = :lc_AccountTypeCode         AND
+221900130712124523*             Age_Threshold >= :li_AnnuitantAge               AND
+222000130712124523*            ((Years_To_Maturity -1 > :li_FullYears )          OR
+222100130712124523*             (:li_FullYears = Years_To_Maturity -1           AND
+222200130712124523*             :li_RemainingDays > Grace_Period_Days))         AND
+222300130512                    (Years_To_Maturity <> 0  OR
+222400130512                     Years_To_Maturity = 0 )
+222500130512                    AND ((MATURITY_RULE = "CMD") OR
+222600130512                         (MATURITY_RULE = "DMD"))
+222700130512              ORDER BY Age_Threshold
+222800130512              FETCH FIRST ROW ONLY
+222900130512           END-EXEC.
+223000130512
+223100130512           MOVE SQLSTATE TO lc_sqlStates.
+223200200422      * RFS185169 - Begin
+223300200422      * ---------------------------------
+223400200422       CreateGWAAcctCursor.
+223500200422      * ---------------------------------
+223600200422
+223700200422           EXEC SQL
+223800200422             DECLARE GWAACCCUR CURSOR FOR
+223900200422             SELECT TRCODP.GUAR_WITHDRAWAL_AMOUNT,
+224000200422                    TRCODP.GUAR_WITHDRAWAL_EXCESS,
+224100200422                    TRCODP.PLACEMENT_DATE,
+224200200422                    TRCODP.TRANS_NO,
+224300200422                    TRNP.TRANS_TYPE_CODE,
+224400200422                    TRNP.TRANS_ORIGIN_CODE,
+224500200422                    TRNP.CONTR_REDEM_CODE
+224600200422             FROM   MFATRCODP TRCODP
+224700200422             INNER  JOIN MFATRNP TRNP ON
+224800200422                    TRCODP.PLACEMENT_DATE = TRNP.PLACEMENT_DATE AND
+224900200422                    TRCODP.TRANS_NO       = TRNP.TRANS_NO
+225000200422             WHERE  TRNP.ACCOUNT_NO = :li_AccountNo AND
+225100200422                    TRNP.TRANS_STATUS_CODE IN ("HST", "HSC") AND
+225200200422                    TRNP.REVERSE <> :lncc_Y AND
+225300200422                    TRNP.TRADE_DATE >= :li_Eligible-Date AND
+225400200422                    TRNP.TRANS_TYPE_CODE IN ("SEL","TRO","SWO") AND
+225500200422                    TRCODP.GWBASE_CALC_METHOD = :lncc_O
+225600200422           END-EXEC.
+225700200422
+225800200422           EXEC SQL
+225900200422                OPEN GWAACCCUR
+226000200422           END-EXEC.
+226100200422      *
+226200200422           MOVE SQLSTATE TO lc_SqlStates.
+226300200422           IF NOT lncc_SqlSuccessful
+226400200422              SET lncc_Err01 TO TRUE
+226500200422              MOVE lncc_ErrorOpeningCursor TO lc_sqlErrShortDESCR
+226600200422              PERFORM SqlFailProcess
+226700200422           END-IF.
+226800200422
+226900200422      * ---------------------------------
+227000200422       ProcessGWAAcctCursor.
+227100200422      * ---------------------------------
+227200200422
+227300200422           SET lb_EndOfCursorFalse TO TRUE
+227400200422           PERFORM PROCESS-GWA-ACCT-RECORDS UNTIL lb_EndOfCursorTrue.
+227500200422
+227600200422      * ---------------------------------
+227700200422       PROCESS-GWA-ACCT-RECORDS.
+227800200422      * ---------------------------------
+227900200422
+228000200422           INITIALIZE ltb_FetchGWATable.
+228100200422
+228200200422           EXEC SQL
+228300200422             FETCH NEXT FROM GWAACCCUR
+228400200422               FOR :lnci_MaxFetchRec ROWS
+228500200422              INTO :ltb_FetchGWA:ltb_Indicators
+228600200422           END-EXEC.
+228700200422
+228800200422           MOVE SQLSTATE TO lc_sqlStates.
+228900200422           EVALUATE TRUE
+229000200422               WHEN lncc_sqlSuccessful
+229100200422                    COMPUTE li_NoOfRowsFetched = SQLERRD(3)
+229200200422               WHEN lncc_sqlEnd
+229300200422                    SET lb_EndOfCursorTrue TO TRUE
+229400200422                    COMPUTE li_NoOfRowsFetched = SQLERRD(3)
+229500200422               WHEN OTHER
+229600200422                    SET lncc_Err02 TO TRUE
+229700200422                    MOVE lncc_FetchErrGWA  TO lc_sqlErrShortDESCR
+229800200422                    PERFORM SQLFailProcess
+229900200422           END-EVALUATE.
+230000200422
+230100200422           COMPUTE li_Counter = 1.
+230200200422           PERFORM GetGWAAmounts TEST BEFORE
+230300200422             UNTIL li_Counter > li_NoOfRowsFetched.
+230400200422      * ---------------------------------
+230500200422       GetAccountBenefitDetails.
+230600200422      * ---------------------------------
+230700200422
+230800200422           EXEC SQL
+230900200422             SELECT ELIGIBLE_DATE,
+231000200422                    INVESTMENT_SERIES
+231100200422             INTO   :li_Eligible-Date,
+231200200422                    :lc_Investment-Series-Code
+231300200422             FROM   MFAACLBENP ACLBENP
+231400200824      *RFS185170 START
+231500200824              EXCEPTION JOIN MFAIVRCLP IVRCLP ON
+231600200824                IVRCLP.ACCOUNT_NO = ACLBENP.ACCOUNT_NO AND
+231700200824                IVRCLP.SCREEN_CODE = "ACCGWDT" AND
+231800200824                IVRCLP.CHANGE_CATEGORY = "RIDER CANCELLED"
+231900200824      *RFS185170 END
+232000200422             WHERE  ACLBENP.ACCOUNT_NO = :li_AccountNo
+232100200422           END-EXEC.
+232200200422
+232300200422           MOVE SQLSTATE TO lc_sqlStates.
+232400200422           EVALUATE TRUE
+232500200422               WHEN lncc_sqlSuccessful
+232600200422               WHEN lncc_sqlEnd
+232700200422                    CONTINUE
+232800200422               WHEN OTHER
+232900200422                    SET lncc_Err04 TO TRUE
+233000200422                    MOVE lncc_ErrorMFAACLBENP TO lc_sqlErrShortDESCR
+233100200422                    PERFORM SQLFailProcess
+233200200422           END-EVALUATE.
+233300200422
+233400200422      * ---------------------------------
+233500200422       GetAccLevelSeriesType.
+233600200422      * ---------------------------------
+233700200422
+233800200422           EXEC SQL
+233900200422             SELECT SUBSTR(SERRLP.Series_Rules, 70, 4)
+234000200422             INTO   :lc_Series-Type
+234100200422             FROM   MFASERRLP SERRLP
+234200200422             WHERE  SERRLP.INVESTMENT_SERIES =
+234300200422                    :lc_Investment-Series-Code
+234400200422           END-EXEC.
+234500200422
+234600200611      * RFS185169 - End
+234700200422
+234800200824      * RFS185172 - Begin
+234900200824      * ---------------------------------
+235000200824        GetAccGuarDthBen.
+235100200824      * ---------------------------------
+235200200824
+235300200824            INITIALIZE li_AccGuarDthBen
+235400200824                       li_ContractCounter
+235500200824                       li_ContractNo.
+235600200824
+235700200824            PERFORM GetAccContracts.
+235800210602      *RFS1115030 Start
+235900210531      *     PERFORM VARYING li_ContractCounter FROM 1 BY 1 UNTIL
+236000210531      *         li_ContractCounter > li_NoOfContracts
+236100200824
+236200210531      *      MOVE ltb_ContractNo(li_ContractCounter) TO li_ContractNo
+236300210531      *      INITIALIZE pi_SegMatValGDV
+236400210531      *      PERFORM GetAccountAttributes
+236500210531      *      PERFORM CalculateGDV
+236600210531      *      COMPUTE li_AccGuarDthBen ROUNDED = li_AccGuarDthBen +
+236700210531      *             li_MDBA_Infl + li_MDBA_NonInfl + pi_SegMatValGDV
+236800210531      *     END-PERFORM.
+236900200824
+237000210531      *     COMPUTE pi_SegMatValGDV ROUNDED = li_AccGuarDthBen.
+237100210602      *RFS1115030 End
+237200200824
+237300200824      * ---------------------------------
+237400200824        GetAccContracts.
+237500200824      * ---------------------------------
+237600200824
+237700200824            INITIALIZE ltb_AccContrTableCur.
+237800200824            EXEC SQL
+237900200824              DECLARE lcu_AcctContrCur CURSOR FOR
+238000200824                 SELECT ACCONP.CONTRACT_NO
+238100200824                   FROM MFAACCONP ACCONP
+238200200824                   WHERE ACCONP.ACCOUNT_NO = :li_AccountNo AND
+238300200824                         ACCONP.CONTRACT_STATUS <> :lncc_C
+238400200824                 ORDER BY ACCONP.CONTRACT_NO
+238500200824            END-EXEC.
+238600200824
+238700200824            EXEC SQL
+238800200824              OPEN lcu_AcctContrCur
+238900200824            END-EXEC.
+239000200824
+239100200824            MOVE SQLSTATE TO lc_sqlStates.
+239200200824            EVALUATE TRUE
+239300200824                WHEN lncc_sqlSuccessful
+239400200824                     CONTINUE
+239500200824                WHEN OTHER
+239600200824                     SET lncc_Err05 TO TRUE
+239700200824                     MOVE lncc_ErrorOpenAcctContrCur TO
+239800200824                                 lc_sqlErrShortDESCR
+239900200824                     PERFORM SQLFailProcess
+240000200824            END-EVALUATE.
+240100200824
+240200200824      * Assumption is max 500 contracts per Account ***
+240300200824
+240400210528      *RFS1115030 Start
+240500210528      *     EXEC SQL
+240600210528      *       FETCH NEXT FROM lcu_AcctContrCur
+240700210528      *       FOR :lnci_NoOfRowsAccCon ROWS
+240800210528      *      INTO :ltb_AccContrTable
+240900210528      *    END-EXEC.
+241000200824
+241100210528      *    MOVE SQLSTATE TO lc_sqlStates.
+241200210528      *    EVALUATE TRUE
+241300210528      *        WHEN lncc_sqlSuccessful
+241400210528      *             COMPUTE li_NoOfContracts = SQLERRD(3)
+241500210528      *        WHEN lncc_sqlEnd
+241600210528      *             COMPUTE li_NoOfContracts = 0
+241700210528      *        WHEN OTHER
+241800210528      *              SET lncc_Err06 TO TRUE
+241900210528      *              MOVE lncc_ErrorFetchingAcctContr TO
+242000210528      *                          lc_sqlErrShortDESCR
+242100210528      *              PERFORM SQLFailProcess
+242200210528      *     END-EVALUATE.
+242300200824
+242400210528      *     EXEC SQL
+242500210528      *       CLOSE lcu_AcctContrCur
+242600210528      *     END-EXEC.
+242700210528      *     MOVE SQLSTATE TO lc_sqlStates.
+242800210528      *     EVALUATE TRUE
+242900210528      *         WHEN lncc_sqlSuccessful
+243000210528      *              CONTINUE
+243100210528      *         WHEN OTHER
+243200210528      *              SET lncc_Err07 TO TRUE
+243300210528      *              MOVE lncc_ErrorCloseAcctContCur TO
+243400210528      *                          lc_sqlErrShortDESCR
+243500210528      *              PERFORM SQLFailProcess
+243600210531      *     END-EVALUATE.
+243700210528
+243800210528           SET lb_EndOfCursorFalse TO TRUE.
+243900210528           PERFORM FetchAcctContrRecords UNTIL
+244000210528           lb_EndOfCursorTrue.
+244100210528           PERFORM CloseAcctContrCur.
+244200210528           COMPUTE pi_SegMatValGDV ROUNDED = li_AccGuarDthBen.
+244300210528      *---------------------------------
+244400210528       FetchAcctContrRecords.
+244500210528      *---------------------------------
+244600210528           INITIALIZE ltb_AccContrTableCur.
+244700210528
+244800210528           EXEC SQL
+244900210528             FETCH NEXT FROM lcu_AcctContrCur
+245000210528             FOR :lnci_NoOfRowsAccCon ROWS
+245100210528             INTO :ltb_AccContrTable
+245200210528           END-EXEC.
+245300210528
+245400210528           MOVE SQLSTATE TO lc_sqlStates.
+245500210528           EVALUATE TRUE
+245600210528             WHEN lncc_sqlSuccessful
+245700210528               COMPUTE li_NoOfContracts = SQLERRD(3)
+245800210528             WHEN lncc_sqlEnd
+245900210528               COMPUTE li_NoOfContracts = 0
+246000210528               SET lb_EndOfCursorTrue TO TRUE
+246100210528            WHEN OTHER
+246200210528              MOVE lncc_ErrorFetchingAcctContr TO
+246300210528              lc_sqlErrShortDESCR
+246400210528              PERFORM SQLFailProcess
+246500210528           END-EVALUATE.
+246600210528
+246700210528           PERFORM ProcessAcctContrRecords.
+246800210528      *---------------------------------
+246900210528        CloseAcctContrCur.
+247000210528      *---------------------------------
+247100210528            EXEC SQL
+247200210528              CLOSE lcu_AcctContrCur
+247300210528            END-EXEC.
+247400210528            MOVE SQLSTATE TO lc_sqlStates.
+247500210528            EVALUATE TRUE
+247600210528                WHEN lncc_sqlSuccessful
+247700210528                     CONTINUE
+247800210528                WHEN OTHER
+247900210528                     SET lncc_Err07 TO TRUE
+248000210528                     MOVE lncc_ErrorCloseAcctContCur TO
+248100210528                                 lc_sqlErrShortDESCR
+248200210528                     PERFORM SQLFailProcess
+248300210528            END-EVALUATE.
+248400210528      *---------------------------------
+248500210528       ProcessAcctContrRecords.
+248600210528      *---------------------------------
+248700210528            PERFORM VARYING li_ContractCounter FROM 1 BY 1 UNTIL
+248800210528                li_ContractCounter > li_NoOfContracts
+248900210528
+249000210528             MOVE ltb_ContractNo(li_ContractCounter) TO li_ContractNo
+249100210528             INITIALIZE pi_SegMatValGDV
+249200210528             PERFORM GetAccountAttributes
+249300210528             PERFORM CalculateGDV
+249400210528             COMPUTE li_AccGuarDthBen ROUNDED = li_AccGuarDthBen +
+249500210528                    li_MDBA_Infl + li_MDBA_NonInfl + pi_SegMatValGDV
+249600210528            END-PERFORM.
+249700210528      *RFS1115030 End
+249800200824      * ---------------------------------
+249900200824        CheckMDBAProduct.
+250000200824      * ---------------------------------
+250100200824
+250200210308      * RFS186290 - Begin
+250300210308      *     INITIALIZE lc_ResetType.
+250400210308            INITIALIZE lc_ResetType
+250500210308                       lc_MultiTypeRule.
+250600210308      * RFS186290 - End
+250700200824
+250800200824            EXEC SQL
+250900200824               SELECT VALUE (G1.RESET_TYPE,
+251000200824                             G2.RESET_TYPE,
+251100200824                            G3.RESET_TYPE,
+251200200824                            G4.RESET_TYPE,
+251300200824                            " ")
+251400210308      * RFS186290 - Begin
+251500210308                    , VALUE (G1.MULTI_TYPE_RULE,
+251600210308                             G2.MULTI_TYPE_RULE,
+251700210308                             G3.MULTI_TYPE_RULE,
+251800210308                             G4.MULTI_TYPE_RULE,
+251900210308                             " ")
+252000210308      * RFS186290 - End
+252100200824               INTO :lc_ResetType
+252200210308186290             ,:lc_MultiTypeRule
+252300200824              FROM  MFAACCCIP ACCCIP
+252400200824              INNER JOIN MFAACCONP ACCONP ON
+252500200824                    ACCCIP.ACCOUNT_NO  = ACCONP.ACCOUNT_NO AND
+252600200824                    ACCCIP.CONTRACT_NO = ACCONP.CONTRACT_NO
+252700200824              INNER JOIN MFAINVSGP INVSGP ON
+252800200824                    ACCCIP.INVESTMENT_CODE = INVSGP.INVESTMENT_CODE
+252900200824              INNER JOIN MFAACCNTP ACCNTP ON
+253000200824                   ACCNTP.ACCOUNT_NO           = ACCONP.ACCOUNT_NO
+253100200824              AND  ACCNTP.ACCOUNT_STATUS <>  :lncc_C
+253200200824              LEFT OUTER JOIN MFAGDTHCSP G1 ON
+253300200824                   ACCNTP.ACCOUNT_TYPE_CODE    = G1.ACCOUNT_TYPE_CODE
+253400200824              AND  ACCONP.RESET_STRUCTURE_XREF =
+253500200824                                               G1.RESET_STRUCTURE_XREF
+253600200824              AND  ACCNTP.ACCOUNT_TYPE_CODE    <> " "
+253700200824              AND  ACCONP.RESET_STRUCTURE_XREF <> " "
+253800200824              AND INVSGP.GDV_SCHED_CODE  = G1.GDV_SCHED_CODE
+253900210308186290        AND G1.RESET_TYPE = :lncc_MDB
+254000200824              LEFT OUTER JOIN MFAGDTHCSP G2 ON
+254100200824                   ACCNTP.ACCOUNT_TYPE_CODE    = G2.ACCOUNT_TYPE_CODE
+254200200824              AND  " "                         =
+254300200824                                               G2.RESET_STRUCTURE_XREF
+254400200824              AND  ACCNTP.ACCOUNT_TYPE_CODE    <> " "
+254500200824              AND INVSGP.GDV_SCHED_CODE  = G2.GDV_SCHED_CODE
+254600210308186290        AND G2.RESET_TYPE = :lncc_MDB
+254700200824              LEFT OUTER JOIN MFAGDTHCSP G3 ON
+254800200824                   " "                         = G3.ACCOUNT_TYPE_CODE
+254900200824              AND  ACCONP.RESET_STRUCTURE_XREF =
+255000200824                                               G3.RESET_STRUCTURE_XREF
+255100200824              AND  ACCONP.RESET_STRUCTURE_XREF <> " "
+255200200824              AND INVSGP.GDV_SCHED_CODE  = G3.GDV_SCHED_CODE
+255300210308186290        AND G3.RESET_TYPE = :lncc_MDB
+255400200824              LEFT OUTER JOIN MFAGDTHCSP G4 ON
+255500200824                   " "                         = G4.ACCOUNT_TYPE_CODE
+255600200824              AND  " "                         =
+255700200824                                               G4.RESET_STRUCTURE_XREF
+255800200824              AND INVSGP.GDV_SCHED_CODE  = G4.GDV_SCHED_CODE
+255900210308186290        AND G4.RESET_TYPE = :lncc_MDB
+256000200824
+256100200824              WHERE ACCCIP.ACCOUNT_NO  = :li_AccountNo  AND
+256200210308      * RFS186290 - Begin
+256300210308      *             ACCCIP.CONTRACT_NO = :li_ContractNo  AND
+256400210308                    ACCCIP.CONTRACT_NO = :li_ContractNo
+256500210308      *** Moved below condition in JOIN clause ***
+256600210308      *             (G1.RESET_TYPE = :lncc_MDB OR
+256700210308      *              G2.RESET_TYPE = :lncc_MDB OR
+256800210308      *              G3.RESET_TYPE = :lncc_MDB OR
+256900210308      *              G4.RESET_TYPE = :lncc_MDB)
+257000210308      * RFS186290 - End
+257100200824              FETCH FIRST ROW ONLY
+257200200824
+257300200824           END-EXEC.
+257400200824
+257500200824           MOVE SQLSTATE TO lc_sqlStates.
+257600200824           EVALUATE TRUE
+257700200824              WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+257800200824                CONTINUE
+257900200824              WHEN OTHER
+258000200824                SET lncc_Err08 TO TRUE
+258100200824                MOVE lncc_ErrorFetchingResetType
+258200200824                      TO lc_sqlErrShortDESCR
+258300200824                PERFORM SQLFailProcess
+258400200824            END-EVALUATE.
+258500200824
+258600200824      * ---------------------------------
+258700200824        GetMaturityDate.
+258800200824      * ---------------------------------
+258900200824
+259000200824            INITIALIZE li_ContMatDate,
+259100200824                       li_AccMAtDate.
+259200200824
+259300200824            EXEC SQL
+259400200824              SELECT ACCONP.MATURITY_DATE,
+259500200824                     COALESCE(ACMDP.ACCOUNT_MATURITY_DATE,0)
+259600200824               INTO :li_ContMatDate,
+259700200824                    :li_AccMAtDate
+259800200824              FROM MFAACCONP ACCONP
+259900200824              LEFT JOIN MFAACMDP ACMDP
+260000200824               ON ACMDP.ACCOUNT_NO = ACCONP.ACCOUNT_NO
+260100200824              WHERE ACCONP.ACCOUNT_NO = :li_AccountNo AND
+260200200824                    ACCONP.CONTRACT_NO = :li_ContractNo
+260300200824            END-EXEC.
+260400200824
+260500200824            MOVE SQLSTATE TO lc_sqlStates.
+260600200824            EVALUATE TRUE
+260700200824              WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+260800200824                CONTINUE
+260900200824              WHEN OTHER
+261000200824                SET lncc_Err09 TO TRUE
+261100200824                MOVE lncc_ErrorFetchingMatDate
+261200200824                      TO lc_sqlErrShortDESCR
+261300200824                PERFORM SQLFailProcess
+261400200824            END-EVALUATE.
+261500200824
+261600200824      * RFS185172 - End
+261700200824
+261800210119      * RFS185894 - Start
+261900210119      * ---------------------------------
+262000210119        CheckLIBMaturity.
+262100210119      * ---------------------------------
+262200210119
+262300210119            SET lb_LIBMaturityExistNo TO TRUE.
+262400210119            INITIALIZE li_LIBMaturityCnt.
+262500210119
+262600210119            EXEC SQL
+262700210119              SELECT COUNT(1)
+262800210119               INTO :li_LIBMaturityCnt
+262900210119              FROM MFAACCCRP ACCCRP
+263000210119              WHERE ACCCRP.ACCOUNT_NO = :li_AccountNo AND
+263100210119              ACCCRP.CONTRACT_NO = :li_ContractNo AND
+263200210119              ACCCRP.RESET_CATEGORY = :lncc_M AND
+263300210119              ACCCRP.RESET_PROCESSED = :lncc_Y AND
+263400210302              ACCCRP.RESET_TYPE = :lncc_AMT AND
+263500210119              REVERSED  <> :lncc_Y
+263600210119            END-EXEC.
+263700210119
+263800210119            MOVE SQLSTATE TO lc_sqlStates.
+263900210119            EVALUATE TRUE
+264000210119              WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+264100210119                CONTINUE
+264200210119              WHEN OTHER
+264300210119                SET lncc_Err11 TO TRUE
+264400210119                MOVE lncc_ErrorFetchingMatDate
+264500210119                      TO lc_sqlErrShortDESCR
+264600210119                PERFORM SQLFailProcess
+264700210119            END-EVALUATE.
+264800210119
+264900210302            INITIALIZE li_mfaacconipCnt.
+265000210302
+265100210302            EXEC SQL
+265200210302              SELECT COUNT(1)
+265300210302               INTO :li_mfaacconipCnt
+265400210302              FROM mfaacconip acconip
+265500210302              WHERE acconip.ACCOUNT_NO = :li_AccountNo AND
+265600210302              acconip.Maturity_Type = :lncc_AMT
+265700210302            END-EXEC.
+265800210302
+265900210302            MOVE SQLSTATE TO lc_sqlStates.
+266000210302            EVALUATE TRUE
+266100210302              WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+266200210302                CONTINUE
+266300210302              WHEN OTHER
+266400210302                SET lncc_Err12 TO TRUE
+266500210302                MOVE lncc_ErrorFetchingmfaacconip
+266600210302                      TO lc_sqlErrShortDESCR
+266700210302                PERFORM SQLFailProcess
+266800210302            END-EVALUATE.
+266900210302
+267000210302            INITIALIZE lc_GLWBDefmatOpt.
+267100210302
+267200210302            EXEC SQL
+267300210302            SELECT Segirlp.GLWB_DEF_MAT_OPTION
+267400210302              into :lc_GLWBDefmatOpt
+267500210302              FROM MFAINVSXP INVSXP
+267600210302              INNER JOIN mfaacccip acccip on
+267700210302                   acccip.Investment_Code =
+267800210302                    INVSXP.Investment_Code
+267900210302              INNER JOIN MFAFNCTP FNCTP ON
+268000210302                  FNCTP.Investment_Structure_Code =
+268100210302                      INVSXP.Investment_Structure_Code
+268200210302              AND ((fnctp.Function_Code = :lncc_SETPOL AND
+268300210302                    :lc_AccountGuarantees = :lncc_No) OR
+268400210302                   (fnctp.Function_Code = :lncc_ACINVG AND
+268500210302                    :lc_AccountGuarantees = :lncc_Yes))
+268600210302              INNER JOIN MFASEGIRLP SEGIRLP ON
+268700210302                  INVSXP.Investment_Structure_Code =
+268800210302                  SEGIRLP.Investment_Structure_Code
+268900210302              and Segirlp.Maturity_Type = :lncc_AMT
+269000210302            WHERE acccip.Account_no = :li_AccountNo  and
+269100210302                  acccip.contract_no = :li_ContractNo
+269200210302            FETCH FIRST ROW ONLY
+269300210302            END-EXEC.
+269400210302
+269500210302            MOVE SQLSTATE TO lc_sqlStates.
+269600210302            EVALUATE TRUE
+269700210302              WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+269800210302                CONTINUE
+269900210302              WHEN OTHER
+270000210302                SET lncc_Err13 TO TRUE
+270100210302                MOVE lncc_ErrorGLWBdefmatopt
+270200210302                      TO lc_sqlErrShortDESCR
+270300210302                PERFORM SQLFailProcess
+270400210302            END-EVALUATE
+270500210302
+270600210302            IF li_LIBMaturityCnt > 0  AND lc_GLWBDefmatOpt = lncc_One
+270700210302               AND li_mfaacconipCnt = 0
+270800210119               SET lb_LIBMaturityExistYes TO TRUE
+270900210119            ELSE
+271000210119               SET lb_LIBMaturityExistNo TO TRUE
+271100210119            END-IF.
+271200210119      * RFS185894 - End
+271300210308      * RFS186290 - Begin
+271400210308      * ---------------------------------
+271500210308       CheckDBGGrading.
+271600210308      * ---------------------------------
+271700210308
+271800210308           SET lb_DBGGradingExistFlagNo TO TRUE.
+271900210308
+272000210308           EXEC SQL
+272100210308             SELECT :lncc_Y
+272200210308               INTO  :lc_DBGGradingExistFlag
+272300210308             FROM MFAGDTHVP GDTHVP
+272400210308             WHERE GDTHVP.GUAR_DEATH_SCHED_CODE = :lc_GuarDthSchedCode
+272500210308                AND GDTHVP.ACCOUNT_TYPE_CODE = :lc_AccountTypeCode
+272600210308                AND GDTHVP.START_DATE <= :li_StartDate
+272700210308                AND GDTHVP.END_DATE   >= :li_StartDate
+272800210308                AND GDTHVP.DEPOSIT_AGE_THRESHOLD > 0
+272900210308             FETCH FIRST ROW ONLY
+273000210308           END-EXEC.
+273100210308
+273200210308           MOVE SQLSTATE TO lc_sqlStates.
+273300210308           EVALUATE TRUE
+273400210308             WHEN lncc_sqlSuccessful
+273500210308               CONTINUE
+273600210308             WHEN lncc_sqlEnd
+273700210308               SET lb_DBGGradingExistFlagNo TO TRUE
+273800210308             WHEN OTHER
+273900210308               SET lncc_Err14 TO TRUE
+274000210308               MOVE lncc_ErrorFetchingDBGGrading
+274100210308                     TO lc_sqlErrShortDESCR
+274200210308               PERFORM SQLFailProcess
+274300210308           END-EVALUATE.
+274400210308
+274500210308      * ---------------------------------
+274600210308       GetMaturityDetails.
+274700210308      * ---------------------------------
+274800210308
+274900210816      * RFS1118592 - Begin
+275000210816      * Commented out below para that calls FXACCANUIT
+275100210816      * We already have annuitant Date of birth
+275200210816      *    PERFORM GetAnnuitantInfo.
+275300210816           IF li_AnnuitantDateOfBirth > 0
+275400210816              MOVE li_AnnuitantDateOfBirth TO ld_FormattedStartDate
+275500210816              MOVE ld_AsAtDate TO ld_FormattedEndDate
+275600210816              INITIALIZE ld_AnnuitantAge
+275700210816              COMPUTE ld_AnnuitantAge = FUNCTION FIND-DURATION
+275800210816                (ld_FormattedStartDate ld_FormattedEndDate YEARS)
+275900210816           ELSE
+276000210816              COMPUTE ld_AnnuitantAge = 0
+276100210816           END-IF.
+276200210816
+276300210816      * RFS1118592 - End
+276400210308
+276500210308           INITIALIZE lc_ProvinceCode,
+276600210308                      lc_InvCode,
+276700210308                      li_MaturityMinYears,
+276800210308                      lc_MatMinYrsCMDRule.
+276900210308
+277000210308           EXEC SQL
+277100210308             SELECT IVRP.Province_Code,
+277200210308                    CCIP.Investment_code
+277300210308               INTO :lc_ProvinceCode,
+277400210308                    :lc_InvCode
+277500210308             FROM MFAACCNTP ACCNTP
+277600210308             INNER JOIN MFAIVRP IVRP ON
+277700210308                    Accntp.Investor_No = Ivrp.Investor_No
+277800210308             INNER JOIN MFAACCCIP CCIP ON
+277900210308               Accntp.Account_No   = CCIP.Account_No
+278000210308             WHERE CCIP.Account_No   = :li_AccountNo
+278100210308                AND CCIP.CONTRACT_NO = :li_ContractNo
+278200210308                AND CCIP.CURR_UNIT_BAL > 0
+278300210308             FETCH FIRST ROW ONLY
+278400210308           END-EXEC.
+278500210308
+278600210308           MOVE SQLSTATE TO lc_sqlStates.
+278700210308           EVALUATE TRUE
+278800210308           WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+278900210308              CONTINUE
+279000210308           WHEN OTHER
+279100210308              SET lncc_Err15 TO TRUE
+279200210308              MOVE lncc_ErrFetchingInvCode
+279300210308                    TO lc_sqlErrShortDESCR
+279400210308              PERFORM SQLFailProcess
+279500210308           END-EVALUATE.
+279600210308
+279700210308           EXEC SQL
+279800210308             SELECT
+279900210308                COALESCE(TAGP1.MATURITY_MIN_YEARS ,
+280000210308                         TAGP2.MATURITY_MIN_YEARS ,
+280100210308                         TAGP3.MATURITY_MIN_YEARS ,
+280200210308                         TAGP4.MATURITY_MIN_YEARS , 0),
+280300210308                COALESCE(TAGP1.MATURITY_MIN_YEARS_RULE,
+280400210308                         TAGP2.MATURITY_MIN_YEARS_RULE,
+280500210308                         TAGP3.MATURITY_MIN_YEARS_RULE,
+280600210308                         TAGP4.MATURITY_MIN_YEARS_RULE, :lncc_Space )
+280700210308             INTO
+280800210308                :li_MaturityMinYears,
+280900210308                :lc_MatMinYrsCMDRule
+281000210308            FROM
+281100210308                MFAACCNTP  CNTP
+281200210308            INNER JOIN MFAACMDP   ACMDP  ON
+281300210308                 ACMDP.ACCOUNT_NO = CNTP.ACCOUNT_NO
+281400210308            LEFT OUTER JOIN MFAACCNMP   ACCNMP  ON
+281500210308                 ACCNMP.ACCOUNT_NO = CNTP.ACCOUNT_NO
+281600210308            LEFT OUTER JOIN MFAINVSXP  INVSXP  ON
+281700210308                 INVSXP.INVESTMENT_CODE = :lc_InvCode
+281800210308            LEFT OUTER JOIN MFAFNCTP   FNCTP  ON
+281900210308                 FNCTP.INVESTMENT_STRUCTURE_CODE =
+282000210308                 INVSXP.INVESTMENT_STRUCTURE_CODE   AND
+282100210308                 FNCTP.FUNCTION_CODE     = :lncc_ACINVG
+282200210308            LEFT OUTER JOIN MFAINVSGP   INVSGP ON
+282300210308                 INVSGP.INVESTMENT_CODE  = :lc_InvCode
+282400210308            LEFT OUTER JOIN MFACMATAGP  TAGP1   ON
+282500210308              TAGP1.PROVINCE_OF_AGREEMENT = :lc_ProvinceCode     AND
+282600210308              CNTP.ACCOUNT_TYPE_CODE = TAGP1.ACCOUNT_TYPE_CODE   AND
+282700210308              COALESCE(ACCNMP.account_type_code, :lncc_Space) =
+282800210308                   TAGP1.NOMINEE_ACCOUNT_TYPE                    AND
+282900210308              TAGP1.MATURITY_DATE_TYPE   = :lncc_C               AND
+283000210308              TAGP1.INVESTMENT_STRUCTURE_CODE  =
+283100210308                         FNCTP.INVESTMENT_STRUCTURE_CODE        AND
+283200210308              TAGP1.INVESTMENT_STRUCTURE_CODE   <> :lncc_Space  AND
+283300210308              TAGP1.ISSUE_DATE_AGE_YEARS >= :ld_AnnuitantAge
+283400210308            LEFT OUTER JOIN MFACMATAGP  TAGP2   ON
+283500210308              TAGP2.PROVINCE_OF_AGREEMENT = :lc_ProvinceCode     AND
+283600210308              CNTP.ACCOUNT_TYPE_CODE = TAGP2.ACCOUNT_TYPE_CODE   AND
+283700210308              COALESCE(ACCNMP.ACCOUNT_TYPE_CODE, :lncc_Space) =
+283800210308                   TAGP2.NOMINEE_ACCOUNT_TYPE                    AND
+283900210308              TAGP2.MATURITY_DATE_TYPE   =  :lncc_C        AND
+284000210308              TAGP2.INVESTMENT_STRUCTURE_CODE  = :lncc_Space  AND
+284100210308              TAGP2.ISSUE_DATE_AGE_YEARS >= :ld_AnnuitantAge
+284200210308            LEFT OUTER JOIN MFACMATAGP  TAGP3   ON
+284300210308              TAGP3.PROVINCE_OF_AGREEMENT = :lc_ProvinceCode     AND
+284400210308              CNTP.ACCOUNT_TYPE_CODE = TAGP3.ACCOUNT_TYPE_CODE   AND
+284500210308              COALESCE(ACCNMP.account_type_code, :lncc_Space ) =
+284600210308                   TAGP3.NOMINEE_ACCOUNT_TYPE                    AND
+284700210308              TAGP3.MATURITY_DATE_TYPE   = :lncc_C               AND
+284800210308              TAGP3.INVESTMENT_STRUCTURE_CODE  =
+284900210308                         FNCTP.INVESTMENT_STRUCTURE_CODE        AND
+285000210308              TAGP3.INVESTMENT_STRUCTURE_CODE    <> :lncc_Space AND
+285100210308              TAGP3.ISSUE_DATE_AGE_YEARS       = 0
+285200210308            LEFT OUTER JOIN MFACMATAGP  TAGP4   ON
+285300210308              TAGP4.PROVINCE_OF_AGREEMENT = :lc_ProvinceCode     AND
+285400210308              CNTP.ACCOUNT_TYPE_CODE = TAGP4.ACCOUNT_TYPE_CODE   AND
+285500210308              COALESCE(ACCNMP.ACCOUNT_TYPE_CODE, :lncc_Space ) =
+285600210308                   TAGP4.NOMINEE_ACCOUNT_TYPE                    AND
+285700210308              TAGP4.MATURITY_DATE_TYPE   =  :lncc_C        AND
+285800210308              TAGP4.INVESTMENT_STRUCTURE_CODE  = :lncc_Space AND
+285900210308              TAGP4.ISSUE_DATE_AGE_YEARS       = 0
+286000210308            WHERE
+286100210308               CNTP.ACCOUNT_NO = :li_AccountNo
+286200210308            ORDER BY TAGP1.ISSUE_DATE_AGE_YEARS,
+286300210308                     TAGP3.ISSUE_DATE_AGE_YEARS,
+286400210308                     TAGP2.ISSUE_DATE_AGE_YEARS,
+286500210308                     TAGP4.ISSUE_DATE_AGE_YEARS
+286600210308            FETCH FIRST ROW ONLY
+286700210308           END-EXEC.
+286800210308
+286900210308           MOVE SQLSTATE TO lc_sqlStates.
+287000210308           EVALUATE TRUE
+287100210308           WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+287200210308              CONTINUE
+287300210308           WHEN OTHER
+287400210308              SET lncc_Err16 TO TRUE
+287500210308              MOVE lncc_ErrFetchingMatDetails
+287600210308                    TO lc_sqlErrShortDESCR
+287700210308              PERFORM SQLFailProcess
+287800210308           END-EVALUATE.
+287900210308
+288000210816      * RFS1118592 - Begin
+288100210816      * Commented out below para that calls FXACCANUIT
+288200210816      * We already have annuitant Date of birth
+288300210308      * ---------------------------------
+288400210816      * GetAnnuitantInfo.
+288500210816      * ---------------------------------
+288600210816      *    INITIALIZE pc_AnnuitFlag,       pi_AnnuitAccountNo,
+288700210816      *               pi_AnnuitContractNo, pi_AnnSequenceNo,
+288800210816      *               pc_AnnuitantStatus,  pi_DateOfBirth,
+288900210816      *               pc_FirstName,        pc_LastName,
+289000210816      *               pc_AnnuitReturnCode.
+289100210816      *
+289200210816      *    SET pb_DefaultAnnuit TO TRUE
+289300210816      *    MOVE li_AccountNo TO pi_AnnuitAccountNo.
+289400210816      *    MOVE li_ContractNo TO pi_AnnuitContractNo.
+289500210816      *
+289600210816      *    CALL "FXACCANUIT" USING pc_AnnuitFlag,
+289700210816      *                            pi_AnnuitAccountNo,
+289800210816      *                            pi_AnnuitContractNo,
+289900210816      *                            pi_AnnSequenceNo,
+290000210816      *                            pc_AnnuitantStatus,
+290100210816      *                            pi_DateOfBirth,
+290200210816      *                            pc_FirstName,
+290300210816      *                            pc_LastName,
+290400210816      *                            pi_socialInsuranceNo,
+290500210816      *                            pc_sex,
+290600210816      *                            pc_AnnuitReturnCode.
+290700210816      *
+290800210816      *    IF pi_DateofBirth > 0
+290900210816      *       MOVE pi_DateofBirth TO ld_FormattedStartDate
+291000210816      *       MOVE ld_AsAtDate TO ld_FormattedEndDate
+291100210816      *       INITIALIZE ld_AnnuitantAge
+291200210816      *       COMPUTE ld_AnnuitantAge = FUNCTION FIND-DURATION
+291300210816      *         (ld_FormattedStartDate ld_FormattedEndDate YEARS)
+291400210816      *    ELSE
+291500210816      *       COMPUTE ld_AnnuitantAge = 0
+291600210816      *    END-IF.
+291700210816      * RFS1118592 - End
+291800210308
+291900210308      * ---------------------------------
+292000210308       CheckFirstContrAftRollover.
+292100210308      * ---------------------------------
+292200210308
+292300210308      **** This check is to ensure only deposits within first year ***
+292400210308      **** after CMT rollover (when AMD = CMD) gets 100% maturity. ***
+292500210308      **** The subsequent contracts will qualify for 75% maturity. ***
+292600210308
+292700210308           SET lb_FirstContractAftRolloverNo TO TRUE
+292800210308           INITIALIZE li_FirstContrStartDate
+292900210308
+293000210308           EXEC SQL
+293100210308             SELECT COALESCE(MIN(ACCONP.START_DATE),0)
+293200210308               INTO :li_FirstContrStartDate
+293300210308             FROM MFAACCONP ACCONP
+293400210308             WHERE ACCONP.ACCOUNT_NO = :li_AccountNo AND
+293500210308                   ACCONP.CONTRACT_STATUS <> :lncc_C
+293600210308           END-EXEC.
+293700210308
+293800210308           MOVE SQLSTATE TO lc_sqlStates.
+293900210308           EVALUATE TRUE
+294000210308           WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+294100210308              IF li_FirstContrStartDate > 0 AND
+294200210308                 li_FirstContrStartDate = ld_StartDate
+294300210308                SET lb_FirstContractAftRolloverYes TO TRUE
+294400210308              END-IF
+294500210308           WHEN OTHER
+294600210308              SET lncc_Err17 TO TRUE
+294700210308              MOVE lncc_ErrFirstContrDetails
+294800210308                    TO lc_sqlErrShortDESCR
+294900210308              PERFORM SQLFailProcess
+295000210308           END-EVALUATE.
+295100210308
+295200210308      * RFS186290 - End
+295300210119
+295301211013      * RFS187471 - Starts
+295302211013       GetGDTHVSCV.
+295303211013
+295304211013            Initialize pc_Schedulecode,
+295305211013                       pi_Scheduledate,
+295306211013                       pc_Accounttypecode,
+295307211013                       pc_trackingrule,
+295308211013                       pc_Annuitantagerule,
+295309211013                       pc_Applypercentatdeposittd.
+295310211013
+295311211013            MOVE lc_GuarDthSchedCode to pc_Schedulecode.
+295312211013            MOVE li_StartDate        to pi_Scheduledate.
+295313211013            MOVE lc_AccountTypeCode  to pc_Accounttypecode.
+295314211013
+295315211013            CALL "FXGDTHVSCV" using pc_Schedulecode,
+295316211013                                    pi_Scheduledate,
+295317211013                                    pc_Accounttypecode,
+295318211013                                    pc_trackingrule,
+295319211013                                    pc_Annuitantagerule,
+295320211013                                    pc_Applypercentatdeposittd.
+295321211013
+295322211013            IF pc_Applypercentatdeposittd = lncc_Yes
+295323211013               SET lb_DepTDDthPercentYes to true
+295324211013            END-IF.
+295325211013
+295326211013      * RFS187471 - End
+295327211013
+295400110629      * ---------------------------------
+295500110629       SQLFailProcess.
+295600110629      * ---------------------------------
+295700110629           PERFORM Dsp-Error.
+295800110629           PERFORM Force-Msgw.
+295900110629      *
+296000110629      * ---------------------------------
+296100110629      * DSP-ERROR and FORCE-MSGW Routines
+296200110629      * ---------------------------------
+296300110629      *
+296400110629          COPY CPYSQLRTN.
+296500110629      *
+296600110627      * RFS88038 End
+296700070329      * ---------------------------------
+296800070329       EndOfProgram.
+296900070329      * ---------------------------------
+297000070329           GOBACK.

@@ -1,0 +1,384 @@
+000100210217      * %ATTR DBGVIEW(*SOURCE) CLOSQLCSR(*ENDMOD)
+000200210217       IDENTIFICATION DIVISION.
+000300210217       PROGRAM-ID.    IVRHHSALD.
+000400210217       AUTHOR.        Aarthi M.
+000500210217       INSTALLATION.  L&T FSTI.
+000600210217       DATE-WRITTEN.  Feb 2021.
+000700210217       DATE-COMPILED. Feb 2021.
+000800210217      *******************************************************************
+000900210217      * Description: Investor HH Second Asset Load Process              *
+001000210217      *                                                                 *
+001100210217      *        This is new batch process being used to                  *
+001200210217      *        get data of Investor Household Secondary Assets          *
+001300210217      *        from EFT library and save the data on MFAIVRHSP file     *
+001400210217      *        (INVESTOR-HOUSEHOLD-SECOND-ASSET) in daily batch process.*
+001500210217      *                                                                 *
+001600210421      *        It will save the received invalid data on the work file  *
+001700210421      *        WKHHSAERR for the Household Second Asset Error Report -  *
+001800210421      *        (HHSAERR).                                               *
+001900210421      *                                                                 *
+002000210217      *        Called By : JOBIVRHHSA                                   *
+002100210217      *                    (Investor Household Second Asset Process)    *
+002200210217      *        Input file: WKIVRHHSA                                    *
+002300210217      *       Output file: MFAIVRHSP                                    *
+002400210421      *        Error file: WKHHSAERR                                    *
+002500210217      *******************************************************************
+002600210217      * PROGRAMMER  *DATE OF CHANGE* DESCRIPTION OF CHANGE              *
+002700210217      *******************************************************************
+002800210217      * Aarthi M    *  2021/02/17  * RFS180886 New program              *
+002900210217      *             *              * WI #                               *
+002901211007      *Mayilsamy D  * 2021/08/28   * RFS187441 - Recompile for MFAIVRHHP*
+003000210217      *******************************************************************
+003100210217       ENVIRONMENT DIVISION.
+003200210217      * ----------------------
+003300210217       CONFIGURATION SECTION.
+003400210217      * ----------------------
+003500210217       SOURCE-COMPUTER. ISERIES.
+003600210217       OBJECT-COMPUTER. ISERIES.
+003700210217       SPECIAL-NAMES. DATA-AREA IS WS-DTAARA-MFASYSPARM.
+003800210217
+003900210217      * ---------------------
+004000210217       INPUT-OUTPUT SECTION.
+004100210217      * ---------------------
+004200210217
+004300210217       DATA DIVISION.
+004400210217      * -------------
+004500210217       FILE SECTION.
+004600210217      * -------------
+004700210217
+004800210217      * ------------------------
+004900210217       WORKING-STORAGE SECTION.
+005000210217      * ------------------------
+005100210217
+005200210217           COPY CPYSQLFLD
+005300210217               REPLACING == "CURRENT_PROGRAM" == BY == "IVRHHSALD" ==.
+005400210217
+005500210217           EXEC SQL
+005600210217             INCLUDE SQLCA
+005700210217           END-EXEC.
+005800210217
+005900210217       01 lc-Fetch-Record.
+006000210421          05  lc-Fetch-Household-ID         PIC X(12).
+006100210421          05  li-Fetch-Household-ID REDEFINES
+006200210421              lc-Fetch-Household-ID         PIC S9(12).
+006300210421          05  lc-Fetch-Trade-Date           PIC X(8).
+006400210421          05  li-Fetch-Trade-Date   REDEFINES
+006500210421              lc-Fetch-Trade-Date           PIC S9(8).
+006600210421          05  lc-Fetch-Market-Value         PIC X(13).
+006700210422          05  ln-Fetch-Market-Value REDEFINES
+006800210421              lc-Fetch-Market-Value         PIC S9(11)V9(2).
+006900210217
+006901210517       01 lc-Fetch-Record1.
+006902210517          05  lc-Fetch-Household-ID1        PIC X(12).
+006905210517          05  lc-Fetch-Trade-Date1          PIC X(8).
+006908210517          05  lc-Fetch-Market-Value1        PIC X(13).
+006911210517
+007000210217       01 lb-EOF-Flag                       PIC X(1).
+007100210421          88  lb-EOF-No                     VALUE "N".
+007200210421          88  lb-EOF-Yes                    VALUE "Y".
+007300210421
+007400210421       01 lb-Valid-Household-ID-Flag        PIC X(1).
+007500210421          88  lb-Valid-Household-ID-No      VALUE "N".
+007600210421          88  lb-Valid-Household-ID-Yes     VALUE "Y".
+007700210421
+007800210421       01 lb-Valid-Trade-Date-Flag          PIC X(1).
+007900210421          88  lb-Valid-Trade-Date-No        VALUE "N".
+008000210421          88  lb-Valid-Trade-Date-Yes       VALUE "Y".
+008100210421
+008200210421       01 li-Household-ID-IVRHHP            PIC S9(12).
+008300210421       01 lc-Error-Description              PIC X(50).
+008400210421
+008500210421       01 lc-DataArea-MFAPRCDTP.
+008600210422           05  li-Process-Date              PIC S9(08).
+008700210421           05  FILLER                       PIC X(161).
+008800210421
+008900210217      * Error Codes, Uniquely Identify where the error happened
+009000210217       01  WS-ERR-CODE                      PIC X(02)     VALUE SPACES.
+009100210217           88 lncc_Err01                                  VALUE "01".
+009200210222           88 lncc_Err02                                  VALUE "02".
+009300210222           88 lncc_Err03                                  VALUE "03".
+009400210222           88 lncc_Err04                                  VALUE "04".
+009500210222           88 lncc_Err05                                  VALUE "05".
+009600210422           88 lncc_Err06                                  VALUE "06".
+009700210217
+009800210217       01  lc_sqlErrShortDESCR.
+009900210222           03 lncc_ErrorInsertMFAIVRHSP     PIC X(80)     VALUE
+010000210222                  "Unable to Insert records in MFAIVRHSP".
+010100210422           03 lncc_ErrorInsertWKHHSAERR     PIC X(80)     VALUE
+010200210422                  "Unable to Insert records in WKHHSAERR".
+010300210222           03 lncc_ErrorUpdateMFAIVRHSP     PIC X(80)     VALUE
+010400210222                  "Unable to Update records in MFAIVRHSP".
+010500210222           03 lncc_ErrorOpenCursor          PIC X(80)     VALUE
+010600210222                  "Unable to Open Cursor".
+010700210222           03 lncc_ErrorFetchCursor         PIC X(80)     VALUE
+010800210222                  "Unable to Fetch  records".
+010900210222           03 lncc_ErrorCloseCursor         PIC X(80)     VALUE
+011000210222                  "Unable to Close Cursor".
+011100210222
+011200210218       LINKAGE SECTION.
+011300210217
+011400210217       PROCEDURE DIVISION.
+011500210217
+011600210217      *--------------
+011700210217       MAIN-PROCESS.
+011800210217      *--------------
+011900210217
+012000210217           EXEC SQL
+012100210217              WHENEVER SQLERROR CONTINUE
+012200210217           END-EXEC.
+012300210217
+012400210217           PERFORM INITIAL-LOGIC.
+012500210217           PERFORM DETAIL-PROCESSING.
+012600210217           PERFORM END-PROGRAM.
+012700210217
+012800210217      *---------------
+012900210217       INITIAL-LOGIC.
+013000210217      *---------------
+013100210217
+013200210421           INITIALIZE lc-Fetch-Record
+013201210517                      lc-Fetch-Record1
+013300210421                      li-Household-ID-IVRHHP
+013400210421                      lc-Error-Description
+013500210421           INITIALIZE lc-DataArea-MFAPRCDTP.
+013600210421
+013700210421      *  Get current process date
+013800210421             CALL "RTVPRCDTP" USING lc-DataArea-MFAPRCDTP
+013900210421             CANCEL "RTVPRCDTP".
+014000210217
+014100210217      *  Declare the cursor
+014200210217
+014300210217           EXEC SQL
+014400210222             DECLARE C1 CURSOR FOR
+014500210422             SELECT  substr(WKIVRHHSA,04,12) AS HH_ID,
+014600210422                     substr(WKIVRHHSA,16,08) AS TRADE_DATE,
+014700210422                     substr(WKIVRHHSA,24,13) AS MARKET_VAL
+014800210422             FROM    WKIVRHHSA
+014900210217           END-EXEC.
+015000210217
+015100210217           EXEC SQL
+015200210217             OPEN C1
+015300210217           END-EXEC.
+015400210217
+015500210222           MOVE SQLSTATE TO lc_sqlStates.
+015600210222           IF lncc_sqlSuccessful OR lncc_sqlWarning
+015700210421              CONTINUE
+015800210222           ELSE
+015900210222              SET lncc_Err01   TO TRUE
+016000210222              MOVE lncc_ErrorOpenCursor TO WS-SQL-ERR-SHORT-DESCR
+016100210222              PERFORM Dsp-Error
+016200210222              PERFORM Force-Msgw
+016300210222           END-IF.
+016400210222
+016500210217      *------------------
+016600210217       DETAIL-PROCESSING.
+016700210217      *------------------
+016800210421           SET lb-EOF-No TO TRUE.
+016900210222           PERFORM Fetch-IVRHHSA-Cursor UNTIL lb-EOF-Yes.
+017000210217
+017100210217      *--------------------
+017200210217       Fetch-IVRHHSA-Cursor.
+017300210217      *--------------------
+017400210217
+017500210222           INITIALIZE lc-Fetch-Record.
+017501210517           INITIALIZE lc-Fetch-Record1.
+017600210217           EXEC SQL
+017700210217             FETCH NEXT FROM C1 INTO
+017800210421                :lc-Fetch-Household-ID
+017900210421               ,:lc-Fetch-Trade-Date
+018000210421               ,:lc-Fetch-Market-Value
+018100210217           END-EXEC.
+018200210217           MOVE SQLSTATE TO lc_sqlStates.
+018300210217           EVALUATE TRUE
+018400210217             WHEN lncc_sqlSuccessful
+018500210421               PERFORM PROCESS-DETAIL-RECORD
+018600210217             WHEN lncc_sqlEnd
+018700210217               Set lb-EOF-Yes  TO True
+018800210222               PERFORM CLOSE-CURSOR
+018900210217             WHEN OTHER
+019000210222               SET lncc_Err02   TO TRUE
+019100210222               MOVE lncc_ErrorFetchCursor TO WS-SQL-ERR-SHORT-DESCR
+019200210217               PERFORM Dsp-Error
+019300210217               PERFORM Force-Msgw
+019400210217            END-EVALUATE.
+019500210217
+019600210422      *----------------------
+019700210421       PROCESS-DETAIL-RECORD.
+019800210422      *----------------------
+019801210517           MOVE lc-Fetch-Household-ID
+019802210517             TO lc-Fetch-Household-ID1.
+019900210422           IF lc-Fetch-Household-ID IS NOT NUMERIC
+020000210513              MOVE ZEROS TO li-Fetch-Household-ID
+020100210422           END-IF.
+020101210517           MOVE lc-Fetch-Trade-Date
+020102210517             TO lc-Fetch-Trade-Date1.
+020200210422           IF lc-Fetch-Trade-Date   IS NOT NUMERIC
+020300210513              MOVE ZEROS TO li-Fetch-Trade-Date
+020400210422           END-IF.
+020500210422           IF lc-Fetch-Market-Value IS NOT NUMERIC
+020600210513              MOVE ZEROS TO ln-Fetch-Market-Value
+020700210422           END-IF.
+020800210422
+020900210422           PERFORM VALIDATE-HOUSEHOLD-ID.
+021000210422           IF lb-Valid-Household-ID-No
+021100210422              PERFORM INSERT-HHSA-ERROR
+021200210422           END-IF.
+021300210422
+021400210422           PERFORM VALIDATE-TRADE-DATE.
+021500210422           IF lb-Valid-Trade-Date-No
+021600210422              PERFORM INSERT-HHSA-ERROR
+021700210422           END-IF.
+021800210422
+021900210422           IF lb-Valid-Household-ID-Yes AND lb-Valid-Trade-Date-Yes
+022000210422              PERFORM INSERT-MFAIVRHSP
+022100210422           END-IF.
+022200210422
+022300210422      *----------------------
+022400210422       VALIDATE-HOUSEHOLD-ID.
+022500210422      *----------------------
+022600210422
+022700210422           SET lb-Valid-Household-ID-Yes TO TRUE.
+022800210422           IF li-Fetch-Household-ID = 0
+022900210422              SET lb-Valid-Household-ID-No TO TRUE
+023000210422              MOVE "Invalid Household ID" TO lc-Error-Description
+023100210422           ELSE
+023200210422              INITIALIZE li-Household-ID-IVRHHP
+023300210422              EXEC SQL
+023400210422                   SELECT HOUSEHOLD_ID
+023500210422                     INTO :li-Household-ID-IVRHHP
+023600210422                     FROM MFAIVRHHP
+023700210422                    WHERE HOUSEHOLD_ID = :li-Fetch-Household-ID
+023800210422              END-EXEC
+023900210422              IF li-Household-ID-IVRHHP = 0
+024000210422                 SET lb-Valid-Household-ID-No TO TRUE
+024100210422                 MOVE "Invalid Household ID"  TO lc-Error-Description
+024200210422              END-IF
+024300210422           END-IF.
+024400210422
+024500210422      *----------------------
+024600210422       VALIDATE-TRADE-DATE.
+024700210422      *----------------------
+024800210422           SET lb-Valid-Trade-Date-Yes TO TRUE.
+024900210422           IF li-Fetch-Trade-Date = 0 OR
+025000210422              li-Fetch-Trade-Date > li-Process-Date
+025100210422              SET lb-Valid-Trade-Date-No TO TRUE
+025200210422              MOVE "Invalid Trade Date" TO lc-Error-Description
+025300210422           ELSE
+025400210422              IF FUNCTION TEST-DATE-TIME
+025500210422                 (lc-Fetch-Trade-Date DATE "@Y%m%d") = B"1"
+025600210422                 SET lb-Valid-Trade-Date-Yes TO TRUE
+025700210422              ELSE
+025800210422                  SET lb-Valid-Trade-Date-No TO TRUE
+025900210422                  MOVE "Invalid Trade Date" TO lc-Error-Description
+026000210422              END-IF
+026100210422           END-IF.
+026200210422
+026300210422      *----------------------
+026400210422       Insert-HHSA-Error.
+026500210422      *----------------------
+026600210422      * Insert Error records into QTEMP/WKHHSAERR
+026700210422           EXEC SQL
+026800210422           INSERT INTO QTEMP/WKHHSAERR
+026900210422                       (HOUSEHOLD_ID
+027000210422                       ,TRADE_DATE
+027100210422                       ,MARKET_VAL
+027200210422                       ,ERROR_DESC)
+027300210422                       VALUES
+027400210517                       (:lc-Fetch-Household-ID1
+027500210517                       ,:lc-Fetch-Trade-Date1
+027600210422                       ,:ln-Fetch-Market-Value
+027700210422                       ,:lc-Error-Description)
+027800210422           END-EXEC.
+027900210422           MOVE SQLSTATE TO lc_sqlStates.
+028000210422           EVALUATE TRUE
+028100210422               WHEN lncc_sqlSuccessful
+028200210422               WHEN lncc_sqlDuplicate
+028300210422                    CONTINUE
+028400210422               WHEN OTHER
+028500210422                    SET lncc_Err06   TO TRUE
+028600210422                    MOVE lncc_ErrorInsertWKHHSAERR
+028700210422                      TO WS-SQL-ERR-SHORT-DESCR
+028800210422                    PERFORM Dsp-Error
+028900210422                    PERFORM Force-Msgw
+029000210422           END-EVALUATE.
+029100210422
+029200210422
+029300210421      *----------------
+029400210421       INSERT-MFAIVRHSP.
+029500210421      *----------------
+029600210222      * Insert all the records into MFAIVRHSP
+029700210217           EXEC SQL
+029800210222           INSERT INTO MFAIVRHSP
+029900210422                       (HOUSEHOLD_ID
+030000210422                       ,HOUSEHOLD_SEC_ASSET_EVAL_DATE
+030100210222                       ,HOUSEHOLD_SEC_ASSET_MARKET_VAL)
+030200210218                       VALUES
+030300210422                       (:li-Fetch-Household-ID
+030400210422                       ,:li-Fetch-Trade-Date
+030500210218                       ,:ln-Fetch-Market-Value)
+030600210218           END-EXEC.
+030700210218           MOVE SQLSTATE TO lc_sqlStates.
+030800210218           EVALUATE TRUE
+030900210218               WHEN lncc_sqlSuccessful
+031000210218                    CONTINUE
+031100210218               WHEN lncc_sqlDuplicate
+031200210222                    PERFORM UPDATE-MFAIVRHSP
+031300210218               WHEN OTHER
+031400210222                    SET lncc_Err04   TO TRUE
+031500210222                    MOVE lncc_ErrorInsertMFAIVRHSP
+031600210222                      TO WS-SQL-ERR-SHORT-DESCR
+031700210218                    PERFORM Dsp-Error
+031800210218                    PERFORM Force-Msgw
+031900210218           END-EVALUATE.
+032000210218
+032100210218      *-----------------
+032200210222       UPDATE-MFAIVRHSP.
+032300210218      *-----------------
+032400210218            EXEC SQL
+032500210222              UPDATE MFAIVRHSP
+032600210222              SET Household_Sec_Asset_Market_Val   =
+032700210218                                    :ln-Fetch-Market-Value
+032800210422              WHERE HOUSEHOLD_ID = :li-Fetch-Household-ID
+032900210218                AND Household_Sec_Asset_Eval_Date    =
+033000210218                                    :li-Fetch-Trade-Date
+033100210218            END-EXEC.
+033200210218            MOVE SQLSTATE TO lc_sqlStates.
+033300210218            EVALUATE TRUE
+033400210218                WHEN lncc_sqlSuccessful
+033500210218                     CONTINUE
+033600210218                WHEN OTHER
+033700210222                    SET lncc_Err05   TO TRUE
+033800210222                    MOVE lncc_ErrorUpdateMFAIVRHSP
+033900210222                      TO WS-SQL-ERR-SHORT-DESCR
+034000210218                    PERFORM Dsp-Error
+034100210218                    PERFORM Force-Msgw
+034200210218           END-EVALUATE.
+034300210218
+034400210218
+034500210222      *-------------
+034600210222       CLOSE-CURSOR.
+034700210222      *-------------
+034800210222           EXEC SQL
+034900210222             CLOSE C1
+035000210222           END-EXEC.
+035100210222
+035200210222           MOVE SQLSTATE TO lc_sqlStates.
+035300210222           IF lncc_sqlSuccessful OR lncc_sqlWarning
+035400210222              CONTINUE
+035500210222           ELSE
+035600210222              SET lncc_Err03   TO TRUE
+035700210222              MOVE lncc_ErrorCloseCursor TO WS-SQL-ERR-SHORT-DESCR
+035800210222              PERFORM Dsp-Error
+035900210222              PERFORM Force-Msgw
+036000210222           END-IF.
+036100210222
+036200210218      *-------------
+036300210217       END-PROGRAM.
+036400210217      *-------------
+036500210217
+036600210217           GOBACK.
+036700210217
+036800210217      * ---------------------------------
+036900210217      * DSP-ERROR and FORCE-MSGW Routines
+037000210217      * ---------------------------------
+037100210217          COPY CPYSQLRTN.
+037200210217      *

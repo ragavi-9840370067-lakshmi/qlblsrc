@@ -1,0 +1,555 @@
+000100210902       IDENTIFICATION DIVISION.
+000200210903       PROGRAM-ID.    CDICEXT5.
+000300210902       AUTHOR.        Chaya SP.
+000400210902       INSTALLATION.  L & T Infotech Financial service Inc.
+000500210902       DATE-WRITTEN.  Sep   2021.
+000600210902       DATE-COMPILED.
+000700210902
+000800210902      ******************************************************************
+000900210902      *                                                                *
+001000211022      * Descr: Daily extract for CDIC (Canada Deposit Insurance Corp)  *
+001100211021      * Produced by JOBCDICEXT                                         *
+001200210902      *                                                                *
+001300210902      * =============================================================  *
+001400210902      *    Programmer * Creation/    *     Description                 *
+001500210902      *               * Modification *                                 *
+001600210902      * Chaya SP.     * 2021/09/09   * RFS186760 - CDIC extract to     *
+001700210902      *               *              * include info from ACCCDIC screen*
+001900211022      * Chaya SP      * 2021/10/21   * RFS1122427 - CDIC  Extract      *
+002000211021      *               *              * Records sorted with account no  *
+002100210902      ******************************************************************
+002200210902      *                                                                *
+002300210902      *  Linked Modules perform I/O on the follwoing files:            *
+002400210902      *  Module-Name      file Name                    Service Program
+002500210902      *  ----------    -------------------             ---------------
+002600210902      *                                                                *
+002700210902      *                                                                *
+002800210902      ******************************************************************
+002900210902
+003000210902      * ====================
+003100210902       ENVIRONMENT DIVISION.
+003200210902      * ====================
+003300210902
+003400210902       CONFIGURATION SECTION.
+003500210902       SOURCE-COMPUTER. ISeries.
+003600210902       OBJECT-COMPUTER. ISeries.
+003700210902       SPECIAL-NAMES. DATA-AREA IS WS-DATA-AREA
+003800210902                      LOCAL-DATA IS WS-LOCAL.
+003900210902
+004000210902
+004100210902       INPUT-OUTPUT SECTION.
+004200210902       FILE-CONTROL.
+004300210902
+004400210902       DATA DIVISION.
+004500210902       FILE SECTION.
+004600210902
+004700210902      *------------------------
+004800210902       WORKING-STORAGE SECTION.
+004900210902      *------------------------
+005000210902
+005100210902          COPY CPYSQLFLD
+005200210903               REPLACING == "CURRENT_PROGRAM" == BY == "CDICEXT5" ==.
+005300210902
+005400210902           EXEC SQL
+005500210902             INCLUDE SQLCA
+005600210902           END-EXEC.
+005700210902
+005800210902
+005900210902      * Error Codes, Uniquely Identify where the error happened
+006000210902
+006100210902       01 WS-ERR-CODE                 PIC X(02) VALUE SPACES.
+006200210902          88 WS-ERR-OK                          VALUE SPACES.
+006300210902          88 WS-ERR-10                          VALUE "10".
+006400210902          88 WS-ERR-11                          VALUE "11".
+006500210902          88 WS-ERR-12                          VALUE "12".
+006600210902          88 WS-ERR-13                          VALUE "13".
+006700210902          88 WS-ERR-14                          VALUE "14".
+006800210902          88 WS-ERR-15                          VALUE "15".
+006900210902          88 WS-ERR-16                          VALUE "16".
+007000210902
+007100210902
+007200210902      * Work fields for columns with default values
+007300210902
+007400210902       01 lc_WorkFields.
+007500210902          05 ln_Sysdate                  PIC S9(8).
+007600210902          05 lf_as_atdate                FORMAT DATE "@Y%m%d".
+007700210902          05 lf_SystemDate               FORMAT DATE "@Y%m%d".
+007800210902          05 ln_date9                    PIC 9(9).
+007900210902          05 ln_date9x redefines ln_date9.
+008000210902             07 ln_date9x1               pic x.
+008100210902             07 ln_date9x2               FORMAT DATE "@Y%m%d".
+008200210902          05 WS-DATE                     PIC 9(9).
+008300210902          05 WS-DATEA      redefines     WS-DATE.
+008400210902             07 WS-DATE-Filler           PIC X.
+008500210902             07 WS-CC                    PIC XX.
+008600210902             07 WS-YY                    PIC XX.
+008700210902             07 WS-MM                    PIC XX.
+008800210902             07 WS-DD                    PIC XX.
+008900210902          05 WS-DATE-DDMMYY.
+009000210902             07 WS-DD                    PIC XX.
+009100210902             07 WS-MM                    PIC XX.
+009200210902             07 WS-YY                    PIC XX.
+009300210902          05 WS-DATE-DDMMCCYY.
+009400210902             07 WS-DD                    PIC XX.
+009500210902             07 WS-MM                    PIC XX.
+009600210902             07 WS-CC                    PIC XX.
+009700210902             07 WS-YY                    PIC XX.
+009800210902          05 ln_records_read             PIC 9(15) value 0.
+009900210902          05 lc_counts                   PIC x(15).
+010000210902          05 WS-OUTREC                   PIC X(267).
+010100210902          05 WS_HDO                      PIC X(5) VALUE "HDO".
+010200210902          05 lc_Passfunction             PIC X(10).
+010300210907          05 lc_Detail_REC               PIC X(267).
+010400210907          05 lc_Trailer_REC              PIC X(20).
+010500210907          05 lc_record_cnt               PIC X(15).
+010600210902
+010700210902       01 ld_ProcessDate.
+010800210902          05 ld_AsAtDate                 PIC X(8) VALUE Zero.
+010900210902          05 ld_AsAtDate-N   REDEFINES ld_AsAtDate
+011000210902                                         PIC S9(8).
+011100210902
+011200210902
+011300210902       01 lc_LocalDataArea.
+011400210902          05 lc_PassCompany              PIC X(3).
+011500210902          05 lc_PassDate                 PIC X(8).
+011600210902          05 lc_PassFillerX              PIC X(1015).
+011700210902
+011800210902
+011900210902      * Record Structure for the main cursor select
+012000210902
+012100210902       01 LEVEL1_REC.
+012200210917          05 lc_Account_No              PIC x(09).
+012300211021122427    05 ln_Account_No              PIC S9(09).
+012400210902          05 lc_Fund_Code               PIC x(5).
+012500210902          05 lc_Benefic_ID              PIC X(20).
+012600210902          05 lc_SIA_Flag                PIC X.
+012700210902          05 lc_Int_Deposit_Flag        PIC X.
+012800210907          05 lc_Int_In_Deposit          PIC X(30).
+012900210902          05 lc_LEI                     PIC X(20).
+013000210902
+013100210902      * header output fields
+013200210902
+013300210902       01 HEADER-REC.
+013400210902          05 lc_record_type              PIC XXX.
+013500210902          05 lc_pipe1                    PIC x    VALUE "|".
+013600210902          05 lc_file_creation_date       PIC X(8).
+013700210902          05 lc_pipe2                    PIC x    VALUE "|".
+013800210902          05 lc_effective_date           PIC X(8).
+013900210902          05 lc_pipe3                    PIC x    VALUE "|".
+014000210902          05 lc_source_system_name       PIC X(5).
+014100210902          05 lc_pipe4                    PIC x    VALUE "|".
+014200210902          05 lc_file_name_P1             PIC X(08).
+014300210902          05 lc_file_name_P2             PIC X(08).
+014400210902          05 lc_file_name_P3             PIC X(04).
+014500210902          05 lc_pipe6                    PIC x    VALUE "|".
+014600210902
+014700210902
+014800210902      * detail output fields
+014900210902
+015000210902       01 DETAIL-WORK-REC.
+015100210902          05 lc_record_type           PIC XXX.
+015200210902          05 lc_pipe1                 PIC X    VALUE "|".
+015300210917          05 lc_Account_No            PIC x(09).
+015400210906          05 lc_Spaces1               PIC X(21) VALUE SPACES.
+015500210902          05 lc_pipe2                 PIC X     VALUE "|".
+015600210906          05 lc_Filler2               PIC X(30) VALUE " ".
+015700210902          05 lc_pipe3                 PIC X     VALUE "|".
+015800210902          05 lc_Fund_Code             PIC X(5).
+015900210906          05 lc_Spaces3               PIC X(25) VALUE SPACES.
+016000210902          05 lc_pipe4                 PIC X    VALUE "|".
+016100210906          05 lc_Filler4               PIC X(30) VALUE " ".
+016200210902          05 lc_pipe5                 PIC X    VALUE "|".
+016300210906          05 lc_Filler5               PIC X(30) VALUE " ".
+016400210902          05 lc_pipe6                 PIC X    VALUE "|".
+016500210906          05 lc_Filler6               PIC X(30) VALUE " ".
+016600210902          05 lc_pipe7                 PIC X    VALUE "|".
+016700210902          05 lc_Benefic_ID            PIC X(20).
+016800210902          05 lc_pipe8                 PIC X    VALUE "|".
+016900210902          05 lc_SIA_Flag              PIC X.
+017000210902          05 lc_pipe9                 PIC X    VALUE "|".
+017100210902          05 lc_Int_Deposit_Flag      PIC X.
+017200210902          05 lc_pipe10                PIC X    VALUE "|".
+017300210907          05 lc_Int_In_Deposit        PIC X(30).
+017400210902          05 lc_pipe11                PIC X    VALUE "|".
+017500210902          05 lc_LEI                   PIC X(20).
+017600210902          05 lc_pipe12                PIC X    VALUE "|".
+017700210902
+017800210902
+017900210902      * TRAILER output fields
+018000210902
+018100210902       01 TRAILER-REC.
+018200210902          05 lc_record_type              PIC XXX.
+018300210907          05 ln_record_cnt               PIC S9(15).
+018400210902
+018500210902      * Control level variables for control break logic
+018600210902
+018700210902       01 CURR-CONTROLS.
+018800210902          02 CURR-LEVEL1.
+018900210917             05 ACCOUNT_NO               PIC x(09).
+019000210902
+019100210902       01 PREV-CONTROLS.
+019200210902          02 PREV-LEVEL1.
+019300210917             05 ACCOUNT_NO               PIC x(09).
+019400210902
+019500210902      * -----------------
+019600210902      * Copybooks - Begin
+019700210902      * -----------------
+019800210902
+019900210902      * Copybook to get data from Process-Date Data Area
+020000210902
+020100210902       COPY CPPRCDTP.
+020200210902
+020300210902      * ---------------------------------
+020400210902      * Copybooks - End
+020500210902      * ---------------------------------
+020600210902
+020700210902       LINKAGE SECTION.
+020800210902
+020900210902       PROCEDURE DIVISION.
+021000210902
+021100210902      *-------------
+021200210902       Main-Process.
+021300210902      *-------------
+021400210902           PERFORM Initial-Logic.
+021500210902           PERFORM Process-Level-logic test before
+021600210902                   UNTIL Curr-Controls  =  HIGH-VALUES
+021700210902
+021800210902           PERFORM End-Job.
+021900210902           GOBACK.
+022000210902
+022100210902      *--------------
+022200210902       Initial-Logic.
+022300210902      *--------------
+022400210902
+022500210902      * Display info.that program Start
+022600210903           DISPLAY "PROGRAM CDICEXT5 starts ....."
+022700210902
+022800210902      * Get local data and sysdate
+022900210902           ACCEPT lc_LocalDataArea   FROM WS-LOCAL.
+023000210902           ACCEPT ln_Sysdate         FROM DATE YYYYMMDD.
+023100210902           MOVE   ln_Sysdate         TO lf_SystemDate  .
+023200210902
+023300210902      * Initialize the controls
+023400210902           MOVE Low-Values  TO Curr-Controls Prev-Controls.
+023500210902
+023600210902      * Get the process date
+023700210902           PERFORM Get-Process-Date.
+023800210902
+023900210902      * Get the function code
+024000210902           PERFORM SQL-GetFunctionCode.
+024100210902
+024200210902      * Declare & Open files and Cursors .....
+024300210902           PERFORM SQL-Header-File.
+024400210902           PERFORM SQL-Declare-Driver-file.
+024500210902           PERFORM SQL-Open-Driver-file.
+024600210902
+024700210902      *------------------
+024800210902        Get-Process-Date.
+024900210902      *------------------
+025000210902      *  Call program FXPRCDTP to get As At Date
+025100210902           SET PASS-ACTION-GETDTA OF COMM-CPPRCDTP-PARAMETERS  TO TRUE
+025200210902           CALL "FXPRCDTP" USING CPWPRCDTP-LINKAGE
+025300210902                                 COMM-CPPRCDTP-PARAMETERS
+025400210902
+025500210902           MOVE PRCDTP-AS-AT-DATE OF CPWPRCDTP-LINKAGE  TO
+025600210902                lf_as_atdate.
+025700210902
+025800210902      *---------------------
+025900210902       SQL-GetFunctionCode.
+026000210902      *---------------------
+026100210913           MOVE SPACES TO lc_Passfunction.
+026200210902           EXEC SQL
+026300210902             select SUBSTR(PARAMETERS,1, 10)   into :lc_Passfunction
+026400210902               From MFAPRORPP
+026500210902               where JOBNAME = "JOBCDICEXT" and
+026600210913               REPORT_NAME   = "CDIEXTUCI"
+026700210902           END-EXEC.
+026800210902
+026900210902      *----------------
+027000210902       SQL-Header-File.
+027100210902      *----------------
+027200210902
+027300210902      *  Create 2 output files and add the header records to both
+027400210902           EXEC SQL
+027500210903             DROP TABLE QTEMP/CDICEXT5
+027600210902           END-EXEC.
+027700210902           MOVE SQLSTATE TO lc_sqlStates.
+027800210902           IF lncc_sqlTblNotExists OR lncc_sqlSuccessful
+027900210902               CONTINUE
+028000210902           ELSE
+028100210902               SET WS-ERR-10         TO TRUE
+028200210902               MOVE SQLSTATE   TO WS-SQLSTATE
+028300210902               PERFORM DSP-ERROR
+028400210902           END-IF.
+028500210902
+028600210902           EXEC SQL
+028700210903            CREATE  TABLE QTEMP/CDICEXT5
+028800210903              ( CDICEXT5              CHAR (267) NOT NULL WITH DEFAULT)
+028900210902           END-EXEC.
+029000210902           MOVE SQLSTATE TO lc_sqlStates.
+029100210902           IF NOT lncc_sqlSuccessful
+029200210902               MOVE SQLSTATE   TO WS-SQLSTATE
+029300210902               SET WS-ERR-11         TO TRUE
+029400210902               PERFORM DSP-ERROR
+029500210902               PERFORM FORCE-MSGW
+029600210902               PERFORM END-JOB
+029700210902           END-IF.
+029800210902
+029900210902
+030000210902      *  Insert 1 header record
+030100210902
+030200210902           Move "000"         TO lc_record_type of HEADER-REC
+030300210902           Move lc_PassDate   To lc_file_creation_date of HEADER-REC
+030400210902           Move lf_as_atdate  To lc_effective_date of HEADER-REC
+030500210902           Move "UCITI"       To lc_source_system_name
+030600210902
+030700210902           Move "UCITIUCI"    To lc_file_name_P1 of HEADER-REC
+030800210902           Move lf_SystemDate To lc_file_name_P2 of HEADER-REC
+030900210902           Move ".DAT"        To lc_file_name_P3 of HEADER-REC
+031000210902
+031100210902           Move HEADER-REC             to ws-outrec.
+031200210902
+031300210902           EXEC SQL
+031400210903               INSERT INTO QTEMP/CDICEXT5
+031500210902                  VALUES    :ws-outrec
+031600210902           END-EXEC.
+031700210902           MOVE SQLSTATE TO lc_sqlStates.
+031800210902           IF NOT lncc_sqlSuccessful
+031900210902               MOVE SQLSTATE   TO WS-SQLSTATE
+032000210902               SET WS-ERR-12         TO TRUE
+032100210902               PERFORM DSP-ERROR
+032200210902               PERFORM FORCE-MSGW
+032300210902               PERFORM END-JOB
+032400210902           END-IF.
+032500210902
+032600210902
+032700210902      *  initialize the trailer records
+032800210902           INITIALIZE TRAILER-REC.
+032900210902           MOVE "003" TO  lc_record_type   of TRAILER-REC.
+033000210902
+033100210902
+033200210902      *------------------------
+033300210902       SQL-Declare-Driver-file.
+033400210902      *------------------------
+033500210902
+033600210902      * Sort the view
+033700210902           EXEC SQL
+033800210902              DECLARE level1_drv CURSOR FOR
+033900210902
+034000210902               SELECT DISTINCT
+034100210917                CHAR(ACDICP.ACCOUNT_NO),
+034200211021122427          ACDICP.ACCOUNT_NO,
+034300210902                INVP.INDUSTRY_FUND_CODE,
+034400210902                ACDICP.CLIENT_IDENTIFICATION,
+034500210902                CASE WHEN ACDICP.SIA_INDIVIDUAL_FLAG = "A" THEN "Y"
+034600210902                     WHEN ACDICP.SIA_INDIVIDUAL_FLAG = "B" THEN "N"
+034700210902                     ELSE " " END,
+034800210902                CASE WHEN
+034900210902                     ( ACCTYP.ACCOUNT_TYPE_RULE = "1" AND
+035000210917                       COALESCE(NOMTYP.ACCOUNT_TYPE_RULE, " ") NOT IN
+035100210917                         ("0","2", "3", "4", "9")
+035200210902                     ) THEN "P"
+035300210902                     ELSE " " END,
+035400210907                CASE WHEN
+035500210907                     ACDICP.DEPOSIT_PERCENTAGE = 0 THEN " "
+035600210907                      ELSE
+035700210907                CHAR(ACDICP.DEPOSIT_PERCENTAGE) END,
+035800210902                ACDICP.LEGAL_ENTITY_IDENTIFIER
+035900210902
+036000210902                FROM MFAACDICP ACDICP
+036100210902                INNER JOIN MFAACCIVP ACCIVP ON
+036200210902                ACDICP.ACCOUNT_NO = ACCIVP.ACCOUNT_NO
+036300210902                INNER JOIN MFAINVP INVP ON
+036400210902                 ACCIVP.INVESTMENT_CODE = INVP.INVESTMENT_CODE
+036500210913                INNER JOIN MFAISTFNP   ISTFNP ON
+036600210902                  ACCIVP.INVESTMENT_CODE = ISTFNP.INVESTMENT_CODE
+036700210913                AND ISTFNP.FUNCTION_CODE =:lc_Passfunction
+036800210902                INNER JOIN MFAACCNTP ACCNTP ON
+036900210902                  ACDICP.ACCOUNT_NO = ACCNTP.ACCOUNT_NO
+037000210902                INNER JOIN MFAACCTYP ACCTYP ON
+037100210902                  ACCTYP.ACCOUNT_TYPE_CODE = ACCNTP.ACCOUNT_TYPE_CODE
+037200210902                LEFT OUTER JOIN MFAACCNMP ACCNMP  ON
+037300210902                   ACDICP.ACCOUNT_NO = ACCNMP.ACCOUNT_NO
+037400210916                LEFT OUTER JOIN MFAACCTYP NOMTYP ON
+037500210902                  NOMTYP.ACCOUNT_TYPE_CODE = ACCNMP.ACCOUNT_TYPE_CODE
+037600210913              WHERE ISTFNP.FUNCTION_CODE =:lc_Passfunction
+037700211021122427*       ORDER BY  CHAR(ACDICP.ACCOUNT_NO)
+037800211021122427        ORDER BY  ACDICP.ACCOUNT_NO
+037900210902
+038000210902              FOR FETCH ONLY
+038100210902              OPTIMIZE FOR ALL ROWS
+038200210902
+038300210902           END-EXEC.
+038400210902
+038500210902
+038600210902      * --------------------
+038700210902       SQL-Open-Driver-file.
+038800210902      * --------------------
+038900210902
+039000210902           EXEC SQL
+039100210902             OPEN level1_drv
+039200210902           END-EXEC.
+039300210902
+039400210902      * -------------------
+039500210902       Process-Level-logic.
+039600210902      * -------------------
+039700210902           PERFORM Get-Current-Record.
+039800210902
+039900210902           IF  Curr-Level1 not = Prev-Level1
+040000210902           AND Prev-Controls NOT = LOW-VALUES
+040100210902               PERFORM Process-Level-Summaries
+040200210902           END-IF.
+040300210902
+040400210902           IF Curr-Controls not =  HIGH-VALUES
+040500210902              IF Curr-Level1 not = Prev-Level1
+040600210902                 PERFORM Process-Level-ReInitialize
+040700210902              END-IF
+040800210902              MOVE Curr-Controls  TO Prev-Controls
+040900210907              PERFORM Detail-Processing THRU DPR-Exit
+041000210902           END-IF.
+041100210902
+041200210902      * -----------------------
+041300210902       Process-Level-Summaries.
+041400210902      * -----------------------
+041500210902
+041600210902           PERFORM Level-Summary-1.
+041700210902
+041800210902      * --------------------------
+041900210902       Process-Level-ReInitialize.
+042000210902      * --------------------------
+042100210902
+042200210902           PERFORM Level-ReInit-1.
+042300210902
+042400210902      * -----------------
+042500210902       Detail-Processing.
+042600210902      * -----------------
+042700210902
+042800210902           MOVE "002"    TO lc_record_type of DETAIL-WORK-REC.
+042900210902      * accumulate to the specific trailer record
+043000210902           ADD 1         TO ln_record_cnt OF TRAILER-REC
+043100210902
+043200210902           MOVE CORR LEVEL1_REC       TO DETAIL-WORK-REC.
+043300210917           INITIALIZE lc_Detail_REC.
+043400210914
+043500210907           STRING "002|" Delimited by size
+043600210917                  lc_Account_No of DETAIL-WORK-REC Delimited by space
+043700210928                  "||" Delimited by size
+043800210907                  lc_Fund_Code of DETAIL-WORK-REC Delimited by space
+043900210928                  "||||" Delimited by size
+044000210907                  lc_Benefic_ID of DETAIL-WORK-REC Delimited by space
+044100210907                  "|" Delimited by size
+044200210907                  lc_SIA_Flag of DETAIL-WORK-REC Delimited by space
+044300210907                  "|" Delimited by size
+044400210907             lc_Int_Deposit_Flag of DETAIL-WORK-REC Delimited by space
+044500210907                  "|" Delimited by size
+044600210907              lc_Int_In_Deposit of DETAIL-WORK-REC Delimited by space
+044700210907                  "|" Delimited by size
+044800210907                  lc_LEI of DETAIL-WORK-REC Delimited by space
+044900210907                  "|" Delimited by size
+045000210907                  into lc_Detail_REC
+045100210907
+045200210907           MOVE lc_Detail_REC       TO WS-OUTREC.
+045300210902
+045400210902           EXEC SQL
+045500210903               INSERT INTO QTEMP/CDICEXT5
+045600210902                   VALUES :WS-OUTREC
+045700210902           END-EXEC
+045800210902           MOVE SQLSTATE TO lc_sqlStates.
+045900210902           IF NOT lncc_sqlSuccessful
+046000210902               MOVE SQLSTATE   TO WS-SQLSTATE
+046100210902               SET WS-ERR-13   TO TRUE
+046200210902               PERFORM DSP-ERROR
+046300210902               PERFORM FORCE-MSGW
+046400210902               PERFORM END-JOB
+046500210902           END-IF.
+046600210902
+046700210902       DPR-Exit.
+046800210902           Exit.
+046900210902
+047000210902
+047100210902      * --------------
+047200210902       Level-Reinit-1.
+047300210902      * --------------
+047400210902
+047500210902           CONTINUE.
+047600210902
+047700210902      * ---------------
+047800210902       Level-Summary-1.
+047900210902      * ---------------
+048000210902
+048100210902           CONTINUE.
+048200210902
+048300210902      * ------------------
+048400210902       Get-Current-Record.
+048500210902      * ------------------
+048600210902
+048700210902      *   Fetch Cursor
+048800210902           INITIALIZE level1_rec.
+048900210902
+049000210902           EXEC SQL
+049100210902               FETCH NEXT FROM level1_drv
+049200210902                     INTO :level1_Rec
+049300210902           END-EXEC.
+049400210902
+049500210902      *            Check status after every IO.
+049600210902      * If error encountered then write error information to
+049700210902      *            error table or display error info
+049800210902
+049900210902           MOVE SQLSTATE                   TO SW-SQL-STATES
+050000210902           EVALUATE TRUE
+050100210902             WHEN SW-SQL-SUCCESSFUL OR SW-SQL-WARNING
+050200210917                 MOVE lc_Account_No of level1_Rec
+050300210902                               to ACCOUNT_NO of CURR-LEVEL1
+050400210902                 add 1                       to ln_records_read
+050500210902
+050600210902             WHEN SW-SQL-END
+050700210902                 MOVE HIGH-VALUES          TO CURR-CONTROLS
+050800210902                 DISPLAY "All records Processed ..."
+050900210902
+051000210902             WHEN OTHER
+051100210902                 MOVE SQLSTATE   TO WS-SQLSTATE
+051200210902                 SET WS-ERR-14         TO TRUE
+051300210902                 DISPLAY "Invalid Fetch ....."
+051400210902                 PERFORM DSP-ERROR
+051500210902                 PERFORM FORCE-MSGW
+051600210902                 PERFORM END-JOB
+051700210902
+051800210902           END-EVALUATE.
+051900210902
+052000210902
+052100210902
+052200210902      * Dsp-Error and Force-Msgw Routines
+052300210902
+052400210902           COPY CPYSQLRTN.
+052500210902
+052600210902      * -------
+052700210902       END-JOB.
+052800210902      * -------
+052900210902
+053000210902      * - write out the trailer record
+053100210902           ADD 2    TO ln_record_cnt   OF TRAILER-REC.
+053200210907           INITIALIZE lC_Trailer_REC.
+053300210907           EXEC SQL
+053400210907            SELECT CHAR(:ln_record_cnt)
+053500210907             INTO :lc_record_cnt
+053600210907             FROM QSQPTABL
+053700210907           end-exec
+053800210907           STRING "003|" Delimited by size
+053900210907                  lc_record_cnt Delimited by space
+054000210907                  "|" Delimited by size
+054100210907                  into lc_Trailer_Rec
+054200210907           MOVE lc_Trailer_Rec     to WS-OUTREC.
+054300210902           EXEC SQL
+054400210903               INSERT INTO QTEMP/CDICEXT5
+054500210902                  VALUES    :WS-OUTREC
+054600210902           END-EXEC
+054700210902
+054800210902      * - records read
+054900210902           Move ln_records_read        to lc_counts.
+055000210902           Display "Records read  ........." lc_counts.
+055100210902
+055200210902      * - Display info, that program End
+055300210903           Display "Program CDICEXT5 ends ......".
+055400210902
+055500210902           GOBACK.
+055600210902

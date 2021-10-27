@@ -1,0 +1,1865 @@
+000100180315      * %ATTR CLOSQLCSR(*ENDMOD)
+000101190426       IDENTIFICATION DIVISION.
+000200190222       PROGRAM-ID.    STMTSEC31.
+000300180717       AUTHOR.        Ragavi Selvaraj.
+000400170110       INSTALLATION.  L&T Financial Services Technology Inc.
+000500170110       DATE-WRITTEN.  Jan 2017.
+000600190422       DATE-COMPILED.
+000601180924      **===============================================================*
+000800180730      **   DESCRIPTION: Created New program for section 31.            *
+000900170110      **                                                               *
+001000170110      **   RFS Number : RFS164528                                      *
+001100170112      **   CALLED By  : STMTROR                                        *
+001200170118      **   PARAMETERS : Inputs passed from STMTROR program             *
+001300170110      **   Linked Modules : None                                       *
+001400170110      **   Called Objects : None                                       *
+001500170110      *----------------------------------------------------------------*
+001501171208      **===============================================================*
+001502180709      *    C H A N G E   H I S T O R  Y                                *
+001503171208      **===============================================================*
+001504171208      ******************************************************************
+002000170110      * PROGRAMMER *  DATE OF CHANGE   * DESCRIPTION OF CHANGE         *
+002001171208      ******************************************************************
+002002171208      * Ragavi S   *  2017/01/13       * Created New program STMTSEC31 *
+002003171208      *            *                   * for populating section 31.    *
+002004171208      * Ragavi S   *  2017/03/14       * RFS168408 -Amount Invested and*
+002005171208      *            *                   * Redeemed values are in        *
+002006171208      *            *                   * section31 of statement extract*
+002007171208      * Aarthi M   *  2017/03/20       * RFS169003 - section 31 must   *
+002008171208      *            *                   * align with section 30.        *
+002009171208      * Aarthi M   *  2017/03/30       * RFS169181 - section 31 field: *
+002010180316      *            *                   * To correct the Opening Value. *
+002011210109      * Gomathi S  *  2021/01/07       * RFS1101968- NO Tax charged for*
+002012210414      *            *                   * rdsp closure account          *
+002013211019      * Surendran C* 2021/10/19   * RFS186592 -RECOMPILE FOR CPYJSISTMT*
+002014171208      ******************************************************************
+003200170110
+003300170110       ENVIRONMENT DIVISION.
+003400170110       CONFIGURATION SECTION.
+003500170110       SOURCE-COMPUTER. IBM-AS400.
+003600170110       OBJECT-COMPUTER. IBM-AS400.
+003700170110       SPECIAL-NAMES.
+003800170406169181 LINKAGE TYPE IS PROCEDURE FOR "FXGETMKVT".
+003900170110      /
+004000170110       INPUT-OUTPUT SECTION.
+004100170110       FILE-CONTROL.
+004200170111            SELECT TRANS-T
+004300170111                ASSIGN          TO  DATABASE-MFATRNP
+004400170111                ORGANIZATION    IS  INDEXED
+004500170111                ACCESS          IS  RANDOM
+004600170111                RECORD KEY      IS  EXTERNALLY-DESCRIBED-KEY.
+004700170111
+004800170124            SELECT TRANS-CHARGES
+004900170124                ASSIGN          TO  DATABASE-MFATRNCHP
+005000170124                ORGANIZATION    IS  INDEXED
+005100170131                ACCESS          IS  DYNAMIC
+005200170124                RECORD KEY      IS  EXTERNALLY-DESCRIBED-KEY.
+005300170124
+005400170112            SELECT TRANS-DISTR-DETAILS
+005500170112                ASSIGN          TO  DATABASE-MFATRNDDP
+005600170112                ORGANIZATION    IS  INDEXED
+005700170112                ACCESS          IS  DYNAMIC
+005800170112                RECORD KEY      IS  EXTERNALLY-DESCRIBED-KEY.
+005900170111
+006000170112            SELECT EXCHANGE-RATE-M
+006100170112                ASSIGN          TO  DATABASE-MFAEXRHMP
+006200170112                ORGANIZATION    IS  INDEXED
+006300170112                ACCESS          IS  DYNAMIC
+006400170112                RECORD KEY      IS  EXTERNALLY-DESCRIBED-KEY.
+006500170110      /
+006600170110       DATA DIVISION.
+006700170110       FILE SECTION.
+006800170111      *****************************************************************
+006900170111      *    F I L E   S E C T I O N                                    *
+007000170111      *****************************************************************
+007100170111       FD  TRANS-T
+007200170111           LABEL RECORDS ARE STANDARD.
+007300170112       01  TRANS-T-REC.                COPY DD-ALL-FORMATS OF MFATRNP.
+007400170111      /
+007500170111       FD  TRANS-DISTR-DETAILS
+007600170111           LABEL RECORDS ARE STANDARD.
+007700170112       01  TRANS-DISTR-DETAILS-REC.    COPY DD-ALL-FORMATS OF MFATRNDDP.
+007800170111      /
+007900170111       FD  EXCHANGE-RATE-M
+008000170111           LABEL RECORDS ARE STANDARD.
+008100170122       01  EXCHANGE-RATE-M-REC.        COPY DD-ALL-FORMATS OF MFAEXRHMP.
+008200170110      /
+008300170118       FD  TRANS-CHARGES
+008400170118           LABEL RECORDS ARE STANDARD.
+008500170118       01  TRANS-CHARGES-REC.          COPY DD-ALL-FORMATS OF MFATRNCHP.
+008600170118      /
+008700170111
+008800170111      ********************************************************
+008900170111      *     W O R K I N G  S T O R A G E  S E C T I O N      *
+009000170111      ********************************************************
+009100170110       WORKING-STORAGE SECTION.
+009200170118
+009300170130        01 ln_ChgValue                     PIC S9(11)V9(2).
+009400170130        01 ln-Max-Rows                     PIC 9(6).
+009500170203        01 ln_Clo_Mkt_Val                  PIC S9(13)V9(2).
+009600170203        01 ln_Open_Mkt_Val                 PIC S9(13)V9(2).
+009700170131        01 lc_Open_Mkt_Val_Sign            PIC X(1).
+009800170130        01 lc_ContRedemCode                PIC X(6).
+009900170130        01 lc_Type                         PIC X(1).
+010000170130        01 lc_Currency                     PIC X(3).
+010100170130        01 lc_BaseCurrency                 PIC X(3).
+010200170130        01 lc_transTypeCode                PIC X(3).
+010300170130        01 ln_FirstTradeDt                 PIC S9(8).
+010400170130        01 ln_AccCreationDate              PIC S9(8).
+010500170130        01 ln_TradeDate                    PIC S9(08).
+010600170130        01 ln_end_date                     PIC S9(8).
+010700170130        01 ln_AccountNo                    PIC S9(9).
+010800170130        01 ln_NumberOfMonth                PIC S9(03).
+010900170130        01 lc_PeriodCode                   PIC X(03).
+011000170130        01 lc_Excg_Rate_Type               PIC S9(9)V9(7).
+011100170130        01 ln_fedprvamount                 PIC S9(11)V9(2).
+011200170130        01 WD-CCYYMMDD                     FORMAT DATE "@Y%m%d".
+011300170130        01 ln_GrossAmt                     PIC S9(11)V9(2).
+011400170130        01 ln_NetAmt                       PIC S9(11)V9(2).
+011500170130        01 li_TransNo                      PIC S9(9).
+011600170130        01 li_Trans-No-2-Swtr              PIC 9(09).
+011700170131        01 ln_Hidden-Flag                  PIC X(1) VALUE 'N'.
+011800170131        01 ln_Declare-Cursor               PIC X(1) VALUE 'Y'.
+011900170130        01 ln_TransStatusCode              PIC X(03).
+012000170314168408* 01 ln_OpenDate                     PIC X(8).
+012100170314168408  01 ln_OpenDate                     PIC 9(8).
+012200170130        01 ln_Target-Error                 PIC X(1) VALUE " ".
+012300170130        01 li_PlacementDate                PIC S9(9).
+012400170130        01 li_Placement-Date-2-Swtr        PIC S9(9).
+012401210109      *RFS1101968- Start *
+012402210109        01 Lncc_C                          PIC X(1) VALUE "C".
+012403210109      *RFS1101968- End  *
+012500170129
+012600170129      *opening date variables
+012700170202        01 ln_Open_Date.
+012800170314168408*    03 ln_Open-Date1                PIC X(8).
+012900170314168408*    03 ln_Open-Date2                PIC X(8).
+013000170314168408*    03 ln_Open-Date3                PIC X(8).
+013100170314168408*    03 ln_Open-Date4                PIC X(8).
+013200170314168408*    03 ln_Open-Date5                PIC X(8).
+013300170314168408*    03 ln_Open-Date6                PIC X(8).
+013400170314168408*    03 ln_Open-Date7                PIC X(8).
+013500170314168408*    03 ln_Open-Date8                PIC X(8).
+013600170314168408*    03 ln_Open-Date9                PIC X(8).
+013700170314168408*    03 ln_Open-Date10               PIC X(8).
+013800170130
+013900170314168408     03 ln_Open-Date1                PIC 9(8).
+014000170314168408     03 ln_Open-Date2                PIC 9(8).
+014100170314168408     03 ln_Open-Date3                PIC 9(8).
+014200170314168408     03 ln_Open-Date4                PIC 9(8).
+014300170314168408     03 ln_Open-Date5                PIC 9(8).
+014400170314168408     03 ln_Open-Date6                PIC 9(8).
+014500170314168408     03 ln_Open-Date7                PIC 9(8).
+014600170314168408     03 ln_Open-Date8                PIC 9(8).
+014700170314168408     03 ln_Open-Date9                PIC 9(8).
+014800170314168408     03 ln_Open-Date10               PIC 9(8).
+014900170314
+015000170130      * Total buy calculating feilds
+015100170202        01 ln_Total_Purchase.
+015200170130           03 ln_TotPurAmt1                PIC S9(11)V9(2).
+015300170130           03 ln_TotPurAmt2                PIC S9(11)V9(2).
+015400170130           03 ln_TotPurAmt3                PIC S9(11)V9(2).
+015500170130           03 ln_TotPurAmt4                PIC S9(11)V9(2).
+015600170130           03 ln_TotPurAmt5                PIC S9(11)V9(2).
+015700170130           03 ln_TotPurAmt6                PIC S9(11)V9(2).
+015800170130           03 ln_TotPurAmt7                PIC S9(11)V9(2).
+015900170130           03 ln_TotPurAmt8                PIC S9(11)V9(2).
+016000170130           03 ln_TotPurAmt9                PIC S9(11)V9(2).
+016100170130           03 ln_TotPurAmt10               PIC S9(11)V9(2).
+016200170129
+016300170129      *Total Redemm amount variables
+016400170202        01 ln_TotalRedeemAmount.
+016500170130           03 ln_TotRedeemAmt1             PIC S9(11)V9(2).
+016600170130           03 ln_TotRedeemAmt2             PIC S9(11)V9(2).
+016700170130           03 ln_TotRedeemAmt3             PIC S9(11)V9(2).
+016800170130           03 ln_TotRedeemAmt4             PIC S9(11)V9(2).
+016900170130           03 ln_TotRedeemAmt5             PIC S9(11)V9(2).
+017000170130           03 ln_TotRedeemAmt6             PIC S9(11)V9(2).
+017100170130           03 ln_TotRedeemAmt7             PIC S9(11)V9(2).
+017200170130           03 ln_TotRedeemAmt8             PIC S9(11)V9(2).
+017300170130           03 ln_TotRedeemAmt9             PIC S9(11)V9(2).
+017400170130           03 ln_TotRedeemAmt10            PIC S9(11)V9(2).
+017500170124
+017600170130        01  ln-Date.
+017700170130            03 ln-LDA-Strdte               PIC 9(8).
+017800170130            03 ln-LDA-Strdte-R             REDEFINES ln-LDA-Strdte.
+017900170130               05  ln-LDA-Strdte-CCYY      PIC 9(4).
+018000170130               05  ln-LDA-Strdte-MMDD      PIC 9(4).
+018100170111
+018200170111
+018300170130            03 ln-LDA-Enddte               PIC 9(8).
+018400170130            03 ln-LDA-Enddte-R             REDEFINES ln-LDA-Enddte.
+018500170130               05 ln-LDA-Enddte-CCYY       PIC 9(4).
+018600170130               05 ln-LDA-Enddte-MMDD       PIC 9(4).
+018700170118
+018800170124        01 ls-Fetch-Table.
+018900170124           05 ls-Fetch-C1 OCCURS 200 TIMES.
+019000170130               10 li_PlacementDate1        PIC S9(9).
+019100170130               10 li_TransNo1              PIC S9(9).
+019200170130               10 li_AccountNo1            PIC S9(09).
+019300170130               10 lc_InvestmentCode1       PIC X(05).
+019400170130               10 li_TradeDate1            PIC S9(08).
+019500170130               10 lc_transTypeCodecode1    PIC X(03).
+019600170130               10 lc_TransStatus           PIC X(03).
+019700170130               10 lc_Currency1             PIC X(03).
+019800170130               10 ln_NetAmount             PIC S9(11)V9(2).
+019900170130               10 ln_GrossAmount           PIC S9(11)V9(2).
+020000170130               10 lc_ContRedemCode1        PIC X(6).
+020100170202
+020200170202        01  ltb_NullIndicatorsTable.
+020300170202          05  ltb_Indicators               OCCURS 200 TIMES.
+020400170202            10  ltb_Indicator              PIC S9(04)  BINARY
+020500170202                                           OCCURS 11   TIMES.
+020600170202
+020700170130        01 FETCHIDX                        PIC S9(5) COMP-3 VALUE 0.
+020800170129
+020900170130        01 lc_EndOfCursor                  PIC X(01).
+021000170130           88  lc_EndOfCursorYes           VALUE "Y".
+021100170130           88  lc_EndOfCursorNo            VALUE "N".
+021200170124
+021300170130      * Error Codes, Uniquely Identify where the error happened
+021400170130
+021500170130        01 WS-ERR-CODE                     PIC X(02) VALUE SPACES.
+021600170130           88 WS-ERR-10                              VALUE "10".
+021700170130           88 WS-ERR-11                              VALUE "11".
+021800170130           88 WS-ERR-12                              VALUE "12".
+021900170130           88 WS-ERR-13                              VALUE "13".
+022000170202           88 WS-ERR-14                              VALUE "14".
+022100170202           88 WS-ERR-15                              VALUE "15".
+022200170130
+022300170131        01  lc_ErrorCodeDescr              PIC X(45) VALUE SPACES.
+022400170131            88  lncc_Error_10
+022500170130            VALUE "Error while retrieving the First trade date".
+022600170131            88  lncc_Error_11
+022700170130            VALUE "Error while retrieving No of Months".
+022800170131            88  lncc_Error_12
+022900170130            VALUE "Error while retrieving Base Currency".
+023000170131            88  lncc_Error_13
+023100170202            VALUE "Error while openning the Trans Cursor".
+023200170202            88  lncc_Error_14
+023300170202            VALUE "Error while fetching the Trans Cursor".
+023400170202            88  lncc_Error_15
+023500170202            VALUE "Error while closing the Trans Cursor".
+023600170130
+023700170125           COPY CPYSQLFLD
+023800170125                REPLACING == "CURRENT_PROGRAM" == BY == "STMTSEC31" ==.
+023900170124
+024000170406      *RFS169181 - STARTS
+024100170406           COPY CPGETMKVT
+024200170406                REPLACING == "CURRENT_PROGRAM" == BY == "STMTSEC31" ==.
+024300170406      *RFS169181 - ENDS
+024400170124           EXEC SQL
+024500170124             INCLUDE SQLCA
+024600170124           END-EXEC.
+024700170110
+024800170111       LINKAGE SECTION.
+024900170124
+025000170125           COPY CPYJSISTMT.
+025100170125
+025200170125      /
+025300170125         PROCEDURE DIVISION USING ACCOUNT-PERFORMANCE-SECTION,
+025400170125                                  ACC-ROR-PERIOD-MKTVAL-SECTION.
+025500170125
+025600170125       MAINLINE.
+025700170202           PERFORM INITIAL-LOGIC.
+025800170202           PERFORM DETAIL-PROCESSING.
+025900170202           PERFORM END-JOB.
+026000170129
+026001171208      * --------------------------------
+026200170125       INITIAL-LOGIC.
+026201171208      * --------------------------------
+026400170124
+026500170202           INITIALIZE  ln_AccountNo,
+026600170202                       ln_FirstTradeDt,
+026700170202                       ln_AccCreationDate,
+026800170202                       ln_End_Date,
+026900170202                       ln_Open_Date,
+027000170202                       ln_Total_Purchase,
+027100170202                       ln_TotalRedeemAmount.
+027200170127
+027300170314168408     SET lc_EndOfCursorNo TO TRUE.
+027400170314
+027500170202           OPEN  INPUT TRANS-T
+027600170202                       TRANS-DISTR-DETAILS
+027700170202                       EXCHANGE-RATE-M
+027800170202                       TRANS-CHARGES.
+027900170126
+028000170202           MOVE AP-ACCOUNT       TO ln_AccountNo
+028100170202           MOVE AP-END-DATE      TO ln_End_Date
+028200170202                                    ln-LDA-Enddte.
+028300170202      * Get the first trade date and account creation date.
+028400170202           EXEC SQL
+028500170201              SELECT COALESCE(MIN(TRNP.TRADE_DATE),0),
+028600170201                     COALESCE(ACCNTP.CREATION_DATE,0)
+028700170130                INTO :ln_FirstTradeDt,
+028800170130                     :ln_AccCreationDate
+028900170122              FROM  MFAACCNTP ACCNTP
+029000170129
+029100170129              LEFT OUTER JOIN MFATRNP TRNP ON
+029200170202              TRNP.ACCOUNT_NO = ACCNTP.ACCOUNT_NO      AND
+029300170202              TRNP.TRANS_STATUS_CODE IN ("HST", "HSC") AND
+029400170202              TRNP.REVERSE    <> "Y"
+029500170129
+029600170202              WHERE ACCNTP.ACCOUNT_NO  = :ln_AccountNo
+029700170202
+029800170130              GROUP BY ACCNTP.CREATION_DATE
+029900170202           END-EXEC
+030000170131
+030100170202           MOVE SQLSTATE TO lc_sqlStates.
+030200170202
+030300170202           EVALUATE TRUE
+030400170202           WHEN lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+030500170202                CONTINUE
+030600170202           WHEN OTHER
+030700170202                SET WS-ERR-10      TO TRUE
+030800170202                SET lncc_Error_10  TO TRUE
+030900170202                PERFORM DSP-ERROR
+031000170202           END-EVALUATE.
+031100170130
+031200170112      * Get the Closing Market value.
+031300170124
+031400170406      *RFS169181 - STARTS
+031500170406      *    INITIALIZE  ln_Clo_Mkt_Val.
+031600170406      *    CALL  "FXGETMKTV" USING ln_AccountNo,
+031700170406      *                            ln_end_date,
+031800170406      *                            ln_Clo_Mkt_Val.
+031900170406           INITIALIZE  pi_GETMVTradeDate
+032000170406                       pi_GETMVPriceDate
+032001210413      *RFS1101968- Start *
+032002210414                       Pc_GETMVMode
+032003210413      *RFS1101968- End  *
+032100170406                       pi_GETMVAccountNo
+032200170406                       pc_GETMVInvestmentCode
+032300170406                       pn_GETMVMarketValue.
+032400170406
+032500170406           MOVE ln_end_date     TO pi_GETMVTradeDate
+032600170406                                   pi_GETMVPriceDate.
+032700170406           MOVE ln_AccountNo    TO pi_GETMVAccountNo.
+032701210109      *RFS1101968- Start *
+032702210109           MOVE Lncc_C          TO Pc_GETMVMode.
+032703210109      *RFS1101968- End  *
+032800170406
+032900170406           CALL "FXGETMKVT" USING  pi_GETMVTradeDate
+033000170406                                   pi_GETMVPriceDate
+033001210109      *RFS1101968- Start *
+033002210109                                   Pc_GETMVMode
+033003210109      *RFS1101968- End  *
+033100170406                                   pi_GETMVAccountNo
+033200170406                                   pc_GETMVInvestmentCode
+033300170406                                   pn_GETMVMarketValue.
+033400170406
+033500170406           MOVE pn_GETMVMarketValue TO ln_Clo_Mkt_Val.
+033600170406
+033700170406      *RFS169181 - ENDS
+033800170202
+033900170202           MOVE ln_Clo_Mkt_Val     TO A31-CLOSING-VALUE
+034000170202           IF ln_Clo_Mkt_Val < 0
+034100170202              MOVE "-"             TO A31-CLOSING-VALUE-SIGN
+034200170202           END-IF.
+034300170202
+034400170130      * To retrieve the Base Currency of the environment
+034500170130
+034600170202           INITIALIZE lc_BaseCurrency.
+034700170202
+034800170202           EXEC SQL
+034900170202              SELECT COALESCE(CURRENCY," ")
+035000170202                INTO :lc_BaseCurrency
+035100170202              FROM MFACURP
+035200170202              WHERE BASE_CURRENCY = "Y"
+035300170202           END-EXEC.
+035400170202
+035500170202           MOVE SQLSTATE TO lc_sqlStates.
+035600170202
+035700170202           EVALUATE TRUE
+035800170202           WHEN lncc_sqlSuccessful OR lncc_sqlWarning
+035900170202                CONTINUE
+036000170202           WHEN lncc_sqlEnd
+036100170202                MOVE 'CAD'        TO lc_BaseCurrency
+036200170202           WHEN OTHER
+036300170202                SET WS-ERR-11     TO TRUE
+036400170202                SET lncc_Error_11 TO  TRUE
+036500170202                PERFORM DSP-ERROR
+036600170202           END-EVALUATE.
+036700170130
+036800170202           PERFORM Transcursor.
+036900170130
+037000170122      * Get the start date for each period.
+037100170130
+037200170122      *Period-1
+037300170129           IF AP-PERIOD-CODE-1 NOT  = " "
+037400170129              IF AP-PERIOD-CODE-1   = "INC"
+037500170314      * RFS168408 Start
+037600170314      *          IF ln_FirstTradeDt < ln_AccCreationDate AND
+037700170314      *             ln_FirstTradeDt NOT = ZERO
+037800170129                     MOVE ln_FirstTradeDt TO A31-PERIOD-CF-START-DATE-1
+037900170129                                             WD-CCYYMMDD
+038000170314      *          ELSE
+038100170314      *              MOVE ln_AccCreationDate
+038200170314      *                                   TO A31-PERIOD-CF-START-DATE-1
+038300170314      *                                      WD-CCYYMMDD
+038400170314      *          END-IF
+038500170314      * RFS168408 End
+038600170202                 IF A31-PERIOD-CF-START-DATE-1 > 0
+038700170202                    MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+038800170129                                          TO ln_Open-Date1
+038900170202                 END-IF
+039000170202                 CONTINUE
+039100170129              ELSE
+039200170129              IF AP-PERIOD-CODE-1 = "YTD"
+039300170130                 MOVE ln-LDA-Enddte       TO ln-LDA-Strdte
+039400170130                 MOVE 0101                TO ln-LDA-Strdte-MMDD
+039500170130                 MOVE ln-LDA-Strdte       TO A31-PERIOD-CF-START-DATE-1
+039600170129                                             WD-CCYYMMDD
+039700170314      *RFS168408 Starts
+039800170314                 IF ln_FirstTradeDt > ln-LDA-Strdte
+039900170314                    MOVE ln_FirstTradeDt  TO A31-PERIOD-CF-START-DATE-1
+040000170314                                             WD-CCYYMMDD
+040100170314                 END-IF
+040200170314      *RFS168408 End
+040300170129                 MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+040400170129                                          TO ln_Open-Date1
+040500170124              ELSE
+040600170130                 MOVE AP-PERIOD-CODE-1    TO lc_PeriodCode
+040700170130                 MOVE ln-LDA-Enddte       TO WD-CCYYMMDD
+040800170129
+040900170129                 PERFORM GET-NO-OF-MONTHS
+041000170129                 MOVE FUNCTION SUBTRACT-DURATION
+041100170129                 (WD-CCYYMMDD MONTHS ln_NumberOfMonth)
+041200170129                                          TO ln_Open-Date1
+041300170129                 MOVE ln_Open-Date1       TO WD-CCYYMMDD
+041400170129                 MOVE FUNCTION ADD-DURATION (WD-CCYYMMDD DAYS 1)
+041500170129                                          TO A31-PERIOD-CF-START-DATE-1
+041600170129              END-IF
+041700170129              END-IF
+041800170122           END-IF.
+041900170122
+042000170122      *Period-2
+042100170130
+042200170130           IF AP-PERIOD-CODE-2 NOT  = " "
+042300170130              IF AP-PERIOD-CODE-2   = "INC"
+042400170314      * RFS168408 Start
+042500170314      *          IF ln_FirstTradeDt < ln_AccCreationDate AND
+042600170314      *             ln_FirstTradeDt NOT = ZERO
+042700170314                     MOVE ln_FirstTradeDt TO A31-PERIOD-CF-START-DATE-2
+042800170314                                             WD-CCYYMMDD
+042900170314      *          ELSE
+043000170314      *              MOVE ln_AccCreationDate
+043100170314      *                                   TO A31-PERIOD-CF-START-DATE-2
+043200170314      *                                      WD-CCYYMMDD
+043300170314      *          END-IF
+043400170314      * RFS168408 End
+043500170202                 IF A31-PERIOD-CF-START-DATE-2 > 0
+043600170202                    MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+043700170202                                          TO ln_Open-Date2
+043800170202                 END-IF
+043900170202                 CONTINUE
+044000170130              ELSE
+044100170130              IF AP-PERIOD-CODE-2 = "YTD"
+044200170130                 MOVE ln-LDA-Enddte       TO ln-LDA-Strdte
+044300170130                 MOVE 0101                TO ln-LDA-Strdte-MMDD
+044400170130                 MOVE ln-LDA-Strdte       TO A31-PERIOD-CF-START-DATE-2
+044500170130                                             WD-CCYYMMDD
+044600170314      *RFS168408 Starts
+044700170314                 IF ln_FirstTradeDt > ln-LDA-Strdte
+044800170314                    MOVE ln_FirstTradeDt  TO A31-PERIOD-CF-START-DATE-2
+044900170314                                             WD-CCYYMMDD
+045000170314                 END-IF
+045100170314      *RFS168408 End
+045200170130                 MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+045300170130                                          TO ln_Open-Date2
+045400170130              ELSE
+045500170130                 MOVE AP-PERIOD-CODE-2    TO lc_PeriodCode
+045600170130                 MOVE ln-LDA-Enddte       TO WD-CCYYMMDD
+045700170130
+045800170130                 PERFORM GET-NO-OF-MONTHS
+045900170130                 MOVE FUNCTION SUBTRACT-DURATION
+046000170130                 (WD-CCYYMMDD MONTHS ln_NumberOfMonth)
+046100170130                                          TO ln_Open-Date2
+046200170130                 MOVE ln_Open-Date2       TO WD-CCYYMMDD
+046300170130                 MOVE FUNCTION ADD-DURATION (WD-CCYYMMDD DAYS 1)
+046400170130                                          TO A31-PERIOD-CF-START-DATE-2
+046500170130              END-IF
+046600170130              END-IF
+046700170130           END-IF.
+046800170130
+046900170130      *Period-3
+047000170130
+047100170130           IF AP-PERIOD-CODE-3 NOT  = " "
+047200170130              IF AP-PERIOD-CODE-3   = "INC"
+047300170314      * RFS168408 Start
+047400170314      *          IF ln_FirstTradeDt < ln_AccCreationDate AND
+047500170314      *             ln_FirstTradeDt NOT = ZERO
+047600170314                     MOVE ln_FirstTradeDt TO A31-PERIOD-CF-START-DATE-3
+047700170314                                             WD-CCYYMMDD
+047800170314      *          ELSE
+047900170314      *              MOVE ln_AccCreationDate
+048000170314      *                                   TO A31-PERIOD-CF-START-DATE-3
+048100170314      *                                      WD-CCYYMMDD
+048200170314      *          END-IF
+048300170314      * RFS168408 End
+048400170202                 IF A31-PERIOD-CF-START-DATE-3 > 0
+048500170202                    MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+048600170202                                          TO ln_Open-Date3
+048700170202                 END-IF
+048800170202                 CONTINUE
+048900170130              ELSE
+049000170130              IF AP-PERIOD-CODE-3 = "YTD"
+049100170130                 MOVE ln-LDA-Enddte       TO ln-LDA-Strdte
+049200170130                 MOVE 0101                TO ln-LDA-Strdte-MMDD
+049300170130                 MOVE ln-LDA-Strdte       TO A31-PERIOD-CF-START-DATE-3
+049400170130                                             WD-CCYYMMDD
+049500170314      *RFS168408 Starts
+049600170314                 IF ln_FirstTradeDt > ln-LDA-Strdte
+049700170314                    MOVE ln_FirstTradeDt  TO A31-PERIOD-CF-START-DATE-3
+049800170314                                             WD-CCYYMMDD
+049900170314                 END-IF
+050000170314      *RFS168408 End
+050100170130                 MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+050200170130                                          TO ln_Open-Date3
+050300170130              ELSE
+050400170130                 MOVE AP-PERIOD-CODE-3    TO lc_PeriodCode
+050500170130                 MOVE ln-LDA-Enddte       TO WD-CCYYMMDD
+050600170130
+050700170130                 PERFORM GET-NO-OF-MONTHS
+050800170130                 MOVE FUNCTION SUBTRACT-DURATION
+050900170130                 (WD-CCYYMMDD MONTHS ln_NumberOfMonth)
+051000170130                                          TO ln_Open-Date3
+051100170130                 MOVE ln_Open-Date3       TO WD-CCYYMMDD
+051200170130                 MOVE FUNCTION ADD-DURATION (WD-CCYYMMDD DAYS 1)
+051300170130                                          TO A31-PERIOD-CF-START-DATE-3
+051400170130              END-IF
+051500170130              END-IF
+051600170130           END-IF.
+051700170130
+051800170130      *Period-4
+051900170130
+052000170130           IF AP-PERIOD-CODE-4 NOT  = " "
+052100170130              IF AP-PERIOD-CODE-4   = "INC"
+052200170314      * RFS168408 Start
+052300170314      *          IF ln_FirstTradeDt < ln_AccCreationDate AND
+052400170314      *             ln_FirstTradeDt NOT = ZERO
+052500170314                     MOVE ln_FirstTradeDt TO A31-PERIOD-CF-START-DATE-4
+052600170314                                             WD-CCYYMMDD
+052700170314      *          ELSE
+052800170314      *              MOVE ln_AccCreationDate
+052900170314      *                                   TO A31-PERIOD-CF-START-DATE-4
+053000170314      *                                      WD-CCYYMMDD
+053100170314      *          END-IF
+053200170314      * RFS168408 End
+053300170202                 IF A31-PERIOD-CF-START-DATE-4 > 0
+053400170202                    MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+053500170202                                          TO ln_Open-Date4
+053600170202                 END-IF
+053700170202                 CONTINUE
+053800170130              ELSE
+053900170130              IF AP-PERIOD-CODE-4 = "YTD"
+054000170130                 MOVE ln-LDA-Enddte       TO ln-LDA-Strdte
+054100170130                 MOVE 0101                TO ln-LDA-Strdte-MMDD
+054200170130                 MOVE ln-LDA-Strdte       TO A31-PERIOD-CF-START-DATE-4
+054300170130                                             WD-CCYYMMDD
+054400170314      *RFS168408 Starts
+054500170314                 IF ln_FirstTradeDt > ln-LDA-Strdte
+054600170314                    MOVE ln_FirstTradeDt  TO A31-PERIOD-CF-START-DATE-4
+054700170314                                             WD-CCYYMMDD
+054800170314                 END-IF
+054900170314      *RFS168408 End
+055000170130                 MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+055100170130                                          TO ln_Open-Date4
+055200170130              ELSE
+055300170130                 MOVE AP-PERIOD-CODE-4    TO lc_PeriodCode
+055400170130                 MOVE ln-LDA-Enddte       TO WD-CCYYMMDD
+055500170130
+055600170130                 PERFORM GET-NO-OF-MONTHS
+055700170130                 MOVE FUNCTION SUBTRACT-DURATION
+055800170130                 (WD-CCYYMMDD MONTHS ln_NumberOfMonth)
+055900170130                                          TO ln_Open-Date4
+056000170130                 MOVE ln_Open-Date4       TO WD-CCYYMMDD
+056100170130                 MOVE FUNCTION ADD-DURATION (WD-CCYYMMDD DAYS 1)
+056200170130                                          TO A31-PERIOD-CF-START-DATE-4
+056300170130              END-IF
+056400170130              END-IF
+056500170130           END-IF.
+056600170130
+056700170130      *Period-5
+056800170130
+056900170130           IF AP-PERIOD-CODE-5 NOT  = " "
+057000170130              IF AP-PERIOD-CODE-5   = "INC"
+057100170314      * RFS168408 Start
+057200170314      *          IF ln_FirstTradeDt < ln_AccCreationDate AND
+057300170314      *             ln_FirstTradeDt NOT = ZERO
+057400170314                     MOVE ln_FirstTradeDt TO A31-PERIOD-CF-START-DATE-5
+057500170314                                             WD-CCYYMMDD
+057600170314      *          ELSE
+057700170314      *              MOVE ln_AccCreationDate
+057800170314      *                                   TO A31-PERIOD-CF-START-DATE-5
+057900170314      *                                      WD-CCYYMMDD
+058000170314      *          END-IF
+058100170314      * RFS168408 End
+058200170202                 IF A31-PERIOD-CF-START-DATE-5 > 0
+058300170202                    MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+058400170202                                          TO ln_Open-Date5
+058500170202                 END-IF
+058600170202                 CONTINUE
+058700170130              ELSE
+058800170130              IF AP-PERIOD-CODE-5 = "YTD"
+058900170130                 MOVE ln-LDA-Enddte       TO ln-LDA-Strdte
+059000170130                 MOVE 0101                TO ln-LDA-Strdte-MMDD
+059100170130                 MOVE ln-LDA-Strdte       TO A31-PERIOD-CF-START-DATE-5
+059200170130                                             WD-CCYYMMDD
+059300170314      *RFS168408 Starts
+059400170314                 IF ln_FirstTradeDt > ln-LDA-Strdte
+059500170314                    MOVE ln_FirstTradeDt  TO A31-PERIOD-CF-START-DATE-5
+059600170314                                             WD-CCYYMMDD
+059700170314                 END-IF
+059800170314      *RFS168408 End
+059900170130                 MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+060000170130                                          TO ln_Open-Date5
+060100170130              ELSE
+060200170130                 MOVE AP-PERIOD-CODE-5    TO lc_PeriodCode
+060300170130                 MOVE ln-LDA-Enddte       TO WD-CCYYMMDD
+060400170130
+060500170130                 PERFORM GET-NO-OF-MONTHS
+060600170130                 MOVE FUNCTION SUBTRACT-DURATION
+060700170130                 (WD-CCYYMMDD MONTHS ln_NumberOfMonth)
+060800170130                                          TO ln_Open-Date5
+060900170130                 MOVE ln_Open-Date5       TO WD-CCYYMMDD
+061000170130                 MOVE FUNCTION ADD-DURATION (WD-CCYYMMDD DAYS 1)
+061100170130                                          TO A31-PERIOD-CF-START-DATE-5
+061200170130              END-IF
+061300170130              END-IF
+061400170130           END-IF.
+061500170130
+061600170130      *Period-6
+061700170130
+061800170130           IF AP-PERIOD-CODE-6 NOT  = " "
+061900170130              IF AP-PERIOD-CODE-6   = "INC"
+062000170314      * RFS168408 Start
+062100170314      *          IF ln_FirstTradeDt < ln_AccCreationDate AND
+062200170314      *             ln_FirstTradeDt NOT = ZERO
+062300170314                     MOVE ln_FirstTradeDt TO A31-PERIOD-CF-START-DATE-6
+062400170314                                             WD-CCYYMMDD
+062500170314      *          ELSE
+062600170314      *              MOVE ln_AccCreationDate
+062700170314      *                                   TO A31-PERIOD-CF-START-DATE-6
+062800170314      *                                      WD-CCYYMMDD
+062900170314      *          END-IF
+063000170314      * RFS168408 End
+063100170202                 IF A31-PERIOD-CF-START-DATE-6 > 0
+063200170202                    MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+063300170202                                          TO ln_Open-Date6
+063400170202                 END-IF
+063500170202                 CONTINUE
+063600170130              ELSE
+063700170130              IF AP-PERIOD-CODE-6 = "YTD"
+063800170130                 MOVE ln-LDA-Enddte       TO ln-LDA-Strdte
+063900170130                 MOVE 0101                TO ln-LDA-Strdte-MMDD
+064000170130                 MOVE ln-LDA-Strdte       TO A31-PERIOD-CF-START-DATE-6
+064100170130                                             WD-CCYYMMDD
+064200170314      *RFS168408 Starts
+064300170314                 IF ln_FirstTradeDt > ln-LDA-Strdte
+064400170314                    MOVE ln_FirstTradeDt  TO A31-PERIOD-CF-START-DATE-6
+064500170314                                             WD-CCYYMMDD
+064600170314                 END-IF
+064700170314      *RFS168408 End
+064800170130                 MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+064900170130                                          TO ln_Open-Date6
+065000170130              ELSE
+065100170130                 MOVE AP-PERIOD-CODE-6    TO lc_PeriodCode
+065200170130                 MOVE ln-LDA-Enddte       TO WD-CCYYMMDD
+065300170130
+065400170130                 PERFORM GET-NO-OF-MONTHS
+065500170130                 MOVE FUNCTION SUBTRACT-DURATION
+065600170130                 (WD-CCYYMMDD MONTHS ln_NumberOfMonth)
+065700170130                                          TO ln_Open-Date6
+065800170130                 MOVE ln_Open-Date6       TO WD-CCYYMMDD
+065900170130                 MOVE FUNCTION ADD-DURATION (WD-CCYYMMDD DAYS 1)
+066000170130                                          TO A31-PERIOD-CF-START-DATE-6
+066100170130              END-IF
+066200170130              END-IF
+066300170130           END-IF.
+066400170130
+066500170130      *Period-7
+066600170130
+066700170130           IF AP-PERIOD-CODE-7 NOT  = " "
+066800170130              IF AP-PERIOD-CODE-7   = "INC"
+066900170314      * RFS168408 Start
+067000170314      *          IF ln_FirstTradeDt < ln_AccCreationDate AND
+067100170314      *             ln_FirstTradeDt NOT = ZERO
+067200170314                     MOVE ln_FirstTradeDt TO A31-PERIOD-CF-START-DATE-7
+067300170314                                             WD-CCYYMMDD
+067400170314      *          ELSE
+067500170314      *              MOVE ln_AccCreationDate
+067600170314      *                                   TO A31-PERIOD-CF-START-DATE-7
+067700170314      *                                      WD-CCYYMMDD
+067800170314      *          END-IF
+067900170314      * RFS168408 End
+068000170202                 IF A31-PERIOD-CF-START-DATE-7 > 0
+068100170202                    MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+068200170202                                          TO ln_Open-Date7
+068300170202                 END-IF
+068400170202                 CONTINUE
+068500170130              ELSE
+068600170130              IF AP-PERIOD-CODE-7 = "YTD"
+068700170130                 MOVE ln-LDA-Enddte       TO ln-LDA-Strdte
+068800170130                 MOVE 0101                TO ln-LDA-Strdte-MMDD
+068900170130                 MOVE ln-LDA-Strdte       TO A31-PERIOD-CF-START-DATE-7
+069000170130                                             WD-CCYYMMDD
+069100170314      *RFS168408 Starts
+069200170314                 IF ln_FirstTradeDt > ln-LDA-Strdte
+069300170314                    MOVE ln_FirstTradeDt  TO A31-PERIOD-CF-START-DATE-7
+069400170314                                             WD-CCYYMMDD
+069500170314                 END-IF
+069600170314      *RFS168408 End
+069700170130                 MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+069800170130                                          TO ln_Open-Date7
+069900170130              ELSE
+070000170130                 MOVE AP-PERIOD-CODE-7    TO lc_PeriodCode
+070100170130                 MOVE ln-LDA-Enddte       TO WD-CCYYMMDD
+070200170130
+070300170130                 PERFORM GET-NO-OF-MONTHS
+070400170130                 MOVE FUNCTION SUBTRACT-DURATION
+070500170130                 (WD-CCYYMMDD MONTHS ln_NumberOfMonth)
+070600170130                                          TO ln_Open-Date7
+070700170130                 MOVE ln_Open-Date7       TO WD-CCYYMMDD
+070800170130                 MOVE FUNCTION ADD-DURATION (WD-CCYYMMDD DAYS 1)
+070900170130                                          TO A31-PERIOD-CF-START-DATE-7
+071000170130              END-IF
+071100170130              END-IF
+071200170130           END-IF.
+071300170130
+071400170130      *Period-8
+071500170130
+071600170130           IF AP-PERIOD-CODE-8 NOT  = " "
+071700170130              IF AP-PERIOD-CODE-8   = "INC"
+071800170314      * RFS168408 Start
+071900170314      *          IF ln_FirstTradeDt < ln_AccCreationDate AND
+072000170314      *             ln_FirstTradeDt NOT = ZERO
+072100170314                     MOVE ln_FirstTradeDt TO A31-PERIOD-CF-START-DATE-8
+072200170314                                             WD-CCYYMMDD
+072300170314      *          ELSE
+072400170314      *              MOVE ln_AccCreationDate
+072500170314      *                                   TO A31-PERIOD-CF-START-DATE-8
+072600170314      *                                      WD-CCYYMMDD
+072700170314      *          END-IF
+072800170314      * RFS168408 End
+072900170202                 IF A31-PERIOD-CF-START-DATE-8 > 0
+073000170202                    MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+073100170202                                          TO ln_Open-Date8
+073200170202                 END-IF
+073300170202                 CONTINUE
+073400170130              ELSE
+073500170130              IF AP-PERIOD-CODE-8 = "YTD"
+073600170130                 MOVE ln-LDA-Enddte       TO ln-LDA-Strdte
+073700170130                 MOVE 0101                TO ln-LDA-Strdte-MMDD
+073800170130                 MOVE ln-LDA-Strdte       TO A31-PERIOD-CF-START-DATE-8
+073900170130                                             WD-CCYYMMDD
+074000170314      *RFS168408 Starts
+074100170314                 IF ln_FirstTradeDt > ln-LDA-Strdte
+074200170314                    MOVE ln_FirstTradeDt  TO A31-PERIOD-CF-START-DATE-8
+074300170314                                             WD-CCYYMMDD
+074400170314                 END-IF
+074500170314      *RFS168408 End
+074600170130                 MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+074700170130                                          TO ln_Open-Date8
+074800170130              ELSE
+074900170130                 MOVE AP-PERIOD-CODE-8    TO lc_PeriodCode
+075000170130                 MOVE ln-LDA-Enddte       TO WD-CCYYMMDD
+075100170130
+075200170130                 PERFORM GET-NO-OF-MONTHS
+075300170130                 MOVE FUNCTION SUBTRACT-DURATION
+075400170130                 (WD-CCYYMMDD MONTHS ln_NumberOfMonth)
+075500170130                                          TO ln_Open-Date8
+075600170130                 MOVE ln_Open-Date8       TO WD-CCYYMMDD
+075700170130                 MOVE FUNCTION ADD-DURATION (WD-CCYYMMDD DAYS 1)
+075800170130                                          TO A31-PERIOD-CF-START-DATE-8
+075900170130              END-IF
+076000170130              END-IF
+076100170130           END-IF.
+076200170130
+076300170130      *Period-9
+076400170130
+076500170130           IF AP-PERIOD-CODE-9 NOT  = " "
+076600170130              IF AP-PERIOD-CODE-9   = "INC"
+076700170314      * RFS168408 Start
+076800170314      *          IF ln_FirstTradeDt < ln_AccCreationDate AND
+076900170314      *             ln_FirstTradeDt NOT = ZERO
+077000170314                     MOVE ln_FirstTradeDt TO A31-PERIOD-CF-START-DATE-9
+077100170314                                             WD-CCYYMMDD
+077200170314      *          ELSE
+077300170314      *              MOVE ln_AccCreationDate
+077400170314      *                                   TO A31-PERIOD-CF-START-DATE-9
+077500170314      *                                      WD-CCYYMMDD
+077600170314      *          END-IF
+077700170314      * RFS168408 End
+077800170202                 IF A31-PERIOD-CF-START-DATE-9 > 0
+077900170202                    MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+078000170202                                          TO ln_Open-Date9
+078100170202                 END-IF
+078200170202                 CONTINUE
+078300170130              ELSE
+078400170130              IF AP-PERIOD-CODE-9 = "YTD"
+078500170130                 MOVE ln-LDA-Enddte       TO ln-LDA-Strdte
+078600170130                 MOVE 0101                TO ln-LDA-Strdte-MMDD
+078700170130                 MOVE ln-LDA-Strdte       TO A31-PERIOD-CF-START-DATE-9
+078800170130                                             WD-CCYYMMDD
+078900170314      *RFS168408 Starts
+079000170314                 IF ln_FirstTradeDt > ln-LDA-Strdte
+079100170314                    MOVE ln_FirstTradeDt  TO A31-PERIOD-CF-START-DATE-9
+079200170314                                             WD-CCYYMMDD
+079300170314                 END-IF
+079400170314      *RFS168408 End
+079500170130                 MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+079600170130                                          TO ln_Open-Date9
+079700170130              ELSE
+079800170130                 MOVE AP-PERIOD-CODE-9    TO lc_PeriodCode
+079900170130                 MOVE ln-LDA-Enddte       TO WD-CCYYMMDD
+080000170130
+080100170130                 PERFORM GET-NO-OF-MONTHS
+080200170130                 MOVE FUNCTION SUBTRACT-DURATION
+080300170130                 (WD-CCYYMMDD MONTHS ln_NumberOfMonth)
+080400170130                                          TO ln_Open-Date9
+080500170130                 MOVE ln_Open-Date9       TO WD-CCYYMMDD
+080600170130                 MOVE FUNCTION ADD-DURATION (WD-CCYYMMDD DAYS 1)
+080700170130                                          TO A31-PERIOD-CF-START-DATE-9
+080800170130              END-IF
+080900170130              END-IF
+081000170130           END-IF.
+081100170130
+081200170130      *Period-10
+081300170130
+081400170130           IF AP-PERIOD-CODE-10 NOT  = " "
+081500170130              IF AP-PERIOD-CODE-10   = "INC"
+081600170314      * RFS168408 Start
+081700170314      *          IF ln_FirstTradeDt < ln_AccCreationDate AND
+081800170314      *             ln_FirstTradeDt NOT = ZERO
+081900170314                     MOVE ln_FirstTradeDt TO A31-PERIOD-CF-START-DATE-10
+082000170314                                             WD-CCYYMMDD
+082100170314      *          ELSE
+082200170314      *              MOVE ln_AccCreationDate
+082300170314      *                                   TO A31-PERIOD-CF-START-DATE-10
+082400170314      *                                      WD-CCYYMMDD
+082500170314      *          END-IF
+082600170314      * RFS168408 End
+082700170202                 IF A31-PERIOD-CF-START-DATE-10 > 0
+082800170202                    MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+082900170202                                          TO ln_Open-Date10
+083000170202                 END-IF
+083100170202                 CONTINUE
+083200170130              ELSE
+083300170130              IF AP-PERIOD-CODE-10 = "YTD"
+083400170130                 MOVE ln-LDA-Enddte       TO ln-LDA-Strdte
+083500170130                 MOVE 0101                TO ln-LDA-Strdte-MMDD
+083600170130                 MOVE ln-LDA-Strdte       TO A31-PERIOD-CF-START-DATE-10
+083700170130                                             WD-CCYYMMDD
+083800170314      *RFS168408 Starts
+083900170314                 IF ln_FirstTradeDt > ln-LDA-Strdte
+084000170314                    MOVE ln_FirstTradeDt  TO A31-PERIOD-CF-START-DATE-10
+084100170314                                             WD-CCYYMMDD
+084200170314                 END-IF
+084300170314      *RFS168408 End
+084400170130                 MOVE FUNCTION SUBTRACT-DURATION (WD-CCYYMMDD DAYS 1)
+084500170130                                          TO ln_Open-Date10
+084600170130              ELSE
+084700170130                 MOVE AP-PERIOD-CODE-10   TO lc_PeriodCode
+084800170130                 MOVE ln-LDA-Enddte       TO WD-CCYYMMDD
+084900170130
+085000170130                 PERFORM GET-NO-OF-MONTHS
+085100170130                 MOVE FUNCTION SUBTRACT-DURATION
+085200170130                 (WD-CCYYMMDD MONTHS ln_NumberOfMonth)
+085300170130                                          TO ln_Open-Date10
+085400170130                 MOVE ln_Open-Date10      TO WD-CCYYMMDD
+085500170130                 MOVE FUNCTION ADD-DURATION (WD-CCYYMMDD DAYS 1)
+085600170130                                          TO A31-PERIOD-CF-START-DATE-10
+085700170130              END-IF
+085800170130              END-IF
+085900170130           END-IF.
+086000170122      * To get the number of months.
+086100170122
+086200170122       GET-NO-OF-MONTHS.
+086300170130           INITIALIZE ln_NumberOfMonth.
+086400170130
+086500170202           EXEC SQL
+086600170202              SELECT COALESCE(NUMBER_OF_MONTHS,0)
+086700170202                INTO :ln_NumberOfMonth
+086800170202              FROM MFARORPCP
+086900170202              WHERE PERIOD_CODE = :lc_PeriodCode
+087000170202           END-EXEC.
+087100170202
+087200170128           MOVE SQLSTATE TO lc_sqlStates.
+087300170202
+087400170131           EVALUATE TRUE
+087500170202           WHEN lncc_sqlSuccessful OR lncc_sqlWarning OR lncc_sqlEnd
+087600170131                CONTINUE
+087700170131           WHEN OTHER
+087800170202                SET WS-ERR-12      TO TRUE
+087900170202                SET lncc_Error_12  TO TRUE
+088000170202                PERFORM DSP-ERROR
+088100170202           END-EVALUATE.
+088200170122
+088300170130      * Declaring cursor to fetch all non-reversed historical transactions.
+088400170130
+088500170130       Transcursor.
+088600170202           EXEC SQL
+088700170130             DECLARE Trans CURSOR FOR
+088800170130                SELECT
+088900170130                  TRNP.PLACEMENT_DATE,
+089000170130                  TRNP.TRANS_NO,
+089100170130                  TRNP.ACCOUNT_NO,
+089200170130                  TRNP.INVESTMENT_CODE,
+089300170130                  TRNP.TRADE_DATE,
+089400170130                  TRNP.TRANS_TYPE_CODE,
+089500170130                  TRNP.TRANS_STATUS_CODE,
+089600170130                  INVP.CURRENCY,
+089700170324      *RFS169003-Starts
+089800170324      *           TRNP.NET_AMT,
+089900170324      *           TRNP.GROSS_AMT,
+090000170324                  CASE WHEN TRNP.TRANS_TYPE_CODE IN
+090100170324                            ("SEL", "TRO","SWO","TFE", "FEE","INC")
+090200170324                       THEN TRNP.NET_AMT
+090300170324                       WHEN TRNP.TRANS_TYPE_CODE = "SAJ"
+090400170324                       THEN (UNIT_AMT * UNIT_PRICE)
+090500170324                  ELSE 0 END,
+090600170324                  CASE WHEN TRNP.TRANS_TYPE_CODE IN
+090700170324                            ("BUY", "TRI","SWI")
+090800170324                       THEN TRNP.NET_AMT
+090900170324                       WHEN TRNP.TRANS_TYPE_CODE IN ("BAJ", "BFW")
+091000170324                       THEN (UNIT_AMT * UNIT_PRICE)
+091100170324                  ELSE 0 END,
+091200170324      *RFS169003-End
+091300170130                  TRNP.CONTR_REDEM_CODE
+091400170130                FROM MFATRNP TRNP
+091500170130
+091600170130                INNER JOIN MFAINVP INVP ON
+091700170130                INVP.INVESTMENT_CODE = TRNP.INVESTMENT_CODE
+091800170130
+091900170130                WHERE
+092000170202                  TRNP.ACCOUNT_NO  =  :ln_AccountNo               AND
+092100170202                  TRNP.TRADE_DATE  <= :ln_end_date                AND
+092200170130                  TRNP.TRANS_STATUS_CODE IN ("HST", "HSC")     AND
+092300170130                  TRNP.REVERSE     <> "Y"                      AND
+092400170314      *RFS168408 Start
+092500170314      *           TRNP.TRANS_TYPE_CODE IN ( "BUY", "SEL",
+092600170314      *                                     "TRI", "TRO",
+092700170314      *                                     "SWI", "SWO" ,"INC")
+092800170324      *RFS169003-Starts
+092900170324      *           (
+093000170324      *            (TRNP.TRANS_TYPE_CODE  = "BUY"  AND
+093100170324      *             TRNP.CONTR_REDEM_CODE IN ( "NOTAXB" , "RDPABC",
+093200170324      *                                        "RDPANL" , "RDPANS",
+093300170324      *                                        "RDPAON" , "RDSPBC",
+093400170324      *                                        "RDSPCA" , "RDSPGC",
+093500170324      *                                        "RDSPRL" , "RDSPTI",
+093600170324      *                                        "RDSRRE" , "RDTRXI",
+093700170324      *                                        "REGBUY" )
+093800170324      *            ) OR
+093900170324      *            (TRNP.TRANS_TYPE_CODE  = "SWI"  AND
+094000170324      *             TRNP.CONTR_REDEM_CODE IN ( "T2033"  , "RDSPTI")
+094100170324      *            ) OR
+094200170324      *            (TRNP.TRANS_TYPE_CODE  = "SWO"  AND
+094300170324      *             TRNP.CONTR_REDEM_CODE IN ( "T2033R" , "RDSPTO")
+094400170324      *            ) OR
+094500170324      *            (TRNP.TRANS_TYPE_CODE  = "TRI"  AND
+094600170324      *             TRNP.CONTR_REDEM_CODE = "RDSPCA"
+094700170324      *            ) OR
+094800170324      *            (TRNP.TRANS_TYPE_CODE  = "TRO"  AND
+094900170324      *             TRNP.CONTR_REDEM_CODE = "REGSEL"
+095000170324      *            ) OR
+095100170324      *            (TRNP.TRANS_TYPE_CODE =  "SEL"  AND
+095200170324      *             TRNP.CONTR_REDEM_CODE IN ( "RDSDAP" , "RDSPTO",
+095300170324      *                                        "RDRAHA" , "RDRANF",
+095400170324      *                                        "RDRNAH" , "RDTRXO",
+095500170324      *                                        "REGSEL" , "RDLDAP" )
+095600170324      *            )OR
+095700170324      *            (TRNP.TRANS_TYPE_CODE =  "INC" )
+095800170324      *            )
+095900170314      *RFS168408 End
+096000170324                  TRNP.TRANS_TYPE_CODE IN
+096100170324                       ( "BUY", "TRI","SWI", "BAJ","BFW","INC",
+096200170324                         "SEL", "TRO" ,"SWO","TFE","FEE","SAJ")
+096300170324      *RFS169003-End
+096400170202           END-EXEC.
+096500170130
+096501171208      * ----------------------------------------*
+096700170122       DETAIL-PROCESSING.
+096701171208      * -----------------------------------------*
+096900170202           PERFORM OpenTranscursor.
+097000170202           PERFORM Fetchcursor  UNTIL lc_EndOfCursorYes
+097100170202           PERFORM Populate-Acc-Section31
+097200170202           PERFORM CloseCursor.
+097300170130
+097400170130       OpenTranscursor.
+097500170202           EXEC SQL
+097600170202              OPEN Trans
+097700170202           END-EXEC
+097800170130
+097900170202           MOVE SQLSTATE TO lc_sqlStates.
+098000170202
+098100170202           EVALUATE TRUE
+098200170202           WHEN lncc_sqlSuccessful OR lncc_sqlWarning
+098300170202                CONTINUE
+098400170202           WHEN OTHER
+098500170202                SET WS-ERR-13      TO TRUE
+098600170202                SET lncc_Error_13  TO TRUE
+098700170202                PERFORM DSP-ERROR
+098800170202           END-EVALUATE.
+098900170122
+099000170124      * Fetching NonReverse cursor
+099100170124
+099200170124       FETCHCURSOR.
+099300170202           EXEC SQL
+099400170202              FETCH next from Trans for 200 rows
+099500170202              INTO :ls-Fetch-C1  :ltb_Indicators
+099600170202           END-EXEC
+099700170202
+099800170202           MOVE SQLSTATE TO lc_sqlStates.
+099900170126
+100000170202           EVALUATE TRUE
+100100170202           WHEN lncc_sqlSuccessful OR lncc_sqlWarning
+100200170202                MOVE SQLERRD(3) TO ln-Max-Rows
+100300170202                PERFORM PROCESS-RECORDS VARYING FETCHIDX FROM 1 BY 1
+100400170202                         UNTIL FETCHIDX    > ln-Max-Rows
+100500170202           WHEN lncc_sqlEnd
+100600170202                SET lc_EndOfCursorYes TO TRUE
+100700170202           WHEN OTHER
+100800170202                SET WS-ERR-14      TO TRUE
+100900170202                SET lncc_Error_14  TO TRUE
+101000170202                PERFORM DSP-ERROR
+101100170202           END-EVALUATE.
+101200170124
+101300170125       CLOSECURSOR.
+101400170202           EXEC SQL
+101500170202              CLOSE Trans
+101600170202           END-EXEC.
+101700170202
+101800170202           MOVE SQLSTATE TO lc_sqlStates.
+101900170202
+102000170202           EVALUATE TRUE
+102100170202           WHEN lncc_sqlSuccessful OR lncc_sqlWarning
+102200170202                CONTINUE
+102300170202           WHEN OTHER
+102400170202                SET WS-ERR-15      TO TRUE
+102500170202                SET lncc_Error_15  TO TRUE
+102600170202                PERFORM DSP-ERROR
+102700170202           END-EVALUATE.
+102800170112
+102900170112       PROCESS-RECORDS.
+103000170130
+103100170202           INITIALIZE ln_TradeDate
+103200170202                      ln_GrossAmt
+103300170202                      ln_NetAmt
+103400170202                      ln_TransStatusCode
+103500170202                      lc_Currency
+103600170202                      lc_transTypeCode
+103700170202                      lc_ContRedemCode
+103800170202                      li_PlacementDate
+103900170202                      li_TransNo.
+104000170129
+104100170202           MOVE li_TradeDate1(fetchidx)         TO ln_TradeDate
+104200170202           MOVE ln_GrossAmount(fetchidx)        TO ln_GrossAmt
+104300170202           MOVE ln_NetAmount(fetchidx)          TO ln_NetAmt
+104400170202           MOVE lc_TransStatus(fetchidx)        TO ln_TransStatusCode
+104500170202           MOVE lc_Currency1(fetchidx)          TO lc_Currency
+104600170202           MOVE lc_transTypeCodeCode1(fetchidx) TO lc_transTypeCode
+104700170202           MOVE lc_ContRedemCode1(fetchidx)     TO lc_ContRedemCode
+104800170202           MOVE li_PlacementDate1(fetchidx)     TO li_PlacementDate
+104900170202           MOVE li_TransNo1(fetchidx)           TO li_TransNo
+105000170130
+105100170314      *RFS168408 Start
+105200170314      *    IF lc_transTypeCode = "BUY" AND
+105300170314      *       lc_ContRedemCode = "NOTAXB" OR "RDPABC" OR "RDPANL" OR
+105400170314      *                          "RDPANS" OR "RDPAON" OR "RDSPBC" OR
+105500170314      *                          "RDSPCA" OR "RDSPGC" OR "RDSPRL" OR
+105600170314      *                          "RDSPTI" OR "RDSRRE" OR "RDTRXI" OR
+105700170314      *                          "REGBUY"
+105800170324      *RFS169003-Starts
+105900170324      *    IF lc_transTypeCode = "BUY"
+106000170324           IF lc_transTypeCode = "BUY" OR "BAJ" OR "BFW"
+106100170324      *RFS169003-End
+106200170314      *RFS168408 End
+106300170202               PERFORM PURCHASE-TRANS
+106400170202           END-IF.
+106500170126
+106600170314      *RFS168408 Start
+106700170314      *    IF ( lc_transTypeCode = "SWI" AND
+106800170314      *         lc_ContRedemCode = "T2033" OR "RDSPTI") OR
+106900170314      *       ( lc_transTypeCode = "TRI" AND
+107000170314      *         lc_ContRedemCode = "RDSPCA" )
+107100170314           IF   lc_transTypeCode = "SWI" OR  "TRI"
+107200170314      *RFS168408 End
+107300170202                PERFORM TRANSFER-SWITCH-RECORDS
+107400170127
+107500170202                IF ln_GrossAmt NOT = 0
+107600170202                   PERFORM PURCHASE-TRANS
+107700170202                END-IF
+107800170202           END-IF.
+107900170127
+108000170314      *RFS168408 Start
+108100170314      *    IF lc_transTypeCode = "SEL" AND
+108200170314      *       lc_ContRedemCode = "RDSDAP" OR "RDSPTO" OR "RDRAHA" OR
+108300170314      *                          "RDRANF" OR "RDRNAH" OR "RDTRXO" OR
+108400170314      *                          "REGSEL" OR "RDLDAP"
+108500170324      *RFS169003-Starts
+108600170324      *    IF lc_transTypeCode = "SEL"
+108700170324           IF lc_transTypeCode = "SEL" OR "TFE" OR "FEE" OR "SAJ"
+108800170324      *RFS169003-End
+108900170314      *RFS168408 End
+109000170202              PERFORM REDEEM-TRANS
+109100170202           END-IF.
+109200170314
+109300170314      *RFS168408 Start
+109400170314      *    IF ( lc_transTypeCode = "SWO" AND
+109500170314      *         lc_ContRedemCode = "T2033R" OR "RDSPTO") OR
+109600170314      *       ( lc_transTypeCode = "TRO" AND
+109700170314      *         lc_ContRedemCode = "REGSEL" )
+109800170314           IF   lc_transTypeCode = "SWO" OR "TRO"
+109900170314      *RFS168408 End
+110000170202                PERFORM TRANSFER-SWITCH-RECORDS
+110100170202                IF ln_NetAmt NOT = 0
+110200170202                   PERFORM REDEEM-TRANS
+110300170202                END-IF
+110400170202           END-IF.
+110500170127
+110600170202           IF lc_transTypeCode  = "INC"
+110700170202              PERFORM INCOME-RECORDS
+110800170202              IF ln_NetAmt NOT  = 0
+110900170202                 PERFORM REDEEM-TRANS
+111000170202              END-IF
+111100170202           END-IF.
+111200170127
+111300170126       PURCHASE-TRANS.
+111400170126
+111500170202           MOVE "P" TO lc_Type
+111600170130
+111700170202           IF lc_Currency NOT EQUAL TO lc_BaseCurrency
+111800170202              PERFORM APPLY-EXCHAGE-RATE
+111900170202           END-IF.
+112000170124
+112100170202           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-1  AND
+112200170314      * RFS168408 Start
+112300170314      *       AP-PERIOD-ROR-APPLICABLE-1 = "Y"
+112400170314              ( AP-PERIOD-ROR-APPLICABLE-1 = "Y" OR
+112500170314                AP-PERIOD-CODE-1  = "INC"        OR
+112600170314                AP-PERIOD-CODE-1  = "YTD")
+112700170314      * RFS168408 End
+112800170202              ADD ln_GrossAmt    TO ln_TotPurAmt1
+112900170202           END-IF.
+113000170202           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-2  AND
+113100170314      * RFS168408 Start
+113200170314      *       AP-PERIOD-ROR-APPLICABLE-2 = "Y"
+113300170314            ( AP-PERIOD-ROR-APPLICABLE-2 = "Y" OR
+113400170314              AP-PERIOD-CODE-2  = "INC"        OR
+113500170314              AP-PERIOD-CODE-2  = "YTD")
+113600170314      * RFS168408 End
+113700170202              ADD ln_GrossAmt    TO ln_TotPurAmt2
+113800170202           END-IF.
+113900170202           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-3  AND
+114000170314      * RFS168408 Start
+114100170314      *       AP-PERIOD-ROR-APPLICABLE-3 = "Y"
+114200170314            ( AP-PERIOD-ROR-APPLICABLE-3 = "Y" OR
+114300170314              AP-PERIOD-CODE-3  = "INC"        OR
+114400170314              AP-PERIOD-CODE-3  = "YTD")
+114500170314      * RFS168408 End
+114600170202              ADD ln_GrossAmt    TO ln_TotPurAmt3
+114700170202           END-IF.
+114800170202           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-4  AND
+114900170314      * RFS168408 Start
+115000170314      *       AP-PERIOD-ROR-APPLICABLE-4 = "Y"
+115100170314            ( AP-PERIOD-ROR-APPLICABLE-4 = "Y" OR
+115200170314              AP-PERIOD-CODE-4  = "INC"        OR
+115300170314              AP-PERIOD-CODE-4  = "YTD")
+115400170314      * RFS168408 End
+115500170202              ADD ln_GrossAmt    TO ln_TotPurAmt4
+115600170202           END-IF.
+115700170202           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-5  AND
+115800170314      * RFS168408 Start
+115900170314      *       AP-PERIOD-ROR-APPLICABLE-5 = "Y"
+116000170314            ( AP-PERIOD-ROR-APPLICABLE-5 = "Y" OR
+116100170314              AP-PERIOD-CODE-5  = "INC"        OR
+116200170314              AP-PERIOD-CODE-5  = "YTD")
+116300170314      * RFS168408 End
+116400170202              ADD ln_GrossAmt    TO ln_TotPurAmt5
+116500170202           END-IF.
+116600170202           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-6  AND
+116700170314      * RFS168408 Start
+116800170314      *       AP-PERIOD-ROR-APPLICABLE-6 = "Y"
+116900170314            ( AP-PERIOD-ROR-APPLICABLE-6 = "Y" OR
+117000170314              AP-PERIOD-CODE-6  = "INC"        OR
+117100170314              AP-PERIOD-CODE-6  = "YTD")
+117200170314      * RFS168408 End
+117300170202              ADD ln_GrossAmt    TO ln_TotPurAmt6
+117400170202           END-IF.
+117500170202           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-7  AND
+117600170314      * RFS168408 Start
+117700170314      *       AP-PERIOD-ROR-APPLICABLE-7 = "Y"
+117800170314             ( AP-PERIOD-ROR-APPLICABLE-7 = "Y" OR
+117900170314               AP-PERIOD-CODE-7  = "INC"        OR
+118000170314               AP-PERIOD-CODE-7  = "YTD")
+118100170314      * RFS168408 End
+118200170202              ADD ln_GrossAmt    TO ln_TotPurAmt7
+118300170202           END-IF.
+118400170202           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-8  AND
+118500170314      * RFS168408 Start
+118600170314      *       AP-PERIOD-ROR-APPLICABLE-8 = "Y"
+118700170314            ( AP-PERIOD-ROR-APPLICABLE-8 = "Y" OR
+118800170314              AP-PERIOD-CODE-8  = "INC"        OR
+118900170314              AP-PERIOD-CODE-8  = "YTD")
+119000170314      * RFS168408 End
+119100170202              ADD ln_GrossAmt    TO ln_TotPurAmt8
+119200170202           END-IF.
+119300170202           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-9  AND
+119400170314      * RFS168408 Start
+119500170314      *       AP-PERIOD-ROR-APPLICABLE-9 = "Y"
+119600170314             ( AP-PERIOD-ROR-APPLICABLE-9 = "Y" OR
+119700170314               AP-PERIOD-CODE-9  = "INC"        OR
+119800170314               AP-PERIOD-CODE-9  = "YTD")
+119900170314      * RFS168408 End
+120000170202              ADD ln_GrossAmt    TO ln_TotPurAmt9
+120100170202           END-IF.
+120200170202           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-10 AND
+120300170314      * RFS168408 Start
+120400170314      *       AP-PERIOD-ROR-APPLICABLE-10 = "Y"
+120500170314             ( AP-PERIOD-ROR-APPLICABLE-10 = "Y" OR
+120600170314               AP-PERIOD-CODE-10  = "INC"        OR
+120700170314               AP-PERIOD-CODE-10  = "YTD")
+120800170314      * RFS168408 End
+120900170202              ADD ln_GrossAmt    TO ln_TotPurAmt10
+121000170202           END-IF.
+121100170126
+121200170126       REDEEM-TRANS.
+121300170127
+121400170202           PERFORM WITHHOLDING-TAX.
+121500170127
+121600170202           MOVE "R" TO lc_Type
+121700170202           IF lc_Currency NOT EQUAL TO lc_BaseCurrency
+121800170202              PERFORM APPLY-EXCHAGE-RATE
+121900170202           END-IF
+122000170112
+122100170202           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-1  AND
+122200170314      * RFS168408 Start
+122300170314      *       AP-PERIOD-ROR-APPLICABLE-1 = "Y"
+122400170314              (AP-PERIOD-ROR-APPLICABLE-1 = "Y"   OR
+122500170314               AP-PERIOD-CODE-1  = "INC"          OR
+122600170314               AP-PERIOD-CODE-1  = "YTD")
+122700170314      * RFS168408 End
+122800170202              ADD ln_NetAmt TO ln_TotRedeemAmt1
+122900170202           END-IF
+123000170314           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-2  AND
+123100170314      * RFS168408 Start
+123200170314      *       AP-PERIOD-ROR-APPLICABLE-2 = "Y"
+123300170314           (AP-PERIOD-ROR-APPLICABLE-2 = "Y"   OR
+123400170314            AP-PERIOD-CODE-2  = "INC"          OR
+123500170314            AP-PERIOD-CODE-2  = "YTD")
+123600170314      * RFS168408 End
+123700170202              ADD ln_NetAmt TO ln_TotRedeemAmt2
+123800170202           END-IF
+123900170202           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-3  AND
+124000170314      * RFS168408 Start
+124100170314      *       AP-PERIOD-ROR-APPLICABLE-3 = "Y"
+124200170314             (AP-PERIOD-ROR-APPLICABLE-3 = "Y"   OR
+124300170314              AP-PERIOD-CODE-3  = "INC"          OR
+124400170314              AP-PERIOD-CODE-3  = "YTD")
+124500170314      * RFS168408 End
+124600170202              ADD ln_NetAmt TO ln_TotRedeemAmt3
+124700170202           END-IF
+124800170202           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-4  AND
+124900170314      * RFS168408 Start
+125000170314      *       AP-PERIOD-ROR-APPLICABLE-4 = "Y"
+125100170314             (AP-PERIOD-ROR-APPLICABLE-4 = "Y"   OR
+125200170314              AP-PERIOD-CODE-4  = "INC"          OR
+125300170314              AP-PERIOD-CODE-4  = "YTD")
+125400170314      * RFS168408 End
+125500170202              ADD ln_NetAmt TO ln_TotRedeemAmt4
+125600170202           END-IF
+125700170202           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-5  AND
+125800170314      * RFS168408 Start
+125900170314      *       AP-PERIOD-ROR-APPLICABLE-5 = "Y"
+126000170314             (AP-PERIOD-ROR-APPLICABLE-5 = "Y"   OR
+126100170314              AP-PERIOD-CODE-5  = "INC"          OR
+126200170314              AP-PERIOD-CODE-5  = "YTD")
+126300170314      * RFS168408 End
+126400170202              ADD ln_NetAmt TO ln_TotRedeemAmt5
+126500170202           END-IF
+126600170202           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-6  AND
+126700170314      * RFS168408 Start
+126800170314      *       AP-PERIOD-ROR-APPLICABLE-6 = "Y"
+126900170314             (AP-PERIOD-ROR-APPLICABLE-6 = "Y"   OR
+127000170314              AP-PERIOD-CODE-6  = "INC"          OR
+127100170314              AP-PERIOD-CODE-6  = "YTD")
+127200170314      * RFS168408 End
+127300170202              ADD ln_NetAmt TO ln_TotRedeemAmt6
+127400170202           END-IF
+127500170202           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-7  AND
+127600170314      * RFS168408 Start
+127700170314      *       AP-PERIOD-ROR-APPLICABLE-7 = "Y"
+127800170314             (AP-PERIOD-ROR-APPLICABLE-7 = "Y"   OR
+127900170314              AP-PERIOD-CODE-7  = "INC"          OR
+128000170314              AP-PERIOD-CODE-7  = "YTD")
+128100170314      * RFS168408 End
+128200170202              ADD ln_NetAmt TO ln_TotRedeemAmt7
+128300170202           END-IF
+128400170202           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-8  AND
+128500170314      * RFS168408 Start
+128600170314      *       AP-PERIOD-ROR-APPLICABLE-8 = "Y"
+128700170314             (AP-PERIOD-ROR-APPLICABLE-8 = "Y"   OR
+128800170314              AP-PERIOD-CODE-8  = "INC"          OR
+128900170314              AP-PERIOD-CODE-8  = "YTD")
+129000170314      * RFS168408 End
+129100170202              ADD ln_NetAmt TO ln_TotRedeemAmt8
+129200170202           END-IF
+129300170202           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-9  AND
+129400170314      * RFS168408 Start
+129500170314      *       AP-PERIOD-ROR-APPLICABLE-9 = "Y"
+129600170314             (AP-PERIOD-ROR-APPLICABLE-9 = "Y"   OR
+129700170314              AP-PERIOD-CODE-9  = "INC"          OR
+129800170314              AP-PERIOD-CODE-9  = "YTD")
+129900170314      * RFS168408 End
+130000170202              ADD ln_NetAmt TO ln_TotRedeemAmt9
+130100170202           END-IF
+130200170202           IF ln_TradeDate >= A31-PERIOD-CF-START-DATE-10 AND
+130300170314      * RFS168408 Start
+130400170314      *       AP-PERIOD-ROR-APPLICABLE-10 = "Y"
+130500170314             (AP-PERIOD-ROR-APPLICABLE-10 = "Y"   OR
+130600170314              AP-PERIOD-CODE-10  = "INC"          OR
+130700170314              AP-PERIOD-CODE-10  = "YTD")
+130800170314      * RFS168408 End
+130900170202              ADD ln_NetAmt TO ln_TotRedeemAmt10
+131000170202           END-IF.
+131100170112
+131200170126       TRANSFER-SWITCH-RECORDS.
+131300170112
+131400170202           INITIALIZE MFATRNP OF TRANS-T-REC
+131500170202                      li_Placement-Date-2-Swtr
+131600170202                      li_Trans-No-2-Swtr.
+131700170112
+131800170202           MOVE "N" TO ln_Target-Error.
+131900170112
+132000170202           CALL "STMTTARGET" USING   li_PlacementDate
+132100170202                                     li_TransNo
+132200170202                                     lc_transTypeCode
+132300170202                                     ln_TransStatusCode
+132400170202                                     li_Placement-Date-2-Swtr
+132500170202                                     li_Trans-No-2-Swtr
+132600170202                                     ln_Hidden-Flag
+132700170202                                     ln_Declare-Cursor.
+132800170112
+132900170202           MOVE li_Placement-Date-2-Swtr TO PLACEMENT-DATE
+133000170202                                         OF TRANS-T-REC.
+133100170202           MOVE li_Trans-No-2-Swtr       TO TRANS-NO
+133200170202                                         OF TRANS-T-REC.
+133300170112
+133400170202           READ TRANS-T
+133500170202            INVALID KEY
+133600170202              INITIALIZE MFATRNP OF TRANS-T-REC
+133700170202              MOVE "Y" TO ln_Target-Error
+133800170202           END-READ.
+133900170122
+134000170202           IF ln_Target-Error NOT = "Y" AND
+134100170202              ACCOUNT-NO OF TRANS-T-REC  = ln_AccountNo
+134200170202
+134300170202              MOVE ZEROES         TO ln_NetAmt
+134400170202                                     ln_GrossAmt
+134500170202           END-IF.
+134600170112
+134700170112       INCOME-RECORDS.
+134800170122
+134900170202           MOVE li_PlacementDate  TO PLACEMENT-DATE
+135000170202                                  OF TRANS-DISTR-DETAILS-REC
+135100170202           MOVE li_TransNo        TO TRANS-NO
+135200170202                                  OF TRANS-DISTR-DETAILS-REC
+135300170119
+135400170202           READ TRANS-DISTR-DETAILS
+135500170202                INVALID KEY
+135600170202                   MOVE SPACES    TO DISTR-OPTION-CODE
+135700170202                                  OF TRANS-DISTR-DETAILS-REC
+135800170202           END-READ
+135900170119
+136000170202           IF  DISTR-OPTION-CODE  OF TRANS-DISTR-DETAILS-REC NOT = "C"
+136100170202               MOVE ZEROES  TO ln_NetAmt
+136200170202           END-IF.
+136300170119
+136400170124       WITHHOLDING-TAX.
+136500170124
+136600170202           INITIALIZE ln_fedprvamount.
+136700170131
+136800170202           MOVE li_PlacementDate TO PLACEMENT-DATE
+136900170202                                 OF TRANS-CHARGES-REC
+137000170202           MOVE li_TransNo       TO TRANS-NO
+137100170202                                 OF TRANS-CHARGES-REC
+137200170202           MOVE  "FEDT"          TO DEDUCTION-CODE
+137300170202                                 OF TRANS-CHARGES-REC
+137400170202           READ TRANS-CHARGES
+137500170202            INVALID KEY
+137600170202               MOVE ZEROES TO CHARGE  OF TRANS-CHARGES-REC
+137700170202           END-READ.
+137800170125
+137900170202           ADD  CHARGE OF TRANS-CHARGES-REC TO ln_fedprvamount
+138000170202           MOVE li_PlacementDate TO PLACEMENT-DATE
+138100170202                                 OF TRANS-CHARGES-REC
+138200170202           MOVE li_TransNo       TO TRANS-NO
+138300170202                                 OF TRANS-CHARGES-REC
+138400170202           MOVE  "PRVT"          TO DEDUCTION-CODE
+138500170202                                 OF TRANS-CHARGES-REC
+138600170202           READ TRANS-CHARGES
+138700170202           INVALID KEY
+138800170202              MOVE ZEROES TO CHARGE  OF TRANS-CHARGES-REC
+138900170202           END-READ.
+139000170131
+139100170202           ADD  CHARGE OF TRANS-CHARGES-REC TO ln_fedprvamount
+139200170202           IF ln_fedprvamount > 0
+139300170202              COMPUTE ln_NetAmt = ln_fedprvamount + ln_NetAmt
+139400170202           END-IF.
+139500170124
+139600170112       POPULATE-ACC-SECTION31.
+139700170126
+139800170119
+139900170130      *Period-1
+140000170314168408*    IF AP-PERIOD-ROR-APPLICABLE-1 = "Y"
+140100170314168408     IF ( AP-PERIOD-ROR-APPLICABLE-1 = "Y"  OR
+140200170314168408          AP-PERIOD-CODE-1 = "INC"          OR
+140300170314168408          AP-PERIOD-CODE-1 = "YTD" )
+140400170124
+140500170130              INITIALIZE ln_Open_Mkt_Val
+140600170130                         lc_Open_Mkt_Val_Sign
+140700170130                         ln_OpenDate
+140800170119
+140900170130              MOVE ln_Open-Date1       TO ln_OpenDate
+141000170130              PERFORM GET-OPEN-MAKT-VALUE
+141100170130              MOVE ln_Open_Mkt_Val     TO A31-PERIOD-CF-OPENINGVALUE-1
+141200170130
+141300170130              MOVE lc_Open_Mkt_Val_Sign
+141400170130                                       TO A31-PERIOD-CF-OPNINGVL-1-SIGN
+141500170130              COMPUTE ln_ChgValue    =  ln_Clo_Mkt_Val
+141600170130                                     -  ln_Open_Mkt_Val
+141700170130                                     -  ln_TotPurAmt1
+141800170130                                     +  ln_TotRedeemAmt1
+141900170112
+142000170130              MOVE ln_ChgValue         TO A31-PERIOD-CF-VALUECHG-1
+142100170129              IF ln_ChgValue < 0
+142200170130                 MOVE "-"              TO A31-PERIOD-CF-VALUECHG-1-SIGN
+142300170129              END-IF
+142400170119
+142500170130              MOVE ln_TotPurAmt1       TO A31-PERIOD-CF-TOTAMTINV-1
+142600170129              IF ln_TotPurAmt1 < 0
+142700170129                 MOVE "-"              TO A31-PERIOD-CF-TOTAMTINV-1-SIGN
+142800170129              END-IF
+142900170112
+143000170130              MOVE ln_TotRedeemAmt1    TO A31-PERIOD-CF-TOTAMTRED-1
+143100170129              IF ln_TotRedeemAmt1 < 0
+143200170130                 MOVE "-"              TO A31-PERIOD-CF-TOTAMTRED-1-SIGN
+143300170129              END-IF
+143400170129            END-IF.
+143500170130      *Period-2
+143600170314168408*    IF AP-PERIOD-ROR-APPLICABLE-2 = "Y"
+143700170314168408     IF ( AP-PERIOD-ROR-APPLICABLE-2 = "Y"  OR
+143800170314168408          AP-PERIOD-CODE-2 = "INC"          OR
+143900170314168408          AP-PERIOD-CODE-2 = "YTD" )
+144000170130
+144100170130              INITIALIZE ln_Open_Mkt_Val
+144200170130                         lc_Open_Mkt_Val_Sign
+144300170130                         ln_OpenDate
+144400170130
+144500170130              MOVE ln_Open-Date2       TO ln_OpenDate
+144600170130              PERFORM GET-OPEN-MAKT-VALUE
+144700170130              MOVE ln_Open_Mkt_Val     TO A31-PERIOD-CF-OPENINGVALUE-2
+144800170130
+144900170130              MOVE lc_Open_Mkt_Val_Sign
+145000170130                                       TO A31-PERIOD-CF-OPNINGVL-2-SIGN
+145100170130              COMPUTE ln_ChgValue    =  ln_Clo_Mkt_Val
+145200170130                                     -  ln_Open_Mkt_Val
+145300170130                                     -  ln_TotPurAmt2
+145400170130                                     +  ln_TotRedeemAmt2
+145500170130
+145600170130              MOVE ln_ChgValue         TO A31-PERIOD-CF-VALUECHG-2
+145700170130              IF ln_ChgValue < 0
+145800170130                 MOVE "-"              TO A31-PERIOD-CF-VALUECHG-2-SIGN
+145900170130              END-IF
+146000170130
+146100170130              MOVE ln_TotPurAmt2       TO A31-PERIOD-CF-TOTAMTINV-2
+146200170130              IF ln_TotPurAmt2 < 0
+146300170130                 MOVE "-"              TO A31-PERIOD-CF-TOTAMTINV-2-SIGN
+146400170130              END-IF
+146500170130
+146600170130              MOVE ln_TotRedeemAmt2    TO A31-PERIOD-CF-TOTAMTRED-2
+146700170130              IF ln_TotRedeemAmt2 < 0
+146800170130                 MOVE "-"              TO A31-PERIOD-CF-TOTAMTRED-2-SIGN
+146900170130              END-IF
+147000170130            END-IF.
+147100170130      *Period-3
+147200170314168408*    IF AP-PERIOD-ROR-APPLICABLE-3 = "Y"
+147300170314168408     IF ( AP-PERIOD-ROR-APPLICABLE-3 = "Y"  OR
+147400170314168408          AP-PERIOD-CODE-3 = "INC"          OR
+147500170314168408          AP-PERIOD-CODE-3 = "YTD" )
+147600170130
+147700170130              INITIALIZE ln_Open_Mkt_Val
+147800170130                         lc_Open_Mkt_Val_Sign
+147900170130                         ln_OpenDate
+148000170130
+148100170130              MOVE ln_Open-Date3       TO ln_OpenDate
+148200170130              PERFORM GET-OPEN-MAKT-VALUE
+148300170130              MOVE ln_Open_Mkt_Val     TO A31-PERIOD-CF-OPENINGVALUE-3
+148400170130
+148500170130              MOVE lc_Open_Mkt_Val_Sign
+148600170130                                       TO A31-PERIOD-CF-OPNINGVL-3-SIGN
+148700170130              COMPUTE ln_ChgValue    =  ln_Clo_Mkt_Val
+148800170130                                     -  ln_Open_Mkt_Val
+148900170130                                     -  ln_TotPurAmt3
+149000170130                                     +  ln_TotRedeemAmt3
+149100170130
+149200170130              MOVE ln_ChgValue         TO A31-PERIOD-CF-VALUECHG-3
+149300170130              IF ln_ChgValue < 0
+149400170130                 MOVE "-"              TO A31-PERIOD-CF-VALUECHG-3-SIGN
+149500170130              END-IF
+149600170130
+149700170130              MOVE ln_TotPurAmt3       TO A31-PERIOD-CF-TOTAMTINV-3
+149800170130              IF ln_TotPurAmt3 < 0
+149900170130                 MOVE "-"              TO A31-PERIOD-CF-TOTAMTINV-3-SIGN
+150000170130              END-IF
+150100170130
+150200170130              MOVE ln_TotRedeemAmt3    TO A31-PERIOD-CF-TOTAMTRED-3
+150300170130              IF ln_TotRedeemAmt3 < 0
+150400170130                 MOVE "-"              TO A31-PERIOD-CF-TOTAMTRED-3-SIGN
+150500170130              END-IF
+150600170130            END-IF.
+150700170130      *Period-4
+150800170314168408*    IF AP-PERIOD-ROR-APPLICABLE-4 = "Y"
+150900170314168408     IF ( AP-PERIOD-ROR-APPLICABLE-4 = "Y"  OR
+151000170314168408          AP-PERIOD-CODE-4 = "INC"          OR
+151100170314168408          AP-PERIOD-CODE-4 = "YTD" )
+151200170130
+151300170130              INITIALIZE ln_Open_Mkt_Val
+151400170130                         lc_Open_Mkt_Val_Sign
+151500170130                         ln_OpenDate
+151600170130
+151700170130              MOVE ln_Open-Date4       TO ln_OpenDate
+151800170130              PERFORM GET-OPEN-MAKT-VALUE
+151900170130              MOVE ln_Open_Mkt_Val     TO A31-PERIOD-CF-OPENINGVALUE-4
+152000170130
+152100170130              MOVE lc_Open_Mkt_Val_Sign
+152200170130                                       TO A31-PERIOD-CF-OPNINGVL-4-SIGN
+152300170130              COMPUTE ln_ChgValue    =  ln_Clo_Mkt_Val
+152400170130                                     -  ln_Open_Mkt_Val
+152500170130                                     -  ln_TotPurAmt4
+152600170130                                     +  ln_TotRedeemAmt4
+152700170130
+152800170130              MOVE ln_ChgValue         TO A31-PERIOD-CF-VALUECHG-4
+152900170130              IF ln_ChgValue < 0
+153000170130                 MOVE "-"              TO A31-PERIOD-CF-VALUECHG-4-SIGN
+153100170130              END-IF
+153200170130
+153300170130              MOVE ln_TotPurAmt4       TO A31-PERIOD-CF-TOTAMTINV-4
+153400170130              IF ln_TotPurAmt4 < 0
+153500170130                 MOVE "-"              TO A31-PERIOD-CF-TOTAMTINV-4-SIGN
+153600170130              END-IF
+153700170130
+153800170130              MOVE ln_TotRedeemAmt4    TO A31-PERIOD-CF-TOTAMTRED-4
+153900170130              IF ln_TotRedeemAmt4 < 0
+154000170130                 MOVE "-"              TO A31-PERIOD-CF-TOTAMTRED-4-SIGN
+154100170130              END-IF
+154200170130            END-IF.
+154300170130      *Period-5
+154400170314168408*    IF AP-PERIOD-ROR-APPLICABLE-5 = "Y"
+154500170314168408     IF ( AP-PERIOD-ROR-APPLICABLE-5 = "Y"  OR
+154600170314168408          AP-PERIOD-CODE-5 = "INC"          OR
+154700170314168408          AP-PERIOD-CODE-5 = "YTD" )
+154800170130
+154900170130              INITIALIZE ln_Open_Mkt_Val
+155000170130                         lc_Open_Mkt_Val_Sign
+155100170130                         ln_OpenDate
+155200170130
+155300170130              MOVE ln_Open-Date5       TO ln_OpenDate
+155400170130              PERFORM GET-OPEN-MAKT-VALUE
+155500170130              MOVE ln_Open_Mkt_Val     TO A31-PERIOD-CF-OPENINGVALUE-5
+155600170130
+155700170130              MOVE lc_Open_Mkt_Val_Sign
+155800170130                                       TO A31-PERIOD-CF-OPNINGVL-5-SIGN
+155900170130              COMPUTE ln_ChgValue    =  ln_Clo_Mkt_Val
+156000170130                                     -  ln_Open_Mkt_Val
+156100170130                                     -  ln_TotPurAmt5
+156200170130                                     +  ln_TotRedeemAmt5
+156300170130
+156400170130              MOVE ln_ChgValue         TO A31-PERIOD-CF-VALUECHG-5
+156500170130              IF ln_ChgValue < 0
+156600170130                 MOVE "-"              TO A31-PERIOD-CF-VALUECHG-5-SIGN
+156700170130              END-IF
+156800170130
+156900170130              MOVE ln_TotPurAmt5       TO A31-PERIOD-CF-TOTAMTINV-5
+157000170130              IF ln_TotPurAmt5 < 0
+157100170130                 MOVE "-"              TO A31-PERIOD-CF-TOTAMTINV-5-SIGN
+157200170130              END-IF
+157300170130
+157400170130              MOVE ln_TotRedeemAmt5    TO A31-PERIOD-CF-TOTAMTRED-5
+157500170130              IF ln_TotRedeemAmt5 < 0
+157600170130                 MOVE "-"              TO A31-PERIOD-CF-TOTAMTRED-5-SIGN
+157700170130              END-IF
+157800170130            END-IF.
+157900170130      *Period-6
+158000170314168408*    IF AP-PERIOD-ROR-APPLICABLE-6 = "Y"
+158100170314168408     IF ( AP-PERIOD-ROR-APPLICABLE-6 = "Y"  OR
+158200170314168408          AP-PERIOD-CODE-6 = "INC"          OR
+158300170314168408          AP-PERIOD-CODE-6 = "YTD" )
+158400170130
+158500170130              INITIALIZE ln_Open_Mkt_Val
+158600170130                         lc_Open_Mkt_Val_Sign
+158700170130                         ln_OpenDate
+158800170130
+158900170130              MOVE ln_Open-Date6       TO ln_OpenDate
+159000170130              PERFORM GET-OPEN-MAKT-VALUE
+159100170130              MOVE ln_Open_Mkt_Val     TO A31-PERIOD-CF-OPENINGVALUE-6
+159200170130
+159300170130              MOVE lc_Open_Mkt_Val_Sign
+159400170130                                       TO A31-PERIOD-CF-OPNINGVL-6-SIGN
+159500170130              COMPUTE ln_ChgValue    =  ln_Clo_Mkt_Val
+159600170130                                     -  ln_Open_Mkt_Val
+159700170130                                     -  ln_TotPurAmt6
+159800170130                                     +  ln_TotRedeemAmt6
+159900170130
+160000170130              MOVE ln_ChgValue         TO A31-PERIOD-CF-VALUECHG-6
+160100170130              IF ln_ChgValue < 0
+160200170130                 MOVE "-"              TO A31-PERIOD-CF-VALUECHG-6-SIGN
+160300170130              END-IF
+160400170130
+160500170130              MOVE ln_TotPurAmt6       TO A31-PERIOD-CF-TOTAMTINV-6
+160600170130              IF ln_TotPurAmt6 < 0
+160700170130                 MOVE "-"              TO A31-PERIOD-CF-TOTAMTINV-6-SIGN
+160800170130              END-IF
+160900170130
+161000170130              MOVE ln_TotRedeemAmt6    TO A31-PERIOD-CF-TOTAMTRED-6
+161100170130              IF ln_TotRedeemAmt6 < 0
+161200170130                 MOVE "-"              TO A31-PERIOD-CF-TOTAMTRED-6-SIGN
+161300170130              END-IF
+161400170130            END-IF.
+161500170130      *Period-7
+161600170314168408*    IF AP-PERIOD-ROR-APPLICABLE-7 = "Y"
+161700170314168408     IF ( AP-PERIOD-ROR-APPLICABLE-7 = "Y"  OR
+161800170314168408          AP-PERIOD-CODE-7 = "INC"          OR
+161900170314168408          AP-PERIOD-CODE-7 = "YTD" )
+162000170130
+162100170130              INITIALIZE ln_Open_Mkt_Val
+162200170130                         lc_Open_Mkt_Val_Sign
+162300170130                         ln_OpenDate
+162400170130
+162500170130              MOVE ln_Open-Date7       TO ln_OpenDate
+162600170130              PERFORM GET-OPEN-MAKT-VALUE
+162700170130              MOVE ln_Open_Mkt_Val     TO A31-PERIOD-CF-OPENINGVALUE-7
+162800170130
+162900170130              MOVE lc_Open_Mkt_Val_Sign
+163000170130                                       TO A31-PERIOD-CF-OPNINGVL-7-SIGN
+163100170130              COMPUTE ln_ChgValue    =  ln_Clo_Mkt_Val
+163200170130                                     -  ln_Open_Mkt_Val
+163300170130                                     -  ln_TotPurAmt7
+163400170130                                     +  ln_TotRedeemAmt7
+163500170130
+163600170130              MOVE ln_ChgValue         TO A31-PERIOD-CF-VALUECHG-7
+163700170130              IF ln_ChgValue < 0
+163800170130                 MOVE "-"              TO A31-PERIOD-CF-VALUECHG-7-SIGN
+163900170130              END-IF
+164000170130
+164100170130              MOVE ln_TotPurAmt7       TO A31-PERIOD-CF-TOTAMTINV-7
+164200170130              IF ln_TotPurAmt7 < 0
+164300170130                 MOVE "-"              TO A31-PERIOD-CF-TOTAMTINV-7-SIGN
+164400170130              END-IF
+164500170130
+164600170130              MOVE ln_TotRedeemAmt7    TO A31-PERIOD-CF-TOTAMTRED-7
+164700170130              IF ln_TotRedeemAmt7 < 0
+164800170130                 MOVE "-"              TO A31-PERIOD-CF-TOTAMTRED-7-SIGN
+164900170130              END-IF
+165000170130            END-IF.
+165100170130      *Period-8
+165200170314168408*    IF AP-PERIOD-ROR-APPLICABLE-8 = "Y"
+165300170314168408     IF ( AP-PERIOD-ROR-APPLICABLE-8 = "Y"  OR
+165400170314168408          AP-PERIOD-CODE-8 = "INC"          OR
+165500170314168408          AP-PERIOD-CODE-8 = "YTD" )
+165600170130
+165700170130              INITIALIZE ln_Open_Mkt_Val
+165800170130                         lc_Open_Mkt_Val_Sign
+165900170130                         ln_OpenDate
+166000170130
+166100170130              MOVE ln_Open-Date8       TO ln_OpenDate
+166200170130              PERFORM GET-OPEN-MAKT-VALUE
+166300170130              MOVE ln_Open_Mkt_Val     TO A31-PERIOD-CF-OPENINGVALUE-8
+166400170130
+166500170130              MOVE lc_Open_Mkt_Val_Sign
+166600170130                                       TO A31-PERIOD-CF-OPNINGVL-8-SIGN
+166700170130              COMPUTE ln_ChgValue    =  ln_Clo_Mkt_Val
+166800170130                                     -  ln_Open_Mkt_Val
+166900170130                                     -  ln_TotPurAmt8
+167000170130                                     +  ln_TotRedeemAmt8
+167100170130
+167200170130              MOVE ln_ChgValue         TO A31-PERIOD-CF-VALUECHG-8
+167300170130              IF ln_ChgValue < 0
+167400170130                 MOVE "-"              TO A31-PERIOD-CF-VALUECHG-8-SIGN
+167500170130              END-IF
+167600170130
+167700170130              MOVE ln_TotPurAmt8       TO A31-PERIOD-CF-TOTAMTINV-8
+167800170130              IF ln_TotPurAmt8 < 0
+167900170130                 MOVE "-"              TO A31-PERIOD-CF-TOTAMTINV-8-SIGN
+168000170130              END-IF
+168100170130
+168200170130              MOVE ln_TotRedeemAmt8    TO A31-PERIOD-CF-TOTAMTRED-8
+168300170130              IF ln_TotRedeemAmt8 < 0
+168400170130                 MOVE "-"              TO A31-PERIOD-CF-TOTAMTRED-8-SIGN
+168500170130              END-IF
+168600170130            END-IF.
+168700170130      *Period-9
+168800170314168408*    IF AP-PERIOD-ROR-APPLICABLE-9 = "Y"
+168900170314168408     IF ( AP-PERIOD-ROR-APPLICABLE-9 = "Y"  OR
+169000170314168408          AP-PERIOD-CODE-9 = "INC"          OR
+169100170314168408          AP-PERIOD-CODE-9 = "YTD" )
+169200170130
+169300170130              INITIALIZE ln_Open_Mkt_Val
+169400170130                         lc_Open_Mkt_Val_Sign
+169500170130                         ln_OpenDate
+169600170130
+169700170130              MOVE ln_Open-Date9       TO ln_OpenDate
+169800170130              PERFORM GET-OPEN-MAKT-VALUE
+169900170130              MOVE ln_Open_Mkt_Val     TO A31-PERIOD-CF-OPENINGVALUE-9
+170000170130
+170100170130              MOVE lc_Open_Mkt_Val_Sign
+170200170130                                       TO A31-PERIOD-CF-OPNINGVL-9-SIGN
+170300170130              COMPUTE ln_ChgValue    =  ln_Clo_Mkt_Val
+170400170130                                     -  ln_Open_Mkt_Val
+170500170130                                     -  ln_TotPurAmt9
+170600170130                                     +  ln_TotRedeemAmt9
+170700170130
+170800170130              MOVE ln_ChgValue         TO A31-PERIOD-CF-VALUECHG-9
+170900170130              IF ln_ChgValue < 0
+171000170130                 MOVE "-"              TO A31-PERIOD-CF-VALUECHG-9-SIGN
+171100170130              END-IF
+171200170130
+171300170130              MOVE ln_TotPurAmt9       TO A31-PERIOD-CF-TOTAMTINV-9
+171400170130              IF ln_TotPurAmt9 < 0
+171500170130                 MOVE "-"              TO A31-PERIOD-CF-TOTAMTINV-9-SIGN
+171600170130              END-IF
+171700170130
+171800170130              MOVE ln_TotRedeemAmt9    TO A31-PERIOD-CF-TOTAMTRED-9
+171900170130              IF ln_TotRedeemAmt9 < 0
+172000170130                 MOVE "-"              TO A31-PERIOD-CF-TOTAMTRED-9-SIGN
+172100170130              END-IF
+172200170130            END-IF.
+172300170130      *Period-10
+172400170314168408*    IF AP-PERIOD-ROR-APPLICABLE-10 = "Y"
+172500170314168408     IF ( AP-PERIOD-ROR-APPLICABLE-10 = "Y"  OR
+172600170314168408          AP-PERIOD-CODE-10 = "INC"          OR
+172700170314168408          AP-PERIOD-CODE-10 = "YTD" )
+172800170130
+172900170130              INITIALIZE ln_Open_Mkt_Val
+173000170130                         lc_Open_Mkt_Val_Sign
+173100170130                         ln_OpenDate
+173200170130
+173300170130              MOVE ln_Open-Date10     TO ln_OpenDate
+173400170130              PERFORM GET-OPEN-MAKT-VALUE
+173500170130              MOVE ln_Open_Mkt_Val    TO A31-PERIOD-CF-OPENINGVALUE-10
+173600170130
+173700170130              MOVE lc_Open_Mkt_Val_Sign
+173800170130                                      TO A31-PERIOD-CF-OPNINGVL-10-SIGN
+173900170130              COMPUTE ln_ChgValue    =  ln_Clo_Mkt_Val
+174000170130                                     -  ln_Open_Mkt_Val
+174100170130                                     -  ln_TotPurAmt10
+174200170130                                     +  ln_TotRedeemAmt10
+174300170130
+174400170130              MOVE ln_ChgValue        TO A31-PERIOD-CF-VALUECHG-10
+174500170130              IF ln_ChgValue < 0
+174600170130                 MOVE "-"             TO A31-PERIOD-CF-VALUECHG-10-SIGN
+174700170130              END-IF
+174800170130
+174900170130              MOVE ln_TotPurAmt10     TO A31-PERIOD-CF-TOTAMTINV-10
+175000170130              IF ln_TotPurAmt10 < 0
+175100170130                 MOVE "-"             TO A31-PERIOD-CF-TOTAMTIV-10-SIGN
+175200170130              END-IF
+175300170130
+175400170130              MOVE ln_TotRedeemAmt10  TO A31-PERIOD-CF-TOTAMTRED-10
+175500170130              IF ln_TotRedeemAmt10 < 0
+175600170130                 MOVE "-"             TO A31-PERIOD-CF-TOTAMTRD-10-SIGN
+175700170130              END-IF
+175800170130            END-IF.
+175900170112
+176000170112
+176100170112         GET-OPEN-MAKT-VALUE.
+176200170112
+176300170406      *RFS169181 - STARTS
+176400170406      *    CALL "FXGETMKTV" USING ln_AccountNo,
+176500170406      *                           ln_OpenDate,
+176600170406      *                           ln_Open_Mkt_Val.
+176700170406           INITIALIZE  pi_GETMVTradeDate
+176800170406                       pi_GETMVPriceDate
+176801210414      *RFS1101968- Start *
+176802210414                       Pc_GETMVMode
+176803210414      *RFS1101968- End  *
+176900170406                       pi_GETMVAccountNo
+177000170406                       pc_GETMVInvestmentCode
+177100170406                       pn_GETMVMarketValue.
+177200170406
+177300170406           MOVE ln_OpenDate     TO pi_GETMVTradeDate
+177400170406                                   pi_GETMVPriceDate.
+177500170406           MOVE ln_AccountNo    TO pi_GETMVAccountNo.
+177501210410      *RFS1101968- Start *
+177502210410           MOVE Lncc_C          TO Pc_GETMVMode.
+177503210410      *RFS1101968- End  *
+177600170406
+177700170406           CALL "FXGETMKVT" USING  pi_GETMVTradeDate
+177800170406                                   pi_GETMVPriceDate
+177801210410      *RFS1101968- Start *
+177802210410                                   Pc_GETMVMode
+177803210410      *RFS1101968- End  *
+177900170406                                   pi_GETMVAccountNo
+178000170406                                   pc_GETMVInvestmentCode
+178100170406                                   pn_GETMVMarketValue.
+178200170406
+178300170406           MOVE pn_GETMVMarketValue TO ln_Open_Mkt_Val.
+178400170406
+178500170406      *RFS169181 - STARTS
+178600170112
+178700170202           IF ln_Open_Mkt_Val < 0
+178800170202              MOVE "-"       TO lc_Open_Mkt_Val_Sign
+178900170202           END-IF.
+179000170112
+179100170112         APPLY-EXCHAGE-RATE.
+179200170112
+179300170202           INITIALIZE MFAEXRHMP.
+179400170126
+179500170202           MOVE lc_Currency           TO CURRENCY-DDS
+179600170202                                      OF EXCHANGE-RATE-M-REC.
+179700170202           MOVE ln_TradeDate          TO TRADE-DATE
+179800170202                                      OF EXCHANGE-RATE-M-REC.
+179900170202           MOVE lc_Excg_Rate_Type     TO EXCHANGE-RATE-TYPE
+180000170202                                      OF EXCHANGE-RATE-M-REC.
+180100170122
+180200170202           READ EXCHANGE-RATE-M
+180300170202             INVALID KEY
+180400170202                MOVE 1                TO EXCHANGE-RATE
+180500170202                                      OF EXCHANGE-RATE-M-REC.
+180600170112
+180700170202           IF EXCHANGE-RATE OF EXCHANGE-RATE-M-REC = 0
+180800170202              MOVE 1                  TO EXCHANGE-RATE
+180900170202                                      OF EXCHANGE-RATE-M-REC
+181000170202           END-IF
+181100170119
+181200170202           IF lc_Type = "R"
+181300170202              COMPUTE ln_NetAmt      =  ln_NetAmt /
+181400170202                                        EXCHANGE-RATE
+181500170202                                     OF EXCHANGE-RATE-M-REC
+181600170202           ELSE
+181700170202              COMPUTE ln_GrossAmt    =  ln_GrossAmt /
+181800170202                                        EXCHANGE-RATE
+181900170202                                     OF EXCHANGE-RATE-M-REC
+182000170202           END-IF.
+182100170125
+182101171208      * --------------------------------
+182300170110       END-JOB.
+182301171208      * --------------------------------
+182500170202           CLOSE      TRANS-T
+182600170202                      TRANS-DISTR-DETAILS
+182700170202                      EXCHANGE-RATE-M
+182800170202                      TRANS-CHARGES.
+182900170202           PERFORM Termination.
+183000170110
+183001171208      * --------------------------------
+183200170110       Termination.
+183201171208      * --------------------------------
+183400170110           GOBACK.
+183500170110
+183501171208      * --------------------------------
+183700170130      *DSP-ERROR and FORCE-MSGW Routines.
+183701171208      * --------------------------------
+183900170130           COPY CPYSQLRTN.
+184000170130

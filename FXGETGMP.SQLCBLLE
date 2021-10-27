@@ -1,0 +1,354 @@
+000100210224       IDENTIFICATION DIVISION.
+000200080911       PROGRAM-ID.     FXGETGMP.
+000300080911       INSTALLATION.   Citigroup Fund Services Canada.
+000400080911       AUTHOR.         Emmanuel Yala.
+000500080911       DATE-WRITTEN.   Sep 11, 2008.
+000600080911       DATE-COMPILED.
+000700080911      ******************************************************************
+000800210823      *   RFS-NUMBER : RFS-50823                                       *
+000900080911      *                                                                *
+001000080925      *   DESCRIPTION: This PGM will return the GMP(Highest Unit Price *
+001100210823      *                of the investment) as well as its Trade Date    *
+001200080911      *   CALLED BY : PRCGMHST, ACIGMA                                 *
+001300080911      *   PARAMETERS:                                                  *
+001400080911      *            1 InvestmentCode         (INPUT)                    *
+001500101203      *            2 EndDate                (INPUT)                    *
+001600101203      *            3 HighestUnitPrice          (RETURN)                *
+001700101203      *            4 TradeDate                 (RETURN)                *
+001800101203      *            5 GMPClosingDate            (RETURN)                *
+001900210221      *            6 GMPRule                   (RETURN)                *
+002000101203      *            7 ReturnCode                (RETURN)                *
+002100080911      *  LINKED MODULES: None.                                         *
+002200080911      ******************************************************************
+002300080911      *    C H A N G E   H I S T O R Y                                 *
+002400080911      ******************************************************************
+002500080925      * PROGRAMMER   | YYYY/MM/DD | DESCRIPTION                        *
+002600080911      ******************************************************************
+002700080925      * Emmanuel Yala| 2008/09/25 | RFS50823 - New Prog.               *
+002800160127      * Bathuu L     | 2009/07/03 | RFS69179 - Recompile for MFAINVMDP *
+002900090703      *              |            | expansion.                         *
+003000101208      * Waldi R.     | 2010/12/03 | RFS85453 - Added logic to retrieve *
+003100101203      *              |            | GMP info based on the GMP Rule.    *
+003200110615      * Jeyarajan    | 2011/05/02 | RFS95729 - Recompile for MFAINVMDP *
+003300120222      * Alex         | 2012/02/22 | RFS97573 - Recompile for ESG22 file*
+003400120222      * Jayasundara  |            | expansion.                         *
+003500130703      * K Naveen     | 2013/07/03 | RFS123719 - Recompile Only.        *
+003600160127      * Aarthi M     | 2016/01/27 | RFS155635- Recompile for MFAINVMDP *
+003700190221      * Kavya K      | 2019/02/21 | RFS181057- Recompile for MFAINVMDP *
+003701210902      * Kavya K      | 2021/02/11 | RFS186088- Recompile for MFAINVMDP *
+003702211007      * Vignesh      | 2021/08/21 | RFS1117445 - Recompile             *
+004000210624      * Kamal T      | 2021/06/24 | RFS186199 - Renamed trade date parm*
+004100080911      *              |            | to resolve ambiguity with other var*
+004200080925      *----------------------------------------------------------------*
+004300080911      *              |     /  /   |                                    *
+004400080911      ******************************************************************
+004500080911
+004600080911       ENVIRONMENT DIVISION.
+004700080911       CONFIGURATION SECTION.
+004800080911       SOURCE-COMPUTER. IBM-AS400.
+004900080911       OBJECT-COMPUTER. IBM-AS400.
+005000080911       SPECIAL-NAMES.
+005100080911      /
+005200080911       INPUT-OUTPUT SECTION.
+005300080911       FILE-CONTROL.
+005400080911      **
+005500080911      /
+005600080911       DATA DIVISION.
+005700080911       FILE SECTION.
+005800080911      **
+005900080911      /
+006000080911       WORKING-STORAGE SECTION.
+006100080911
+006200080911          COPY CPYSQLFLD
+006300080911               REPLACING    "CURRENT_PROGRAM"  BY "FXGETGMP".
+006400080911      **
+006500080911           EXEC SQL
+006600080911             INCLUDE SQLCA
+006700080911           END-EXEC.
+006800080911      **
+006900080911
+007000101210       01 WS-ERR-CODE                       PIC X(02) VALUE "  ".
+00710010121085453 *   88 WS-ERR-OK                          VALUE "00".
+00720010121085453 *   88 WS-ERR-10                          VALUE "10".
+00730010121085453 *   88 WS-ERR-11                          VALUE "11".
+00740010121085453     88  lncc_Err_OK                 VALUE "  ".
+00750010121085453     88  lncc_Err_10                 VALUE "10".
+00760010121085453     88  lncc_Err_11                 VALUE "11".
+00770010121085453     88  lncc_Err_12                 VALUE "12".
+00780010121085453     88  lncc_Err_13                 VALUE "13".
+00790010121085453     88  lncc_Err_14                 VALUE "14".
+00800008091185453     88  lncc_Err_15                 VALUE "15".
+008100101208
+00820010120885453  01 lc_Vars.
+00830010120885453     05 ln_FirstUnitPrice   PIC S9(09)V9(4).
+00840010121085453     05 li_FirstTradeDate   PIC S9(08).
+00850010120885453     05 ln_MaxUnitPrice     PIC S9(09)V9(4).
+008600101203
+008700101203       01 lc-Parms.
+008800101215          05 lc_InvestmentCode   PIC X(05).
+00890010121585453     05 li_EndDate          PIC S9(08) COMP-3.
+00900010121585453     05 ln_UnitPrice        PIC S9(09)V9(4) COMP-3.
+00910010121585453     05 li_TradeDate        PIC S9(08) COMP-3.
+00920010120885453     05 li_GMPClosingDate   PIC S9(08) COMP-3.
+00930010120385453     05 lc_GMPRule          PIC  X(02).
+00940010120385453     05 lc_ReturnCode       PIC  X(02).
+009500101203
+009600101203       01 lnc-Constants.
+009700101203          05 lnc_RCode99                    PIC  X(02)  VALUES "99".
+009800101203          05 lnc_RCode00                    PIC  X(02)  VALUES "00".
+00990010121085453     05 lnc_RCode01                    PIC  X(02)  VALUES "01".
+01000010121085453     05 lnc_MO                         PIC  X(02)  VALUES "MO".
+01010010121085453     05 lncc_ErrSelectingMFAINVMDP     PIC  X(80)
+01020010121085453        VALUE "Error selecting MFAINVMDP".
+01030010121085453     05 lncc_ErrSelectingMFAINVUPP     PIC  X(80)
+01040010120385453        VALUE "Error selecting MFAINVUPP".
+010500080911
+010600080911      /
+010700101203       LINKAGE SECTION.
+01080008091185453  COPY CPGETGMP.
+010900101203      /*
+01100010120385453 *01 pc_InvestmentCode   PIC X(05).
+01110010120385453 *01 pn_UnitPrice        PIC S9(09)V9(4).
+01120010120385453 *01 pi_TradeDate        PIC S9(09).
+01130008091185453 *01 pc_ErrCode          PIC X(02).
+011400080911
+011500080911      ******************************************************************
+011600080911      *               M A I N L I N E                                  *
+011700080911      ******************************************************************
+011800101203       PROCEDURE DIVISION USING pc_InvestmentCode
+01190008092585453                           pi_EndDate
+012000210624                                pn_UnitPrice
+012100210624186199*                         pi_TradeDate
+012200101203186199                          pi_TradeDte
+01230010120385453                           pi_GMPClosingDate
+01240010120385453                           pc_GMPRule
+01250008091185453                           pc_ReturnCode.
+012600080911
+012700080911       MAINLINE.
+012800101208           PERFORM Initial_Logic
+012900101208
+01300010120885453      IF lc_ReturnCode = lnc_RCode00
+01310010120885453         PERFORM Detail_Processing
+01320010120885453      END-IF.
+013300080911
+013400080911           PERFORM End_Job.
+013500080911      /
+013600101208      **************
+013700080911       Initial_Logic.
+013800080911      **************
+013900101210           INITIALIZE lc-Parms.
+01400010121085453      INITIALIZE lc_Vars.
+01410008091185453      MOVE lnc_RCode00 TO lc_ReturnCode.
+014200101208           MOVE pc_InvestmentCode TO lc_InvestmentCode.
+014300101208
+014400101208      * RFS 85453 - begins.
+014500101208           MOVE pi_EndDate        TO li_EndDate.
+014600101208
+014700101208           EXEC SQL
+014800101208            SELECT  GMP_Closing_Date, GMP_Rule
+014900101208              INTO  :li_GMPClosingDate, :lc_GMPRule
+015000101208              FROM  MFAINVMDP
+015100101208             WHERE  Investment_Code = :lc_InvestmentCode
+015200101208           END-EXEC.
+015300101208
+015400101208           MOVE SQLSTATE  TO lc_sqlStates.
+015500101208           EVALUATE TRUE
+015600101210             WHEN lncc_sqlSuccessful
+015700101210                IF li_GMPClosingDate = ZEROS
+015800101210                   MOVE lnc_RCode01 TO lc_ReturnCode
+015900101210                ELSE
+016000101210                   MOVE lnc_RCode00 TO lc_ReturnCode
+016100101210                   IF li_EndDate = ZEROS
+016200101210                       MOVE li_GMPClosingDate TO li_EndDate
+016300101210                   ELSE
+016400101210                      IF li_GMPClosingDate < li_EndDate
+016500101210                         MOVE li_GMPClosingDate TO li_EndDate
+016600101210                      END-IF
+016700101210                   END-IF
+016800101208                END-IF
+016900101210             WHEN lncc_sqlEnd
+017000101208                MOVE lnc_RCode01 TO lc_ReturnCode
+017100101210             WHEN OTHER
+017200101210                MOVE lnc_RCode99 TO lc_ReturnCode
+017300101210                SET  lncc_Err_10 TO TRUE
+017400101210                MOVE lncc_ErrSelectingMFAINVMDP TO lc_sqlErrShortDESCR
+017500101208                PERFORM DSP-ERROR
+017600101208           END-EVALUATE.
+017700101210
+017800101210           IF lc_GMPRule = "1"  AND  lc_ReturnCode = lnc_RCode00
+017900101210              EXEC SQL
+018000101210                SELECT  MAX(INVUPP.Unit_Price)
+018100101210                INTO   :ln_MaxUnitPrice
+018200101210                FROM    MFAINVUPP INVUPP
+018300101210                WHERE   INVUPP.Investment_Code = :lc_InvestmentCode
+018400101210                AND     INVUPP.Trade_Date     <= :li_EndDate
+018500101210              END-EXEC
+018600101210
+018700101210              MOVE SQLSTATE  TO lc_sqlStates
+018800101210              EVALUATE TRUE
+018900101210                WHEN lncc_sqlSuccessful
+019000101210                  MOVE lnc_RCode00 TO lc_ReturnCode
+019100101210                WHEN lncc_sqlEnd
+019200101210                  MOVE lnc_RCode01 TO lc_ReturnCode
+019300101210                WHEN OTHER
+019400101210                  MOVE lnc_RCode99 TO lc_ReturnCode
+019500101210                  SET  lncc_Err_11 TO TRUE
+019600101210                 MOVE lncc_ErrSelectingMFAINVUPP TO lc_sqlErrShortDESCR
+019700101210                  PERFORM DSP-ERROR
+019800101210              END-EVALUATE
+019900101210           END-IF.
+020000101210
+020100101208           IF lc_GMPRule = "2"  AND  lc_ReturnCode = lnc_RCode00
+020200101208              EXEC SQL
+020300101208                SELECT  A.Trade_Date , A.Unit_Price
+020400101208                INTO  :li_FirstTradeDate, :ln_FirstUnitPrice
+020500101208                FROM  MFAINVUPP A
+020600101208                WHERE A.Investment_Code = :lc_InvestmentCode
+020700101208                ORDER BY A.Trade_Date
+020800101208                FETCH FIRST ROW ONLY
+020900101208              END-EXEC
+021000101208
+021100101210              MOVE SQLSTATE  TO lc_sqlStates
+021200101210              EVALUATE TRUE
+021300101210                WHEN lncc_sqlSuccessful
+021400101210                  MOVE lnc_RCode00 TO lc_ReturnCode
+021500101210                WHEN lncc_sqlEnd
+021600101210                  MOVE lnc_RCode01 TO lc_ReturnCode
+021700101210                WHEN OTHER
+021800101210                  MOVE lnc_RCode99 TO lc_ReturnCode
+021900101210                  SET  lncc_Err_12 TO TRUE
+022000101210                 MOVE lncc_ErrSelectingMFAINVUPP TO lc_sqlErrShortDESCR
+022100101210                  PERFORM DSP-ERROR
+022200101210              END-EVALUATE
+022300101210
+022400101210              EXEC SQL
+022500101210                SELECT  MAX(INVUPP.Unit_Price)
+022600101210                INTO   :ln_MaxUnitPrice
+022700101210                FROM    MFAINVUPP INVUPP
+022800101210
+022900101210                   INNER JOIN MFABUSPEP BUSPEP
+023000101210                      ON INVUPP.Trade_Date = BUSPEP.Business_Day
+023100101210
+023200101210                WHERE   INVUPP.Investment_Code = :lc_InvestmentCode
+023300101210                AND     INVUPP.Trade_Date     <= :li_EndDate
+023400101210                AND     BUSPEP.Frequency_Code  = :lnc_MO
+023500101210              END-EXEC
+023600101210
+023700101210              MOVE SQLSTATE  TO lc_sqlStates
+023800101210              EVALUATE TRUE
+023900101210                WHEN lncc_sqlSuccessful  OR  lncc_sqlEnd
+024000101210                  MOVE lnc_RCode00 TO lc_ReturnCode
+024100101210                WHEN OTHER
+024200101210                  MOVE lnc_RCode99 TO lc_ReturnCode
+024300101210                  SET  lncc_Err_13 TO TRUE
+024400101210                 MOVE lncc_ErrSelectingMFAINVUPP TO lc_sqlErrShortDESCR
+024500101210                  PERFORM DSP-ERROR
+024600101208              END-EVALUATE
+024700101208           END-IF.
+024800101208      * RFS 85453 - ends.
+024900080911
+025000080911      /
+025100080911      *******************
+025200080911       Detail_Processing.
+025300080911      *******************
+025400080911      *** Get the highest Unit Price of the fund
+025500080911           EXEC SQL
+025600080911              WHENEVER SQLERROR   CONTINUE
+025700080911           END-EXEC
+025800101208
+025900101208      * RFS 85453 - begins.
+026000101208      *    EXEC SQL
+026100101208      *     SELECT A.Trade_Date , A.Unit_Price
+026200101208      *     INTO  :li_TradeDate , :ln_UnitPrice
+026300101208      *     FROM MFAINVUPP A,
+026400101208      *      (SELECT
+026500101208      *           MAX(INVUPP.Unit_Price) AS MaxUnitPrice
+026600101208      *       FROM MFAINVUPP INVUPP, MFAINVMDP INVMDP
+026700101208      *       WHERE INVUPP.Investment_Code = INVMDP.Investment_Code AND
+026800101208      *             INVUPP.Investment_Code = :lc_InvestmentCode     AND
+026900101208      *             INVUPP.Trade_Date <= INVMDP.GMP_Closing_Date
+027000101208      *       ) AS Temp
+027100101208      *    WHERE A.Unit_Price = Temp.MaxUnitPrice AND
+027200101208      *          A.Investment_Code = :lc_InvestmentCode
+027300101208      *    ORDER BY A.Investment_Code, A.Trade_Date
+027400101208      *    FETCH FIRST ROW ONLY
+027500101208      *    END-EXEC.
+027600101208      *    MOVE SQLSTATE  TO lc_sqlStates
+027700101208      *    IF lncc_sqlSuccessful
+027800101208      *       MOVE lnc_RCode00 TO lc_ErrCode
+027900101208      *    ELSE
+028000101208      *       MOVE lnc_RCode99 TO lc_ErrCode
+028100101208      *    END-IF.
+028200101208
+028300101210           IF lc_GMPRule = "1"
+028400101210              EXEC SQL
+028500101210                SELECT  A.Trade_Date , A.Unit_Price
+028600101210                INTO  :li_TradeDate, :ln_UnitPrice
+028700101210                FROM  MFAINVUPP A
+028800101210                WHERE A.Unit_Price      = :ln_MaxUnitPrice
+028900101210                AND   A.Investment_Code = :lc_InvestmentCode
+029000101210                ORDER BY A.Trade_Date
+029100101210                FETCH FIRST ROW ONLY
+029200101210              END-EXEC
+029300101210
+029400101210              MOVE SQLSTATE  TO lc_sqlStates
+029500101210              EVALUATE TRUE
+029600101210                WHEN lncc_sqlSuccessful
+029700101210                  MOVE lnc_RCode00 TO lc_ReturnCode
+029800101210                WHEN lncc_sqlEnd
+029900101210                  MOVE lnc_RCode01 TO lc_ReturnCode
+030000101210                WHEN OTHER
+030100101210                  MOVE lnc_RCode99 TO lc_ReturnCode
+030200101210                  SET  lncc_Err_14 TO TRUE
+030300101210                 MOVE lncc_ErrSelectingMFAINVUPP TO lc_sqlErrShortDESCR
+030400101210                  PERFORM DSP-ERROR
+030500101208              END-EVALUATE
+030600101208           END-IF.
+030700101208
+030800101208           IF lc_GMPRule = "2"
+030900101208              EXEC SQL
+031000101208                SELECT  A.Trade_Date , A.Unit_Price
+031100101210                INTO  :li_TradeDate, :ln_UnitPrice
+031200101210                FROM  MFAINVUPP A
+031300101210                WHERE A.Investment_Code = :lc_InvestmentCode
+031400101208                AND   A.Unit_Price      = :ln_MaxUnitPrice
+031500101208                ORDER BY A.Trade_Date
+031600101208                FETCH FIRST ROW ONLY
+031700101208              END-EXEC
+031800101208
+031900101210              MOVE SQLSTATE  TO lc_sqlStates
+032000101210              EVALUATE TRUE
+032100101210                WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+032200101210                  MOVE lnc_RCode00 TO lc_ReturnCode
+032300101210                  IF ln_FirstUnitPrice > ln_UnitPrice
+032400101210                     MOVE ln_FirstUnitPrice TO ln_UnitPrice
+032500101210                     MOVE li_FirstTradeDate TO li_TradeDate
+032600101210                  END-IF
+032700101210                WHEN OTHER
+032800101210                  MOVE lnc_RCode99 TO lc_ReturnCode
+032900101210                  SET  lncc_Err_15 TO TRUE
+033000101210                 MOVE lncc_ErrSelectingMFAINVUPP TO lc_sqlErrShortDESCR
+033100101210                  PERFORM DSP-ERROR
+033200101208              END-EVALUATE
+033300101208           END-IF.
+033400101208      * RFS 85453 - begins.
+033500080911
+033600080911      /
+033700080911      *********
+033800080911       End_Job.
+033900101203      *********
+03400008091185453      MOVE lc_ReturnCode TO pc_ReturnCode.
+034100210624           MOVE ln_UnitPrice  TO pn_UnitPrice.
+034200210624186199*    MOVE li_TradeDate  TO pi_TradeDate.
+034300101208186199     MOVE li_TradeDate  TO pi_TradeDte.
+03440010120885453      MOVE li_GMPClosingDate TO pi_GMPClosingDate.
+03450008091185453      MOVE lc_GMPRule    TO pc_GMPRule.
+034600080911
+034700080911           GOBACK.
+034800080911      /
+034900080911      ******************************************************************
+035000080911      * DSP-ERROR AND FORCE-MSGW ROUTINES                              *
+035100080911      ******************************************************************
+035200080911          COPY CPYSQLRTN.
+035300080911      *
+999999999999      /

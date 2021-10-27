@@ -1,0 +1,3616 @@
+000100210224      * %ATTR DBGVIEW(*SOURCE) CLOSQLCSR(*ENDACTGRP)
+000200200626       IDENTIFICATION DIVISION.
+000300210603       PROGRAM-ID.    SACDSCCLC.
+000400210126       AUTHOR.        Lev O.
+000500210121       DATE-WRITTEN.  Decmber 2006.
+000600210807       DATE-COMPILED.
+000700200615      *****************************************************************
+000800210706      *PROGRAMMER  *DATE    *RFS  *COMMENTS                            *
+000900061227      *****************************************************************
+001000061228      * Lev O      ¦20061228¦ RFS32409 - Created the stored procedure
+001100180614      *            ¦        ¦ to be called for SOA  to calculate CDSC
+001200210316      *            ¦        ¦ charges.
+001300170814      * Lev O      ¦20070320¦ RFS32409 - Changed array size from 15 to 100
+001400070502      * Lev O      ¦20070430¦ RFS32409.A - added order by SEQNO
+001500071127      * Raymond Mui¦20071123¦ RFS45845 -Recompile
+001600171107      * M. Anwar   ¦20080314¦ RFS49391 -Recompile
+001700080527      * Lev O      ¦20080527¦ RFS50832 - added functionality for
+001800080527      *            ¦        ¦   account level DSC and Account Level
+001900080527      *            ¦        ¦   withholding tax.
+002000100104      * Lev O      ¦20080908¦ RFS50832.1 - added call to regaccrcon for
+002100080908      *            ¦        ¦   account level withholding tax.
+002200080915      * Lev O      ¦20080908¦   fixed defect for acc level
+002300080925      * Lev O      ¦20080925¦ RFS57698 - program didn't return result
+002400080925      *            ¦        ¦   set in environment without acc level
+002500080925      *            ¦        ¦   withholding tax. Solution: make sure
+002600080925      *            ¦        ¦   the program return result set.
+002700081029      * Lev O      ¦20081029¦ RFS59053 - add validations, new message
+002800081029      *            ¦        ¦   and fix existing validations.
+002900090205      * Gary Xia   ¦20090116¦ RFS52328 - Recompile.
+003000081114      * Lev O      ¦20081111¦ RFS58210 - add code for account level DSC
+003100081114      *            ¦        ¦   and removed obsoleted code.
+003200081222      * Lev        ¦20081218¦ RFS44008 - added cert# to the            *
+003300081222      *            ¦        ¦   get unique key for the calculator.     *
+003400090217      * Lev        ¦20090217¦ RFS65227 - Recompile for changes to      *
+003500090217      *            ¦        ¦      TRNPST wrt RFS59781                 *
+003600090312      * Andy Chan  ¦20090312¦ RFS64453 - Recompile
+003700090316      * Meynard B. ¦20090316¦ RFS64527 - Recompile for CALHHVAL dependency
+003800090629      * Andy Chan  ¦20090427¦ RFS67639 - Recompile
+003900090629      * Bathuu L   |20090616| RFS59853 - Recompile for MFATRNMSCP.
+004000090831      * Lev O      ¦20090831¦ RFS72877 - fix defect: calculate         *
+004100090831      *            ¦        ¦   deductions for assigned accounts if    *
+004200090831      *            ¦        ¦   assigned and certificate flag=Y.       *
+004300090914      *            ¦20090914¦          - retrofited for RELEASE 9.6    *
+004400091001      * Lev O      ¦20091001¦ retrofited the rfs:
+004500091001      * Ewa K.     ¦20090916¦ RFS73722 - DSC calculator in GUI does
+004600091001      *            ¦        ¦ not return always correct results        *
+004700091013      * Pawel A    |20090915| RFS62817 - Change list of parameters to call
+004800091013      *            |        | REGACCRCON. New parameters for *MULTIQ
+004900091030      * Lev O      ¦20091030¦ RFS74589 - Recompile
+005000091127      * Bathuu L   |20091014| RFS73715 - Recompile only.
+005100091127      * Daniel M   |20091127| RFS75512 - Recompile only.
+005200100103      * L. Martin  |20091221| RFS76402 - Add original dollar value
+005300100104      *            |        | from MFADSCCA2P to cu_accdtl1
+005400100104      *            |        | -create/override/delete override files
+005500100104      *            |        | for both tax loops for acct withholdg tax
+005600100104      *            |        | -delete override files after REGACCRCON
+005700100315      * L. Martin  |20090914| RFS 67242  Add Request User Id.
+005800100315      *            |        | Call a module to set up lib list
+005900100315      *            |        | as per the request userid when provided
+006000100315      * Waldi R.   |20100204| RFS78967 - Do not perform system avail-
+006100100315      *            |        | ability check in batch mode.
+006200100419      *J.Maquirang ¦20100419¦ RFS81379 -Recompile
+006300100508      * L. Martin  |20090914| RFS 82761 use SWAPUSER and SWAPBACK for
+006400100508      *            |        | ESB connections
+006500100615      * Waldi R.   ¦20100615¦ RFS68035 - Recompile.
+006600100826      * Waldi R.   ¦20100719¦ RFS80658 - Recompile.
+006700100826      * Richard S. ¦20100816¦ RFS81399 - Recompile.
+006800100910      * Emman. Yala¦20100907¦ RFS86430 - Recompile.
+006900100813      * Bathuu L   ¦20100806¦ RFS85594 - Close files when lb_initialOK *
+007000100813      *            ¦        ¦  is true.                                *
+007100101029      * Kevin Shen ¦20101013¦ RFS85029 - Recompile.
+007200101201      * TCS        ¦20101201¦ RFS71427 - Recompile.
+007300101201      * Esin A.    ¦20101201¦ RFS87708 - Recompile.
+007400110414      * Emman. Yala¦20110308¦ RFS92156 - Checked out for recompile only
+007500110414      * Richard Shi¦20110217¦ RFS84184 - ESG 21                        *
+007600110414      *            ¦        ¦ recompiled for MFAACCNMP.                *
+007700110708      * Thilaga. K ¦20110530¦ RFS92465 - Recompile for MFAACCASP       *
+007800110712      * L Martin   ¦20110712¦ RFS96125 - Recompile for MFAACCTXP       *
+007900110915      * Waldi R.   ¦20110915¦ RFS92475 - Recompile.
+008000111103      * Waldi R.   ¦20111019¦ RFS52265 - Recompile.
+008100120228      * Manohar J. ¦20111216¦ RFS103643- Recompile.
+008200120604      * Manohar J. ¦20120529¦ RFS108322- Recompile.
+008300120830      * Alan A.    ¦20120827¦ RFS112752- Fix GUI DSC Withholding tax
+008400120830      *            ¦        ¦ calculation returning different amounts
+008500120924      * Vinsfy J.  ¦20120924¦ RFS112770- SOA DSC Inquiry Enhancement   *
+008600121029      * Ambikapathy* 2012/10/24   * RFS105992 - RECOMPILE
+008700130211      * Suresh G.  * 2013/02/03   * RFS118744- Recompile for MFAINVPTP
+008800130401      * Ganbold L. * 2013/02/19   * RFS119993- Recompile MFATRNMSCP
+008900130401      * Callista N * 2013/02/11   * RFS112072- Recompile MFAINVPTP
+009000130401      * Abhisek M. * 2013/03/01   * RFS112137- Recompile MFATRNMSCP
+009100130416      * Callista N * 2013/03/01   * RFS113784- Recompile
+009200130312      * L Martin   * 2013/03/12   * RFS117125-process multiple certs
+009300130312      *            *              * per fund
+009400130416      * Manohar J  * 2013/04/05   * RFS 119802- Recompile
+009500130626      * Daniel M.  * 2013/04/09   * RFS 120003- Recompile
+009600130626      * Antony S.  * 2013/05/15   * RFS 117280- Recompile CPWSYSPARM
+009700130726      * Anitha T.  * 2013/07/25   * RFS 125210- Recompile.
+009800131002      * Waldi R.   * 2013/10/02   * RFS 127383- Recompile.
+009900131009      * Waldi R.   * 2013/10/08   * RFS 129169- Recompile.
+010000131022      * Michael Fan* 2013/10/22   * RFS 129525- Recompile.
+010100131129      * Sairam     * 2013/09/13   * RFS 127038- Recompile.
+010200131129      * Bhanu D    * 2013/11/22   * RFS128341 - Recompile for MFAACCASP
+010300131129      * Thilaga K  * 2013/08/28   * RFS127129- Recompile.
+010400131213      * Vinsfy J   * 2013/11/06   * RFS 125258- Added new parameter for
+010500131213      *            *              * the module SETDSCINS.
+010600140204      * Michael Fan* 2014/01/15   * RFS132956- Recompile due to changes
+010700140115      *            *              * on copy book CPTRNPST1.
+010800140306      * Vinsfy J   * 2014/02/11   * RFS 133073- Redem Calc Enhancement
+010900140306      *            *              * defect.
+011000140326      * Vinsfy J   * 2014/02/11   * RFS 135446- To Add 133073 back.
+011100140326      *            *              *
+011200140422      * Thilaga K  * 2014/01/21   * RFS133150 - Recompile for MFATRCODP
+011300140422      * Thilaga K  * 2014/02/18   * RFS132733 - Recompile for MFAGDTHVP
+011400140422      * Sairam DC  * 2014/03/17   * RFS134768 - Recompile for MFADMATLGP
+011500140422      * Emmanuel Y * 2014/03/19   * RFS135101 - Fix issue due to V7R1
+011600140609      * Thilaga K  * 2014/05/07   * RFS134936 - Recompile for MFAACCNNP
+011700140609      * Sushmita J * 2014/04/01   * RFS134626 - Recompile for MFAACMDP.
+011800140609      * Tamilselvi * 2014/05/09   * RFS136015- Recompile for MFAACMDP.
+011900140506      * Pawel A    * 2014/05/05   * RFS134542 - DSC calculator problem
+012000140512      * Arthy K    *  2014/05/12  * RFS134771 Recompile
+012100140521      * Michael Fan* 2014/05/21   * RFS136716 - Modify to include accrual
+012200190916      *            *              *  interest from previous full redeem
+012300190924      *            *              *  certificate to the calculation of
+012400140521      *            *              *  redemption amount on subsequent
+012500140521      *            *              *  certificate redemption related to
+012600140521      *            *              *  GIC order of redemption.
+012700140813      * Vinsfy J   *  2014/06/19  * RFS136634- Recompile
+012800140813      * SAIRAM     *  2014/06/23  * RFS137217- Recompile
+012900140813      * Nagamnai S * 2014/08/13   * RFS139007 - Recompile for CPGLWBRULE
+013000150617      * Banupriya V* 2014/10/14   * RFS141507 - Recompile for MFATRNCPP
+013100150727      *MUTHULAKSHMI* 2015/04/08   * RFS145157  - RECOMPILE
+013200150617      * Thilaga K  * 2015/05/12   * RFS145136 - Recompile for MFAACCCSP
+013300150223      * Michael Fan* 2015/02/23   * RFS138770 - Fix calculation on withholding
+013400150223      *            *              *  tax.  If it is calling from GICORDRV for
+013500150223      *            *              *  transaction split.  Use the work file
+013600150223      *            *              *  passed from GICRDORDR that contain GIC
+013700150223      *            *              *  waive flag, override replacement amt,
+013800150223      *            *              *  penalty amount and/or override additional
+013900150223      *            *              *  tax information that will be used by TRNPST
+014000150604      * Michael Fan* 2015/06/03   * RFS138770 - Fix issue that if the amount
+014100150604      *            *              *  not enough on the net redemption of a
+014200150604      *            *              *  certificate, do not return error
+014300150604      *            *              *  error code = 'G2') instead do a
+014400150604      *            *              *  full redemption on this certificate
+014500150603      *            *              *  and continue the redemption on next
+014600150603      *            *              *  certificate.
+014700150728      * Michael Fan* 2015/07/22   * RFS149620 - Remove the logic that added
+014800150728      *            *              *  from 138770 to pass GIC waive flag,
+014900150728      *            *              *  override penalty amt and override
+015000150728      *            *              *  replacement amt to local data area
+015100150728      *            *              *  as parameters on CPTRNPST1 to TRNPST
+015200150728      *            *              *  since it create conflict to Web
+015300150728      *            *              *  Service because they use the same
+015400150728      *            *              *  position on SWAPBACK function.
+015500150728      *            *              *  Instead TRNPST will call program
+015600150728      *            *              *  FXGICPRM to retrieve these parameters
+015700150728      *            *              *  in calculator mode from work file
+015800150728      *            *              *  WRKGICPRM.
+015900150831      * Michael Fan* 2015/07/28   * RFS149784 - Bypass checking of contra-
+016000150831      *            *              *  redemption code against table MFAACCTXP
+016100150831      *            *              *  if it is calling from GICRDORDR.
+016200150831      *            *              *  The reason is that is checking should
+016300150831      *            *              *  only apply to online screen that call
+016400150831      *            *              *  SACDSCCLC directly.  For batch program,
+016500150831      *            *              *  this casue rejection since there are
+016600150831      *            *              *  redemption code hard-coded from
+016700150831      *            *              *  SEGMATCAL that is not supposed to setup
+016800150831      *            *              *  on table MFAACCTXP.
+016900150922      * Michael Fan* 2015/08/06   * RFS150005 - Store local data area   *
+017000150922      *            *              * before process and restore the value*
+017100150922      *            *              * back after the process.  This is to *
+017200150922      *            *              * avoid local data area updated from  *
+017300150922      *            *              * SACDSCCLC and TRNPST and those      *
+017400150922      *            *              * values are passed back outside of   *
+017500150922      *            *              * GICRDORDR.                          *
+017600150923      * Pooja K    * 2015/06/19   * RFS 148347 - Redemption calculator
+017700150923      *            *              * requires prov tax be for non-PQ
+017800150923      *            *              * investors
+017900160302      * Aarthi M   * 2016/02/02   * RFS 155635 - Recompile MFAINVMDP
+018000170302      * Divya  V   * 2017/03/01   * RFS166545 - Recompile for MFATRTXRP  *
+018100170609      * Muthukumar * 2017/06/01   * RFS171012 - Recompile                *
+018200170723      * Suresh G.  * 2017/07/21   * RFS171752 - Recompile of MFAACCCSP
+018300170906      * Muthukumar * 2017/09/06   * RFS168133 - Recompile                *
+018400180111      * Suresh G.  * 2017/10/07   * RFS169270 - Recompile                *
+018500180724      * Suresh G.  * 2018/01/25   * RFS177527 - Recompile                *
+018600181205      * Suresh G.  * 2018/07/26   * RFS177665 - Recompile                *
+018700190221      * Kavya K    * 2019/02/21   * RFS181057 - Recompile for MFAINVMDP  *
+018800190226      * Sachin S   * 2019/02/26   * RFS181857 - Recompile                *
+018900190329      * Mayilsamy D* 2019/03/19   * RFS182913 - Recompile                *
+019000190618      * Mayilsamy D* 2019/06/04   * RFS1014578- To Fix RFS181857         *
+019100190618      *            *              * DSC charges on the cash distribution *
+019200190618      *            *              * pay out - Recompile only             *
+019300190923      * Mayilsamy D* 2019/08/20   * RFS183140- Recompile                 *
+019400191016      * Mayilsamy D* 2019/09/26   * RFS184858- Recompile                 *
+019500191106      * Mayilsamy D* 2019/10/14   * RFS1016152-Recompile                 *
+019600191127      * Priya N    * 2019/11/15   * RFS185037 - Recompile of MFABNKACP   *
+019700191230      * Ashwini B  * 2019/12/30   * RFS1020979 - GIC:Amount transacted   *
+019800191230      *            *              * from a sell should be same as        *
+019900191230      *            *              * requested.                           *
+020000200330      * Chaya SP   * 2020/02/11   * RFS185066 - Recompile for MFAGICDP   *
+020100200330      * Arthy K    * 2020/03/03   * RFS185965- Recompile                 *
+020200200330      * Poojasri M * 2020/02/19   * RFS1021595-Recompile                 *
+020300200609      * Suresh P   * 2020/03/03   * RFS1020345 - Recompile               *
+020400200624      * Kirthigaa S*  2020/04/17  * RFS186069 - Recompile for MFAACMDP   *
+020500200704      * Mayilsamy D* 2020/07/04   * RFS186092 - Recompile                *
+020600200706      * Surendran C* 2020/07/04   * RFS184696 - Recompile                *
+020700200707      * Ashwini B  * 2020/07/07   * RFS184676 - Recompile                *
+020800200719      * M K SINDHU * 2020/07/08   * RFS185172 - Recompile for MFAGDTHVP  *
+020900200719      *            *              * and MFATRCODP
+021000200824      * Vignesh    * 2020/06/24   * RFS183812 - Recompile of MFAFINSCP
+021100200930      * Mayilsamy D* 2020/08/26   * RFS185892 - Recompile for TRNPST
+021200201223      * Ewa K.     * 2020/10/15   * RFS185174 Recompile for CPWSYSPARM.
+021300201116      * Kavya K    * 2020/10/19   * RFS186497 - Recompile for MFAACMDP
+021400210130      * Surendran C* 2020/07/04   * RFS1027333- Recompile                *
+021500210130      * Mayilsamy D* 2020/10/22   * RFS180707 - Modified the program
+021600210130      *            *              * to calculate fund level DSC
+021700210130      *            *              * calculation in account level dsc
+021800210130      *            *              * environment based on "ACINDSC"
+021900210130      *            *              * function code
+022000210331      * Chaya SP   * 2020/10/19   * RFS180721 - Recompile for MFATRCODP
+022100210331      * Mayilsamy D* 2021/02/18   * RFS1111244 - Recompile for TRNPST
+022200210211      * Kavya K    * 2021/02/11   * RFS186088 - Recompile for MFAINVMDP
+022300210217      * Kavin      * 2021/02/17   * RFS186290 - Recompile only
+022400210408      * Bagathsingh* 2021/04/08   * RFS1110228 - Recompile
+022500210704      * Mayilsamy D* 2021/05/18   * RFS186888 - Recompile for TRNPST
+022600210806      * Mayilsamy D* 2021/07/15   * RFS1117913 - Recompile for TRNPST
+022700210806      * JasonJoshua* 2021/06/16   * RFS1113955 - Recompile TRNPST
+022800210707      * Vignesh    * 2021/07/07   * RFS187254 - Recompile for MFATRCODP
+022900210713      * Ewa K.     * 2021/06/11   * RFS186019 - Recompile for TRNPST
+023000210804      * Mayilsamy D* 2021/08/04   * RFS1118005 -Recompile for TRNPST
+023001210914      * Lev O      * 2021/08/23   * RFS1118263 -Recompile for TRNPST
+023002210914      * Kavin K    * 2021/08/09   * RFS187471 - Recompile for MFAGDTHVP
+023003210921      * Ewa K.     * 2021/09/21   * RFS186588 - Recompile for TRNPST
+023004211004      * MuthukumarS* 2021/10/04   * RFS1115611 - Recompile for TRNPST
+023200200511      *********************** *Last* ***********************************
+023300190624       ENVIRONMENT DIVISION.
+023400191016       CONFIGURATION SECTION.
+023500191016       SPECIAL-NAMES.
+023600070205             LINKAGE TYPE IS PROCEDURE FOR "TRNPST"
+023700070126             LINKAGE TYPE IS PROCEDURE FOR "FXDSCCRTT"
+023800061215             LINKAGE TYPE IS PROCEDURE FOR "FXSPCMAUT"
+023900070125             LINKAGE TYPE IS PROCEDURE FOR "FXBASCUR"
+024000070125             LINKAGE TYPE IS PROCEDURE FOR "FXMESSAGE"
+024100070126             LINKAGE TYPE IS PROCEDURE FOR "FXGETLUP"
+024200070129             LINKAGE TYPE IS PROCEDURE FOR "FXINVRULE"
+024300070201             LINKAGE TYPE IS PROCEDURE FOR "FXSCEDTAL1"
+024400070201             LINKAGE TYPE IS PROCEDURE FOR "FXDSCIVRP"
+024500070226             LINKAGE TYPE IS PROCEDURE FOR "FXACRRULE"
+024600070306             LINKAGE TYPE IS PROCEDURE FOR "VALDATEFMT"
+024700080603      * RFS50832 - Begin
+024800080609             LINKAGE TYPE IS PROCEDURE FOR "FXCTRRULE"
+024900080603             LINKAGE TYPE IS PROCEDURE FOR "SETCALENV3"
+025000080603             LINKAGE TYPE IS PROCEDURE FOR "SETDSCDEL"
+025100080603      * RFS50832 - Begin
+025200091001R73722       DATA-AREA IS lc_dtaaraMfaobjects
+025300131213125258       DATA-AREA IS WS-DATA-AREA
+025400070108             LOCAL-DATA IS lc_local.
+025500080611      * RFS50832 - Begin
+025600080611       INPUT-OUTPUT SECTION.
+025700080611       FILE-CONTROL.
+025800081114      * RFS58210 - removed obsolete code
+025900080611      * RFS50832 - End
+026000070123       DATA DIVISION.
+026100080611       FILE SECTION.
+026200081114      * RFS58210 - removed obsolete code
+026300061227       WORKING-STORAGE SECTION.
+026400201223      *RFS180707 - Starts
+026500201223      * Replace "SQLSTD" with the name of Current Program
+026600201223            COPY CPYSQLFLD
+026700201223              REPLACING == "CURRENT_PROGRAM" == BY == "SACDSCCLC" ==.
+026800201223      *RFS180707 -Ends
+026900061228           EXEC SQL
+027000061228             INCLUDE SQLCA
+027100061228           END-EXEC.
+027200080908      * RFS50832.1 - Begin
+027300080908       01 lc_mfadsccivpRec               PIC X(91).
+027400080908       01  DSC-CALC-INVESTMENT-REC.
+027500080908           05 DSC-ACCOUNT-NO            PIC S9(9).
+027600080908           05 DSC-INVESTMENT-CODE       PIC X(5).
+027700080908           05 DSC-TRADE-DATE            PIC S9(8) COMP-3.
+027800080908           05 DSC-CONTR-REDEM-CDE       PIC X(6).
+027900080908           05 DSC-SPLIT-OPTION-CODE     PIC X(1).
+028000080908           05 DSC-ASSIGNMENT-CERTIFICATE PIC X(1).
+028100080908           05 DSC-CERTIFICATE-ID-NO     PIC 9(10).
+028200080908           05 DSC-GROSS-AMT             PIC S9(11)V9(02) COMP-3.
+028300080908           05 DSC-NET-AMT               PIC S9(11)V9(02) COMP-3.
+028400080908           05 DSC-UNIT-AMT              PIC S9(10)V9(03) COMP-3.
+028500080908           05 DSC-FEDERAL-TAX-AMT       PIC S9(11)V9(02) COMP-3.
+028600080908           05 DSC-PROVINCIAL-TAX-AMT    PIC S9(11)V9(02) COMP-3.
+028700080908           05 DSC-AMT                   PIC S9(11)V9(02) COMP-3.
+028800080908           05 DSC-OTHER-DEDUCTION-AMT   PIC S9(11)V9(02) COMP-3.
+028900080908           05 DSC-REJECTION-CODE        PIC X(3).
+029000080908           05 DSC-SEQNO                 PIC 9(3) COMP-3.
+029100080908      * RFS50832.1 - End
+029200081118      * RFS58210 - Begin
+029300081118       01 lc_filesOverridenFlag  PIC X(01).
+029400081118         88 lncc_filesNotOverriden  VALUE SPACES.
+029500081118         88 lncc_filesOverriden     VALUE "Y".
+029600081118      * RFS58210 - End
+029700061229      * Flag fo initial logic validation
+029800070102       01 lb_initialFlag         PIC 1.
+029900070102         88 lb_initialOK           VALUE B"0".
+030000070102         88 lb_initialFail         VALUE B"1".
+030100190126
+030200070320      * Flag fo initial logic validation
+030300070320       01 lb_moreFundsFlag       PIC 1.
+030400070320         88 lb_noMoreFunds         VALUE B"0".
+030500070320         88 lb_isMoreFunds         VALUE B"1".
+030600070320
+030700070102       01 lb_loopFlag            PIC 1.
+030800070102         88 lb_loopStart           VALUE B"0".
+030900070102         88 lb_loopEnd             VALUE B"1".
+031000070206
+031100070207       01 lc_awdQcWhTax          PIC X(1) VALUE SPACES.
+031200070207         88 lnc_awdQcWhTaxYes       VALUE "Y".
+031300070207         88 lnc_awdQcWhTaxNo        VALUE "N".
+031400070207
+031500070130       01 lb_allInvestmentsLoadedFlag   PIC 1 VALUE B"0".
+031600070221         88 lb_allInvestmentsInit       VALUE B"0".
+031700070221         88 lb_allInvestmentsLoaded     VALUE B"1".
+031800070130
+031900061215        01 lc_DataInitializedFlag      PIC X(01).
+032000061215         88 lnc_DataNotInitialized       VALUE SPACES.
+032100061215         88 lnc_DataInitialized          VALUE "Y".
+032200061215
+032300070131       01 lc_companyCode          PIC X(03).
+032400070301       01 lc_string80             PIC X(80).
+032500070129       01 lc_errCode2             PIC X(02).
+032600070129         88 lnc_errCode2Ok          VALUE SPACES.
+032700091013
+032800091013      *RFS 62817 Begin
+032900091013       01 lc_FromAcct            PIC X(9) VALUE "000000000".
+033000091013       01 lc_ToAcct              PIC X(9) VALUE "999999999".
+033100091013      *RFS 62817 End
+033200131213125258 01 lc_Dname               PIC X(6) VALUE SPACES.
+033300131213125258 01 lncc_Retrieve          PIC X(1) VALUE "R".
+033400070102
+033500070213      * Some numeric data from linkage - to be used in the program
+033600070213       01 lc_numFromLinkage.
+033700070213         03 ln_pointer            PIC S9(09)       VALUE 0.
+033800070213         03 ln_IvrAcctNo          PIC S9(09)       VALUE 0.
+033900070213         03 ln_fedTax             PIC S9(11)V9(02) VALUE 0.
+034000070213         03 ln_provTax            PIC S9(11)V9(02) VALUE 0.
+034100070213         03 ln_AcctGrossAmt       PIC S9(11)V9(02) VALUE 0.
+034200070213         03 ln_AcctNetAmt         PIC S9(11)V9(02) VALUE 0.
+034300070213
+034400070207       01 ln_lastProcessDate     PIC S9(09) COMP-3.
+034500080908      * RFS50832.1 - Begin
+034600080908       01 lncc_cdscModeSACDSC    PIC X(10) VALUE "SACDSC".
+034700080908       01 lncc_I                 PIC X(01) VALUE "I".
+034800080908       01 lncc_C                 PIC X(01) VALUE "C".
+034900080908       01 lncc_D                 PIC X(01) VALUE "D".
+035000080908      * RFS50832.1 - End
+035100131213      * RFS125258 - Begin
+035200131213       01 lncc_R                 PIC X(01) VALUE "R".
+035300131213       01 lncc_O                 PIC X(01) VALUE "O".
+035400131213       01 lncc_E                 PIC X(01) VALUE "E".
+035500131213
+035600131213       01  WS-IATRAX-LOG           PIC X(1024) .
+035700131213         03  lc_IaTrax             PIC X(06)   VALUE SPACES.
+035800131213         03  lc_Filler             PIC X(1018) VALUE SPACES.
+035900131213      * RFS125258 - End
+036000070201
+036100070201       01 lc_ivrData.
+036200070202         03 lc_lockedIn          PIC X(01).
+036300070202           88 lnc_lockedInYes      VALUE "Y".
+036400070201         03 lc_stopActivity      PIC X(01).
+036500070201           88 lnc_stopActivityYes  VALUE "Y".
+036600070201         03 lc_stopRedem         PIC X(01).
+036700070201           88 lnc_stopRedemYes     VALUE "Y".
+036800070201
+036900070201         03 ln_InvestorNo        PIC S9(09).
+037000070201         03 lc_ProvinceCode      PIC X(03).
+037100070201           88 lnc_ProvinceCodeQC    VALUE "QC".
+037200070201
+037300070201         03 lc_CountryCode       PIC X(03).
+037400070205         03 lc_accountTypeCode   PIC X(05).
+037500080609      * RFS50832 - Begin
+037600080609         03 lc_accountTypeRule     PIC X(01).
+037700080609      * Registred accounts
+037800080609           88 lncc_accountTypeRuleReg   VALUES "2" "3"
+037900080609                                               "4" "5".
+038000080611           88 lncc_accountTypeRIF       VALUES "3".
+038100080611           88 lncc_accountTypeLIF       VALUES "5".
+038200080609      * Contribution rules for account level withholding tax
+038300080609         03 lc_ContrRedemCodeRule  PIC X(02).
+038400080609           88 lncc_ContrRedemCodeRuleAlw VALUES "4" "26".
+038500080609      * RFS50832 - End
+038600070205         03 lc_contrRedemCode    PIC X(06).
+038700070201
+038800070102       01 lnc_ErrorCodes.
+038900080925      * RFS57698 - Begin: temporary error code for acc level dsc
+039000080925         03 lnc_errAccLvlDsc          PIC X(05) VALUE "-1".
+039100080925      * RFS57698 - Begin: temporary error code for acc level dsc
+039200070202         03 lnc_successful            PIC X(05) VALUE "00000".
+039300070202         03 lnc_NoAccountNumber       PIC X(05) VALUE "92450".
+039400070202         03 lnc_ErrAmounts            PIC X(05) VALUE "92451".
+039500070301         03 lnc_NotEnabled            PIC X(05) VALUE "92452".
+039600070129      * One or more investments rejected.
+039700070202         03 lc_errAccLevel            PIC X(05) VALUE "92454".
+039800070306         03 lc_oneAcctGrossOrNet      PIC X(05) VALUE "92453".
+039900070202         03 lnc_NoInvWithCurrency     PIC X(05) VALUE "92455".
+040000070201
+040100070207         03 lnc_dupInvestments        PIC X(05) VALUE "92456".
+040200070207         03 lnc_errReplaceAdd         PIC X(05) VALUE "92457".
+040300070226         03 lnc_accContrRedemCode     PIC X(05) VALUE "92458".
+040400070301         03 lnc_fundNotExists         PIC X(05) VALUE "92459".
+040500070202         03 lnc_errTaxSplitFedTaxReq  PIC X(05) VALUE "92460".
+040600070202         03 lnc_errAddReplFedTaxReq   PIC X(05) VALUE "92461".
+040700070202         03 lnc_errTaxSplit           PIC X(05) VALUE "92462".
+040800070306         03 lnc_errTradeDate          PIC X(05) VALUE "92463".
+040900070201
+041000070201         03 lnc_errTaxSplitProvTaxReq PIC X(05) VALUE "92464".
+041100070201         03 lnc_errAddReplProvTaxReq  PIC X(05) VALUE "92465".
+041200070202
+041300070202         03 lnc_errStopRedem          PIC X(05) VALUE "92466".
+041400070202         03 lnc_errStopActive         PIC X(05) VALUE "92467".
+041500070207         03 lnc_shouldHaveAssigned    PIC X(05) VALUE "92468".
+041600070125
+041700070202         03 lnc_oneResidual           PIC X(05) VALUE "92469".
+041800070202         03 lnc_lastResidual          PIC X(05) VALUE "92470".
+041900070202         03 lnc_grossOrNetResidual    PIC X(05) VALUE "92471".
+042000070301         03 lnc_notValidAccount       PIC X(05) VALUE "92472".
+042100070202         03 lnc_grossExceedsResidual  PIC X(05) VALUE "92473".
+042200070202         03 lnc_netExceedsResidual    PIC X(05) VALUE "92474".
+042300070202
+042400070202         03 lnc_notAllowWithoutWTax   PIC X(05) VALUE "92475".
+042500070202         03 lnc_enterProvOrFedTax     PIC X(05) VALUE "92476".
+042600070202         03 lnc_totalTaxPercent       PIC X(05) VALUE "92477".
+042700070125
+042800070202         03 lnc_NoInvestments         PIC X(05) VALUE "92478".
+042900081103      * RFS59053 - Begin
+043000081103         03 lnc_withholdingTax        PIC X(05) VALUE "92479".
+043100081103      * RFS59053 - End
+043200070129
+043300070129       01 lc_retnAccData.
+043400070129         03 lc_retnAccLevelErr      PIC X(08) VALUE SPACES.
+043500070129         03 lc_retnAccMessageDesc   PIC X(80) VALUE SPACES.
+043600070202
+043700070202       01 lc_MessageDesc            PIC X(80) VALUE SPACES.
+043800070306       01 lc_toReportData.
+043900070306         03 lc_fundToReport           PIC X(05).
+044000070306         03 lc_dateToReport           PIC X(08).
+044100070202
+044200070202      * Set default to successful
+044300070301       01 lc_businessError          PIC X(05).
+044400070301       01 lnc_SuccessBusinessError  PIC X(05) VALUE "00000".
+044500070125
+044600070131       01 ln_numInvWithCurrency  PIC S9(03) COMP-3 VALUE 0.
+044700070131
+044800080529      * RFS50832 - Begin
+044900080612       01 lc_withholdTaxExistsFlag    PIC X(01).
+045000080612         88 lncc_withholdTaxNotExists   VALUE SPACES.
+045100080612         88 lncc_withholdTaxExists      VALUE "Y".
+045200080611       01 ln_convertDolPerFed         PIC S9(09)V9(2) COMP-3.
+045300080611       01 ln_convertDolPerPro         PIC S9(09)V9(2) COMP-3.
+045400080611       01 lcu_AwdRecord.
+045500080611         03 lc_AwdFreq                PIC X(2).
+045600080611         03 lc_AwdStatus              PIC X(2).
+045700080611
+045800080611       01 ln_AwdAmount           PIC S9(11)V9(4) COMP-3 VALUE 0.
+045900080611
+046000080611       01 lc_fileStatus          PIC X(02).
+046100080610       01 ln_numTaxLoops         PIC S9(03) COMP-3 VALUE 0.
+046200080610       01 ln_currTaxLoop         PIC S9(03) COMP-3 VALUE 0.
+046300080611       01 ln_calcProvTax         PIC S9(11)V9(2) COMP-3 VALUE 0.
+046400080611       01 ln_calcFedTax          PIC S9(11)V9(2) COMP-3 VALUE 0.
+046500080611       01 ln_taxableAmt          PIC S9(11)V9(2) COMP-3 VALUE 0.
+046600080611
+046700080611       01 ln_FxtaxprpProvTaxRate PIC S9(11)V9(2) COMP-3 VALUE 0.
+046800080610      * Flag for the registred accounts
+046900080610       01 lc_RegAccFlag          PIC X(01).
+047000080610         88 lncc_RegAccYes         VALUE "Y".
+047100080610         88 lncc_RegAccNo          VALUE "N".
+047200080603      * Error code returned from SETCALENV3 program
+047300080603       01 lc_tmpErrCode             PIC X(02).
+047400080603       01 lc_errCodeSetCalEnv       PIC X(02).
+047500080603      * Flag to indicate if new files have to be created
+047600080602       01 lncc_crtAccLvlFilesFlag   PIC X(01).
+047700080602         88 lncc_crtAccLvlFiles    VALUE "Y".
+047800080602         88 lncc_crtAccLvlFilesNo  VALUE SPACES.
+047900080602
+048000080602      * Generated placement Date
+048100080909      * RFS50832.1 - Begin
+048200080909       01 ln_genPlacementDatePacked PIC S9(09) COMP-3.
+048300080909      * RFS50832.1 - End
+048400080602       01 ln_genPlacementDate    PIC 9(09) VALUE 0.
+048500080529      * Trade date to be used to calculate Age in years
+048600191230      * RFS1020979 START
+048700191230       01 ln_currPrcdtp          PIC 9(09) VALUE 0.
+048800191230      * RFS1020979 END
+048900080602       01 ln_cdscTradeDate       PIC S9(08) VALUE 0.
+049000080530       01 lc_cdscTradeDateRed1 REDEFINES ln_cdscTradeDate.
+049100080530         03 lc_cdscTradeDateCCYY PIC X(04).
+049200080530         03 lc_cdscTradeDateMM   PIC X(02).
+049300080530         03 lc_cdscTradeDateDD   PIC X(02).
+049400080530       01 lc_cdscTradeDateRed2 REDEFINES ln_cdscTradeDate.
+049500080530         03 ln_cdscTradeDateCCYY PIC X(04).
+049600080530         03 ln_cdscTradeDateMM   PIC X(02).
+049700080530         03 ln_cdscTradeDateDD   PIC X(02).
+049800080529      * RFS50832 - End
+049900070125       01 lnc_maxDeductions      PIC S9(03) COMP-3 VALUE 10.
+050000070102       01 ln_currNumInvs         PIC S9(03) COMP-3 VALUE 0.
+050100070125       01 ln_cnt                 PIC S9(03) COMP-3 VALUE 0.
+050200070207       01 ln_startNum            PIC S9(03) COMP-3 VALUE 0.
+050300070207       01 ln_tmpSqlCounter       PIC S9(09) COMP-3 VALUE 0.
+050400070125       01 ln_tmpCnt              PIC S9(03) COMP-3 VALUE 0.
+050500070214       01 ln_c1                  PIC S9(03) COMP-3 VALUE 0.
+050600070125       01 ln_dedCnt              PIC S9(03) COMP-3 VALUE 0.
+050700070221       01 lc_residual.
+050800070221         03 ln_numResidual         PIC S9(03) COMP-3 VALUE 0.
+050900070221         03 ln_lastResidual        PIC S9(03) COMP-3 VALUE 0.
+051000070125
+051100070125       01 lc_baseCurrency        PIC X(03).
+051200070102
+051300070125       01 lnc_SplitOptionCodeAll    PIC X(01) VALUE "A".
+051400070207       01 lnc_IncludeAssignedUnits  PIC X(01) VALUE "Y".
+051500070103
+051600070108       01 lc_constants.
+051700080602      * RFS50832 - Begin: Years to add while generating
+051800080602      *   new process date.
+051900080611         03 lnc_CAL                  PIC X(3)        VALUE "CAL".
+052000080611         03 lncc_one                 PIC S9(03) VALUE 1.
+052100080602         03 lnc_genYearsToAdd        PIC 9(03) VALUE 100.
+052200080603         03 lncc_crtfil              PIC X(06) VALUE "CRTFIL".
+052300080603         03 lncc_ovrfil              PIC X(06) VALUE "OVRFIL".
+052400080603         03 lncc_dltovr              PIC X(06) VALUE "DLTOVR".
+052500080604         03 lncc_deldta              PIC X(06) VALUE "DELDTA".
+052600080604         03 lncc_insdta              PIC X(06) VALUE "INSDTA".
+052700080610      * It is used for trans additional tax:
+052800080610         03 lncc_crtfi1              PIC X(06) VALUE "CRTFI1".
+052900080610         03 lncc_ovrfi1              PIC X(06) VALUE "OVRFI1".
+053000080610         03 lncc_dltov1              PIC X(06) VALUE "DLTOV1".
+053100080610         03 lncc_deldt1              PIC X(06) VALUE "DELDT1".
+053200131213      *RFS125258 - begin.
+053300131213      * It is used for trans :
+053400131213         03 lncc_crtfi2              PIC X(06) VALUE "CRTFI2".
+053500131213         03 lncc_ovrfi2              PIC X(06) VALUE "OVRFI2".
+053600131213         03 lncc_dltov2              PIC X(06) VALUE "DLTOV2".
+053700131213         03 lncc_deldt2              PIC X(06) VALUE "DELDT2".
+053800131213      *RFS125258 - end.
+053900080602      * RFS50832 - End
+054000070301         03 lnc_colon                PIC X(01) VALUE ":".
+054100070301         03 lnc_1Space               PIC X(01) VALUE SPACE.
+054200070301         03 lnc_2Spaces              PIC X(02) VALUE SPACES.
+054300081103      * RFS59053 - Begin
+054400081103         03 lnc_3Spaces              PIC X(03) VALUE SPACES.
+054500081103      * RFS59053 - End
+054600070215         03 lnc_tradeDateZero        PIC S9(09)      VALUE 0.
+054700070215         03 lnc_defaultRowCountN     PIC S9(09)      VALUE 999999999.
+054800070215         03 lnc_defaultRowCountX       REDEFINES lnc_defaultRowCountN
+054900070215                                     PIC X(09).
+055000070215
+055100070125         03 lnc_UnitZero             PIC S9(10)V9(03)  VALUE 0.
+055200070125         03 lnc_AmtZero              PIC S9(11)V9(02)  VALUE 0.
+055300070206         03 lnc_CertNoSpaces         PIC X(11)         VALUE SPACES.
+055400070206         03 lnc_CertZero             PIC S9(10)        VALUE 0.
+055500070125         03 lnc_seqNoZero            PIC S9(03) COMP-3 VALUE 0.
+055600070202
+055700070202         03 lnc_maxPercent           PIC S9(03) COMP-3 VALUE 100.
+055800070125
+055900070320         03 lnc_maxNumInvs           PIC S9(03) COMP-3 VALUE 100.
+056000070125         03 lnc_maxDedudtions        PIC S9(03) COMP-3 VALUE 10.
+056100070125
+056200070201         03 lc_spcModules.
+056300070201           05 lnc_ACLVDSC              PIC X(10) VALUE "ACLVDSC".
+056400070201           05 lnc_ACLVFRD              PIC X(10) VALUE "ACLVFRD".
+056500070201           05 lnc_ERFEE                PIC X(10) VALUE "ERFEE".
+056600070201
+056700070201         03 lc_accWithholdingTax.
+056800070201           05 lnc_scrCodeTRNCDSC     PIC X(08) VALUE "TRNCDSC".
+056900070201           05 lnc_editCodeACWTAX     PIC X(06) VALUE "ACWTAX".
+057000070201           05 lnc_editLevelCodeT     PIC X(01) VALUE "T".
+057100070201
+057200131213      *RFS125258 - Begin.
+057300131213         03  lnc_EditCodeDLYDSCSetup.
+057400131213           05  lnc_DLYDSCScrCode       PIC X(08) VALUE "TRNCDSC".
+057500131213           05  lnc_DLYDSCEditCode      PIC X(06) VALUE "DLYDSC".
+057600131213           05  lnc_DLYDSCLevelCode     PIC X(01) VALUE "T".
+057700131213           05  lnc_DLYDSCSetupFlag     PIC X(01) VALUE SPACE.
+057800131213             88  lb_DLYDSCSetupYes             VALUE "Y".
+057900131213             88  lb_DLYDSCSetupNo              VALUE "N".
+058000131213
+058100131213         03 ln_TradeDate             PIC S9(08) COMP-3 VALUE 0.
+058200131213         03 ln_CalDate               PIC S9(08) COMP-3 VALUE 0.
+058300131213      *RFS125258 - End.
+058400070201
+058500070108         03 lnc_Y                    PIC X(01) VALUE "Y".
+058600070206         03 lnc_A                    PIC X(01) VALUE "A".
+058700070202         03 lnc_splitOptDollar       PIC X(01) VALUE "$".
+058800070215         03 lnc_splitOptUnit         PIC X(01) VALUE "U".
+058900130404117125   03 lnc_splitCertificate     PIC X(01) VALUE "C".
+059000070202         03 lnc_percent              PIC X(01) VALUE "%".
+059100070123         03 lnc_CDSCCalcSOA          PIC X(01) VALUE "2".
+059200080604      * RFS50832 - Begin: calculator parameter to indicate
+059300080604      *   that the files will be updated.
+059400080604         03 lnc_CDSCCalcSOAUpd       PIC X(01) VALUE "3".
+059500080611         03 lnc_R                    PIC X(01) VALUE "R".
+059600080611         03 lnc_Gross                PIC X(01) VALUE "G".
+059700080611         03 lnc_Net                  PIC X(01) VALUE "N".
+059800080604      * RFS50832 - End
+059900070125         03 lnc_CAD                  PIC X(03) VALUE "CAD".
+060000070226         03 lnc_SEL                  PIC X(03) VALUE "SEL".
+060100070125         03 lnc_Residual             PIC X(01) VALUE "R".
+060200070213         03 lnc_elemDelim            PIC X(01) VALUE ",".
+060300070213         03 lnc_rowDelim             PIC X(01) VALUE ";".
+060400070125         03 lnc_maxResidual          PIC S9(03) COMP-3 VALUE 1.
+060500070130
+060600070207         03 lnc_space10              PIC X(10) VALUE SPACES.
+060700070207         03 lnc_space25              PIC X(25) VALUE SPACES.
+060800070131         03 lnc_space35              PIC X(35) VALUE SPACES.
+060900061215
+061000070110         03 lc_fileNames.
+061100070112      * Deduction list DB Table name
+061200061215           05 lnc_dedList           PIC X(10) VALUE "DEDLIST".
+061300130312117125     05 lnc_dedList2          PIC X(10) VALUE "DEDLIST2".
+061400130324117125     05 lnc_Accsum            PIC X(10) VALUE "ACCSUM".
+061500061215           05 lnc_MFADSCCALP        PIC X(10) VALUE "MFADSCCALP".
+061600080529      * RFS50832 - Begin
+061700080529           05 lnc_MFADSCCA2P        PIC X(10) VALUE "MFADSCCA2P".
+061800080908           05 lnc_MFADSCCIVP        PIC X(10) VALUE "MFADSCCIVP".
+061900080529      * RFS50832 - End
+062000061215           05 lnc_invSum            PIC X(10) VALUE "INVSUM".
+062100070122
+062200061215         03 lnc_hundredPerc         PIC S9(03)V9(2) COMP-3 VALUE 100.00.
+062300070108
+062400070201       01 lc_accLevelDSCFlag        PIC X(01) VALUE SPACES.
+062500061215         88 lnc_accLevelDSC                   VALUE "Y".
+062600070123
+062700070201       01 lc_accLevelFreeDollarFlag PIC X(01) VALUE SPACES.
+062800061215         88 lnc_accLevelFreeDollar            VALUE "Y".
+062900070108
+063000070201       01 lc_erFeeFlag              PIC X(01) VALUE SPACES.
+063100070201         88 lnc_erFeeYes                      VALUE "Y".
+063200070201
+063300070201       01 lc_accWithholdingTaxFlag  PIC X(01) VALUE SPACES.
+063400070202         88 lnc_accWithholdingTaxYes          VALUE "Y".
+063500070201
+063600201223      *RFS180707 - Starts
+063700201223       01 ln_Count                  PIC S9(3) VALUE 0.
+063800201223       01 lc_ACINDSCFlag            PIC X(01) VALUE SPACES.
+063900201223         88 lnc_ACINDSCYes                    VALUE "Y".
+064000201223         88 lnc_ACINDSCNo                     VALUE "N".
+064100201223      *RFS180707 - Ends
+064200201223
+064300061215       01 ltb_invData.
+064400070320         03 ltb_invDataArr OCCURS 100.
+064500070115           05 ltbc_investmentCode            PIC X(05).
+064600061215           05 ltbc_FundCode                  PIC X(05).
+064700070126           05 ltbc_currency                  PIC X(03).
+064800070126           05 ltbc_productTypeRule           PIC X(01).
+064900070115           05 ltbn_TradeDate                 PIC S9(09).
+065000070115           05 ltbc_SplitOptionCode           PIC X(01).
+065100070207           05 ltbc_IncludeAssignedUnits      PIC X(01).
+065200061215           05 ltbn_UnitAmt                   PIC S9(10)V9(03).
+065300061215           05 ltbn_GrossAmt                  PIC S9(11)V9(02).
+065400061215           05 ltbn_NetAmt                    PIC S9(11)V9(02).
+065500070206           05 ltbc_CertificateNo             PIC X(11).
+065600070130           05 ltbn_CertificateIdNo           PIC S9(10).
+065700130313117125     05 ltbn_CertDollarBal             PIC S9(11)V9(02).
+065800080611      * RFS 50832 - Begin
+065900080611           05 ltbc_InvestmentType            PIC X(03).
+066000080611           05 ltbc_FormCode                  PIC X(10).
+066100080611      * RFS 50832 - End
+066200070131       01 lc_totals.
+066300070220      * This variables are initialized in initial logic
+066400070227         03 ln_totDeducitonAmt     PIC S9(11)V9(2)  COMP-3 VALUE 0.
+066500070202      * These totals calculated before TRNPST
+066600070131         03 ln_totGrossAmt         PIC S9(11)V99 COMP-3 VALUE 0.
+066700070131         03 ln_totNetAmt           PIC S9(11)V99 COMP-3 VALUE 0.
+066800070131
+066900070131         03 ln_totFederalTaxAmt       PIC S9(11)V9(2) COMP-3 VALUE 0.
+067000070131         03 ln_totProvincialTaxAmt    PIC S9(11)V9(2) COMP-3 VALUE 0.
+067100070131         03 ln_totDscAmt              PIC S9(11)V9(2) COMP-3 VALUE 0.
+067200070131         03 ln_totOtherDeductionAmt   PIC S9(11)V9(2) COMP-3 VALUE 0.
+067300070130
+067400070202      * These amounts calcuated after TRNPST
+067500070131       01 lc_accTotals.
+067600080611      * This variables are initialized in initial logic
+067700070221         03 ln_accTotDeducitonAmt      PIC S9(11)V9(2) COMP-3.
+067800070221         03 ln_accTotProvFedTaxAmt     PIC S9(11)V9(2) COMP-3.
+067900070131
+068000070221         03 ln_accTotGrossAmt          PIC S9(11)V99   COMP-3.
+068100070221         03 ln_accTotNetAmt            PIC S9(11)V99   COMP-3.
+068200070221         03 ln_accTotUnitAmt           PIC S9(10)V9(3) COMP-3.
+068300070221         03 ln_accTotDscAmt            PIC S9(11)V9(2) COMP-3.
+068400070221         03 ln_accTotOtherDeductionAmt PIC S9(11)V9(2) COMP-3.
+068500070221         03 ln_accTotFederalTaxAmt     PIC S9(11)V9(2) COMP-3.
+068600070221         03 ln_accTotProvincialTaxAmt  PIC S9(11)V9(2) COMP-3.
+068700080611      * RFS50832 - Begin
+068800080611         03 ln_accTotTaxForGrossOrNet  PIC S9(11)V9(2) COMP-3.
+068900080611      * RFS50832 - End
+069000070221
+069100070131
+069200070130      * Record to insert deduction data
+069300070130       01 lc_dedlistRec.
+069400070130         03 lc_dedInvestmentCode           PIC X(05).
+069500070130         03 lc_dedDeductonCode             PIC X(04).
+069600080611           88 lnc_taxForGrossOrNet            VALUES "FEDT" "PRVT"
+069700080611                                                     "NONT" "USWT".
+069800070130           88 lnc_FEDT                        VALUE "FEDT".
+069900070130           88 lnc_PRVT                        VALUE "PRVT".
+070000070130           88 lnc_CDSC                        VALUE "CDSC".
+070100140521136716     88 lnc_GICI                        VALUE "GICI".
+070200070131         03 ln_dedDeductionAmt             PIC S9(11)V9(2) COMP-3.
+070300130312
+070400130312      *Rfs117125 Begins
+070500130312       01 lc_dedlistRec2.
+070600130312         03 lc_dedInvestmentCode2          PIC X(05).
+070700130312         03 lc_dedDeductonCode2            PIC X(04).
+070800130312           88 lnc_taxForGrossOrNet2           VALUES "FEDT" "PRVT"
+070900130312                                                     "NONT" "USWT".
+071000130312           88 lnc_FEDT2                       VALUE "FEDT".
+071100130312           88 lnc_PRVT2                       VALUE "PRVT".
+071200130312           88 lnc_CDSC2                       VALUE "CDSC".
+071300130312         03 ln_dedDeductionAmt2            PIC S9(11)V9(2) COMP-3.
+071400130312         03 ln_dedSeqNo2                   PIC S9(03) COMP-3.
+071500130312         03 ln_dedCertIdNo2                PIC S9(10).
+071600130312      *Rfs117125 Ends
+071700070207
+071800070207       01 lc_accAssignEntire               PIC X(01) VALUE SPACES.
+071900070207         88 lnc_accAssignEntireNo              VALUE "N".
+072000070207         88 lnc_accAssignEntireYes             VALUE "Y".
+072100070207
+072200081222      * RFS44008 - Begin
+072300081222       01 lc_tmpData.
+072400081222         03 ln_tmpCertificateIdNo          PIC S9(10).
+072500081222      * RFS44008 - End
+072600121003112770 01  li_Year                         PIC S9(04).
+072700120925112770 01  lc_Currency                     PIC  X(03).
+072800130313      *Rfs117125 Begins
+072900130313       01 lc_prevInvestmentCode           PIC  X(05) VALUE SPACES.
+073000130314       01 lc_NextInvestmentCode           PIC  X(05) VALUE SPACES.
+073100130313       01 ln_InvGrossTotal                PIC S9(11)V9(02) COMP-3.
+073200130313       01 ln_InvNetTotal                  PIC S9(11)V9(02) COMP-3.
+073300130313       01 ln_InvGrossRmdr                 PIC S9(11)V9(02) COMP-3.
+073400130313       01 ln_InvNetRmdr                   PIC S9(11)V9(02) COMP-3.
+073500130314       01 ln_CertGrossAmt                 PIC S9(11)V9(02) COMP-3.
+073600130314       01 ln_CertNetAmt                   PIC S9(11)V9(02) COMP-3.
+073700130321       01 lc_ProdTypeRuleGic              PIC X(01) VALUE "2".
+073800130404       01 lc_InvRedStatus  PIC X(01).
+073900130314         88 lncc_InvRedComplete     VALUE "Y".
+074000130314         88 lncc_InvRedNotComplete  VALUE SPACES.
+074100130404       01 lc_SplitCertOption  PIC X(01).
+074200130404         88 lncc_SplitInvCert       VALUE "Y".
+074300130404         88 lncc_SplitInvCertNo     VALUE SPACES.
+074400130404       01 lc_CertDollarOption PIC X(01).
+074500130404         88 lncc_CertNetAmt         VALUE "N".
+074600130404         88 lncc_CertGrossAmt       VALUE "G".
+074700130313      *Rfs117125 Ends
+074800130313
+074900070207      * This record will be written to invsum Table
+075000070130       01 lc_invsumRec.
+075100070130        03 lc_currInvestmentCode           PIC X(05).
+075200070130        03 lc_currFundCode                 PIC X(05).
+075300070130
+075400070228        03 ln_currTradeDate                PIC S9(09) COMP-3.
+075500070130        03 lc_currContrRedemCode           PIC X(06).
+075600070130        03 lc_currSplitOptionCode          PIC X(01).
+075700070130
+075800070207        03 lc_currIncludeAssignedUnits     PIC X(01).
+075900070206        03 lc_currCertificateNo            PIC X(11).
+076000070206        03 ln_currCertificateIdNo          PIC S9(10).
+076100070130
+076200070228        03 ln_currGrossAmt                 PIC S9(11)V9(02) COMP-3.
+076300070228        03 ln_currNetAmt                   PIC S9(11)V9(02) COMP-3.
+076400070228        03 ln_currUnitAmt                  PIC S9(10)V9(03) COMP-3.
+076500070208
+076600070228        03 ln_invFederalTaxAmt        PIC S9(11)V9(2) COMP-3.
+076700070228        03 ln_invProvincialTaxAmt     PIC S9(11)V9(2) COMP-3.
+076800070228        03 ln_invDscAmt               PIC S9(11)V9(2) COMP-3.
+076900070228        03 ln_invOtherDeductionAmt    PIC S9(11)V9(2) COMP-3.
+077000070228        03 ln_dscFeeAsPerOfNetAmt     PIC S9(02)V9(03) COMP-3.
+077100070208
+077200070227        03 lc_currAssignedUnits       PIC X(01).
+077300070301          88 lnc_currAssignedUnitsNo    VALUE "N".
+077400070130
+077500070130        03 lc_currRejectionCode            PIC x(03).
+077600070130        03 ln_currSeqNo                    PIC S9(03) COMP-3.
+077700070130
+077800140521136716 01 ln_currAccrInt                  PIC S9(11)V9(02) COMP-3.
+077900070115       01 lc_currData.
+078000070115        03 lc_currLanguageCode             PIC X(01) VALUE SPACES.
+078100070123
+078200070108       01 lc_tmpVars.
+078300070202         03 ln_tmpAmt                     PIC S9(11)V9(2) COMP-3.
+078400070202         03 ln_tmpTotalPercent            PIC S9(11)V9(2) COMP-3.
+078500070202         03 ln_tmpTradeDate               PIC S9(09)      COMP-3.
+078600070213         03 lc_tmpTradeDate               PIC X(08).
+078700070202         03 ln_tmpUnitPrice               PIC S9(05)V9(4) COMP-3.
+078800070202         03 ln_tmpInterestRate            PIC S9(02)V9(9) COMP-3.
+078900080611      * RFS50832 - Begin
+079000080612         03 lc_tmpProvinceCode            PIC X(03).
+079100080611         03 lc_tmpInvestmentType          PIC X(03).
+079200080611         03 lc_tmpFormCode                PIC X(10).
+079300080611         03 lc_tmpInvGroupCode            PIC X(05).
+079400080611      * RFS50832 - End
+079500070206         03 lc_tmpCertNo                  PIC X(11).
+079600070206         03 ln_tmpcertidno                PIC S9(10).
+079700130313117125   03 ln_tmpCertBal                 PIC S9(13)V9(03).
+079800070207         03 lc_tmpAssign                  PIC X(01).
+079900070301           88 lnc_tmpAssignNo                VALUE "N".
+080000070126
+080100070108         03 lc_tmpInvCode                 PIC X(05).
+080200070108         03 lc_tmpFundCode                PIC X(05).
+080300070126         03 lc_tmpCurrency                PIC X(03).
+080400070126         03 lc_tmpProductTypeRule         PIC X(01).
+080500070126           88 lnc_tmpProdTypeRuleGic       VALUE "2".
+080600070126           88 lnc_tmpProdTypeRuleDii       VALUE "7".
+080700070126           88 lnc_tmpProdTypeRuleGicDii    VALUE "2" "7".
+080800070213
+080900070213         03 lc_tmpSplitOptionCode         PIC X(01).
+081000070213         03 lc_tmpIncludeAssignedUnits    PIC X(01).
+081100070213         03 lc_tmpUnitAmt                 PIC X(16).
+081200070213         03 lc_tmpGrossAmt                PIC X(16).
+081300070213         03 lc_tmpNetAmt                  PIC X(16).
+081400070213         03 lc_tmpCertificateNo           PIC X(11).
+081500070130
+081600070126       01 lc_tmpIndicators.
+081700070126         03 li_tmpInd1                    PIC S9(04) BINARY.
+081800070126         03 li_tmpInd2                    PIC S9(04) BINARY.
+081900070110
+082000070226       01 lc_origParameterValues.
+082100070226         03 lc_origContrRedemCode         PIC X(06).
+082200070306      * Parameters to validate the date
+082300070306       01 lc_validateDate.
+082400070306         03 ln_dateNum8                        PIC 9(08).
+082500070306         03 lc_dateX8    REDEFINES ln_dateNum8 PIC X(08).
+082600070306         03 lc_dateValidFlag                   PIC X(01).
+082700070306           88 lc_dateValidYes                    VALUE "Y".
+082800070306           88 lc_dateValidNo                     VALUE "N".
+082900100106
+083000091001      * RFS73722 begins
+083100091001       01 lc_Mfaobjects.
+083200091001          05 lc_OJLibrary                 PIC X(10) VALUE " ".
+083300091001       01 lc_prvOJLibrary                 PIC X(10) VALUE " ".
+083400091001      * RFS73722 ends
+083500100315
+083600100315      * RFS 78967 - begins.
+083700100315      * Variables for call of API Retrieve job atributes (QUSRJOBI)
+083800100315
+083900100315       01 len-rcv-data                 PIC X(04) VALUE X'00000512'.
+084000100315       01 name-format                  PIC X(08) VALUE "JOBI0600".
+084100100315       01 job-curr-name                PIC X(26) VALUE "*".
+084200100315       01 internal-job-Id              PIC X(16) VALUE SPACES.
+084300100315
+084400100315      * Layout for API Retrieve job attributes  (QUSRJOBI)
+084500100315
+084600100315       01  QWC-JOBI0600.
+084700100315           05  bytes-returned                      PIC S9(00009) BINARY.
+084800100315           05  bytes-avail                         PIC S9(00009) BINARY.
+084900100315           05  ws-job                              PIC  X(00010).
+085000100315           05  ws-user                             PIC  X(00010).
+085100100315           05  ws-number                           PIC  X(00006).
+085200100315           05  INT-JOB-ID                          PIC  X(00016).
+085300100315           05  JOB-STATUS                          PIC  X(00010).
+085400100315           05  JOB-TYPE                            PIC  X(00001).
+085500100315               88 JOB-TYPE-INTERACTIVE             VALUE "I".
+085600100315               88 JOB-TYPE-BATCH                   VALUE "B".
+085700100315           05  JOB-SUBTYPE                         PIC  X(00001).
+085800100315           05  JOB-SWITCHES                        PIC  X(00008).
+085900100315           05  END-STATUS                          PIC X.
+086000100315           05  SUBSYSTEM-NAME                      PIC X(10).
+086100100315           05  SUBSYSTEM-DESC                      PIC X(10).
+086200100315           05  CURRENT-USER                        PIC X(10).
+086300100315           05  FILLER                              PIC X(411).
+086400100315      * RFS 78967 - ends.
+086500100508
+086600100508      *Rfs82761 - Start
+086700100508      *Swap User and Swap Back parameters
+086800100508       01  swap_user_Ojlib          PIC  X(10) VALUE SPACES.
+086900100508       01  swap_user_Error          PIC  X(07) VALUE SPACES.
+087000100508       01  swap_user_Libl           PIC  X(2750) VALUE SPACES.
+087100100508       01  swap_user_Jobinfo        PIC  X(40) VALUE SPACES.
+087200100508       01  swap_Doc_Id              PIC  X(01) VALUE SPACES.
+087300100508       01  swap_Doc_Src             PIC  X(10) VALUE SPACES.
+087400100508
+087500100508       01  swap_back_Error          PIC  X(07) VALUE SPACES.
+087600100508       01  swap_back_Libl           PIC  X(2750) VALUE SPACES.
+087700100508       01  swap_back_Jobinfo        PIC  X(40) VALUE SPACES.
+087800100508      *Rfs82761 - End
+087900100508
+088000150223138770* Begin
+088100150223138770 01  li_Cert_ID_No            PIC S9(10) VALUE 0.
+088200150223138770 01  li_ATP_PlacementDate     PIC S9(09) VALUE 0.
+088300150223138770 01  li_ATP_TransNo           PIC S9(09) VALUE 0.
+088400150223138770 01  li_ATP_Count             PIC S9(01) VALUE 0.
+088500150223138770
+088600150223  ||   01 lta_invData.
+088700150223  ||     03 lta_invDataArr OCCURS 100.
+088800150223  ||       05 ltac_investmentCode            PIC X(05).
+088900150223  ||       05 ltac_FundCode                  PIC X(05).
+089000150223  ||       05 ltac_currency                  PIC X(03).
+089100150223  ||       05 ltac_productTypeRule           PIC X(01).
+089200150223  ||       05 ltan_TradeDate                 PIC S9(09).
+089300150223  ||       05 ltac_SplitOptionCode           PIC X(01).
+089400150223  ||       05 ltac_IncludeAssignedUnits      PIC X(01).
+089500150223  ||       05 ltan_UnitAmt                   PIC S9(10)V9(03).
+089600150223  ||       05 ltan_GrossAmt                  PIC S9(11)V9(02).
+089700150223  ||       05 ltan_NetAmt                    PIC S9(11)V9(02).
+089800150223  ||       05 ltac_CertificateNo             PIC X(11).
+089900150223  ||       05 ltan_CertificateIdNo           PIC S9(10).
+090000150223  ||       05 ltan_CertDollarBal             PIC S9(11)V9(02).
+090100150223  ||       05 ltac_InvestmentType            PIC X(03).
+090200150223  ||       05 ltac_FormCode                  PIC X(10).
+090300150223138770*
+090400150223  ||   01 GICORD-PARMS.
+090500150223  ||       05 wrk_AccountNo                  PIC S9(09).
+090600150223  ||       05 wrk_InvestmentCode             PIC  X(05).
+090700150223  ||       05 wrk_RedemptionAmt              PIC S9(13)V9(02).
+090800150223  ||       05 wrk_GICWaiveFlag               PIC  X(01).
+090900150223  ||       05 wrk_ReplacementAmt             PIC S9(13)V9(02).
+091000150223  ||       05 wrk_PenaltyAmt                 PIC S9(13)V9(02).
+091100150223  ||       05 wrk_Cert_ID_No                 PIC S9(10).
+091200150223  ||       05 wrk_Cert_No                    PIC  X(11).
+091300150223  ||       05 wrk_ATP_PlacementDate          PIC S9(09).
+091400150223  ||       05 wrk_ATP_TransNo                PIC S9(09).
+091500150611138770     05 lc_TransType                   PIC  X(03).
+091600150223138770* End
+091700150922150005 01  lc_LDA                    PIC  X(1024) VALUE SPACES.
+091800100315
+091900061229      * -----------------------------------------
+092000061229      * Copybook - Start
+092100061229      * -----------------------------------------
+092200080610      * RFS50832 - Begin
+092300080611          COPY CPWSYSPARM.
+092400080611          COPY CPYTAXPRP.
+092500080611       01 trans-additional-tax.
+092600080610          COPY DD-ALL-FORMATS OF MFATRNATP.
+092700080610      * RFS50832 - End
+092800061229       COPY CPYSOAMSG.
+092900070108       COPY CPTRNPST1.
+093000061215       COPY CPSPCMAUT.
+093100070108      * Copybook to get data from Process-Date Data Area
+093200070108       COPY CPPRCDTP.
+093300061215       COPY Cpbascur.
+093400061229      * -----------------------------------------
+093500061229      * Copybook - End
+093600061229      * -----------------------------------------
+093700061227       LINKAGE SECTION.
+093800061227
+093900061229       COPY CPCDSCCLC.
+094000061227       PROCEDURE DIVISION USING
+09410010010667242            pc_RequestUserId
+094200070102                 pc_LanguageCode
+094300061215                 pc_RowThreshold
+094400070102
+094500070102                 pc_IvrAcctNo
+094600070102                 pc_ContRdmptnCode
+094700070102
+094800070102                 pc_DispDscSched
+094900070102                 pc_Currency
+095000070102                 pc_WaiveDsc
+095100070102                 pc_WaiveErf
+095200070102                 pc_SplitTaxOption
+095300070102                 pc_ReplaceAddTax
+095400070102                 pc_FedTax
+095500070102                 pc_ProvTax
+095600070102                 pc_AcctGrossAmt
+095700070102                 pc_AcctNetAmt
+095800070102
+095900070102                 pc_AWDRedemptionFlag
+096000061215                 pc_acctlevelReq
+096100070102
+096200070102                 pc_invData
+096300070102
+096400070215                 pc_rowCount
+096500070102                 pc_MessageCode
+096600070102                 pc_MessageDesc.
+096700061227       MAINLINE.
+096800061229      * Make sure the SP is finished and return some result
+096900061227           EXEC SQL
+097000061228             WHENEVER SQLERROR
+097100061228               CONTINUE
+097200061228           END-EXEC
+097300061227
+097400061228           PERFORM initial-validation
+097500081114      * RFS58210 - Begin: removed obsolete code
+097600081114           IF lb_initialOK
+097700150922150005* Save local data area value before process
+097800150922150005        ACCEPT lc_LDA FROM lc_LOCAL
+097900081114               PERFORM set-acc-level-withh-tax-flags
+098000201223      *RFS180707 -Starts
+098100201223               PERFORM Verify-ACINDSC
+098200201223      *RFS180707 -Ends
+098300081114               PERFORM detail-processing
+098400150922150005* Restore back original local data area value
+098500150922150005        DISPLAY lc_LDA UPON lc_LOCAL
+098600081114           END-IF
+098700081114      * RFS58210 - End
+098800070202      * Set business error (may be successful)
+098900070202           PERFORM set-business-error
+099000080611
+099100080611      * RFS50832 - Begin
+099200100813R85594     IF lb_initialOK
+099300100813              PERFORM close-files
+099400100813R85594     END-IF.
+099500080611      * RFS50832 - End
+099600100508
+09970010051182761 * Start
+099800100511           IF pc_RequestUserid NOT = SPACES THEN
+099900100511              PERFORM Swap-Back
+100000100511           END-IF.
+10010010051182761 * End
+100200100508
+100300061229           GOBACK.
+100400061229      * ------------------------------------------
+100500061229       initial-validation.
+100600061229      * ------------------------------------------
+100700091001
+100800070129           SET lb_initialOK             TO TRUE
+100900070129      * Init local error code to successful
+101000061229           INITIALIZE pc_MessageCode
+101100061229                      pc_MessageDesc
+101200070220                      lc_accTotals
+101300070220                      lc_totals
+101400070220                      lc_invsumRec
+101500140521136716                ln_currAccrInt
+101600070221      * Initialize Account Level error information
+101700070221                      lc_retnAccData
+101800070226                      lc_accAssignEntire
+101900070306                      lc_toReportData
+102000081114      * RFS58210 - Begin
+102100081114                      lc_filesOverridenFlag
+102200081114      * RFS58210 - End
+102300070301
+102400070301           MOVE lnc_SuccessBusinessError TO lc_businessError
+102500070220
+102600070221           SET lb_allInvestmentsInit    TO TRUE
+102700070221
+102800070130           MOVE Inc_DSCCalculator                      TO lc_ProcName
+102900070215           MOVE lnc_defaultRowCountN                   TO pc_rowCount
+103000081114
+103100081114      * RFS58210 - removed obsolete code
+103200100106
+10330010010667242 * Start
+103400100106           IF pc_RequestUserid NOT = SPACES THEN
+10350010050882761         PERFORM Swap-User
+103600100106           END-IF.
+10370010010667242 * End
+103800100323
+10390010051182761 * Move following to after Swap-User
+104000100323      * RFS73722 - Starts
+10410010051182761      IF lb_initialOK
+104200100511              ACCEPT lc_Mfaobjects FROM lc_dtaaraMfaobjects
+104300100511                                 FOR "MFAOBJECTS"
+10440010051182761      END-IF.
+104500100323      * RFS73722 - Ends
+104600080611
+104700070130           IF pc_LanguageCode = SPACES
+104800070130             MOVE lnc_english                          TO
+104900070130                        lc_currLanguageCode
+105000070130           ELSE
+105100070130             MOVE FUNCTION UPPER-CASE(pc_LanguageCode) TO
+105200070130                        lc_currLanguageCode
+105300070130           END-IF
+105400070102
+105500070207           IF pc_AWDRedemptionFlagYes
+105600070207             SET lnc_awdQcWhTaxYes TO TRUE
+105700070207           ELSE
+105800070207             SET lnc_awdQcWhTaxNo  TO TRUE
+105900070207           END-IF
+106000070223      * Convert account level parms to upper case
+106100070226           IF pc_ContRdmptnCode NOT = SPACES
+106200070226             MOVE FUNCTION UPPER-CASE(pc_ContRdmptnCode) TO
+106300070226                        pc_ContRdmptnCode
+106400070226           END-IF
+106500070223           IF pc_WaiveDsc NOT = SPACES
+106600070223             MOVE FUNCTION UPPER-CASE(pc_WaiveDsc) TO
+106700070223                        pc_WaiveDsc
+106800070223           END-IF
+106900070223
+107000070223           IF pc_WaiveErf NOT = SPACES
+107100070223             MOVE FUNCTION UPPER-CASE(pc_WaiveErf) TO
+107200070223                        pc_WaiveErf
+107300070223           END-IF
+107400070223
+107500070223           IF pc_ReplaceAddTax NOT = SPACES
+107600070223             MOVE FUNCTION UPPER-CASE(pc_ReplaceAddTax) TO
+107700070223                        pc_ReplaceAddTax
+107800070223           END-IF
+107900070207
+108000070223           IF pc_AWDRedemptionFlag NOT = SPACES
+108100070223             MOVE FUNCTION UPPER-CASE(pc_AWDRedemptionFlag) TO
+108200070223                        pc_AWDRedemptionFlag
+108300070223           END-IF
+108400070223
+108500070223           IF pc_acctlevelReq NOT = SPACES
+108600070223             MOVE FUNCTION UPPER-CASE(pc_acctlevelReq) TO
+108700070223                        pc_acctlevelReq
+108800070223           END-IF
+108900100315
+109000100315      * RFS 78967 - begins.
+109100100315           CALL "QUSRJOBI" USING QWC-JOBI0600
+109200100315                                 LEN-RCV-DATA
+109300100315                                 NAME-FORMAT
+109400100315                                 JOB-CURR-NAME
+109500100315                                 INTERNAL-JOB-ID.
+109600100315
+109700100315           IF JOB-TYPE-BATCH
+109800100315              CONTINUE
+109900100315           ELSE
+110000100510      *RFS82761 Start - If SWAP-USER cannot setup the library list
+110100100510              IF lb_initialOK
+110200100510      *RFS82761 End
+110300100315              PERFORM check-system-availability
+110400100510      *RFS82761 Start
+110500100510              END-IF
+110600100510      *RFS82761 End
+110700100315           END-IF.
+110800100315      * RFS 78967 - ends.
+110900150223138770*
+111000150223138770* Check if GIC order of redemption parm file exists in QTEMP.
+111100150223138770     MOVE 0 TO li_Cert_ID_NO.
+111200150223138770     MOVE 0 TO li_ATP_PlacementDate.
+111300150223138770     MOVE 0 TO li_ATP_TransNo.
+111400150223138770     PERFORM GET-GICORD-PARM.
+111500150223138770     IF wrk_ATP_PlacementDate NOT = 0 AND
+111600150223138770        wrk_ATP_TransNo NOT = 0
+111700150223138770       MOVE wrk_ATP_PlacementDate TO li_ATP_PlacementDate
+111800150223138770       MOVE wrk_ATP_TransNo       TO li_ATP_TransNo
+111900150223138770     END-IF.
+112000070201
+112100070208           IF lb_initialOK
+112200070208             PERFORM valid-acct
+112300070208             IF lb_initialOK
+112400070213               PERFORM move-acc-level-parms-to-locals
+112500070306               PERFORM validate-acct-gross-net
+112600070306               IF lb_initialOK
+112700070306                 PERFORM get-acc-ivr-data
+112800070306                 IF lb_initialOK
+112900070306                   PERFORM validate-contr-redem-code
+113000070306                   IF lb_initialOK
+113100080609      * RFS50832 - Begin
+113200080609                     PERFORM get-contr-redem-code-rule
+113300080609      * RFS50832 - End
+113400070306                     PERFORM validate-stop-act-redem
+113500091001      * RFS73722 - Starts
+113600091001                     If lc_prvOJLibrary = spaces
+113700091001                        MOVE lc_OJLibrary TO lc_prvOJLibrary
+113800091001                     ELSE
+113900091001                        If lc_prvOJLibrary NOT = lc_OJLibrary
+114000091001                           MOVE lc_OJLibrary TO lc_prvOJLibrary
+114100091001                           SET lnc_DataNotInitialized   TO TRUE
+114200091001                        END-IF
+114300091001                     END-IF
+114400091001      * RFS73722 - Ends
+114500070306                     IF lnc_DataNotInitialized
+114600070306                       PERFORM get-company-code
+114700070306                       PERFORM get-spec-modules
+114800070306                       PERFORM get-edit-codes
+114900070306                       PERFORM get-process-date
+115000070306                       PERFORM get-base-currency
+115100080611      * RFS50832 - Begin
+115200080611                       PERFORM get-sysparms
+115300080611      * RFS50832 - End
+115400070306                       SET lnc_DataInitialized      TO TRUE
+115500070306                     END-IF
+115600070306                     PERFORM validate-account-withhold-Tax
+115700070306                     IF lb_initialOK
+115800070306                       PERFORM validate-erf-for-the-firm
+115900070306                       IF lb_initialOK
+116000070306                         PERFORM load-input-inv-array
+116100070306                         PERFORM validate-residual
+116200070306                         IF lb_initialOK
+116300070306                           PERFORM check-set-parm-currency
+116400070306                           PERFORM valid-gross-net
+116500070306                           IF lb_initialOK
+116600070306                             IF ln_currNumInvs = 0
+116700070306                               PERFORM load-all-investments
+116800070306                               SET lb_allInvestmentsLoaded  TO TRUE
+116900070306                             END-IF
+117000070306                             IF lb_initialOK
+117100070306                               IF NOT lb_allInvestmentsLoaded
+117200070306                                 PERFORM set-residual
+117300070306                               END-IF
+117400070306                               IF lb_initialOK
+117500070306                                 PERFORM set-investment-data.
+117600081114      * RFS58210 - removed obsolete code
+117700070102      * ------------------------------------------
+117800070108       valid-acct.
+117900070102      * ------------------------------------------
+118000070102      * Account validation
+118100070208
+118200070213           IF pc_IvrAcctNo = SPACES
+118300070103             PERFORM set-initial-fail
+118400070202             MOVE lnc_NoAccountNumber  TO lc_businessError
+118500070103           ELSE
+118600070213             COMPUTE ln_IvrAcctNo = FUNCTION NUMVAL(pc_ivrAcctNo)
+118700070103           END-IF.
+118800070306      * ------------------------------------------
+118900070306       validate-acct-gross-net.
+119000070306      * ------------------------------------------
+119100070306      * Validate account Gross and net amounts
+119200070306           IF ln_AcctGrossAmt > 0.0     AND
+119300070306              ln_AcctNetAmt   > 0.0
+119400070306             PERFORM set-initial-fail
+119500070306             MOVE lc_oneAcctGrossOrNet  TO lc_businessError
+119600130612117125     END-IF.
+119700070202      * ------------------------------------------
+119800070202       validate-account-withhold-Tax.
+119900070202      * ------------------------------------------
+120000070202      * This option is not allowed without account level withholding
+120100070202      * tax.
+120200070202           IF NOT lnc_accWithholdingTaxYes      AND
+120300070202               (pc_SplitTaxOption NOT = SPACES OR
+120400070202                pc_ReplaceAddTax  NOT = SPACES OR
+120500070213                ln_fedTax  > 0                 OR
+120600070213                ln_provTax > 0 )
+120700070202             PERFORM set-initial-fail
+120800070202             MOVE lnc_notAllowWithoutWTax   TO lc_businessError
+120900070202           END-IF
+121000070227
+121100070227           IF lb_initialOK
+121200070227             PERFORM check-add-replace
+121300070227             IF lb_initialOK
+121400070227               PERFORM check-tax-split
+121500070227               IF lb_initialOK
+121600070227                 PERFORM check-fed-tax
+121700070227                 IF lb_initialOK
+121800070227                   PERFORM check-prov-tax.
+121900070202
+122000070202      * Check if provincial or federal tax entered
+122100070202           IF lb_initialOK
+122200070202             IF (pc_SplitTaxOption NOT = SPACES OR
+122300070202                 pc_ReplaceAddTax  NOT = SPACES)   AND
+122400070213                  ln_fedTax  = 0                   AND
+122500070213                  ln_provTax = 0
+122600070202               PERFORM set-initial-fail
+122700070202               MOVE lnc_enterProvOrFedTax    TO lc_businessError
+122800070202             END-IF
+122900070202           END-IF
+123000070202
+123100070202      * Validate total tax percent
+123200070202           IF lb_initialOK
+123300070213             COMPUTE ln_tmpTotalPercent = ln_fedTax + ln_provTax
+123400070202             IF pc_SplitTaxOption = lnc_percent AND
+123500070202                ln_tmpTotalPercent > lnc_maxPercent
+123600070202               PERFORM set-initial-fail
+123700070202               MOVE lnc_totalTaxPercent      TO lc_businessError
+123800070202             END-IF
+123900130612117125     END-IF.
+124000070227
+124100070201      * ------------------------------------------
+124200070201       validate-erf-for-the-firm.
+124300070201      * ------------------------------------------
+124400070201           IF NOT lnc_erFeeYes     AND
+124500070201              pc_WaiveErfYes
+124600070201             PERFORM set-initial-fail
+124700070202             MOVE  lnc_NotEnabled        TO lc_businessError
+124800130612117125     END-IF.
+124900070213      * ------------------------------------------
+125000070213       move-acc-level-parms-to-locals.
+125100070213      * ------------------------------------------
+125200070213      * Move passing parms to local variables, converting
+125300070213      *   amounts to numeric
+125400070214           IF pc_fedTax = SPACES
+125500070214             COMPUTE ln_fedTax        = 0.0
+125600070214           ELSE
+125700070214             COMPUTE ln_fedTax  = FUNCTION NUMVAL ( pc_fedTax )
+125800070214           END-IF
+125900070214
+126000070214           IF pc_provTax = SPACES
+126100070214             COMPUTE ln_provTax       = 0.0
+126200070214           ELSE
+126300070214             COMPUTE ln_provTax = FUNCTION NUMVAL ( pc_provTax )
+126400070214           END-IF
+126500070213
+126600070214           IF pc_AcctGrossAmt = SPACES
+126700070214             COMPUTE ln_AcctGrossAmt  = 0.0
+126800070214           ELSE
+126900070214             COMPUTE ln_AcctGrossAmt  =
+127000070213                                FUNCTION NUMVAL ( pc_AcctGrossAmt )
+127100070214           END-IF
+127200070214           IF pc_AcctNetAmt = SPACES
+127300070214              COMPUTE ln_AcctNetAmt   = 0.0
+127400070214           ELSE
+127500070214              COMPUTE ln_AcctNetAmt   =
+127600070214                                FUNCTION NUMVAL ( pc_AcctNetAmt )
+127700130612117125     END-IF.
+127800070201      * ------------------------------------------
+127900070202       get-acc-ivr-data.
+128000070201      * ------------------------------------------
+128100070202      * Get province, country and other account/investor data
+128200070201           CALL "FXDSCIVRP" USING
+128300070201                              ln_IvrAcctNo
+128400070202                              lc_lockedIn
+128500070201                              lc_stopActivity
+128600070201                              lc_stopRedem
+128700070201                              ln_InvestorNo
+128800070201                              lc_ProvinceCode
+128900070201                              lc_CountryCode
+129000070205                              lc_accountTypeCode
+129100080609      * RFS50832 - Begin
+129200080609                              lc_accountTypeRule
+129300080609      * RFS50832 - End
+129400070205                              lc_contrRedemCode
+129500070205                              lc_errCode2
+129600070226           MOVE pc_ContRdmptnCode TO lc_origContrRedemCode
+129700070205           IF pc_ContRdmptnCode = SPACES
+129800070205             MOVE lc_contrRedemCode   TO pc_ContRdmptnCode
+129900070301           END-IF
+130000081103      * RFS59053 - Begin
+130100081103           MOVE pc_ContRdmptnCode     TO lc_contrRedemCode
+130200081103      * RFS59053 - End
+130300070301      * Validate if account exists in the system
+130400070301           IF NOT lnc_errCode2OK
+130500070301             PERFORM set-initial-fail
+130600070301             MOVE  lnc_notValidAccount    TO lc_businessError
+130700130612117125     END-IF.
+130800070226      * ------------------------------------------
+130900070226       validate-contr-redem-code.
+131000070226      * ------------------------------------------
+131100070226      * Validate contribution redemption code:
+131200070226      *   do not validate if default value was used
+131300070226           IF lc_origContrRedemCode NOT = SPACES
+131400150610138770      IF lc_TransType = " "
+131500070226             CALL "FXACRRULE" USING
+131600070226                                lc_accountTypeCode
+131700070226                                pc_ContRdmptnCode
+131800070226                                lnc_SEL
+131900070226                                lc_errCode2
+132000150831149784*138770       ELSE
+132100150831149784*138770       CALL "FXACRRULE" USING
+132200150831149784*138770                          lc_accountTypeCode
+132300150831149784*138770                          pc_ContRdmptnCode
+132400150831149784*138770                          lc_TransType
+132500150831149784*138770                          lc_errCode2
+132600150610138770      END-IF
+132700070226             IF NOT lnc_errCode2Ok
+132800070226               PERFORM set-initial-fail
+132900070226               MOVE lnc_accContrRedemCode    TO lc_businessError
+133000070226             END-IF
+133100070226           END-IF.
+133200080609      * RFS50832 - Begin
+133300080609      * ------------------------------------------
+133400080609       get-contr-redem-code-rule.
+133500080609      * ------------------------------------------
+133600080609      * Get contribution redemption code rule
+133700080609           CALL "FXCTRRULE" USING
+133800080609                                lc_accountTypeCode
+133900080609                                pc_ContRdmptnCode
+134000080609                                lc_ContrRedemCodeRule
+134100130612117125                          lc_errCode2.
+134200080609      * RFS50832 - End
+134300070202      * ------------------------------------------
+134400070202       validate-stop-act-redem.
+134500070202      * ------------------------------------------
+134600070202      * Validate stop activity and redemptions and set up
+134700070202      *   warning flag.
+134800070202           EVALUATE TRUE
+134900070202             WHEN lnc_stopActivityYes
+135000070202               MOVE lnc_errStopActive TO lc_errorCode
+135100070202                                         lc_retnAccLevelErr
+135200070202               PERFORM get-message-description
+135300070202               MOVE lc_MessageDesc    TO lc_retnAccMessageDesc
+135400070202             WHEN lnc_stopRedemYes
+135500070202               MOVE lnc_errStopRedem  TO lc_errorCode
+135600070202                                         lc_retnAccLevelErr
+135700070202               PERFORM get-message-description
+135800070202               MOVE lc_MessageDesc    TO lc_retnAccMessageDesc
+135900070202           END-EVALUATE.
+136000070201      * ------------------------------------------
+136100070201       check-add-replace.
+136200070201      * ------------------------------------------
+136300070201      * Validate add-replace for prov/fed taxes
+136400070201           IF pc_ReplaceAddTax = SPACES
+136500070213             IF ((ln_fedTax > 0 OR ln_provTax > 0) AND
+136600070201                  pc_SplitTaxOption NOT = SPACES)      OR
+136700070213                (ln_fedTax > 0)                        OR
+136800070213                (ln_provTax > 0 AND lnc_ProvinceCodeQC)
+136900070201               PERFORM set-initial-fail
+137000070202               MOVE  lnc_errReplaceAdd    TO lc_businessError
+137100070201             END-IF
+137200070201           END-IF.
+137300070201      * ------------------------------------------
+137400070201       check-tax-split.
+137500070201      * ------------------------------------------
+137600070201           IF pc_SplitTaxOption = SPACES
+137700070213             IF ln_fedTax  > 0  OR
+137800070213               (ln_provTax > 0 AND lnc_ProvinceCodeQC)
+137900070201               PERFORM set-initial-fail
+138000070202               MOVE  lnc_errTaxSplit    TO lc_businessError
+138100070201             END-IF
+138200070201           END-IF.
+138300070201      * ------------------------------------------
+138400070201       check-fed-tax.
+138500070201      * ------------------------------------------
+138600070213           IF ln_fedTax = 0              AND
+138700070201             NOT pnc_SplitTaxOptionPerc
+138800070201             IF pc_ReplaceAddTax NOT = SPACES
+138900070201               PERFORM set-initial-fail
+139000070202               MOVE  lnc_errAddReplFedTaxReq     TO lc_businessError
+139100070201             ELSE
+139200070201               IF pc_SplitTaxOption NOT = SPACES
+139300070201                 PERFORM set-initial-fail
+139400070202                 MOVE  lnc_errTaxSplitFedTaxReq  TO lc_businessError
+139500070201               END-IF
+139600070201             END-IF
+139700070201           END-IF.
+139800070201      * ------------------------------------------
+139900070201       check-prov-tax.
+140000070201      * ------------------------------------------
+140100150923148347     IF lnc_ProvinceCodeQC
+140200070213           IF ln_provTax = 0              AND
+140300070201             NOT pnc_SplitTaxOptionPerc
+140400070201             IF pc_ReplaceAddTax NOT = SPACES
+140500070201               PERFORM set-initial-fail
+140600070202               MOVE  lnc_errAddReplProvTaxReq     TO lc_businessError
+140700070201             ELSE
+140800070201               IF pc_SplitTaxOption NOT = SPACES
+140900070201                 PERFORM set-initial-fail
+141000070202                 MOVE  lnc_errTaxSplitProvTaxReq  TO lc_businessError
+141100070201               END-IF
+141200070201             END-IF
+141300150923      * RFS 148347 STARTS
+141400150923      *    END-IF.
+141500150923           END-IF
+141600150923           END-IF.
+141700150923      * RFS 148347 ENDS
+141800070213      * ------------------------------------------
+141900070213       load-input-inv-array.
+142000070213      * ------------------------------------------
+142100070213      * Unstring input "array" into internal array to be used in the pgm
+142200070214           INITIALIZE       ln_currNumInvs
+142300070214                            ln_numResidual
+142400070214                            ln_lastResidual
+142500070214                            ln_totGrossAmt
+142600070214                            ln_totNetAmt
+142700070214           MOVE 1        TO ln_pointer
+142800070320           SET lb_isMoreFunds     TO TRUE
+142900070213           PERFORM VARYING ln_cnt FROM 1 BY 1
+143000070301                   UNTIL ln_cnt > lnc_maxNumInvs OR
+143100070320                   NOT lb_initialOK              OR
+143200070320                   lb_noMoreFunds
+143300070214             INITIALIZE lc_tmpFundCode
+143400070214             UNSTRING ptbc_invDataArr
+143500070214                DELIMITED BY lnc_elemDelim OR
+143600070214                             lnc_rowDelim
+143700070214                INTO lc_tmpFundCode
+143800070214                     lc_tmpTradeDate
+143900070214                     lc_tmpSplitOptionCode
+144000070214                     lc_tmpIncludeAssignedUnits
+144100070214                     lc_tmpUnitAmt
+144200070214                     lc_tmpGrossAmt
+144300070214                     lc_tmpNetAmt
+144400070214                     lc_tmpCertificateNo
+144500070214                WITH POINTER ln_pointer
+144600070214                ON OVERFLOW
+144700070214                   CONTINUE
+144800070214                NOT ON OVERFLOW
+144900070214                   CONTINUE
+145000070214             END-UNSTRING
+145100070320      * If fund code is spaces then stop to Unstring the input data
+145200070214             IF lc_tmpFundCode = SPACES
+145300070320               SET lb_noMoreFunds     TO TRUE
+145400070214             ELSE
+145500070214      * Increase counter and move data to internal array
+145600070214               COMPUTE ln_currNumInvs = ln_currNumInvs + 1
+145700070214               MOVE ln_currNumInvs   TO ln_c1
+145800070214
+145900070214               MOVE lc_tmpFundCode   TO ltbc_FundCode (ln_c1)
+146000070214               IF lc_tmpTradeDate = SPACES
+146100070214                 COMPUTE ltbn_TradeDate (ln_c1) = 0
+146200070214               ELSE
+146300070214                 COMPUTE ltbn_TradeDate (ln_c1) =
+146400070214                           FUNCTION NUMVAL(lc_tmpTradeDate)
+146500070214               END-IF
+146600070215
+146700070214               IF lc_tmpIncludeAssignedUnits = SPACE
+146800070214                 MOVE lnc_Y                       TO
+146900070214                                     ltbc_IncludeAssignedUnits (ln_c1)
+147000070214               ELSE
+147100070223                 MOVE
+147200070223                   FUNCTION UPPER-CASE(lc_tmpIncludeAssignedUnits) TO
+147300070223                                     ltbc_IncludeAssignedUnits (ln_c1)
+147400070214               END-IF
+147500070214               IF lc_tmpUnitAmt = SPACES
+147600070214                 COMPUTE ltbn_unitAmt   (ln_c1) = 0.0
+147700070214               ELSE
+147800070214                 COMPUTE ltbn_unitAmt   (ln_c1) =
+147900070214                              FUNCTION NUMVAL(lc_tmpUnitAmt)
+148000070214               END-IF
+148100070214               IF lc_tmpGrossAmt = SPACES
+148200070214                 COMPUTE ltbn_GrossAmt  (ln_c1) = 0.0
+148300070214               ELSE
+148400070214                 COMPUTE ltbn_GrossAmt  (ln_c1) =
+148500070214                              FUNCTION NUMVAL(lc_tmpGrossAmt)
+148600070214               END-IF
+148700070214               IF lc_tmpNetAmt = SPACES
+148800070214                 COMPUTE ltbn_netAmt    (ln_c1) = 0.0
+148900070214               ELSE
+149000070214                 COMPUTE ltbn_netAmt    (ln_c1) =
+149100070214                              FUNCTION NUMVAL(lc_tmpNetAmt)
+149200070214               END-IF
+149300070214
+149400070214               MOVE lc_tmpCertificateNo           TO
+149500070214                                      ltbc_CertificateNo      (ln_c1)
+149600070214               PERFORM get-certificate-id-no
+149700070214
+149800070214               MOVE lc_tmpFundCode                TO
+149900070214                                      lc_tmpFundCode
+150000070214                                      ltbc_FundCode           (ln_c1)
+150100070214               PERFORM get-investment
+150200070301               IF NOT lnc_errCode2Ok
+150300070301                 MOVE lc_tmpFundCode      TO lc_fundToReport
+150400070301                 PERFORM set-initial-fail
+150500070301                 MOVE  lnc_fundNotExists  TO lc_businessError
+150600070301               ELSE
+150700080611      * RFS50832 - Begin
+150800080611                 PERFORM get-inv-group
+150900080611                 MOVE lc_tmpInvestmentType TO
+151000080611                                       ltbc_InvestmentType (ln_c1)
+151100080611                 MOVE lc_tmpFormCode       TO
+151200080611                                       ltbc_FormCode        (ln_c1)
+151300080611      * RFS50832 - End
+151400070301                 MOVE lc_tmpInvCode     TO ltbc_investmentCode (ln_c1)
+151500070301                 MOVE lc_tmpCurrency    TO ltbc_currency       (ln_c1)
+151600070301                 MOVE lc_tmpProductTypeRule TO
+151700070214                                       ltbc_ProductTypeRule      (ln_c1)
+151800070214
+151900070301                 IF lc_tmpSplitOptionCode = SPACES
+152000070301                   IF ltbn_GrossAmt  (ln_c1) > 0.0 OR
+152100070301                      ltbn_netAmt    (ln_c1) > 0.0
+152200070301                     MOVE lnc_splitOptDollar   TO lc_tmpSplitOptionCode
+152300070301                   ELSE
+152400070301                     IF ltbn_unitAmt   (ln_c1) > 0.0
+152500070301                      MOVE lnc_splitOptUnit     TO lc_tmpSplitOptionCode
+152600070301                     END-IF
+152700070301                   END-IF
+152800070301                 END-IF
+152900070215
+153000070301                 MOVE FUNCTION UPPER-CASE(lc_tmpSplitOptionCode) TO
+153100070301                                 lc_tmpSplitOptionCode
+153200070301                 MOVE lc_tmpSplitOptionCode                      TO
+153300070301                                       ltbc_SplitOptionCode (ln_c1)
+153400070301                 IF lc_tmpSplitOptionCode = lnc_Residual
+153500070301                   COMPUTE ln_numResidual = ln_numResidual + 1
+153600070301                   MOVE ln_c1               TO ln_lastResidual
+153700070301                 END-IF
+153800070214
+153900070301                 COMPUTE ln_totGrossAmt = ln_totGrossAmt +
+154000070214                                         ltbn_GrossAmt  (ln_c1)
+154100070301                 COMPUTE ln_totNetAmt   = ln_totNetAmt   +
+154200070214                                         ltbn_NetAmt    (ln_c1)
+154300070301               END-IF
+154400070214             END-IF
+154500070213           END-PERFORM.
+154600080611      * RFS50832 - Begin
+154700080611      * ------------------------------------------
+154800080611       get-inv-group.
+154900080611      * ------------------------------------------
+155000080611           EXEC SQL
+155100080611             SELECT INVESTMENT_TYPE,
+155200080611                    FORM_CODE
+155300080611               INTO
+155400080611                 :lc_tmpInvestmentType,
+155500080611                 :lc_tmpFormCode
+155600080611               FROM
+155700080611                 mfainvgrp
+155800080611             WHERE
+155900080611               investment_group_code = :lc_tmpInvGroupCode
+156000080611           END-EXEC.
+156100080611      * RFS50832 - End
+156200070206      * ------------------------------------------
+156300070206       get-certificate-id-no.
+156400070206      * ------------------------------------------
+156500070206      * Get certificate id number using passing parameters.
+156600070206
+156700070214           INITIALIZE      ltbn_CertificateIdNo   (ln_c1)
+156800070214                           ln_tmpCertIdNo
+156900130313117125                     ln_tmpCertBal
+157000070206
+157100070214           IF ltbc_CertificateNo (ln_c1) NOT = SPACES
+157200070214             MOVE ltbc_CertificateNo (ln_c1) TO  lc_tmpCertNo
+157300070206
+157400070206             EXEC SQL
+157500070206               SELECT
+157600130313117125           certificate_id_no,
+157700130313117125           current_certificate_balance
+157800070206               INTO
+157900130313117125           :ln_tmpCertIdNo,
+158000130313117125           :ln_tmpCertBal
+158100070206               FROM
+158200070206                 mfagicdp
+158300070206               WHERE
+158400070206                 certificate_no              = :lc_tmpCertNo  AND
+158500070206                 cert_status_code            = :lnc_A         AND
+158600070206                 current_certificate_balance > 0              AND
+158700070207                 movable_mortgage           <> :lnc_Y
+158800070206             END-EXEC
+158900070206
+159000140422135101       MOVE SQLSTATE TO Ic_SqlStates
+159100140422135101*      IF SQLSTATE NOT = lnc_SuccessMsgId
+159200140422135101       IF NOT Incc_sqlSuccessful
+159300130612117125*        INITIALIZE ln_tmpCertIdNo
+159400130612117125         INITIALIZE ln_tmpCertIdNo, ln_tmpCertBal
+159500070206             END-IF
+159600070214             MOVE ln_tmpCertIdNo   TO ltbn_CertificateIdNo (ln_c1)
+159700130313117125       MOVE ln_tmpCertBal    TO ltbn_CertDollarBal (ln_c1)
+159800070206           END-IF.
+159900070108      * ------------------------------------------
+160000070108       get-investment.
+160100070108      * ------------------------------------------
+160200070108      * Get investment record for the fund code
+160300070129           CALL "FXINVRULE" USING
+160400070301                              ln_IvrAcctNo
+160500070129                              lc_tmpFundCode
+160600070129                              lc_tmpInvCode
+160700070129                              lc_tmpCurrency
+160800070129                              lc_tmpProductTypeRule
+160900080611      * RFS50832 - Begin
+161000080611                              lc_tmpInvGroupCode
+161100080611      * RFS50832 - End
+161200070129                              lc_errCode2.
+161300070125      * ------------------------------------------
+161400070125       check-set-parm-currency.
+161500070125      * ------------------------------------------
+161600070223      * Move base currency or convert to upper case
+161700070125           IF pc_Currency = SPACES
+161800070223             MOVE lc_baseCurrency                  TO
+161900070223                        pc_Currency
+162000070223           ELSE
+162100070223             MOVE FUNCTION UPPER-CASE(pc_Currency) TO
+162200070223                        pc_Currency
+162300070125           END-IF.
+162400070102      * ------------------------------------------
+162500070102       valid-gross-net.
+162600070102      * ------------------------------------------
+162700070103      * Looping through investments and
+162800070306      * validate if Gross/Net entered  ;
+162900070306      * Validate trade date
+163000070102           MOVE 0              TO ln_tmpCnt
+163100070102           SET lb_loopStart    TO TRUE
+163200070102           PERFORM VARYING ln_cnt
+163300070214             FROM 1 BY 1 UNTIL ln_cnt > ln_currNumInvs  OR
+163400070102                               lb_initialFail           OR
+163500070102                               lb_loopEnd
+163600070214             IF ltbc_FundCode (ln_cnt) = SPACES
+163700070102               SET lb_loopEnd     TO TRUE
+163800070102             ELSE
+163900070103      * Count which amounts exists/Validate: only 1 should entered
+164000070306               PERFORM validate-trade-date
+164100070306               IF lb_initialOk
+164200070306                 COMPUTE ln_tmpCnt = 0
+164300070306                 IF ltbn_unitAmt (ln_cnt) NOT = ZEROES
+164400070306                   COMPUTE ln_tmpCnt = ln_tmpCnt + 1
+164500070306                 END-IF
+164600070306                 IF ltbn_grossAmt (ln_cnt) NOT = ZEROES
+164700070306                   COMPUTE ln_tmpCnt = ln_tmpCnt + 1
+164800070306                 END-IF
+164900070306                 IF ltbn_netAmt (ln_cnt) NOT = ZEROES
+165000070306                   COMPUTE ln_tmpCnt = ln_tmpCnt + 1
+165100070306                 END-IF
+165200070306                 IF ln_tmpCnt > 1
+165300070306                   PERFORM set-initial-fail
+165400070306                   MOVE lnc_ErrAmounts       TO lc_businessError
+165500070306                 END-IF
+165600070306               END-IF
+165700070102             END-IF
+165800070102           END-PERFORM.
+165900070306      * ------------------------------------------
+166000070306       validate-trade-date.
+166100070306      * ------------------------------------------
+166200070306      * Validate if trade date is valid date
+166300070306           IF ltbn_TradeDate (ln_cnt) > 0
+166400070306             MOVE ltbn_TradeDate (ln_cnt) TO ln_dateNum8
+166500070306             CALL "VALDATEFMT" USING lc_dateX8
+166600070306                                     lc_dateValidFlag
+166700070306             IF  lc_dateValidNo
+166800070306               MOVE lc_dateX8              TO lc_dateToReport
+166900070306               PERFORM set-initial-fail
+167000070306               MOVE lnc_errTradeDate       TO lc_businessError
+167100070306             END-IF
+167200131213      *RFS125258-begin.
+167300131213             IF lb_DLYDSCSetupYes
+167400131213               MOVE ln_dateNum8 TO ln_TradeDate
+167500131213             ELSE
+167600131213               MOVE ZEROES      TO ln_TradeDate
+167700131213             END-IF
+167800131213      *RFS125258-end.
+167900130612117125     END-IF.
+168000070125      * ------------------------------------------
+168100070125       validate-residual.
+168200070125      * ------------------------------------------
+168300070129      * Validate residual - check if more than 1 Residual entered,
+168400070129      * Check if gross/net for residual at account level is entered
+168500070125           IF ln_numResidual > 0
+168600070125             IF ln_numResidual > lnc_maxResidual
+168700070125               PERFORM set-initial-fail
+168800070202               MOVE lnc_oneResidual       TO lc_businessError
+168900070125             ELSE
+169000070125               IF ln_lastResidual < ln_currNumInvs
+169100070125                 PERFORM set-initial-fail
+169200070202                 MOVE lnc_lastResidual    TO lc_businessError
+169300070129               ELSE
+169400070129      * Gross or net have to be entered for residual
+169500070213                 IF ln_AcctGrossAmt = 0 AND
+169600070213                    ln_AcctNetAmt   = 0
+169700070129                   PERFORM set-initial-fail
+169800070202                   MOVE lnc_grossOrNetResidual    TO lc_businessError
+169900070129                 END-IF
+170000070125               END-IF
+170100070125             END-IF
+170200070125           END-IF.
+170300070102      * ------------------------------------------
+170400070102       load-all-investments.
+170500070102      * ------------------------------------------
+170600070103      * Load all investments for the provided account
+170700070102           MOVE 0           TO ln_currNumInvs
+170800070102           EXEC SQL
+170900070122             DECLARE cu_accivp CURSOR FOR
+171000070108               SELECT
+171100070122                      accivp.investment_code,
+171200070122                      invp.industry_fund_code,
+171300070126                      invp.currency,
+171400070126                      prtcdp.product_type_rule,
+171500070103                      :lnc_tradeDateZero,
+171600070103                      :lnc_SplitOptionCodeAll,
+171700070207                      :lnc_IncludeAssignedUnits,
+171800070123                      :lnc_UnitZero,
+171900070103                      :lnc_AmtZero,
+172000070103                      :lnc_AmtZero,
+172100070206                      :lnc_CertNoSpaces,
+172200080612                      :lnc_CertZero,
+172300130516117125                :lnc_AmtZero,
+172400080612                      invgrp.investment_type,
+172500080612                      invgrp.form_code
+172600070102               FROM
+172700061215                mfaaccivp accivp JOIN mfainvp invp
+172800061215                 ON accivp.investment_code = invp.investment_code
+172900070126                                 JOIN mfaprtcdp prtcdp
+173000070126                 ON invp.product_type_code = prtcdp.product_type_code
+173100080612                                 JOIN mfainvgrp invgrp
+173200080612                 ON invp.investment_group_code =
+173300080612                      invgrp.investment_group_code
+173400070102               WHERE
+173500070301                 account_no = :ln_IvrAcctNo
+173600070228               ORDER BY
+173700070228                 accivp.account_no,
+173800070228                 accivp.investment_code
+173900070102               FOR FETCH ONLY
+174000070102           END-EXEC
+174100070102
+174200070102           EXEC SQL
+174300070102             OPEN cu_accivp
+174400070102           END-EXEC
+174500070102
+174600070102           EXEC SQL
+174700070102             FETCH NEXT
+174800070102             FROM cu_accivp
+174900070102             FOR :lnc_maxNumInvs ROWS
+175000070102             INTO
+175100070103               :ltb_invDataArr
+175200070102           END-EXEC
+175300070102
+175400070108           MOVE SQLERRD(3)          TO ln_currNumInvs
+175500070102
+175600070102           EXEC SQL
+175700070102             CLOSE cu_accivp
+175800070102           END-EXEC
+175900070102
+176000070102           IF ln_currNumInvs = 0
+176100070103             PERFORM set-initial-fail
+176200070202             MOVE lnc_NoInvestments TO lc_businessError
+176300070103           END-IF.
+176400070108      * ------------------------------------------
+176500070108       get-company-code.
+176600070108      * ------------------------------------------
+176700070108           CALL "RTVCMPCD" USING
+176800070108                           lc_companyCode.
+176900070108      * ------------------------------------------
+177000070108       get-spec-modules.
+177100070108      * ------------------------------------------
+177200070108      * Get Special module for account level DSC
+177300061215           MOVE lc_companyCode       TO pc_spcmautCompanyCode
+177400061215           MOVE lnc_ACLVDSC          TO pc_spcmautModuleId
+177500061215           PERFORM process-user-index
+177600061215           MOVE pc_spcmautSuccessful TO lc_accLevelDSCFlag
+177700070123
+177800061215           MOVE lc_companyCode       TO pc_spcmautCompanyCode
+177900061215           MOVE lnc_ACLVFRD          TO pc_spcmautModuleId
+178000061215           PERFORM process-user-index
+178100061215           MOVE pc_spcmautSuccessful TO lc_accLevelFreeDollarFlag.
+178200070201
+178300070201           MOVE lc_companyCode       TO pc_spcmautCompanyCode
+178400070201           MOVE lnc_ERFEE            TO pc_spcmautModuleId
+178500070201           PERFORM process-user-index
+178600070201           MOVE pc_spcmautSuccessful TO lc_erFeeFlag.
+178700070201      * ------------------------------------------
+178800070201       get-edit-codes.
+178900070201      * ------------------------------------------
+179000070201      * Acc level withholding Tax
+179100070201           CALL "FXSCEDTAL1" USING
+179200070201                          lnc_scrCodeTRNCDSC
+179300070201                          lnc_editCodeACWTAX
+179400070201                          lnc_editLevelCodeT
+179500070201                          lc_accWithholdingTaxFlag.
+179600131213      * RFS125258 - begin.
+179700131213      * Back dated trade for SUN Life Client.
+179800131213           CALL "CRTDTATRAX" USING lncc_Retrieve lc_Dname.
+179900131213           MOVE lc_Dname TO lc_IaTrax
+180000131213           IF lc_IaTrax = "IATRAX"
+180100131213           CALL "FXSCEDTAL1" USING
+180200131213                          lnc_DLYDSCScrCode
+180300131213                          lnc_DLYDSCEditCode
+180400131213                          lnc_DLYDSCLevelCode
+180500131213                          lnc_DLYDSCSetupFlag
+180600131213           END-IF.
+180700131213      * RFS125258 - end.
+180800070108      * ------------------------------------------
+180900070108       get-process-date.
+181000070108      * ------------------------------------------
+181100070108           SET PASS-ACTION-GETDTA OF COMM-CPPRCDTP-PARAMETERS  TO TRUE
+181200070108           CALL "FXPRCDTP" USING
+181300070108                             CPWPRCDTP-LINKAGE
+181400070207                             COMM-CPPRCDTP-PARAMETERS
+181500191230      * RFS1020979 START
+181600191230           MOVE PRCDTP-AS-AT-DATE OF CPWPRCDTP-LINKAGE
+181700191230                                       TO ln_currPrcdtp
+181800191230      * RFS1020979 END
+181900070207           MOVE PRCDTP-LST-PROCESS-DATE    TO ln_lastProcessDate
+182000080602      * RFS50832 - Begin: generate placement date
+182100080602           COMPUTE ln_genPlacementDate =
+182200080602             PRCDTP-AS-AT-DATE + lnc_genYearsToAdd * 10000.
+182300130612117125     MOVE ln_genPlacementDate TO ln_genPlacementDatePacked.
+182400080602      * RFS50832 - End
+182500061215      * ------------------------------------------
+182600061215       get-base-currency.
+182700061215      * ------------------------------------------
+182800061215           SET Comm-Act-Get-Bas-Currency    TO TRUE
+182900061215           CALL "FXBASCUR" USING Comm-Cpbascur-Parameters
+183000061215           IF NOT Retn-OK OF Comm-Cpbascur-Parameters
+183100061215             MOVE lnc_CAD       TO lc_BaseCurrency
+183200061215           ELSE
+183300061215             MOVE Retn-Currency OF Comm-Cpbascur-Parameters
+183400061215                                TO lc_BaseCurrency
+183500061215           END-IF.
+183600080611      * RFS50832 - Begin
+183700080611      * ------------------------------------------
+183800080611       get-sysparms.
+183900080611      * ------------------------------------------
+184000080611           CALL "RTVSYSPARM"  USING CPWSYSPARM-LINKAGE.
+184100080611      * RFS50832 - End
+184200070129      * ------------------------------------------
+184300070129       set-residual.
+184400070129      * ------------------------------------------
+184500070129      * If residual is entered then calculate residual units/gross/net
+184600070129           IF ln_numResidual > 1
+184700070202      * Set split option dollars for residual
+184800070202             MOVE lnc_splitOptDollar    TO
+184900070202                         ltbc_SplitOptionCode (ln_currNumInvs)
+185000070129             EVALUATE TRUE
+185100070213               WHEN ln_AcctGrossAmt > 0
+185200070202                 COMPUTE ln_tmpAmt =
+185300070213                    ln_AcctGrossAmt - ln_totGrossAmt
+185400070202                 IF ln_tmpAmt < 0
+185500070202                   PERFORM set-initial-fail
+185600070202                   MOVE lnc_grossExceedsResidual TO lc_businessError
+185700070129                 END-IF
+185800070213               WHEN ln_AcctNetAmt > 0
+185900070202                 COMPUTE ln_tmpAmt =
+186000070213                    ln_AcctNetAmt - ln_totNetAmt
+186100070202                 IF ln_tmpAmt < 0
+186200070202                   PERFORM set-initial-fail
+186300070202                   MOVE lnc_netExceedsResidual   TO lc_businessError
+186400070202                 END-IF
+186500070129             END-EVALUATE
+186600070129           END-IF.
+186700070108      * ------------------------------------------
+186800070103       set-investment-data.
+186900070108      * ------------------------------------------
+187000070108      * Loop through the array and set some missing data for
+187100070108      *   the investment.
+187200070131      * Initialize some variables
+187300070103           PERFORM VARYING ln_cnt FROM 1 BY 1
+187400070207                   UNTIL ln_cnt > ln_currNumInvs   OR
+187500070207                      NOT lb_initialOK
+187600070115             IF ltbn_TradeDate (ln_cnt) = 0
+187700070115               MOVE ltbc_investmentCode (ln_cnt)
+187800070115                                        TO lc_tmpInvCode
+187900070103               PERFORM get-trade-date
+188000070115               MOVE ln_tmpTradeDate     TO ltbn_TradeDate (ln_cnt)
+188100070103             END-IF
+188200070131
+188300070131             IF ltbc_currency (ln_cnt) = pc_Currency
+188400070131               COMPUTE ln_numInvWithCurrency =
+188500070131                  ln_numInvWithCurrency + 1
+188600070131             END-IF
+188700130321             IF NOT lb_allInvestmentsLoaded
+188800130321               PERFORM validate-dup-investments
+188900130321             END-IF
+189000081103      * RFS59053-Begin:validation for withholding tax/contr redem code
+189100081121             IF lb_initialOK  AND
+189200081121                pc_ReplaceAddTax NOT = SPACES
+189300081103               PERFORM validate-withholding-tax
+189400081103             END-IF
+189500081103      * RFS59053- End
+189600090831
+189700090831      * RFS72877 - Begin: moved the code here to be executed for
+189800090831      *   every account-investment.
+189900090831
+190000090831      * Check locked in/Assigned units
+190100090831             IF lb_initialOK
+190200090831               IF lnc_lockedInYes    AND
+190300090831                  ltbc_IncludeAssignedUnits (ln_cnt) NOT = lnc_Y
+190400090831                 PERFORM set-initial-fail
+190500090831                 MOVE lnc_shouldHaveAssigned   TO lc_businessError
+190600090831               END-IF
+190700090831             END-IF
+190800090831      * RFS72877 - End
+190900070131           END-PERFORM
+191000070131
+191100070207           IF lb_initialOK
+191200070131      * Check, if number invetments with this currency = 0
+191300070207             IF ln_numInvWithCurrency = 0
+191400070207               PERFORM set-initial-fail
+191500070207               MOVE lnc_NoInvWithCurrency TO lc_businessError
+191600070207             END-IF
+191700090831      * RFS72877 - Begin: moved the code under Perform statement
+191800090831      * ---------------------------------------------------------------
+191900070207      * Check locked in/Assigned units
+192000090831      *      IF lb_initialOK
+192100090831      *        IF lnc_lockedInYes    AND
+192200090831      *           ltbc_IncludeAssignedUnits (ln_cnt) NOT = lnc_Y
+192300090831      *          PERFORM set-initial-fail
+192400090831      *          MOVE lnc_shouldHaveAssigned   TO lc_businessError
+192500090831      *        END-IF
+192600090831      *      END-IF
+192700090831      * ---------------------------------------------------------------
+192800090831      * RFS72877 - End
+192900130612117125     END-IF.
+193000070207      * ------------------------------------------
+193100070207       validate-dup-investments.
+193200070207      * ------------------------------------------
+193300070207      * Check, if the reqest has duplicate investments
+193400070207           COMPUTE ln_startNum = ln_cnt + 1
+193500070207           PERFORM VARYING ln_tmpCnt
+193600070207             FROM ln_startNum BY 1
+193700070207                   UNTIL ln_tmpCnt > ln_currNumInvs   OR
+193800070207                     NOT lb_initialOK
+193900070207             IF ltbc_investmentCode (ln_cnt) =
+194000070207                  ltbc_investmentCode (ln_tmpCnt)
+194100130321117125          AND ltbc_productTypeRule (ln_cnt) NOT =
+194200130321117125             lc_ProdTypeRuleGic
+194300070207               PERFORM set-initial-fail
+194400070207               MOVE lnc_dupInvestments TO lc_businessError
+194500070207             END-IF
+194600130612117125     END-PERFORM.
+194700070108      * ------------------------------------------
+194800070108       get-trade-date.
+194900070108      * ------------------------------------------
+195000070108      * Get trade date for the investment using last unit price for
+195100070108      * the investment.
+195200070126           CALL "FXGETLUP" USING
+195300070126                       lc_tmpInvCode
+195400070126                       ln_tmpTradeDate
+195500070126                       ln_tmpUnitPrice
+195600070126                       ln_tmpInterestRate
+195700070129                       lc_errCode2.
+195800081103      * RFS59053 - Begin
+195900081103      * ------------------------------------------
+196000081103       validate-withholding-tax.
+196100081103      * ------------------------------------------
+196200081103           INITIALIZE ln_tmpCnt
+196300081103           MOVE ltbc_InvestmentType (ln_cnt)   TO
+196400081103                               lc_tmpInvestmentType
+196500081103           MOVE ltbc_FormCode       (ln_cnt)   TO
+196600081103                               lc_tmpFormCode
+196700150610138770     IF lc_TransType = " "
+196800081103           EXEC SQL
+196900081103             SELECT COUNT(*)
+197000081103             INTO :ln_tmpCnt
+197100081103             FROM
+197200081103               mfacouwtp
+197300081103             WHERE
+197400081103               country_code       = :lc_CountryCode               AND
+197500081103               province_code      IN
+197600081103                                 (:lnc_3Spaces, :lc_ProvinceCode) AND
+197700081103               account_type_code  = :lc_accountTypeCode           AND
+197800081103               contr_redem_code   = :lc_contrRedemCode            AND
+197900150610               trans_type_code    = :lnc_SEL                      AND
+198000081103               investment_type    = :lc_tmpInvestmentType         AND
+198100081103               form_code          = :lc_tmpFormCode
+198200081103           END-EXEC
+198300150610138770
+198400150610138770     ELSE
+198500150610138770       EXEC SQL
+198600150610138770         SELECT COUNT(*)
+198700150610138770         INTO :ln_tmpCnt
+198800150610138770         FROM
+198900150610138770           mfacouwtp
+199000150610138770         WHERE
+199100150610138770           country_code       = :lc_CountryCode               AND
+199200150610138770           province_code      IN
+199300150610138770                             (:lnc_3Spaces, :lc_ProvinceCode) AND
+199400150610138770           account_type_code  = :lc_accountTypeCode           AND
+199500150610138770           contr_redem_code   = :lc_contrRedemCode            AND
+199600150610138770           trans_type_code    = :lc_TransType                 AND
+199700150610138770           investment_type    = :lc_tmpInvestmentType         AND
+199800150610138770           form_code          = :lc_tmpFormCode
+199900150610138770       END-EXEC
+200000150610138770     END-IF
+200100081103           IF ln_tmpCnt = 0
+200200081103             MOVE lnc_withholdingTax TO lc_businessError
+200300081103             PERFORM set-initial-fail
+200400081103           END-IF.
+200500081103      * RFS59053 - End
+200600070103      * ------------------------------------------
+200700070103       set-initial-fail.
+200800070103      * ------------------------------------------
+200900070129      * Set flag to indicate business error: no result data will be returned
+201000070129      *  to the calling program(s).
+201100070129      *
+201200070103           SET lb_initialFail     TO TRUE.
+201300061229      * ------------------------------------------
+201400061229       check-system-availability.
+201500061229      * ------------------------------------------
+201600061229           INITIALIZE lb_SystemAvailable
+201700061229           CALL   "FXCHKSYS" USING lb_SystemAvailable
+201800061229
+201900061229           IF lb_SystemDown
+202000070129             PERFORM set-initial-fail
+202100070202             MOVE  lnc_SystemNotAvailableId TO lc_businessError
+202200061229           END-IF.
+202300080609      * RFS50832 - Begin
+202400080609      * ------------------------------------------
+202500080610       set-acc-level-withh-tax-flags.
+202600080609      * ------------------------------------------
+202700080609      * Check if it is account level withholding tax and if
+202800080609      *  it is required 2 loops
+202900080610
+203000080610      * Set up flag to know if it is registred account
+203100080610           IF lncc_accountTypeRuleReg     AND
+203200080610              lncc_ContrRedemCodeRuleAlw
+203300080610             SET lncc_RegAccYes    TO TRUE
+203400080610           ELSE
+203500080610             SET lncc_RegAccNo     TO TRUE
+203600080610           END-IF
+203700080909      * RFS50832.1 - Begin
+203800080915           IF lnc_accWithholdingTaxYes
+203900080909             MOVE 2       TO ln_numTaxLoops
+204000080925           ELSE
+204100080925      * RFS57698 - Begin
+204200080925             MOVE 1       TO ln_numTaxLoops
+204300080925      * RFS57698 - End
+204400081118           END-IF.
+204500081118      * RFS58210 - removed obsolete code
+204600081118      * RFS50832.1 - End
+204700080609      * RFS50832 - End
+204800210130      * RFS180707 - Starts
+204900210130      * ------------------------------------------
+205000210130       Verify-ACINDSC.
+205100210130      * ------------------------------------------
+205200210130           INITIALIZE  ln_Count.
+205300210130           SET lnc_ACINDSCNo    TO TRUE.
+205400210130
+205500210130           EXEC SQL
+205600210130             SELECT COUNT(*)
+205700210130               INTO :ln_Count
+205800210130               FROM MFAACCIVP ACCIVP
+205900210130             INNER JOIN MFAISTFNP ISTFNP ON
+206000210130             ISTFNP.INVESTMENT_CODE = ACCIVP.INVESTMENT_CODE AND
+206100210130             ISTFNP.FUNCTION_CODE = "ACINDSC"
+206200210130              WHERE ACCIVP.ACCOUNT_NO =  :ln_IvrAcctNo
+206300210130           END-EXEC
+206400210130
+206500210130            MOVE SQLSTATE TO lc_sqlStates
+206600210130             EVALUATE TRUE
+206700210130              WHEN lncc_sqlSuccessful
+206800210130                   IF ln_Count > 0
+206900210130                      SET lnc_ACINDSCYes TO TRUE
+207000210130                   END-IF
+207100210130              WHEN OTHER
+207200210130                CONTINUE
+207300210130             END-EVALUATE.
+207400210130
+207500210130      * RFS180707 - Ends
+207600201223      * ------------------------------------------
+207700070108       detail-processing.
+207800070108      * ------------------------------------------
+207900081118      * RFS58210 - Begin: modified the code
+208000080530           IF (lnc_accLevelFreeDollar  OR
+208100140306133073         lb_DLYDSCSetupYes       OR
+208200201223      *RFS180707 - Starts
+208300201223      *        lnc_accLevelDsc )
+208400201223               lnc_accLevelDsc ) and lnc_ACINDSCNo
+208500201223      *RFS180707 - Ends
+208600080602             SET lncc_crtAccLvlFiles   TO TRUE
+208700070108           ELSE
+208800080602             SET lncc_crtAccLvlFilesNo TO TRUE
+208900080602           END-IF
+209000081118      * RFS58210 - End
+209100150223
+209200150223138770     MOVE ltb_invdata TO lta_invdata
+209300080602
+209400080610      * RFS50832 - Begin: added option to run 2 loops
+209500081118      * RFS58210 - removed obsolete code
+209600080610           PERFORM VARYING ln_currTaxLoop FROM 1 BY 1
+209700080610                   UNTIL ln_currTaxLoop > ln_numTaxLoops
+209800080610             PERFORM detail-fund-level-main
+209900130612           END-PERFORM
+210000080610      * Create result sets after
+210100130324           PERFORM create-res-set-main.
+210200080610      * RFS50832 - End
+210300070108      * -----------------------------------------
+210400080602       detail-fund-level-main.
+210500070108      * -----------------------------------------
+210600070108      * Call TRNPST and build result sets
+210700070205
+210800070205      * For account level withholding tax do calculation for account
+210900070205      *   level
+211000080530           PERFORM create-clear-fund-acc-tables
+211100080602      * RFS50832 - Begin
+211200080611           INITIALIZE
+211300130321      *Rfs117125 Begins
+211400130321      *               lc_accTotals
+211500130321                      lc_accTotals,
+211600130321                      lc_prevInvestmentCode, lc_NextInvestmentCode,
+211700130403                      ln_CertGrossAmt, ln_CertNetAmt,
+211800130321                      ln_InvGrossTotal, ln_InvNetTotal,
+211900130403                      ln_InvGrossRmdr, ln_InvNetRmdr
+212000130321      *Rfs117125 Ends
+212100080610           IF lncc_regAccYes   AND
+212200080610              ln_currTaxLoop = ln_numTaxLoops
+212300080908             PERFORM  create-trans-add-tax
+212400080909      * RFS50832.1 - Begin
+212500080909      *      PERFORM  delete-from-trans-add-tax
+212600080909      * RFS50832.1 - End
+212700080908             PERFORM  override-trans-add-tax
+212800080610           END-IF
+21290010010476402 *    IF lncc_crtAccLvlFiles AND
+21300010010476402      IF lncc_crtAccLvlFiles
+213100081120      * RFS58210 - Begin
+21320010010476402 *       ln_currTaxLoop < ln_numTaxLoops
+213300081120      * RFS58210 - End
+213400080603             PERFORM  create-Acc-Lvl-files
+213500080603             PERFORM  delete-from-Acc-Lvl-files
+213600080602             PERFORM  populate-Acc-Lvl-files
+213700080602             PERFORM  override-Acc-Lvl-files
+213800080602           END-IF
+213900080602      * RFS50832 - End
+214000070108           PERFORM VARYING ln_cnt FROM 1 BY 1
+214100070108                   UNTIL ln_cnt > ln_currNumInvs
+214200070223      * Do the calculations only for one currency...
+214300070223             IF ltbc_currency (ln_cnt) = pc_currency
+214400070223               PERFORM set-curr-data
+214500130402117125* To accomodate multiple certificates per fund, do not
+214600130402      * continue processing the remaining certificates in the
+214700130402      * fund when total amt has been redeemed
+214800130314117125         IF NOT lncc_InvRedComplete
+214900130314                 PERFORM update-LDA
+215000080909      * RFS50832.1 - Begin
+215100130314      *          PERFORM set-trans-additional-tax
+215200080909      * RFS50832.1 - End
+215300130314                 PERFORM call-trnpst
+215400070115
+215500130314                 PERFORM get-LDA
+215600130313
+215700130313      *Rfs117125 Begins
+215800130313      *If processing multiple certficates per fund for Net amounts,
+215900130313      *& the transaction rejects due to insufficient funds but there
+216000130402      *are still certificates available for processing for that fund,
+216100130404      *re-process that fund certificate using all share redemption &
+216200130404      *the remainder will be calculated and processed later
+216300130404                 IF lncc_SplitInvCert AND lncc_CertNetAmt
+216400130314                   AND ln_cnt  < ln_currNumInvs
+216500150603138770*            AND PASS-REJECTION-CODE = "11"
+216600150603138770             AND (PASS-REJECTION-CODE = "11" OR
+216700150603138770                  PASS-REJECTION-CODE = "G2")
+216800130314                   AND lc_currInvestmentCode = lc_NextInvestmentCode
+216900130313                     MOVE lnc_SplitOptionCodeAll TO
+217000130313                             ltbc_SplitOptionCode (ln_cnt)
+217100130314                     MOVE ZEROES to ln_CertNetAmt
+217200130313                     PERFORM set-curr-data
+217300130404                     PERFORM update-LDA
+217400130313                     PERFORM call-trnpst
+217500130313                     PERFORM get-LDA
+217600130314                 END-IF
+217700130313      *Rfs117125 Ends
+217800130313
+217900130314                 PERFORM save-returned-trnpst-data
+218000130612117125         END-IF
+218100130404             END-IF
+218200070108           END-PERFORM
+218300080530      * RFS50832 - Begin
+21840010010476402 *    IF lncc_crtAccLvlFiles AND
+21850010010476402      IF lncc_crtAccLvlFiles
+218600081120      * RFS58210 - Begin
+21870010010476402 *       ln_currTaxLoop < ln_numTaxLoops
+218800081120      * RFS58210 - End
+218900080604             PERFORM  delete-override-Acc-Lvl-files
+219000080610           END-IF.
+219100080610           IF lncc_regAccYes   AND
+219200080610              ln_currTaxLoop = ln_numTaxLoops
+219300080610             PERFORM  delete-override-trans-add-tax
+219400080610           END-IF.
+219500080611      * At the end of the first loop calculate additional tax
+219600080611      *   for the add replace = "A" or spaces.
+219700080611           IF lncc_regAccYes   AND
+219800080611              ln_currTaxLoop < ln_numTaxLoops
+219900080908      * RFS50832.1 - Begin: Do prep and call to regaccrcon
+220000080908             PERFORM  calc-trans-add-tax-regaccrcon
+220100081118      * RFS58210 - Begin: removed obsolete code
+220200080908      * RFS50832.1 - End
+220300080611           END-IF.
+220400080610      *  Move the paragraph up because it could run multiple times.
+220500130324      *    PERFORM create-fund-res-set
+220600080610      * RFS50832 - End
+220700080908      * RFS50832.1 - Begin
+220800080908      * -----------------------------------------
+220900080908       calc-trans-add-tax-regaccrcon.
+221000080908      * -----------------------------------------
+221100080908      * RFS50832.1 - Begin: Do prep and call to regaccrcon
+221200080908      * ??? Do we need to create key recods per account investment ?
+221300080908      * Calculate trans-additional tax values
+221400080908           INITIALIZE ln_calcFedTax
+221500080908                      ln_calcProvTax
+221600081118      * RFS58210 - Begin: removed obsolete code
+221700131213      *RFS125258 - Begin.
+221800131213      *      CALL "SETCALENV2" USING  lncc_I lc_errCode2
+221900131213      *      CALL "SETCALENV2" USING  lncc_C lc_errCode2
+222000131213             MOVE  ZEROS TO    ln_CalDate
+222100131213             CALL "SETCALENV2" USING  lncc_I ln_CalDate lc_errCode2
+222200131213             IF lb_DLYDSCSetupYes
+222300131213                MOVE  ln_TradeDate TO    ln_CalDate
+222400131213                CALL "SETCALENV2" USING  lncc_R ln_CalDate lc_errCode2
+222500131213                CALL "SETCALENV2" USING  lncc_O ln_CalDate lc_errCode2
+222600131213             ELSE
+222700131213                CALL "SETCALENV2" USING  lncc_C ln_CalDate lc_errCode2
+222800131213             END-IF.
+222900131213      *RFS125258 - End.
+223000081118      * RFS58210 - Begin
+223100081118             SET lncc_filesOverriden  TO TRUE
+223200081118      * RFS58210 - End
+223300080909             PERFORM populate-mfadsccivp
+223400150223138770* Duplicate work file CDSCTRN with data to WRKCERATP
+223500150223138770       PERFORM populate-WRKCERATP
+223600080908             CALL "REGACCRCON" USING  lncc_cdscModeSACDSC
+223700080908                                      pc_ReplaceAddTax
+223800080908                                      pc_SplitTaxOption
+223900080908                                      ln_fedTax
+224000080908                                      ln_provTax
+224100091013                                      lc_awdQcWhTax
+224200091013      * RFS62817 - Begin
+224300091013                                      lc_FromAcct
+224400091013                                      lc_ToAcct.
+224500131213      *RFS125258 - Begin.
+22460013121376402 *      CALL "SETCALENV2" USING  lncc_D lc_errCode2.
+224700131213             MOVE  ZEROS TO  ln_CalDate.
+224800131213             CALL "SETCALENV2" USING  lncc_D ln_CalDate lc_errCode2.
+224900131213           IF lb_DLYDSCSetupYes
+225000131213             CALL "SETCALENV2" USING  lncc_E ln_CalDate lc_errCode2
+225100131213           END-IF.
+225200131213      *RFS125258 - End.
+225300091013      * RFS62817 - End
+225400080909      *    END-EVALUATE.
+225500080908      * -----------------------------------------
+225600080908       populate-mfadsccivp.
+225700080908      * -----------------------------------------
+225800080909           EXEC SQL
+225900080909             DELETE FROM QTEMP/CDSCTRN
+226000080909           END-EXEC
+226100080909
+226200080908           PERFORM VARYING ln_cnt FROM 1 BY 1
+226300080908                   UNTIL ln_cnt > ln_currNumInvs
+226400080908             INITIALIZE DSC-CALC-INVESTMENT-REC
+226500080908             MOVE ln_ivrAcctno                    TO
+226600080908                                          DSC-ACCOUNT-NO
+226700080908             MOVE ltbc_investmentCode (ln_cnt)    TO
+226800080908                                          DSC-INVESTMENT-CODE
+226900080908             MOVE ltbn_TradeDate      (ln_cnt)    TO
+227000080908                                          DSC-TRADE-DATE
+227100080908             MOVE pc_ContRdmptnCode               TO
+227200080908                                          DSC-CONTR-REDEM-CDE
+227300080908             MOVE ltbc_SplitOptionCode (ln_cnt)   TO
+227400080908                                          DSC-SPLIT-OPTION-CODE
+227500130405      *Rfs117125 Begins
+227600130405             IF DSC-SPLIT-OPTION-CODE = lnc_splitCertificate
+227700130405                MOVE lnc_splitOptDollar  TO DSC-SPLIT-OPTION-CODE
+227800150223138770          MOVE ltac_SplitOptionCode (ln_cnt)   TO
+227900150223138770                                    DSC-SPLIT-OPTION-CODE
+228000130405             END-IF
+228100130405      *Rfs117125 Ends
+228200130405
+228300120824112752       MOVE ltbc_IncludeAssignedUnits (ln_cnt) TO
+228400120824112752                                    DSC-ASSIGNMENT-CERTIFICATE
+228500081222      * RFS44008 - Begin
+228600081222             MOVE ltbn_CertificateIdNo (ln_cnt)   TO
+228700081222                                          DSC-CERTIFICATE-ID-NO
+228800081222                                          ln_tmpCertificateIdNo
+228900081222      * RFS44008 - End
+229000080908             MOVE ltbn_GrossAmt (ln_cnt)          TO
+229100080908                                          DSC-GROSS-AMT
+229200080908             MOVE ltbn_NetAmt (ln_cnt)            TO
+229300080908                                          DSC-NET-AMT
+229400080908             MOVE ltbn_UnitAmt (ln_cnt)           TO
+229500080908                                          DSC-UNIT-AMT
+229600080908             MOVE ln_cnt                          TO
+229700080908                                          DSC-SEQNO
+229800150223138770       IF ltbc_SplitOptionCode (ln_cnt) =
+229900150223138770                              lnc_splitCertificate
+230000150223138770          MOVE ltan_GrossAmt (ln_cnt)          TO
+230100150223138770                                       DSC-GROSS-AMT
+230200150223138770          MOVE ltan_NetAmt (ln_cnt)            TO
+230300150223138770                                       DSC-NET-AMT
+230400150223138770          MOVE ltan_UnitAmt (ln_cnt)           TO
+230500150223138770                                       DSC-UNIT-AMT
+230600150223138770       END-IF
+230700080908             MOVE DSC-CALC-INVESTMENT-REC TO lc_mfadsccivpRec
+230800150223138770       IF ltbc_SplitOptionCode (ln_cnt) Not = lnc_splitCertificate
+230900150223138770         OR (ltbc_SplitOptionCode (ln_cnt) = lnc_splitCertificate
+231000150223138770             AND ltac_CertificateNo (ln_cnt) Not = " ")
+231100080908             EXEC SQL
+231200080908               INSERT INTO QTEMP/MFADSCCIVP
+231300080908                 VALUES ( :lc_mfadsccivpRec )
+231400080908             END-EXEC
+231500080909      * Create keys Data
+231600080909             EXEC SQL
+231700080909               INSERT INTO QTEMP/CDSCTRN
+231800080909                 VALUES ( :DSC-ACCOUNT-NO,
+231900080909                          :DSC-INVESTMENT-CODE,
+232000081222      * RFS44008 - Begin
+232100081222                          :ln_tmpCertificateIdNo,
+232200081222      * RFS44008 - End
+232300080909                          :ln_genPlacementDatePacked,
+232400080909                          :ln_cnt)
+232500080909             END-EXEC
+232600150223138770* Check if additional tax record entered to override tax
+232700150223138770* If additional tax record entered, create the same record
+232800150223138770* in MFATRNATP on library QTEMP, so that REGACCRON will pick
+232900150223138770* it up to tax calculation.
+233000150223138770         PERFORM CHECK-ADD-TAX THRU CAT-EXIT
+233100150223138770       END-IF
+233200080908           END-PERFORM.
+233300080908      * -----------------------------------------
+233400080908      * RFS50832.1 - End
+233500081118      * RFS58210 - removed obsolete code
+233600080611      * -----------------------------------------
+233700080603       create-Acc-Lvl-files.
+233800080604      * -----------------------------------------
+233900080603      * Create tables in QTEMP to be populated before
+234000080603      * TRNPST and updated in TRNPST program.
+234100080603           CALL "SETCALENV3" USING
+234200080603                   lncc_crtfil
+234300080603                   lc_errCodeSetCalEnv.
+234400131213      * RFS125258 - Begin.
+234500131213           IF lb_DLYDSCSetupYes
+234600131213           CALL "SETCALENV3" USING
+234700131213                   lncc_crtfi2
+234800131213                   lc_errCodeSetCalEnv
+234900131213           END-IF.
+235000131213      * RFS125258 - End.
+235100080603      * -----------------------------------------
+235200080603       delete-from-Acc-Lvl-files.
+235300080603      * -----------------------------------------
+235400080603      * Delete data from QTEMP files.
+235500080603           CALL "SETDSCDEL"  USING
+235600080604                   lncc_deldta
+235700131213                   lc_tmpErrCode.
+235800131213      * RFS125258 - Begin.
+235900131213           IF lb_DLYDSCSetupYes
+236000131213           CALL "SETDSCDEL"  USING
+236100131213                   lncc_deldt2
+236200131213                   lc_tmpErrCode
+236300131213           END-IF.
+236400131213      * RFS125258 - End.
+236500080603      * -----------------------------------------
+236600080603       populate-Acc-Lvl-files.
+236700080604      * -----------------------------------------
+236800080604      * Insert data to QTEMP files.
+236900080604           CALL "SETDSCINS"  USING
+237000080604                   ln_IvrAcctNo
+237100080604                   lncc_insdta
+237200131213125258             ln_TradeDate
+237300080604                   lc_tmpErrCode.
+237400080603      * -----------------------------------------
+237500080603       override-Acc-Lvl-files.
+237600080603      * -----------------------------------------
+237700080603      * Override files in QTEMP library
+237800080603           CALL "SETCALENV3" USING
+237900080603                   lncc_ovrfil
+238000080603                   lc_errCodeSetCalEnv.
+238100131213      * RFS125258 - Begin.
+238200131213           IF lb_DLYDSCSetupYes
+238300131213           CALL "SETCALENV3" USING
+238400131213                   lncc_ovrfi2
+238500131213                   lc_errCodeSetCalEnv
+238600131213           END-IF.
+238700131213      * RFS125258 - End.
+238800080603      * -----------------------------------------
+238900080603       delete-override-Acc-Lvl-files.
+239000080603      * -----------------------------------------
+239100080604      * Delete overrides to QTEMP library
+239200080603           CALL "SETCALENV3" USING
+239300080603                   lncc_dltovr
+239400080603                   lc_errCodeSetCalEnv.
+239500131213      * RFS125258 - Begin.
+239600131213           IF lb_DLYDSCSetupYes
+239700131213           CALL "SETCALENV3" USING
+239800131213                   lncc_dltov2
+239900131213                   lc_errCodeSetCalEnv
+240000131213           END-IF.
+240100131213      * RFS125258 - End.
+240200080610      * -----------------------------------------
+240300080610       create-trans-add-tax.
+240400080610      * -----------------------------------------
+240500080610      * Create tables in QTEMP to be populated before
+240600080610      * TRNPST and updated in TRNPST program.
+240700080610           CALL "SETCALENV3" USING
+240800080610                   lncc_crtfi1
+240900080610                   lc_errCodeSetCalEnv.
+241000080610      * -----------------------------------------
+241100080610       delete-from-trans-add-tax.
+241200080610      * -----------------------------------------
+241300080610      * Delete data from QTEMP files.
+241400080610           CALL "SETDSCDEL"  USING
+241500080610                   lncc_deldt1
+241600080610                   lc_tmpErrCode.
+241700080610      * -----------------------------------------
+241800080610       override-trans-add-tax.
+241900080610      * -----------------------------------------
+242000080610      * Override files in QTEMP library
+242100080610           CALL "SETCALENV3" USING
+242200080610                   lncc_ovrfi1
+242300080610                   lc_errCodeSetCalEnv.
+242400080610      * -----------------------------------------
+242500080610       delete-override-trans-add-tax.
+242600080610      * -----------------------------------------
+242700080610      * Delete overrides to QTEMP library
+242800080610           CALL "SETCALENV3" USING
+242900080610                   lncc_dltov1
+243000080610                   lc_errCodeSetCalEnv.
+243100081118      * RFS58210 - Begin: removed obsolete code
+243200080610      *-----------------------------------------
+243300130324       create-res-set-main.
+243400080530      * -----------------------------------------
+243500080530      * Manage result sets: perform special paragraph for
+243600080530      *   account level DSC environment.
+243700201223      *RFS180707 - Starts
+243800201223      *    IF lnc_accLevelFreeDollar  OR
+243900201223      *       lnc_accLevelDsc
+244000201223           IF (lnc_accLevelFreeDollar  OR
+244100201223              lnc_accLevelDsc) and lnc_ACINDSCNo
+244200201223      *RFS180707 - Ends
+244300080530             PERFORM create-acc-res-set
+244400080530           ELSE
+244500080530             PERFORM create-fund-res-set
+244600080530           END-IF.
+244700080530      * RFS50832 - End
+244800070108      * -----------------------------------------
+244900080530       create-clear-fund-acc-tables.
+245000070108      * -----------------------------------------
+245100080530      * Create tables used in result sets
+245200130324117125     PERFORM create-accsum-table
+245300070112           PERFORM create-dedList-table
+245400130312117125     PERFORM create-dedList2-table
+245500070112
+245600070112           PERFORM create-dsc-calc-table
+245700080529      * RFS50832 - Begin: create acc level dsc table
+245800080529           PERFORM create-dsc-calc-table2
+245900080529      * RFS50832 - End
+246000080908      * RFS50832.1 - Begin: create acc level dsc table
+246100080908           PERFORM create-mfadsccivp
+246200080908      * RFS50832.1 - End
+246300080908           PERFORM create-dsc-calc-InvSum.
+246400130324
+246500130324      *Rfs117125 Begins
+246600130324      * -----------------------------------------
+246700130324       create-accsum-table.
+246800130324      * -----------------------------------------
+246900130324      * Note: this file will be populated by SP
+247000130324           CALL "FXDSCCRTT" USING
+247100130324                           lnc_accsum
+247200130324                           lc_errCode2.
+247300130324      *Rfs117125 Ends
+247400070112      * -----------------------------------------
+247500070112       create-dedList-table.
+247600070112      * -----------------------------------------
+247700070115      * Check & create for DSCCalcInvDedList DB table:
+247800070115      * Deductions will be saved in this table.
+247900070122      * Note: this file will be populated by SP, using data from LDA/
+248000070122      *   TRNPST.
+248100070126           CALL "FXDSCCRTT" USING
+248200070126                           lnc_dedList
+248300070129                           lc_errCode2.
+248400130312
+248500130324      *Rfs117125 Begins
+248600130312      * -----------------------------------------
+248700130312       create-dedList2-table.
+248800130312      * -----------------------------------------
+248900130312      * Check & create for DSCCalcInvDedList DB table:
+249000130312      * Deductions will be saved in this table.
+249100130312      * Note: this file will be populated by SP, using data from LDA/
+249200130312      *   TRNPST.
+249300130312           CALL "FXDSCCRTT" USING
+249400130312                           lnc_dedList2
+249500130312                           lc_errCode2.
+249600130324      *Rfs117125 Ends
+249700130324
+249800070112      * -----------------------------------------
+249900070112       create-dsc-calc-table.
+250000070112      * -----------------------------------------
+250100070122      * Check & create DSC Calc Table
+250200070122      * This table is populated by TRNPST program.
+250300070112
+250400070126           CALL "FXDSCCRTT" USING
+250500070126                           lnc_MFADSCCALP
+250600070129                           lc_errCode2.
+250700080529      * RFS50832 - Begin: create table for acc level dsc
+250800080529      * -----------------------------------------
+250900080529       create-dsc-calc-table2.
+251000080529      * -----------------------------------------
+251100080529      * Check & create DSC Calc Table for acc level dsc
+251200080529      * This table is populated by TRNPST program.
+251300080529
+251400080529           CALL "FXDSCCRTT" USING
+251500080529                           lnc_MFADSCCA2P
+251600080529                           lc_errCode2.
+251700080529      * RFS50832 - End
+251800080908      * RFS50832.1 - Begin
+251900080908      * -----------------------------------------
+252000080908       create-mfadsccivp.
+252100080908      * -----------------------------------------
+252200080908      * Check & create DSC acc-inv table for regacccon
+252300080908
+252400080908           CALL "FXDSCCRTT" USING
+252500080908                           lnc_MFADSCCIVP
+252600080908                           lc_errCode2.
+252700080908      * RFS50832.1 - End
+252800070115      * -----------------------------------------
+252900070115       create-dsc-calc-InvSum.
+253000070115      * -----------------------------------------
+253100070115      * Check & create DSC Calc Investment Summary Table
+253200070122      * This table will be populated by SP program using LDA
+253300070122      * /TRNPST returned data.
+253400070122      * (Based (but diff) on the Table:DSC-CALC-INVESTMENT,MFADSCCIVP)
+253500070115
+253600070126           CALL "FXDSCCRTT" USING
+253700070126                               lnc_invSum
+253800070129                               lc_errCode2.
+253900070115      * -----------------------------------------
+254000130403       set-curr-data.
+254100070115      * -----------------------------------------
+254200070122      * Set current data used for the current loop
+254300130612117125     INITIALIZE lc_invsumRec,
+254400140521136716                ln_currAccrInt,
+254500130404117125                lc_InvRedStatus, lc_SplitCertOption,
+254600130404117125                lc_CertDollarOption
+254700070221
+254800070122           MOVE ltbc_InvestmentCode       (ln_cnt) TO
+254900070122                                    lc_currInvestmentCode
+255000061215           MOVE ltbc_FundCode             (ln_cnt) TO
+255100061215                                    lc_currFundCode
+255200061215           MOVE ltbn_TradeDate            (ln_cnt) TO
+255300070122                                    ln_currTradeDate
+255400130404
+255500130404           MOVE ltbc_SplitOptionCode      (ln_cnt) TO
+255600130404                                    lc_currSplitOptionCode
+255700130404      *Rfs117125 Begins
+255800130404           IF ltbc_SplitOptionCode (ln_cnt) = lnc_splitCertificate
+255900130404              MOVE "Y" TO lc_SplitCertOption
+256000130404           ELSE
+256100130404              MOVE " " TO lc_SplitCertOption
+256200130404           END-IF.
+256300130404      *Rfs117125 Ends
+256400130404
+256500070207           MOVE ltbc_IncludeAssignedUnits (ln_cnt) TO
+256600070207                                    lc_currIncludeAssignedUnits
+256700070206           MOVE ltbc_CertificateNo        (ln_cnt) TO
+256800070206                                    lc_currCertificateNo
+256900070130           MOVE ltbn_CertificateIdNo       (ln_cnt) TO
+257000070202                                    ln_currCertificateIdNo
+257100070202
+257200070207      * Set assignment certificate
+257300070207           PERFORM set-AssignEmnt-certificate
+257400070207
+257500070202      * Check if it is residual record and calculate amount
+257600070202
+257700070202           IF ltbc_SplitOptionCode (ln_cnt) =  lnc_residual
+257800070202             EVALUATE TRUE
+257900070213               WHEN ln_AcctGrossAmt > 0
+258000070202                 COMPUTE ltbn_grossAmt (ln_cnt) =
+258100070213                           ln_AcctGrossAmt - ln_accTotGrossAmt
+258200070202                 IF ltbn_grossAmt (ln_cnt) < 0
+258300070202                   MOVE 0 TO ltbn_grossAmt (ln_cnt)
+258400070202                 END-IF
+258500070213               WHEN ln_AcctNetAmt > 0
+258600070202                 COMPUTE ltbn_netAmt (ln_cnt) =
+258700070213                           ln_AcctNetAmt - ln_accTotNetAmt
+258800070202                 IF ltbn_netAmt (ln_cnt) < 0
+258900070202                   MOVE 0 TO ltbn_netAmt (ln_cnt)
+259000070202                 END-IF
+259100070202             END-EVALUATE
+259200070202           END-IF
+259300130312
+259400130314      *Rfs117125 Begins
+259500130312      * Check if it is Fund Certificate Total rec and calculate amount
+259600130314           IF ln_cnt < ln_currNumInvs
+259700130314              MOVE ltbc_InvestmentCode       (ln_cnt + 1) TO
+259800130314                   lc_NextInvestmentCode
+259900130314           ELSE
+260000130314              MOVE SPACES TO lc_NextInvestmentCode
+260100130314           END-IF.
+260200130312
+260300130404      *When the split option code is 'C' for certificate, the gross
+260400130404      *amount or net amount represents the total value to be split
+260500130404      *amongst all of the available certs until the amoun is used up
+260600130404           IF lncc_SplitInvCert
+260700150223138770       MOVE " " TO ltac_CertificateNo (ln_cnt)
+260800130312             EVALUATE TRUE
+260900130313               WHEN ltbn_GrossAmt (ln_cnt) > 0
+261000130404                 MOVE "G" TO lc_CertDollarOption
+261100130313                 COMPUTE ln_InvGrossRmdr =
+261200130313                         ltbn_GrossAmt (ln_cnt) - ln_InvGrossTotal
+261300130314                 IF ln_InvGrossRmdr <= 0
+261400130314                    MOVE "Y" TO lc_InvRedStatus
+261500130314                 ELSE
+261600130313                 IF ln_InvGrossRmdr > ltbn_CertDollarBal (ln_cnt)
+261700130314                    AND lc_currInvestmentCode = lc_NextInvestmentCode
+261800130313                    MOVE lnc_SplitOptionCodeAll
+261900130405                                       TO lc_currSplitOptionCode
+262000130314                    MOVE ZEROES to ln_CertGrossAmt
+262100150223138770              MOVE lnc_SplitOptionCodeAll
+262200150223138770                               TO ltac_SplitOptionCode (ln_cnt)
+262300150223138770              MOVE ZEROES      TO ltan_GrossAmt (ln_cnt)
+262400130313                 ELSE
+262500130313                    MOVE lnc_splitOptDollar
+262600130405                                       TO lc_currSplitOptionCode
+262700130404                    MOVE ln_InvGrossRmdr  TO ln_CertGrossAmt
+262800150223138770              MOVE lnc_splitOptDollar
+262900150223138770                               TO ltac_SplitOptionCode (ln_cnt)
+263000150223138770              MOVE ln_InvGrossRmdr TO ltan_GrossAmt (ln_cnt)
+263100130313                 END-IF
+263200130314                 END-IF
+263300130313               WHEN ltbn_NetAmt (ln_cnt) > 0
+263400130404                 MOVE "N" TO lc_CertDollarOption
+263500130313                 COMPUTE ln_InvNetRmdr =
+263600130314                         ltbn_NetAmt (ln_cnt) - ln_InvNetTotal
+263700130314                 IF ln_InvNetRmdr <= 0
+263800130314                    MOVE "Y" TO lc_InvRedStatus
+263900130314                 ELSE
+264000130313                 IF ln_InvNetRmdr > ltbn_CertDollarBal (ln_cnt)
+264100130314                    AND lc_currInvestmentCode = lc_NextInvestmentCode
+264200130313                    MOVE lnc_SplitOptionCodeAll
+264300130405                                       TO lc_currSplitOptionCode
+264400130404                    MOVE ZEROES           TO ln_CertNetAmt
+264500150223138770              MOVE lnc_SplitOptionCodeAll
+264600150223138770                               TO ltac_SplitOptionCode (ln_cnt)
+264700150223138770              MOVE ZEROES      TO ltan_NetAmt (ln_cnt)
+264800130313                 ELSE
+264900130313                    MOVE lnc_splitOptDollar
+265000130405                                       TO lc_currSplitOptionCode
+265100130404                    MOVE ln_InvNetRmdr    TO ln_CertNetAmt
+265200150223138770              MOVE lnc_splitOptDollar
+265300150223138770                               TO ltac_SplitOptionCode (ln_cnt)
+265400150223138770              MOVE ln_InvNetRmdr TO ltan_NetAmt (ln_cnt)
+265500130313                 END-IF
+265600130314                 END-IF
+265700130314               WHEN OTHER
+265800130314                 MOVE "Y" TO lc_InvRedStatus
+265900130313             END-EVALUATE
+266000130312           END-IF
+266100070202           .
+266200130314      *Rfs117125 Ends
+266300130314
+266400070207      * -----------------------------------------
+266500130314       set-AssignEmnt-certificate.
+266600070207      * -----------------------------------------
+266700070221      * Get what is assignment certificate value for the investment
+266800070207
+266900070301           SET lnc_currAssignedUnitsNo    TO TRUE
+267000070207           EVALUATE TRUE
+267100070207             WHEN lnc_accAssignEntireYes
+267200070207               MOVE lc_accAssignEntire      TO
+267300070227                                    lc_currAssignedUnits
+267400070207             WHEN lnc_accAssignEntireNo
+267500070207               PERFORM get-inv-level-acc-assignment
+267600070207                 MOVE lc_tmpAssign          TO
+267700070227                                    lc_currAssignedUnits
+267800070207             WHEN OTHER
+267900070207               PERFORM get-acc-level-acc-assignment
+268000070207               IF lnc_accAssignEntireYes
+268100070207                 MOVE lc_accAssignEntire    TO
+268200070227                                    lc_currAssignedUnits
+268300070207               ELSE
+268400070207                 PERFORM get-inv-level-acc-assignment
+268500070207                 MOVE lc_tmpAssign          TO
+268600070227                                    lc_currAssignedUnits
+268700070207               END-IF
+268800130612117125     END-EVALUATE.
+268900070207
+269000070207      * -----------------------------------------
+269100070207       get-inv-level-acc-assignment.
+269200070207      * -----------------------------------------
+269300070207      * set assignment flag for the current account investment
+269400070301           SET lnc_tmpAssignNo     TO TRUE
+269500070207
+269600070207           EXEC SQL
+269700070207             SELECT COUNT(*)
+269800070207             INTO
+269900070207               :ln_tmpSqlCounter :li_tmpInd1
+270000070207             FROM
+270100070207               mfaaccasp
+270200070207             WHERE
+270300070207               account_no        = :ln_IvrAcctNo          AND
+270400070207               investment_code   = :lc_currInvestmentCode AND
+270500070207               (entire_account   = :lnc_Y OR
+270600070207                units            > 0)                     AND
+270700070207               assignment_status = :lnc_A                 AND
+270800070207               (start_date <= :ln_lastProcessDate AND
+270900070207                  (end_date = 0   OR
+271000070207                   end_date >= :ln_lastProcessDate))
+271100140422           END-EXEC
+271200070207
+271300140422135101     MOVE SQLSTATE TO Ic_SqlStates
+271400140422135101*    IF SQLSTATE = lnc_SuccessMsgId
+271500140422135101     IF Incc_sqlSuccessful
+271600070207             IF ln_tmpSqlCounter > 0
+271700070207               MOVE lnc_Y    TO lc_tmpAssign
+271800140422             END-IF
+271900150617           END-IF.
+272000070207      * -----------------------------------------
+272100140422       get-acc-level-acc-assignment.
+272200070207      * -----------------------------------------
+272300070207      * Get account level assignemnt
+272400070207           SET lnc_accAssignEntireNo       TO TRUE
+272500070207
+272600070207           EXEC SQL
+272700070207             SELECT COUNT(*)
+272800070207             INTO
+272900070207               :ln_tmpSqlCounter :li_tmpInd1
+273000070207             FROM
+273100070207               mfaaccasp
+273200070207             WHERE
+273300070207               account_no        = :ln_IvrAcctNo    AND
+273400070207               entire_account    = :lnc_Y           AND
+273500070207               assignment_status = :lnc_A
+273600070207           END-EXEC
+273700070207
+273800140422135101     MOVE SQLSTATE TO Ic_SqlStates
+273900140422135101*    IF SQLSTATE = lnc_SuccessMsgId
+274000140422135101     IF Incc_sqlSuccessful
+274100070207             IF ln_tmpSqlCounter > 0
+274200070207                SET lnc_accAssignEntireYes TO TRUE
+274300070207             END-IF
+274400150617           END-IF.
+274500070108      * -----------------------------------------
+274600070108       update-LDA.
+274700070108      * -----------------------------------------
+274800061215           INITIALIZE WS-LOCAL-DATA-AREA
+274900080604      * RFS50832 - Begin: set parameter to indicate if files
+275000080604      *  will be updated.
+275100080604      *    MOVE lnc_CDSCCalcSOA                 TO PASS-CDSC-CALCULATOR
+27520010010476402 *    IF lncc_crtAccLvlFiles AND
+27530010010476402      IF lncc_crtAccLvlFiles
+275400081121      * RFS58210 - Begin
+27550010010476402 *       ln_currTaxLoop < ln_numTaxLoops
+275600081121      * RFS58210 - End
+275700080604             MOVE lnc_CDSCCalcSOAUpd         TO PASS-CDSC-CALCULATOR
+275800080604           ELSE
+275900080604             MOVE lnc_CDSCCalcSOA            TO PASS-CDSC-CALCULATOR
+276000080604           END-IF
+276100080604      * RFS50832 - End
+276200070122
+276300070213           MOVE ln_IvrAcctNo                    TO PASS-CDSC-ACCOUNT
+276400070122           MOVE ltbc_investmentCode    (ln_cnt) TO
+276500070122                                           PASS-CDSC-INVESTMENT
+276600070122           MOVE ltbn_tradeDate         (ln_cnt) TO PASS-CDSC-TRADE-DATE
+276700070122           MOVE pc_ContRdmptnCode               TO PASS-REDEM-CODE
+276800070122
+276900130314      *Rfs117125 Begins
+277000130404           IF lncc_SplitInvCert
+277100130314              MOVE ln_CertGrossAmt                 TO PASS-CDSC-GROSS
+277200130314              MOVE ln_CertNetAmt                   TO PASS-CDSC-NET
+277300130402              MOVE ZEROES                          TO PASS-CDSC-UNITS
+277400130314           ELSE
+277500130314      *Rfs117125 Ends
+277600130314              MOVE ltbn_grossAmt          (ln_cnt) TO PASS-CDSC-GROSS
+277700130314              MOVE ltbn_netAmt            (ln_cnt) TO PASS-CDSC-NET
+277800130314              MOVE ltbn_unitAmt           (ln_cnt) TO PASS-CDSC-UNITS
+277900130314117125     END-IF.
+278000070122
+278100070301           IF ltbc_SplitOptionCode (ln_cnt) =  lnc_residual
+278200070301             MOVE lnc_splitOptDollar              TO PASS-SPLIT-OPTION
+278300070301           ELSE
+278400130405117125*      MOVE ltbc_splitOptionCode   (ln_cnt) TO PASS-SPLIT-OPTION
+278500130405117125       MOVE lc_currSplitOptionCode          TO PASS-SPLIT-OPTION
+278600070301           END-IF
+278700070122           MOVE pc_AWDRedemptionFlag            TO PASS-TREAT-AWD
+278800070206           MOVE ltbn_CertificateIdNo   (ln_cnt) TO PASS-CERT-ID
+278900070207           MOVE ltbc_IncludeAssignedUnits (ln_cnt)  TO
+279000070122                                          PASS-ASSIGNMENT-CERTIFICATE
+279100070122
+279200070129           MOVE ln_cnt                          TO pass-seqno
+279300070123                                                   ln_currSeqNo
+279400070122           MOVE pc_WaiveDsc                     TO PASS-WAIVE-DSC
+279500070122           MOVE pc_WaiveErf                     TO PASS-WAIVE-ERF
+279600070122
+279700080602      * RFS50832 - Begin
+279800080602           MOVE ln_genPlacementDate             TO
+279900080602                                         PASS-GEN-PLACEMENT-DATE
+280000080602           MOVE ln_cnt                          TO
+280100080602                                         PASS-GEN-TRANS-NO
+280200080602      * RFS50832 - End
+280300150223138770     MOVE PASS-CERT-ID TO li_Cert_ID_NO
+280400150223138770     PERFORM GET-GICORD-PARM
+280500150728149620* Begin - Remove the logic to pass in new parameters.
+280600150728149620*138770    IF wrk_GICWaiveFlag NOT = " "
+280700150728149620*138770      MOVE wrk_GICWaiveFlag       TO PASS-WAIVE-GI-FLAG
+280800150728149620*138770      MOVE wrk_ReplacementAmt     TO PASS-OVR-REPLACE-AMT
+280900150728149620*138770      MOVE wrk_PenaltyAmt         TO PASS-OVR-PENALTY-AMT
+281000150728149620*138770     ELSE
+281100150728149620*138770      MOVE "N"                    TO PASS-WAIVE-GI-FLAG
+281200150728149620*138770    END-IF.
+281300150728149620* End
+281400061215           DISPLAY WS-LOCAL-DATA-AREA
+281500070108             UPON lc_local.
+281600070108      * -----------------------------------------
+281700070108       call-trnpst.
+281800070108      * -----------------------------------------
+281900191230      * RFS1020979 START
+282000191230           IF PRCDTP-AS-AT-DATE OF CPWPRCDTP-LINKAGE
+282100200122               IS NOT EQUAL TO ln_currPrcdtp
+282200191230           MOVE ln_currPrcdtp
+282300191230                TO   PRCDTP-AS-AT-DATE OF CPWPRCDTP-LINKAGE
+282400200122           END-IF
+282500200122      * RFS1020979 END
+282600070108           CALL "TRNPST" USING
+282700070108                         PRCDTP-AS-AT-DATE OF CPWPRCDTP-LINKAGE.
+282800070115      * -----------------------------------------
+282900070115       get-LDA.
+283000070115      * -----------------------------------------
+283100070115      * Get data from LDA: deductions
+283200061215           ACCEPT WS-LOCAL-DATA-AREA FROM lc_local.
+283300070122      * -----------------------------------------
+283400130313       save-returned-trnpst-data.
+283500070122      * -----------------------------------------
+283600070208           PERFORM initialize-totals
+283700070208
+283800070206           PERFORM set-curr-data-retn-from-trnpst
+283900070208           PERFORM save-calc-deductions
+284000070208           PERFORM calc-dsc-fee-as-per-of-net
+284100070208
+284200070221           PERFORM calc-acc-inv-totals
+284300070221           PERFORM save-calc-dscCalcInvSum
+284400070221
+284500070206           IF PASS-REJECTION-CODE = SPACES OR
+284600070206              PASS-REJECTION-CODE-OK
+284700070208             CONTINUE
+284800070206           ELSE
+284900070206             PERFORM set-acc-err-code
+285000070206           END-IF
+285100070125           .
+285200070131      * ----------------------------------------
+285300070131       initialize-totals.
+285400070131      * ----------------------------------------
+285500070131      * Initialize totals per investment
+285600070131           INITIALIZE ln_totFederalTaxAmt
+285700070227                      ln_totProvincialTaxAmt
+285800070131                      ln_totDscAmt
+285900070131                      ln_totOtherDeductionAmt
+286000070131                      ln_totDeducitonAmt
+286100070206                      ln_currGrossAmt
+286200070206                      ln_currNetAmt
+286300070206                      ln_currUnitAmt
+286400140521136716                ln_currAccrInt
+286500080611      * RSF50832 - Begin
+286600080611                      ln_accTotTaxForGrossOrNet
+286700080611      * RSF50832 - End
+286800070131           .
+286900070122      * -----------------------------------------
+287000070122       set-curr-data-retn-from-trnpst.
+287100070122      * -----------------------------------------
+287200070123      * Set some data returned from TRNPST
+287300070122           MOVE PASS-CDSC-GROSS      TO ln_currGrossAmt
+287400070122           MOVE PASS-CDSC-NET        TO ln_currNetAmt
+287500070123           MOVE PASS-CDSC-UNITS      TO ln_currUnitAmt
+287600070123
+287700070123           MOVE PASS-REJECTION-CODE  TO lc_currRejectionCode
+287800061215
+287900061215           MOVE PASS-SPLIT-OPTION    TO lc_currSplitOptionCode
+288000061215           MOVE PASS-REDEM-CODE      TO lc_currContrRedemCode
+288100130612117125     MOVE PASS-CERT-ID         TO ln_currCertificateIdNo
+288200130612117125     MOVE PASS-SEQNO           TO ln_currSeqNo
+288300061215           .
+288400070115      * -----------------------------------------
+288500070122       save-calc-deductions.
+288600070115      * -----------------------------------------
+288700070122      * Loop through deductions, save them and calculate some
+288800070131      * tots for the deductions.
+288900070122      *
+289000070115           PERFORM VARYING ln_dedCnt
+289100070115                   FROM 1 BY 1
+289200070125                   UNTIL ln_dedCnt > lnc_maxDeductions  OR
+289300070115                         PASS-DEDUCT-CODE (ln_dedCnt) = SPACES
+289400070130             MOVE lc_currInvestmentCode        TO lc_dedInvestmentCode
+289500130612117125                                            lc_dedInvestmentCode2
+289600070130             MOVE PASS-DEDUCT-CODE (ln_dedCnt) TO lc_dedDeductonCode
+289700130612117125                                            lc_dedDeductonCode2
+289800070131             MOVE PASS-DEDUCT-AMT (ln_dedCnt)  TO ln_dedDeductionAmt
+289900130612117125                                            ln_dedDeductionAmt2
+290000130612117125       MOVE ln_currCertificateIdNo       TO ln_dedCertIdNo2
+290100130612117125       MOVE ln_currSeqNo                 TO ln_dedSeqNo2
+290200130312
+290300080612      * RFS50832 - Begin: save the data only at the final loop
+290400080612             IF ln_currTaxLoop = ln_numTaxLoops
+290500080612      * RFS50832 - End
+290600080612               EXEC SQL
+290700080612                INSERT
+290800080612                INTO QTEMP/dedlist
+290900080612                VALUES (:lc_dedlistRec)
+291000080612               END-EXEC
+291100130312      * RFS117125 - Begins
+291200130312               EXEC SQL
+291300130312                INSERT
+291400130312                INTO QTEMP/dedlist2
+291500130312                VALUES (:lc_dedlistRec2)
+291600130312               END-EXEC
+291700130312      * RFS117125 - Ends
+291800080612      * RFS50832 - Begin
+291900080612             END-IF
+292000080612      * RFS50832 - End
+292100070131             PERFORM calc-tot-deductions
+292200070115           END-PERFORM.
+292300070122      * -----------------------------------------
+292400070131       calc-tot-deductions.
+292500070122      * -----------------------------------------
+292600070131           COMPUTE ln_totDeducitonAmt =
+292700070131                      ln_totDeducitonAmt + ln_dedDeductionAmt
+292800070122           EVALUATE TRUE
+292900070122             WHEN lnc_PRVT
+293000070131               COMPUTE ln_totProvincialTaxAmt =
+293100070131                  ln_totProvincialTaxAmt + ln_dedDeductionAmt
+293200070122             WHEN lnc_FEDT
+293300070131               COMPUTE ln_totFederalTaxAmt =
+293400070131                  ln_totFederalTaxAmt + ln_dedDeductionAmt
+293500070122             WHEN lnc_CDSC
+293600070131               COMPUTE ln_totDscAmt =
+293700070131                  ln_totDscAmt + ln_dedDeductionAmt
+293800070122             WHEN OTHER
+293900070131               COMPUTE ln_totOtherDeductionAmt =
+294000070131                  ln_totOtherDeductionAmt + ln_dedDeductionAmt
+294100070122           END-EVALUATE.
+294200140521      * 136716 - Begin: Capture Accrual Interest returned from TRNPST
+294300140521136716     IF lnc_GICI
+294400140521136716         COMPUTE ln_currAccrInt =
+294500140521136716            ln_currAccrInt + ln_dedDeductionAmt
+294600140521136716     END-IF.
+294700140521      * 136716 - End
+294800080611      * RFS50832 - Begin: calculate total to get later
+294900080611      *   taxable amount if system parameter taxOnGrossNet = "N"
+295000080611           IF lnc_taxForGrossOrNet
+295100080611             COMPUTE ln_accTotTaxForGrossOrNet =
+295200080611               ln_accTotTaxForGrossOrNet + ln_dedDeductionAmt
+295300080611           END-IF.
+295400080611      * RFS50832 - End
+295500070131      * -----------------------------------------
+295600070221       calc-acc-inv-totals.
+295700070131      * -----------------------------------------
+295800070221      * Calculate totals at account level
+295900070131           COMPUTE ln_accTotDeducitonAmt =
+296000070131              ln_accTotDeducitonAmt     + ln_totDeducitonAmt
+296100070131
+296200070131           COMPUTE ln_accTotProvincialTaxAmt =
+296300070131              ln_accTotProvincialTaxAmt + ln_totProvincialTaxAmt
+296400070221           COMPUTE ln_invProvincialTaxAmt =
+296500070221                                          ln_totProvincialTaxAmt
+296600070221
+296700070131           COMPUTE ln_accTotFederalTaxAmt =
+296800070131              ln_accTotFederalTaxAmt    + ln_totFederalTaxAmt
+296900070221           COMPUTE ln_invFederalTaxAmt =
+297000070221                                          ln_totFederalTaxAmt
+297100070221
+297200070131           COMPUTE ln_accTotProvFedTaxAmt =
+297300070131              ln_accTotProvFedTaxAmt + ln_totProvincialTaxAmt
+297400070131                                     + ln_totFederalTaxAmt
+297500070131
+297600070131           COMPUTE ln_accTotDscAmt =
+297700070131              ln_accTotDscAmt           + ln_totDscAmt
+297800070221           COMPUTE ln_invDscAmt    = ln_totDscAmt
+297900070131
+298000070131           COMPUTE ln_accTotOtherDeductionAmt =
+298100070131              ln_accTotOtherDeductionAmt + ln_totOtherDeductionAmt
+298200070221           COMPUTE ln_invOtherDeductionAmt = ln_totOtherDeductionAmt
+298300070221
+298400070131      * Gross, net , units:
+298500070131           COMPUTE ln_accTotGrossAmt =
+298600070131              ln_accTotGrossAmt + ln_currGrossAmt
+298700140521136716            + ln_currAccrInt
+298800070131           COMPUTE ln_accTotNetAmt =
+298900070131              ln_accTotNetAmt + ln_currNetAmt
+299000070131           COMPUTE ln_accTotUnitAmt =
+299100070131              ln_accTotUnitAmt + ln_currUnitAmt
+299200130313
+299300130313      *Rfs117125 Begins
+299400130313      * keep track of gross, net, unit totals at the fund level
+299500130318           IF lc_currInvestmentCode = lc_prevInvestmentCode
+299600130313               COMPUTE ln_InvGrossTotal =
+299700130313                    ln_InvGrossTotal + ln_currGrossAmt
+299800140521136716            + ln_currAccrInt
+299900130313               COMPUTE ln_InvNetTotal =
+300000130313                    ln_InvNetTotal + ln_currNetAmt
+300100130313           ELSE
+300200130314              INITIALIZE ln_InvGrossTotal, ln_InvNetTotal,
+300300130403                         ln_InvGrossRmdr, ln_InvNetRmdr
+300400130313              MOVE lc_currInvestmentCode to lc_prevInvestmentCode
+300500140506134542      If lc_currInvestmentCode = lc_nextInvestmentCode
+300600130313              MOVE ln_currGrossAmt  TO ln_InvGrossTotal
+300700130313              MOVE ln_currNetAmt    TO ln_InvNetTotal
+300800140521136716        Compute ln_InvGrossTotal =
+300900140521136716               ln_InvGrossTotal + ln_currAccrInt
+301000140506134542      End-If
+301100130313           END-IF
+301200150223138770* Begin
+301300150223138770     IF ltbc_splitOptionCode (ln_cnt) = lnc_splitCertificate
+301400150223138770        MOVE ltbc_CertificateNo (ln_cnt) TO
+301500150223138770             ltac_CertificateNo (ln_cnt)
+301600150223138770        MOVE ln_currGrossAmt  TO ltan_GrossAmt (ln_cnt)
+301700150223138770         Compute ltan_NetAmt (ln_cnt) = ln_currNetAmt +
+301800150223138770                                  ln_totFederalTaxAmt +
+301900150223138770                                  ln_totProvincialTaxAmt
+302000150223138770     END-IF
+302100150223138770* End
+302200070131           .
+302300130612      *Rfs117125 Ends
+302400070122      * -----------------------------------------
+302500070122       calc-dsc-fee-as-per-of-net.
+302600070122      * -----------------------------------------
+302700070122      * Calculate dsc fee as percent of the Net amount
+302800070122           INITIALIZE ln_dscFeeAsPerOfNetAmt
+302900070122           IF PASS-CDSC-NET NOT = 0
+303000070122             COMPUTE ln_dscFeeAsPerOfNetAmt ROUNDED =
+303100070131               lnc_hundredPerc * ln_totDscAmt / PASS-CDSC-NET
+303200070122           END-IF.
+303300070122      * -----------------------------------------
+303400070122       save-calc-dscCalcInvSum.
+303500070122      * -----------------------------------------
+303600070122      * Save investment summary record
+303700080612      * RFS50832 - Begin: save the data only at the final loop
+303800080612             IF ln_currTaxLoop = ln_numTaxLoops
+303900080612      * RFS50832 - End
+304000080612               EXEC SQL
+304100080612                INSERT
+304200080612                INTO QTEMP/INVSUM
+304300080612                 VALUES
+304400080612                   (:lc_invsumRec)
+304500080612               END-EXEC
+304600080612      * RFS50832 - Begin
+304700080612             END-IF
+304800080612             .
+304900080612      * RFS50832 - End
+305000070129      * -----------------------------------------
+305100070129       set-acc-err-code.
+305200070129      * -----------------------------------------
+305300070129      * Set account level error code and description
+305400070206             MOVE lc_errAccLevel    TO lc_ErrorCode
+305500070206                                       lc_retnAccLevelErr
+305600070206             PERFORM get-message-description
+305700070206             MOVE lc_MessageDesc    TO lc_retnAccMessageDesc
+305800070206             .
+305900080529      * RFS50832 - Begin
+306000080529      * -----------------------------------------
+306100130324       create-acc-res-set.
+306200080529      * -----------------------------------------
+306300080529      * For the account level declare cusrors
+306400080529           PERFORM set-accsum-cursor
+306500080529           PERFORM set-invsum-cursor
+306600080529           PERFORM set-dedlist-cursor
+306700080529      * Return account level dsc deductions/charges
+306800080529           PERFORM set-accdtl-cursor
+306900080529      * Return account level result sets
+307000120924112770     PERFORM setAccLvlFreeCursor
+307100080529           PERFORM set-acc-level-result-sets
+307200080529           .
+307300080529      * RFS50832 - End
+307400070115      * -----------------------------------------
+307500130324       create-fund-res-set.
+307600070108      * -----------------------------------------
+307700130404      * For the fund level declare cusrors
+307800070131           PERFORM set-accsum-cursor
+307900070131           PERFORM set-invsum-cursor
+308000070131           PERFORM set-dedlist-cursor
+308100070131           IF pc_acctlevelReqNo
+308200070131             CONTINUE
+308300070131           ELSE
+308400070131             PERFORM set-invdtl-cursor
+308500070131           END-IF
+308600070131      * Set result sets (do not return invdtl if not asked for this)
+308700070131           PERFORM set-fund-level-result-sets
+308800070131           .
+308900070131      * -----------------------------------------
+309000070131       set-accsum-cursor.
+309100070131      * ----------------- ------------------------
+309200130324      *Rfs117125 Begins
+309300130324      *      EXEC SQL
+309400130324      *       DECLARE cu_accsum CURSOR
+309500130324      *        FOR SELECT
+309600130324      *        :ln_IvrAcctNo AS ivr_Acc_No,
+309700130324      *        :ln_accTotGrossAmt AS total_Gross_Amt,
+309800130324      *        :ln_accTotDscAmt   AS total_Dsc_Amt,
+309900130324      *        :ln_accTotProvFedTaxAmt     AS total_Prov_Fed_Tax_Amt,
+310000130324      *        :ln_accTotOtherDeductionAmt AS Total_Other_Deduction_Amt,
+310100130324      *        :ln_accTotNetAmt AS total_Net_Amt,
+310200130324      *        :lnc_amtZero     AS total_Fee_Amt_Used,
+310300130324      *        :lnc_amtZero     AS total_Charge_Amt_Used,
+310400130324      *        :lnc_amtZero     AS total_Fee_Charge,
+310500130324      *        :lnc_amtZero     AS total_Deposit_Equivalent_Amt,
+310600130324      *        :lc_retnAccLevelErr    AS acc_Level_Err_Code,
+310700130324      *        :lc_retnAccMessageDesc AS acc_Level_Err_Desc
+310800130324      *        FROM
+310900130324      *         QSQPTABL
+311000130324      *      END-EXEC
+311100130612      *Rfs117125 Create accsum file in qtemp for SACDSCCALC
+311200130324             EXEC SQL
+311300130324              INSERT INTO ACCSUM
+311400130324               VALUES(
+311500130324               :ln_IvrAcctNo,
+311600130324               :ln_accTotGrossAmt,
+311700130324               :ln_accTotDscAmt,
+311800130324               :ln_accTotProvFedTaxAmt,
+311900130324               :ln_accTotOtherDeductionAmt,
+312000130324               :ln_accTotNetAmt,
+312100130324               :lnc_amtZero,
+312200130324               :lnc_amtZero,
+312300130324               :lnc_amtZero,
+312400130324               :lnc_amtZero,
+312500130324               :lc_retnAccLevelErr,
+312600130324               :lc_retnAccMessageDesc)
+312700130324             END-EXEC
+312800070131
+312900130324             EXEC SQL
+313000130324              DECLARE cu_accsum CURSOR
+313100130324               FOR SELECT * FROM QTEMP/ACCSUM
+313200130324             END-EXEC
+313300130324
+313400130324      *Rfs117125 Ends
+313500130324
+313600070131             EXEC SQL
+313700070131               OPEN cu_accsum
+313800070131             END-EXEC.
+313900070130      * -----------------------------------------
+314000070130       set-invsum-cursor.
+314100070130      * -----------------------------------------
+314200070131      * Investment summary
+314300070130             EXEC SQL
+314400070130               DECLARE cu_invsum CURSOR
+314500070130                 FOR SELECT
+314600070130                  invsum.investment_code,
+314700070220                  COALESCE(invnmp.investment_name_long,:lnc_space35)
+314800070220                                   AS investment_name_long,
+314900070130                  invsum.industry_fund_code,
+315000070130
+315100070130                  invsum.trade_date,
+315200070130                  invsum.split_option_code,
+315300070130                  splopp.split_option_descr,
+315400070227                  invsum. include_assigned_units,
+315500070130
+315600070206                  invsum.certificate_no,
+315700070130                  invsum.gross_amt,
+315800070130                  invsum.net_amt,
+315900070130                  invsum.unit_amt,
+316000070130
+316100070130                  invsum.dsc_amt,
+316200070221                  invsum.provincial_tax_amt + invsum.federal_tax_amt
+316300070221                                   AS Prov_And_Federal_Tax,
+316400070130                  invsum.other_deduction_amt,
+316500070228                  dsc_fee_as_per_of_net_amt,
+316600070227                  invsum.assigned_units,
+316700070130                  invsum.rejection_code,
+316800070220                  COALESCE( rejcdp.rejection_descr, :lnc_space25)
+316900070220                                          AS rejection_descr
+317000070130                 FROM
+317100070131                  QTEMP/invsum
+317200070131                    LEFT OUTER JOIN mfainvnmp invnmp ON
+317300070131                  invsum.investment_code   = invnmp.investment_code AND
+317400070131                  invnmp.language_code     = :lc_currLanguageCode
+317500070131                               JOIN mfasplopp splopp ON
+317600070131                  invsum.split_option_code = splopp.split_option_code
+317700070131                    LEFT OUTER JOIN mfarejcdp rejcdp ON
+317800070131                  invsum.rejection_code    = rejcdp.rejection_code
+317900070130                 ORDER BY
+318000070130                   invsum.seqno
+318100070130             END-EXEC
+318200070131
+318300070130             EXEC SQL
+318400070130               OPEN cu_invsum
+318500070130             END-EXEC.
+318600070130      * -----------------------------------------
+318700070130       set-dedlist-cursor.
+318800070130      * -----------------------------------------
+318900070131      * Deductions
+319000070131             EXEC SQL
+319100070131              DECLARE cu_dedlist CURSOR
+319200070131               FOR SELECT
+319300070131                dedlist.investment_code,
+319400070131                dedlist.deduction_code,
+319500070220                COALESCE(trndep.deduction_short_descr, :lnc_space10)
+319600070220                                 AS deduction_short_descr,
+319700070131                dedlist.deductionAmt
+319800070131               FROM
+319900070131                QTEMP/dedlist
+320000070131                  LEFT OUTER JOIN mfatrndep trndep ON
+320100070220                dedlist.deduction_code  = trndep.deduction_code AND
+320200070131                trndep.language_code    = :lc_currLanguageCode
+320300070502      * RFS32409.A - Begin
+320400070430                             JOIN QTEMP/invsum     ON
+320500070430                 dedlist.investment_code = invsum.investment_code
+320600070430               ORDER BY
+320700070430                  invsum.seqno
+320800070502      * RFS32409.A - End
+320900070131             END-EXEC
+321000070131
+321100070131             EXEC SQL
+321200070131               OPEN cu_dedlist
+321300070131             END-EXEC.
+321400070131      * -----------------------------------------
+321500070131       set-invdtl-cursor.
+321600070131      * -----------------------------------------
+321700070131      * Investment detail DSC charges
+321800070201      * (Exclude excluded schedules in one selection)
+321900070201             IF pc_DispDscSchedYes
+322000070201               EXEC SQL
+322100070202                DECLARE cu_invdtl1 CURSOR
+322200070201                 FOR SELECT
+322300070502      * RFS32409.A - added qualifier
+322400070430                  dsccalp.investment_code,
+322500070201                  purchase_date,
+322600070502      * RFS32409.A - added qualifier
+322700070430                  dsccalp.unit_amt,
+322800070201                  rate,
+322900070201                  charge,
+323000070201                  financer_schedule,
+323100070201                  charge_cdsc_on_orig_or_market
+323200070201                 FROM
+323300070201                  QTEMP/MFADSCCALP dsccalp
+323400070502      * RFS32409.A - Begin
+323500070430                             JOIN QTEMP/invsum     ON
+323600070430                 dsccalp.investment_code = invsum.investment_code
+323700070430               ORDER BY
+323800070430                  invsum.seqno
+323900070502      * RFS32409.A - End
+324000070201               END-EXEC
+324100070202
+324200070202               EXEC SQL
+324300070202                 OPEN cu_invdtl1
+324400070202               END-EXEC
+324500070201             ELSE
+324600070201               EXEC SQL
+324700070202                DECLARE cu_invdtl2 CURSOR
+324800070201                 FOR SELECT
+324900070502      * RFS32409.A - added qualifier
+325000070430                  dsccalp.investment_code,
+325100070201                  purchase_date,
+325200070502      * RFS32409.A - added qualifier
+325300070430                  dsccalp.unit_amt,
+325400070201                  rate,
+325500070201                  charge,
+325600070201                  financer_schedule,
+325700070201                  charge_cdsc_on_orig_or_market
+325800070201                 FROM
+325900070201                  QTEMP/MFADSCCALP dsccalp
+326000070502      * RFS32409.A - Begin
+326100070430                             JOIN QTEMP/invsum        ON
+326200070430                 dsccalp.investment_code = invsum.investment_code
+326300070502      * RFS32409.A - End
+326400070201                 WHERE NOT EXISTS
+326500070201                   (SELECT *
+326600070201                    FROM
+326700070201                      MFADSCCXP dsccxp
+326800070201                    WHERE
+326900070201                      dsccalp.cdsc_schedule = dsccxp.cdsc_schedule)
+327000070502      * RFS32409.A - Begin
+327100070430                 ORDER BY
+327200070430                   invsum.seqno
+327300070502      * RFS32409.A - End
+327400070201               END-EXEC
+327500070202
+327600070202               EXEC SQL
+327700070202                 OPEN cu_invdtl2
+327800070202               END-EXEC
+327900070201             END-IF
+328000080529      * RFS50832 - Begin
+328100080529          .
+328200080529      * -----------------------------------------
+328300080529       set-accdtl-cursor.
+328400080529      * -----------------------------------------
+328500080529      * Account level detail DSC charges
+328600080530
+328700080530      * Passed PASS-CDSC-TRADE-DATE trade date
+328800080530      * will be used to display data in years
+328900080530      *   (Calculate age in years by comparing dates and
+329000080530      *    subtructing one date from another)
+329100080529             MOVE PASS-CDSC-TRADE-DATE TO ln_cdscTradeDate
+329200080529             EXEC SQL
+329300080529              DECLARE cu_accdtl1 CURSOR
+329400080529               FOR SELECT
+329500080530                CAST (
+329600080529                  CASE
+329700080529                    WHEN
+329800080529                      :ln_cdscTradeDate = 0  OR
+329900080529                      age_date          = 0  OR
+330000080529                      age_date > :ln_cdscTradeDate
+330100080529                     THEN 0
+330200080529                    WHEN
+330300080530                      (:lc_cdscTradeDateMM   >
+330400080529                           SUBSTRING(age_date,5,2))    OR
+330500080530                      (:lc_cdscTradeDateMM   =
+330600080529                           SUBSTRING(age_date,5,2) AND
+330700080530                       :lc_cdscTradeDateDD   >=
+330800080529                             SUBSTRING(age_date,7,2))
+330900080529                     THEN
+331000081119      * RFS58210 - Fixed the calculation formula
+331100081119                        :ln_cdscTradeDateCCYY -
+331200081119                      CAST(SUBSTRING(age_date,1,4) AS NUMERIC(4,0))
+331300080529                    ELSE
+331400081119                        :ln_cdscTradeDateCCYY - 1 -
+331500081119                      CAST(SUBSTRING(age_date,1,4) AS NUMERIC(4,0))
+331600080530                  END  AS NUMERIC (4,0) )
+331700080530                                         AS age_yr,
+331800080530                  free_dollars_used,
+331900080530                 (chrg_units_taken_down -
+332000080530                    free_dollars_used)   AS chrg_dif,
+332100080530                  percent_applied,
+332200080530                  cum_deposit_left,
+332300080530                  age_date,
+332400100103                  cdsc_charged,
+33250010010376402             original_doll_value
+332600080529                 FROM
+332700080529                  QTEMP/MFADSCCA2P dscca2p
+332800080529               ORDER BY
+332900080529                  dscca2p.age_date
+333000080529               END-EXEC
+333100080529
+333200080529               EXEC SQL
+333300080529                 OPEN cu_accdtl1
+333400080529               END-EXEC
+333500080529           .
+333600080529      * RFS50832 - End
+333700120924      * RFS112770 - begin
+333800120924      * -----------------------------------------
+333900120924       setAccLvlFreeCursor.
+334000120924      * -----------------------------------------
+334100121003           COMPUTE li_Year = PRCDTP-AS-AT-DATE / 10000
+334200121003           MOVE pc_Currency TO  lc_Currency
+334300120924            EXEC SQL
+334400120924             DECLARE lcu_accLvlFreeCursror CURSOR
+334500121003             FOR SELECT
+334600120924                  Currency              AS CurrencyType,
+334700120924                  Free_Dollars          AS FreeDollar,
+334800121005                  CAST(YEAR AS NUMERIC(4,0)) AS Year,
+334900120924                  Market_Value          AS MarketValue,
+335000120924                  Additional_Deposits   AS AddDeposits,
+335100120926                  Free_Withdrawal_Taken AS FreeWdlTaken,
+335200120926                  Free_Dollars + Free_Withdrawal_Taken
+335300120928                                        AS FreeAllocAmt
+335400121003             FROM QTEMP/MFAALVFAP
+335500121003             WHERE Account_No = :ln_IvrAcctNo  AND
+335600121003                    YEAR     = :li_Year       AND
+335700120925                    Currency   = :lc_Currency
+335800121003             ORDER BY YEAR
+335900120924            END-EXEC
+336000120924
+336100120924            EXEC SQL
+336200121003             OPEN lcu_accLvlFreeCursror
+336300120924            END-EXEC.
+336400120924      * RFS112770 - end
+336500081118      * RFS58210 - removed obsolete code
+336600070108      * -----------------------------------------
+336700061229       get-message-description.
+336800070108      * -----------------------------------------
+336900070202           CALL  "FXMESSAGE" USING lc_MessageCode
+337000070115                                   lc_currLanguageCode
+337100130612117125                             lc_MessageDesc.
+337200070108      * -----------------------------------------
+337300061215       process-user-index.
+337400061215      * -----------------------------------------
+337500061215      * Get special module authorization - call module.
+337600061215           CALL  "FXSPCMAUT" USING
+337700061215                              pc_spcmautModuleId
+337800061215                              pc_spcmautCompanyCode
+337900061215                              pc_spcmautSuccessful.
+338000061229      * ------------------------------------------
+338100070131       set-fund-level-result-sets.
+338200070131      * ------------------------------------------
+338300070131           IF pc_acctlevelReqNo
+338400070131             EXEC SQL
+338500070131               SET RESULT SETS
+338600070131                 CURSOR cu_accsum,
+338700070131                 CURSOR cu_invsum,
+338800070131                 CURSOR cu_dedlist
+338900070131             END-EXEC
+339000070131           ELSE
+339100070202             IF pc_DispDscSchedYes
+339200070202               EXEC SQL
+339300070202                 SET RESULT SETS
+339400070202                   CURSOR cu_accsum,
+339500070202                   CURSOR cu_invsum,
+339600070202                   CURSOR cu_dedlist,
+339700070202                   CURSOR cu_invdtl1
+339800070202               END-EXEC
+339900070202             ELSE
+340000070202               EXEC SQL
+340100070202                 SET RESULT SETS
+340200070202                   CURSOR cu_accsum,
+340300070202                   CURSOR cu_invsum,
+340400070202                   CURSOR cu_dedlist,
+340500070202                   CURSOR cu_invdtl2
+340600070202               END-EXEC
+340700070202             END-IF
+340800070131           END-IF.
+340900080529      * RFS50832 - Begin
+341000080529      * ------------------------------------------
+341100080529       set-acc-level-result-sets.
+341200080529      * ------------------------------------------
+341300080529      * Set account level result sets
+341400080529           EXEC SQL
+341500080529             SET RESULT SETS
+341600080529               CURSOR cu_accsum,
+341700080529               CURSOR cu_invsum,
+341800080529               CURSOR cu_dedlist,
+341900080529      * This is specific to account level dsc cursor
+342000120924      *RFS112770 - begin
+342100120924      *        CURSOR cu_accdtl1
+342200120924               CURSOR cu_accdtl1,
+342300120924               CURSOR lcu_accLvlFreeCursror
+342400120924      *RFS112770 - end
+342500080529           END-EXEC.
+342600080529      * RFS50832 - End
+342700070202      * -----------------------------------------
+342800070202       set-business-error.
+342900070202      * -----------------------------------------
+343000070202      * Set business error (may be successful)
+343100070202           MOVE lc_businessError       TO lc_errorCode
+343200070202           PERFORM get-message-description
+343300070202           MOVE lc_messageCode         TO pc_MessageCode
+343400070301      * Do special formatting if fund does not exist
+343500070301           IF lc_businessError = lnc_fundNotExists
+343600070301              MOVE lc_messageDesc TO lc_string80
+343700070301              INITIALIZE lc_messageDesc
+343800070301              STRING lc_string80     DELIMITED BY lnc_2Spaces
+343900070301                     lnc_colon       DELIMITED BY SIZE
+344000070301                     lnc_1Space      DELIMITED BY SIZE
+344100070301                     lc_fundToReport DELIMITED BY SIZE
+344200070301             INTO lc_messageDesc
+344300070301             END-STRING
+344400070306           ELSE
+344500070306             IF lc_businessError = lnc_errTradeDate
+344600070306               MOVE lc_messageDesc TO lc_string80
+344700070306               INITIALIZE lc_messageDesc
+344800070306               STRING lc_string80     DELIMITED BY lnc_2Spaces
+344900070306                      lnc_colon       DELIMITED BY SIZE
+345000070306                      lnc_1Space      DELIMITED BY SIZE
+345100070306                      lc_dateToReport DELIMITED BY SIZE
+345200070306               INTO lc_messageDesc
+345300070306               END-STRING.
+345400070306
+345500130321           MOVE lc_messageDesc         TO pc_MessageDesc.
+345600080611      * RFS50832 - Begin
+345700080611      * ------------------------------------------
+345800080611       close-files.
+345900080611      * ------------------------------------------
+346000081114      * RFS58210 - Begin: replaced the code
+346100131213      * RFS125258- Begin.
+346200131213117125*    CALL "SETCALENV2" USING  lncc_D lc_errCode2.
+346300131213           CALL "SETCALENV2" USING  lncc_D ln_CalDate lc_errCode2.
+346400131213           IF  lb_DLYDSCSetupYes
+346500131213              CALL "SETCALENV2" USING  lncc_E ln_CalDate lc_errCode2
+346600131213           END-IF.
+346700131213      * RFS125258- End.
+346800081114      * RFS58210 - End
+346900100508
+347000100508      *Rfs82761 - Start
+347100100508       SWAP-USER.
+347200100508           IF pc_RequestUserId NOT = SPACES
+347300100508              MOVE SPACES TO
+347400100508                             swap_user_Ojlib
+347500100508                             swap_user_Error
+347600100508                             swap_user_Libl
+347700100508                             swap_user_Jobinfo
+347800100508                             swap_Doc_Id
+347900100508                             swap_Doc_Src
+348000100508              CALL  "SWAPUSER" USING  pc_RequestUserId,
+348100100508                                      swap_user_Ojlib,
+348200100508                                      swap_user_Error,
+348300100508                                      swap_user_Libl,
+348400100508                                      swap_user_Jobinfo,
+348500100508                                      swap_Doc_Id,
+348600100508                                      swap_Doc_Src
+348700100508              IF swap_user_Error NOT = SPACES
+348800100508                 MOVE lnc_ReqIdEnvError          to lc_ErrorCode
+348900100508                 IF pc_LanguageCode = "F"
+349000100508                    MOVE lnc_ReqIdEnvError_Msg_F to pc_MessageDesc
+349100100508                 ELSE
+349200100508                    MOVE lnc_ReqIdEnvError_Msg_E to pc_MessageDesc
+349300100508                 END-IF
+349400100508                 move lc_MessageCode to pc_MessageCode
+349500100508                 PERFORM set-initial-fail
+349600100508              END-IF
+349700100508           END-IF.
+349800100508      /
+349900100508       SWAP-BACK.
+350000100508           MOVE SPACES TO swap_back_Error
+350100100508                          swap_back_Libl
+350200100508                          swap_back_Jobinfo
+350300100508                          swap_Doc_Id
+350400100508                          swap_Doc_Src.
+350500100508           CALL  "SWAPBACK" USING  swap_back_Error,
+350600100508                                   swap_back_Libl,
+350700100508                                   swap_back_Jobinfo,
+350800100508                                   swap_Doc_Id,
+350900100508                                   swap_Doc_Src.
+351000100508      *Rfs82761 - End
+351100150223138770* - Start
+351200150223138770*Get GICORD Parm record.
+351300150223138770* ------------------------------------------
+351400150223138770 GET-GICORD-PARM.
+351500150223138770* ------------------------------------------
+351600150223138770     INITIALIZE GICORD-PARMS
+351700150223138770
+351800150223138770     EXEC SQL
+351900150223138770       SELECT COALESCE(ACCOUNT_NO, 0),
+352000150223138770              COALESCE(INVESTMENT_CODE, " "),
+352100150223138770              COALESCE(TRANS_AMOUNT, 0),
+352200150223138770              COALESCE(WAIVE_GIC_FLAG, " "),
+352300150223138770              COALESCE(OVR_REPLACE_AMT, 0),
+352400150223138770              COALESCE(OVR_PENALTY_AMT, 0),
+352500150223138770              COALESCE(CERT_ID_NO, 0),
+352600150223138770              COALESCE(CERT_NO, " "),
+352700150223138770              COALESCE(PLACEMENT_DATE, 0),
+352800150610138770              COALESCE(TRANS_NO, 0),
+352900150610138770              COALESCE(TRANS_TYPE_CODE, " ")
+353000150223138770         INTO :wrk_AccountNo,
+353100150223138770              :wrk_InvestmentCode,
+353200150223138770              :wrk_RedemptionAmt,
+353300150223138770              :wrk_GICWaiveFlag,
+353400150223138770              :wrk_ReplacementAmt,
+353500150223138770              :wrk_PenaltyAmt,
+353600150223138770              :wrk_Cert_ID_No,
+353700150223138770              :wrk_Cert_No,
+353800150223138770              :wrk_ATP_PlacementDate,
+353900150610138770              :wrk_ATP_TransNo,
+354000150610138770              :lc_TransType
+354100150223138770         FROM QTEMP/WRKGICPRM
+354200150223138770        WHERE CERT_ID_NO = :li_Cert_ID_NO
+354300150223138770     END-EXEC
+354400150223138770     MOVE SQLSTATE TO Ic_SqlStates
+354500150223138770     IF NOT Incc_sqlSuccessful
+354600150223138770       INITIALIZE GICORD-PARMS
+354700150223138770     END-IF
+354800150223138770 .
+354900150223138770*Duplicate work file CDSCTRN to WRKCERATP in QTEMP.  This is
+355000150223138770* use to link the certificates involve to additional tax.
+355100150223138770* ------------------------------------------
+355200150223138770 populate-WRKCERATP.
+355300150223138770* ------------------------------------------
+355400150515138770     EXEC SQL
+355500150515138770       DROP TABLE QTEMP/WRKCERATP
+355600150515138770     END-EXEC
+355700150515138770
+355800150223138770     EXEC SQL
+355900150223138770        CREATE TABLE QTEMP/WRKCERATP  AS
+356000150223138770        ( SELECT * FROM QTEMP/CDSCTRN ) WITH DATA
+356100150223138770     END-EXEC
+356200150223138770 .
+356300150223138770*
+356400150223138770*Check if additional tax record is entered.  If yes, create the
+356500150223138770* same on MFATRNATP in QTEMP.  So REGACCRCON will pick it up.
+356600150223138770* ------------------------------------------
+356700150223138770 CHECK-ADD-TAX.
+356800150223138770* ------------------------------------------
+356900150223138770     IF li_ATP_PlacementDate NOT = 0 AND li_ATP_TransNo NOT = 0
+357000150223138770       Initialize li_ATP_Count
+357100150223138770       EXEC SQL
+357200150223138770         SELECT Count(*) INTO :li_ATP_Count
+357300150223138770           FROM QTEMP/MFATRNATP
+357400150223138770          WHERE PLACEMENT_DATE = :ln_genPlacementDatePacked
+357500150223138770            AND TRANS_NO = :ln_cnt
+357600150223138770       END-EXEC
+357700150223138770
+357800150223138770       IF li_ATP_Count = 0
+357900150223138770         EXEC SQL
+358000150223138770           SELECT Count(*) INTO :li_ATP_Count
+358100150223138770             FROM QTEMP/WRKTRNATP
+358200150223138770            WHERE PLACEMENT_DATE = :li_ATP_PlacementDate
+358300150223138770              AND TRANS_NO = :li_ATP_TransNo
+358400150223138770         END-EXEC
+358500150223138770
+358600150223138770         IF li_ATP_Count > 0
+358700150223138770           EXEC SQL
+358800150223138770           INSERT INTO QTEMP/MFATRNATP
+358900150223138770           SELECT :ln_genPlacementDatePacked,
+359000150223138770                  :ln_cnt,
+359100150223138770                  ATP.SPLIT_OPTION_CODE,
+359200150223138770                  ATP.ADD_REPLACE_TAX,
+359300150223138770                  ATP.FEDERAL_TAX_AMT,
+359400150223138770                  ATP.FEDERAL_TAX_PERCENT,
+359500150223138770                  ATP.PROVINCIAL_TAX_AMT,
+359600150223138770                  ATP.PROVINCIAL_TAX_PERCENT,
+359700150223138770                  ATP.INPUT_SPLIT_OPTION_CODE,
+359800150223138770                  ATP.INPUT_ADD_REPLACE_TAX,
+359900150223138770                  ATP.INPUT_FEDERAL_TAX_AMT,
+360000150223138770                  ATP.INPUT_FEDERAL_TAX_PERCENT,
+360100150223138770                  ATP.INPUT_PROVINCIAL_TAX_AMT,
+360200150223138770                  ATP.INPUT_PROVINCIAL_TAX_PERCENT
+360300150223138770             FROM QTEMP/WRKTRNATP ATP
+360400150223138770             WHERE PLACEMENT_DATE = :li_ATP_PlacementDate
+360500150223138770               AND TRANS_NO = :li_ATP_TransNo
+360600150223138770          END-EXEC
+360700150223138770         END-IF
+360800150223138770       END-IF
+360900150223138770     END-IF.
+361000150223138770
+361100150223138770 CAT-EXIT.
+361200150223138770     EXIT.
+361300150223138770* - End
