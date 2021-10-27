@@ -1,0 +1,432 @@
+000100070212       IDENTIFICATION DIVISION.
+000200070213       PROGRAM-ID.    SEGINVGBV.
+000300171128       AUTHOR.        Ewa Kolasinska-Roj.
+000400070212       INSTALLATION.  CitiGroup CIB.
+000500070213       DATE-WRITTEN.  Feb 14, 2007.
+000600070212       DATE-COMPILED.
+000700070212      ******************************************************************
+000800070213      *    RFS-NUMBER : RFS-38037                                      *
+000900070212      *                                                                *
+001000070213      *    DESCRIPTION: The program will mark overridden GBV/GDV as    *
+001100070213      *                 invalid if the associated with the contract
+001200070214      *                 backdated historical transaction was processed
+001300070214      *                 and its Trade Date < Effect Date of most       *
+001400070213      *                 recent 'OVGBV' or 'OVGDV'.                     *
+001500070212      *                                                                *
+001600070214      *    CALLED BY:   JOBDAILY when 'OVRGBV' edit code is set up.    *
+001700070212      *                                                                *
+001800070212      *    PARAMETERS:  N/A                                            *
+001900070212      *                                                                *
+002000070214      * LINKED MODULES:                                                *
+002100070212      *    COMPILE PGM: 1) Use option 15 to create module.             *
+002200070212      *                 2) CRTPGM prompt F4                            *
+002300070213      *                    program: SEGINVGBV                          *
+002400070212      *                    library: Object library                     *
+002500070213      *                    Module : SEGINVGBV                          *
+002600070212      *                    library: *LIBL                              *
+002700070212      *                    Prompt F10 (additional parameters)          *
+002800070213      *                    program entry...:SEGINVGBV                  *
+002900070212      *                    library: ie. Object library                 *
+003000070212      ******************************************************************
+003100070212      *    C H A N G E   H I S T O R Y                                 *
+003200070212      ******************************************************************
+003300070212      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE              *
+003400070212      ******************************************************************
+003500070213      * Ewa K.     * 2006/09/19   * RFS 38037 - Create program.        *
+003600071127      * Raymond Mui* 2007/11/27   * RFS 45845 - Recompile.             *
+003700080110      * Emman. Yala* 2008/01/10   * RFS47227 - Recompile.              *
+003800080507      * Bojana J.  * 2008/05/07   * RFS 51776 - Recompile.
+003900110304      * Emman. Yala* 2011/03/03   * RFS91599 - Recompile for 80605
+004000110304      *            *              * Replaced Implicit Join by Inner Join
+004100130717      * TamilSelvi * 2013/07/15   * RFS110904 - Recompile for MFAACCONP
+004200200617      * Thilaga    * 2014/05/15   * RFS133150 - Recompile
+004201200410      * Ashwini B  * 2020/04/10   * RFS185365 - Recompile for MFATRCODP
+004202200630      * CHAYA SP   * 2020/06/30   * RFS185172 - Recompile for MFAACCONP
+004203200720      * M K SINDHU * 2020/07/08   * RFS185172 - Recompile for MFATRCODP
+004204201222      * Chaya SP   * 2020/11/15   * RFS180721 - Recompile for MFATRCODP
+004205210319      * Chaya SP   * 2021/03/19   * RFS186832 - Recompile           *
+004206210707      * Vignesh    * 2021/07/07   * RFS187254 - Recompile for MFATRCODP
+004300070212      ******************************************************************
+004400070212
+004500070212       ENVIRONMENT DIVISION.
+004600070212       CONFIGURATION SECTION.
+004700070212       SOURCE-COMPUTER. IBM-AS400.
+004800070212       OBJECT-COMPUTER. IBM-AS400.
+004900070212       SPECIAL-NAMES.
+005000070212            DATA-AREA IS lc_ProcessDateDA.
+005100070212
+005200070212       INPUT-OUTPUT SECTION.
+005300070212       FILE-CONTROL.
+005400070212
+005500070212       DATA DIVISION.
+005600070212
+005700070212       WORKING-STORAGE SECTION.
+005800070212      *
+005900070212           Copy Cpysqlfld
+006000070213               REPLACING == "CURRENT_PROGRAM" == BY == "SEGINVGBV" ==.
+006100070212      *
+006200070212           EXEC SQL
+006300070212             INCLUDE SQLCA
+006400070212           END-EXEC.
+006500070212      *
+006600070212      * Error Codes, Uniquely Identify where the error happened
+006700070212       01  Ws-Err-Code                   PIC X(02) VALUE SPACES.
+006800070212           88  lncc_Err-Ok                         VALUE SPACES.
+006900070212           88  lncc_Err-10                         VALUE "10".
+007000070212           88  lncc_Err-11                         VALUE "11".
+007100070212           88  lncc_Err-12                         VALUE "12".
+007200070212           88  lncc_Err-13                         VALUE "13".
+007300070212           88  lncc_Err-14                         VALUE "14".
+007400070214           88  lncc_Err-15                         VALUE "15".
+007500070212      *
+007600070212       01  lc_Constants.
+007700070214           03  lncc_DeclareErrorBck       PIC X(45)
+007800070214           VALUE "Error while Declaring cursor c_Backdate".
+007900070214           03  lncc_OpenErrorBck          PIC X(45)
+008000070214           VALUE "Error while Opening cursor c_Backdate".
+008100070214           03  lncc_FetchErrorBck         PIC X(45)
+008200070214           VALUE "Error while Fetching cursor c_Backdate".
+008300070214           03  lncc_InsertMfaacccap          PIC X(45)
+008400070214           VALUE "Error while Inserting MFAACCCAP".
+008500070214           03  lncc_UpdateMfaacccap           PIC X(45)
+008600070214           VALUE "Error while Updating MFAACCCAP".
+008700070214           03  lncc_DeleteMfaacccap           PIC X(45)
+008800070214           VALUE "Error while Deleting MFAACCCAP".
+008900070212      *
+009000070212           03  lnci_MaxFetchRec               PIC S9(03) VALUE 200.
+009100070212           03  lncc_HST                       PIC X(03)  VALUE "HST".
+009200070212           03  lncc_HSC                       PIC X(03)  VALUE "HSC".
+009300070214           03  lncc_IVGBV                     PIC X(05)  VALUE "IVGBV".
+009400070214           03  lncc_VLGBV                     PIC X(05)  VALUE "VLGBV".
+009500070305           03  lncc_OVGBV                     PIC X(05)  VALUE "OVGBV".
+009600070305           03  lncc_OVGDV                     PIC X(05)  VALUE "OVGDV".
+009700070305           03  lncc_ActionAOT                 PIC X(05)  VALUE "AOT".
+009800070305           03  lncc_OriginWOR                 PIC X(05)  VALUE "WOR".
+009900070305           03  lncc_OriginDIR                 PIC X(05)  VALUE "DIR".
+010000070305           03  lncc_OriginARA                 PIC X(05)  VALUE "ARA".
+010100070305           03  lncc_OriginTRK                 PIC X(05)  VALUE "TRK".
+010200070214           03  lncc_Yes                       PIC X(01)  VALUE "Y".
+010300070214
+010400070212       01  lc_Flags.
+010500070212           03  lb_EndOfCursorFlag             PIC 1.
+010600070212               88  lb_EndOfCursorTrue         VALUE B"1".
+010700070212               88  lb_EndOfCursorFalse        VALUE B"0".
+010800070212
+010900070212       01 lc_Conditions.
+011000070214           02 lc_BckCursorIsOpen        PIC X(01)  VALUE SPACE.
+011100070214              88 lncc_BckCursorIsOpen              VALUE "Y".
+011200070305           02 lc_MfaacccapUpdInsert     PIC X(01)   VALUE SPACE.
+011300070305              88 lncc_MfaacccapUpdInserted            VALUE "Y".
+011400070212
+011500070212       01  lc_Tables.
+011600070214           03  ltb_FetchCurAcctContTable.
+011700070214               05  ltb_FetchCurAcctContract   OCCURS 200 TIMES.
+011800070214                   07  ltbi_AccountNo             PIC S9(09).
+011900070214                   07  ltbi_ContractNo            PIC S9(09).
+012000070212
+012100070212       01  lc_WorkingStorageFields.
+012200070212           03  li_NumRows                PIC S9(5)   COMP-3 VALUE 0.
+012300070212           03  li_FetchIdx               PIC S9(5)   COMP-3 VALUE 0.
+012400070214           03  li_AccountNo              PIC S9(09).
+012500070214           03  li_ContractNo             PIC S9(09).
+012600070222           03  lc_ContractXref           PIC  X(09).
+012700070212           03  lc_ProcessDateDataArea.
+012800070212               05  lc_ProcessDate             PIC X(08).
+012900070212               05  ln_ProcessDate REDEFINES lc_ProcessDate PIC S9(08).
+013000070212               05  FILLER                     PIC X(161).
+013100070212      *
+013200070212       LINKAGE SECTION.
+013300070212      *
+013400070212       PROCEDURE DIVISION.
+013500070212
+013600070212      * ---------------------------------
+013700070212       MAINLINE.
+013800070212      * ---------------------------------
+013900070212           PERFORM InitialLogic.
+014000070212           PERFORM DetailProcess.
+014100070212           PERFORM Termination.
+014200070212
+014300070212      * ---------------------------------
+014400070212       InitialLogic.
+014500070212      * ---------------------------------
+014600070212
+014700070212           EXEC SQL
+014800070212             WHENEVER SQLERROR CONTINUE
+014900070212           END-EXEC.
+015000070212
+015100070212           PERFORM InitializeVariables.
+015200070212           PERFORM GetProcessDate.
+015300070212           PERFORM DeclareCursor.
+015400070214           PERFORM OpenCursor.
+015500070212
+015600070212      * ---------------------------------
+015700070212       InitializeVariables.
+015800070212      * ---------------------------------
+015900070212
+016000070214           INITIALIZE Ws-Sql-Err-Short-Descr.
+016100070212           SET lb_EndOfCursorFalse TO TRUE.
+016200070212           SET lncc_Err-Ok         TO TRUE.
+016300070212
+016400070212      * ---------------------------------
+016500070212       GetProcessDate.
+016600070212      * ---------------------------------
+016700070212
+016800070212           ACCEPT lc_ProcessDateDataArea FROM lc_ProcessDateDA
+016900070212                  FOR "MFAPRCDTP".
+017000070212
+017100070212      * ---------------------------------
+017200070212       DeclareCursor.
+017300070212      * ---------------------------------
+017400070212
+017500110304      *RFS91599 Replaced 'Implicit Join' by 'Inner Join'
+017600070212           EXEC SQL
+017700070214            DECLARE C_Backdate CURSOR FOR
+017800070214            SELECT DISTINCT
+017900070226               B.Account_No,
+018000070226               B.Contract_No
+018100070221            FROM
+01820011030491599          Mfaacccap  Acccap
+018300110304  |            INNER JOIN Mfaacconp  Acconp ON
+018400110304  |               Acccap.Account_No    = Acconp.Account_No        AND
+018500110304  |               Acccap.Contract_No   = Acconp.Contract_No
+018600110304  |            INNER JOIN Mfatrnp    Trnp ON
+018700110304  |               Acconp.Account_No    = Trnp.Account_No
+018800110304  |            INNER JOIN Mfatrcodp  Trcodp ON
+018900110304  |               Trnp.Placement_Date  = Trcodp.Placement_Date    AND
+019000110304  |               Trnp.Trans_No        = Trcodp.Trans_No          AND
+019100110304  |               Acconp.Contract_No   = Trcodp.Contract_No
+019200110304  |            INNER JOIN  Mfaacconp  B ON
+019300110304  |               B.Account_No    = Acconp.Account_No             AND
+01940011030491599             B.Contract_Xref = Acconp.Contract_Xref
+019500070226               LEFT OUTER JOIN Mfatrnbkp Trnbkp ON
+019600070226                  Trnbkp.Placement_Date = Trnp.Placement_Date AND
+019700070226                  Trnbkp.Trans_No       = Trnp.Trans_No
+019800070221            WHERE
+019900070305              (Acccap.Contract_Attribute_Code = :lncc_OVGBV         OR
+020000070305               Acccap.Contract_Attribute_Code = :lncc_OVGDV)        AND
+020100070227               Trnp.Process_Date      = :ln_ProcessDate             AND
+020200070214              (Trnp.Trans_Status_Code = :lncc_HST                   OR
+020300070214               Trnp.Trans_Status_Code = :lncc_HSC)                  AND
+020400070305              (Trnp.Trans_Origin_Code = :lncc_OriginWOR             OR
+020500070305               Trnp.Trans_Origin_Code = :lncc_OriginDIR             OR
+020600070305               Trnp.Trans_Origin_Code = :lncc_OriginARA             OR
+020700070305               Trnp.Trans_Origin_Code = :lncc_OriginTRK)            AND
+020800070214               Trnp.Trade_Date < Acccap.Effect_Date                 AND
+020900070305             ((Trnp.Trans_Origin_Code = :lncc_OriginWOR             AND
+021000070305               Trnbkp.Action_Code     = :lncc_ActionAOT)            OR
+02110011030491599          Trnp.Trade_Date < Trnp.Placement_Date)
+021200070212      *
+021300070221            FOR FETCH ONLY
+021400070221            OPTIMIZE FOR ALL ROWS
+021500070212           END-EXEC.
+021600070212
+021700070212           IF SQLSTATE NOT = SPACES
+021800070212              MOVE SQLSTATE TO lc_sqlStates
+021900070212              IF NOT lncc_sqlSuccessful
+022000070212                 SET lncc_Err-10 TO TRUE
+022100070214                 STRING lncc_DeclareErrorBck  DELIMITED BY "  "
+022200070212                        " "                       DELIMITED BY SIZE
+022300070212                        SQLSTATE                  DELIMITED BY SIZE
+022400070212                   INTO Ws-Sql-Err-Short-Descr
+022500070212                 PERFORM SQLFailProcess
+022600070212              END-IF
+022700070212           END-IF.
+022800070212
+022900070212      * ---------------------------------
+023000070214       OpenCursor.
+023100070212      * ---------------------------------
+023200070212
+023300070212           EXEC SQL
+023400070214             OPEN c_Backdate
+023500070212           END-EXEC.
+023600070212
+023700070214      *    If c_Backdate is not opened then end process.
+023800070212           MOVE SQLSTATE TO lc_sqlStates.
+023900070212           IF lncc_sqlSuccessful
+024000070214              SET lncc_BckCursorIsOpen TO TRUE
+024100070212           ELSE
+024200070214              SET lncc_Err-11 TO TRUE
+024300070214              STRING lncc_OpenErrorBck  DELIMITED BY "  "
+024400070212                     " "                    DELIMITED BY SIZE
+024500070212                     SQLSTATE               DELIMITED BY SIZE
+024600070212                INTO Ws-Sql-Err-Short-Descr
+024700070212              PERFORM Dsp-Error
+024800070212           END-IF.
+024900070212
+025000070212      * ---------------------------------
+025100070212       DetailProcess.
+025200070212      * ---------------------------------
+025300070212
+025400070212      * Process historical redemption transactions.
+025500070214           IF lncc_BckCursorIsOpen
+025600070214              PERFORM ProcessCursorBackdate
+025700070212                UNTIL lb_EndOfCursorTrue
+025800070212           END-IF.
+025900070212
+026000070212      * ---------------------------------
+026100070214       ProcessCursorBackdate.
+026200070212      * ---------------------------------
+026300070212
+026400070214           INITIALIZE ltb_FetchCurAcctContTable.
+026500070212
+026600070212           EXEC SQL
+026700070214             FETCH NEXT FROM c_Backdate
+026800070212               FOR :lnci_MaxFetchRec ROWS
+026900070214              INTO :ltb_FetchCurAcctContract
+027000070212           END-EXEC.
+027100070212
+027200070212           MOVE SQLSTATE TO lc_sqlStates.
+027300070212           EVALUATE TRUE
+027400070212               WHEN lncc_sqlSuccessful
+027500070212                    CONTINUE
+027600070212               WHEN lncc_sqlEnd
+027700070212                    SET lb_EndOfCursorTrue TO TRUE
+027800070212               WHEN OTHER
+027900070214                    SET lncc_Err-12 TO TRUE
+028000070214                    STRING lncc_FetchErrorBck  DELIMITED BY "  "
+028100070212                           " "                     DELIMITED BY SIZE
+028200070212                           SQLSTATE                DELIMITED BY SIZE
+028300070212                      INTO Ws-Sql-Err-Short-Descr
+028400070212                    PERFORM SQLFailProcess
+028500070212           END-EVALUATE.
+028600070212
+028700070212           IF SQLERRD(3) > 0
+028800070212               COMPUTE li_NumRows = SQLERRD(3)
+028900070212
+029000070212               PERFORM VARYING li_FetchIdx FROM 1 BY 1
+029100070212               UNTIL li_FetchIdx > li_NumRows
+029200070214                   PERFORM ProcessAttributeUpdate
+029300070212               END-PERFORM
+029400070212            END-IF.
+029500070212
+029600070212      * ---------------------------------
+029700070214       ProcessAttributeUpdate.
+029800070212      * ---------------------------------
+029900070214
+030000070305           PERFORM UpdateInsertIVGBV.
+030100070305           IF lncc_MfaacccapUpdInserted
+030200070215              PERFORM DeleteVLGBV
+030300070215           END-IF.
+030400070215
+030500070212      * ---------------------------------
+030600070305       UpdateInsertIVGBV.
+030700070212      * ---------------------------------
+030800070214
+030900070305           INITIALIZE lc_MfaacccapUpdInsert,
+031000070214                      li_AccountNo,
+031100070214                      li_ContractNo.
+031200070214           MOVE ltbi_AccountNo(li_FetchIdx)   TO li_AccountNo.
+031300070214           MOVE ltbi_ContractNo(li_FetchIdx)  TO li_ContractNo.
+031400070305
+031500070305           EXEC SQL
+031600070305           UPDATE MFAACCCAP
+031700070305           SET EFFECT_DATE = :ln_ProcessDate
+031800070305           WHERE
+031900070305               ACCOUNT_NO  = :li_AccountNo  AND
+032000070305               CONTRACT_NO = :li_ContractNo AND
+032100070305               CONTRACT_ATTRIBUTE_CODE = :lncc_IVGBV
+032200070305           END-EXEC.
+032300070305
+032400070305           MOVE SQLSTATE TO lc_sqlStates.
+032500070305           IF lncc_sqlSuccessful
+032600070305              MOVE lncc_Yes TO lc_MfaacccapUpdInsert
+032700070305           ELSE
+032800070305              IF lncc_sqlEnd
+032900070305                 PERFORM InsertIVGBV
+033000070305              ELSE
+033100070305                 DISPLAY "ACCNT: " li_AccountNo
+033200070305                 DISPLAY "CONTRACT: " li_ContractNo
+033300070305                 SET lncc_Err-14 TO TRUE
+033400070305                 STRING lncc_UpdateMfaacccap   DELIMITED BY "  "
+033500070305                        " "                    DELIMITED BY SIZE
+033600070305                        SQLSTATE               DELIMITED BY SIZE
+033700070305                   INTO Ws-Sql-Err-Short-Descr
+033800070305                 PERFORM Dsp-Error
+033900070305              END-IF
+034000070305           END-IF.
+034100070212
+034200070212      * ---------------------------------
+034300070305       InsertIVGBV.
+034400070212      * ---------------------------------
+034500070212
+034600070305           IF li_AccountNo NOT = 0
+034700070305             EXEC SQL
+034800070305               INSERT INTO Mfaacccap
+034900070305               (ACCOUNT_NO,
+035000070305                CONTRACT_NO,
+035100070305                CONTRACT_ATTRIBUTE_CODE,
+035200070305                EFFECT_DATE)
+035300070305                VALUES (:li_AccountNo,
+035400070305                        :li_ContractNo,
+035500070305                        :lncc_IVGBV,
+035600070305                        :ln_ProcessDate)
+035700070305             END-EXEC
+035800070305
+035900070305             MOVE SQLSTATE TO lc_sqlStates
+036000070305             IF lncc_sqlSuccessful
+036100070305                MOVE lncc_Yes TO lc_MfaacccapUpdInsert
+036200070305             ELSE
+036300070305                DISPLAY "ACCNT: " li_AccountNo
+036400070305                DISPLAY "CONTRACT: " li_ContractNo
+036500070305                SET lncc_Err-13 TO TRUE
+036600070305                STRING lncc_InsertMfaacccap  DELIMITED BY "  "
+036700070305                       " "                    DELIMITED BY SIZE
+036800070305                       SQLSTATE               DELIMITED BY SIZE
+036900070305                  INTO Ws-Sql-Err-Short-Descr
+037000070305                PERFORM Dsp-Error
+037100070305             END-IF
+037200070212           END-IF.
+037300070212
+037400070214      * ---------------------------------
+037500070214       DeleteVLGBV.
+037600070214      * ---------------------------------
+037700070214
+037800070214           EXEC SQL
+037900070214           DELETE FROM MFAACCCAP
+038000070214           WHERE
+038100070214               ACCOUNT_NO  = :li_AccountNo  AND
+038200070214               CONTRACT_NO = :li_ContractNo AND
+038300070214               CONTRACT_ATTRIBUTE_CODE = :lncc_VLGBV
+038400070214           END-EXEC.
+038500070214
+038600070214           MOVE SQLSTATE TO lc_sqlStates.
+038700070227           IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+038800070214              DISPLAY "ACCNT: " li_AccountNo
+038900070214              DISPLAY "CONTRACT: " li_ContractNo
+039000070214              SET lncc_Err-15 TO TRUE
+039100070214              STRING lncc_DeleteMfaacccap   DELIMITED BY "  "
+039200070214                     " "                    DELIMITED BY SIZE
+039300070214                     SQLSTATE               DELIMITED BY SIZE
+039400070214                INTO Ws-Sql-Err-Short-Descr
+039500070214              PERFORM Dsp-Error
+039600070214           END-IF.
+039700070214
+039800070212      * ---------------------------------
+039900070212       CloseCursor.
+040000070212      * ---------------------------------
+040100070212
+040200070214           IF lncc_BckCursorIsOpen
+040300070212              EXEC SQL
+040400070214                CLOSE c_Backdate
+040500070212              END-EXEC
+040600070212           END-IF.
+040700070212
+040800070212      * ---------------------------------
+040900070212       SQLFailProcess.
+041000070212      * ---------------------------------
+041100070212
+041200070212           PERFORM CloseCursor.
+041300070212           PERFORM Dsp-Error.
+041400070212           GOBACK.
+041500070212
+041600070212      * ---------------------------------
+041700070212       Termination.
+041800070212      * ---------------------------------
+041900070212
+042000070212           PERFORM CloseCursor.
+042100070212           GOBACK.
+042200070212
+042300070212      * ---------------------------------
+042400070212      * DSP-ERROR and FORCE-MSGW Routines
+042500070212      * ---------------------------------
+042600070212          COPY CPYSQLRTN.

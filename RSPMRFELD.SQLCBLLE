@@ -1,0 +1,3101 @@
+000100171212       IDENTIFICATION DIVISION.
+000200120203       PROGRAM-ID.    RSPMRFELD.
+000300120203       AUTHOR.        Thilaga K.
+000400120203       INSTALLATION.  L&T Financial Services Technology Inc.
+000500120203       DATE-WRITTEN.  Feb 01, 2012.
+000600110518       DATE-COMPILED.
+000700110518      *****************************************************************
+000800120203      * RFS105493   - QESI/IQEE PHASE 3
+000900110520      * Description - Utility program which accepts the name of a flat
+001000110518      *               file that contains the outgoing data to MRQ
+001100110518      *               and load the filing data in the database.
+001200110518      *****************************************************************
+001300110518      *    C H A N G E   H I S T O R Y
+001400110518      *****************************************************************
+001500110518      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE
+001600110518      *****************************************************************
+001700120201      * Thilaga K  * 2012/02/01   * RFS105493 - defect fix
+001800120201      *            *              * QESI - historical loading of filed
+001900120201      *            *              * events utility issues
+002000120418      * Manohar J. * 2012/04/18   * RFS108242 - Net Contribution amounts on
+002100120418      *            *              * annual request filing log is incorrectly
+002200120418      *            *              * set to zero
+002300120523      * Boopathy D * 2012/05/23   * RFS107921 - Defect fix for the
+002400120523      *            *              * Utility Failure
+002500120531      * Daniel M   * 2012/05/31   * RFS107921.1 - Evaluate changed fields
+002600120711      * TVN Deepthi* 2012/07/11   * RFS98805 - Recompile
+002700120927      * Muthu      * 2012/09/24   * RFS99609 - Enhancement to QESI
+002800120927      * lakshmi M  *              *            filing details
+002900121109      * Shu Yin    * 2012/11/09   * RFS103860- Added loading RT-12
+003000130723      * Revathi P  * 2013/07/23   * RFS124236 - RECOMPILE
+003100140113      * T Valeri   * 2012/11/21   * RFS107500 - MRQ response file
+003200140113      *            *              * not processed in production
+003300140113      * Shakina    * 2013/12/04   * RFS107500 - In addition to Tony's
+003400140113      *            *              * retrofit handled conditions.(1) Not
+003500140113      *            *              * to insert records with beneficiary-
+003600140113      *            *              * seq-no is zero for rec type 2 & 3.
+003700140113      *            *              * (2) Validated the variables used in
+003800140113      *            *              * UPDATE for rec type 22 & 32.
+003900140113      *            *              * (3) MFAMRQRQP fields has been updat
+004000140113      *            *              * ed with its corresponding rec type
+004100140113      *            *              * variables.
+004200140117      * Shakina    * 2014/01/17   * RFS107500 - Fixed legacy issue
+004300140117      *            *              * related to the filename value.
+004400150406      *Muthulakshmi* 2015/04/06   * RFS145157 - Recompile MFAARTNP
+004500150519      * Eswaran T  * 2015/05/19   * RFS147117 - Recompile for MFAARTNDP
+004600160219      * Sairam     * 2016/02/19   * RFS155900 - Recompile
+004700110518      *****************************************************************
+004800110518       ENVIRONMENT DIVISION.
+004900110518       CONFIGURATION SECTION.
+005000110518       SOURCE-COMPUTER. IBM-AS400.
+005100110518       OBJECT-COMPUTER. IBM-AS400.
+005200110623       SPECIAL-NAMES.
+005300110518       INPUT-OUTPUT SECTION.
+005400110518       FILE-CONTROL.
+005500110518
+005600110518       DATA DIVISION.
+005700110518       FILE SECTION.
+005800110518
+005900110518       WORKING-STORAGE SECTION.
+006000110518
+006100110527       01 lc_Current_02_Record.
+006200111107          03 li_C_RecordType                 PIC  X(02).
+006300111107          03 li_C_Trxn_VersCde               PIC S9(01).
+006400110527          03 li_C_FilingYear                 PIC S9(04).
+006500110527          03 lc_C_PromoterID                 PIC  X(10).
+006600110527          03 li_C_Account_No                 PIC S9(15).
+006700110527          03 li_C_SpecimenPlanNo             PIC S9(10).
+006800110527          03 li_C_Plan_Setup_Date            PIC S9(08).
+006900120531      *   RFS 107921.1 - Begins - li_C_Resp_Type_Code was O/N (Oui/Non or Y/N)
+007000120531      *   03 li_C_Resp_Type_Code             PIC S9(01).
+007100120531          03 lc_C_Resp_Type_Code             PIC  X(01).
+007200120531          03 lc_C_Resp_Type_Code-X REDEFINES lc_C_Resp_Type_Code.
+007300120531             05 li_C_Resp_Type_Code             PIC S9(01).
+007400120531      *   RFS 107921.1 - Ends
+007500110527          03 li_C_No_Years_QcResident        PIC S9(02).
+007600110527          03 ln_C_YTD_Amount                 PIC S9(07)V99.
+007700110527          03 ln_C_YTD_Transfer_Amount        PIC S9(07)V99.
+007800110527          03 ln_C_YTD_Deposit_Amount         PIC S9(07)V99.
+007900110527          03 ln_C_LTD_Amount                 PIC S9(07)V99.
+008000110527      *regrouping of the elements
+008100110527          03 lc_C_Benef-rec                  PIC X(224).
+008200110527          03 lc_C_Benef-rec-x REDEFINES lc_C_Benef-rec.
+008300110527             05 li_C_Benef_SIN               PIC S9(09).
+008400110527             05 lc_C_Benef_LastName          PIC  X(20).
+008500110527             05 lc_C_Benef_FirstName         PIC  X(20).
+008600110527             05 li_C_Benef_DOB               PIC S9(08).
+008700120531      *      RFS107921.1 - Begins - Gender was X(01) M/F now 2/1
+008800120531      *      05 lc_C_Benef_Sex               PIC S9(01).
+008900120531             05 lc_C_Benef_Sex_X             PIC  X(01).
+009000120531             05 lc_C_Benef_Sex_9 REDEFINES lc_C_Benef_Sex_X.
+009100120531                 07 lc_C_Benef_Sex               PIC S9(01).
+009200120531      *      RFS107921.1 - Ends
+009300110527             05 lc_C_Benef_AptNo             PIC  X(06).
+009400110527             05 lc_C_Benef_StreetNo          PIC  X(10).
+009500110527             05 lc_C_Benef_StreetName        PIC  X(50).
+009600110527             05 lc_C_Benef_AddLine2          PIC  X(14).
+009700110527             05 lc_C_Benef_AddLine3          PIC  X(40).
+009800110527             05 lc_C_Benef_City              PIC  X(30).
+009900110527             05 lc_C_Benef_Prov              PIC  X(02).
+010000110527             05 lc_C_Benef_Country           PIC  X(03).
+010100110527             05 lc_C_Benef_PostalCode        PIC  X(10).
+010200120531      *      RFS107921.1 - Begins - Res Indicator was X(01) O/N {Y/N} now 1/0
+010300120531      *      05 li_C_Benef_QcResident        PIC S9(01).
+010400120531             05 li_C_Benef_QcResident_X      PIC  X(01).
+010500120531             05 li_C_Benef_QcResident_9 REDEFINES
+010600120531                                 li_C_Benef_QcResident_X.
+010700120531                07 li_C_Benef_QcResident        PIC S9(01).
+010800120531      *      RFS107921.1 - Ends
+010900110527      *regrouping of the elements
+011000120531      *   RFS107921.1 - Begins - Subs type was X(01) P/E now 1/2
+011100120531      *   03 li_C_Subsc_Type                 PIC S9(01).
+011200120531          03 li_C_Subsc_Type_X               PIC  X(01).
+011300120531          03 li_C_Subsc_Type_9 REDEFINES li_C_Subsc_Type_X.
+011400120531             05 li_C_Subsc_Type                 PIC S9(01).
+011500120531      *   RFS107921.1 - Ends
+011600110527          03 li_C_Subsc_SIN                  PIC S9(09).
+011700110527          03 lc_C_Subsc_BusNumber            PIC  X(10).
+011800110527          03 lc_C_Subsc_Name                 PIC  X(40).
+011900110527          03 lc_C_Subsc_NameFields REDEFINES lc_C_Subsc_Name.
+012000110527             05 lc_C_Subsc_LastName          PIC  X(20).
+012100110527             05 lc_C_Subsc_FirstName         PIC  X(20).
+012200110527          03 lc_C_Subsc_BenRelation          PIC  X(01).
+012300110530          03 lc_C_Subsc_Address              PIC  X(175).
+012400110606          03 lc_C_Subsc_AddressFields REDEFINES lc_C_Subsc_Address.
+012500110606             05 lc_C_Subsc_AptNo             PIC X(06).
+012600110606             05 lc_C_Subsc_StreetNo          PIC X(10).
+012700110606             05 lc_C_Subsc_StreetName        PIC X(50).
+012800110606             05 lc_C_Subsc_AddrLine2         PIC X(14).
+012900110606             05 lc_C_Subsc_AddrLine3         PIC X(40).
+013000110606             05 lc_C_Subsc_City              PIC X(30).
+013100110606             05 lc_C_Subsc_Prov              PIC X(02).
+013200110606             05 lc_C_Subsc_Country           PIC X(03).
+013300110606             05 lc_C_Subsc_PostalCode        PIC X(10).
+013400110606             05 lc_C_Subsc_Phone             PIC X(10).
+013500110530          03 li_C_JoinSub_SIN                PIC S9(09).
+013600110530          03 lc_C_JoinSub_LastName           PIC  X(20).
+013700110530          03 lc_C_JoinSub_FirstName          PIC  X(20).
+013800110530          03 lc_C_JoinSub_BenRelation        PIC  X(01).
+013900110530          03 lc_C_JoinSub_Phone              PIC  X(10).
+014000120531      *   RFS107921.1 - Begins - PCG type was X(01) P/E now 1/2
+014100120531      *   03 li_C_PCG_Type_Code              PIC S9(01).
+014200120531          03 li_C_PCG_Type_Code_X            PIC  X(01).
+014300120531          03 li_C_PCG_Type_Code_9 REDEFINES li_C_PCG_Type_Code_X.
+014400120531              05 li_C_PCG_Type_Code              PIC S9(01).
+014500120531      *   RFS107921.1 - Ends
+014600110530          03 li_C_PCG_SIN                    PIC S9(09).
+014700110530          03 lc_C_PCG_BusinessNo             PIC  X(10).
+014800110530          03 lc_C_PCG_Name                   PIC  X(40).
+014900110527          03 lc_C_PCG_NameFields REDEFINES lc_C_PCG_Name.
+015000110530             05 lc_C_PCG_LastName            PIC  X(20).
+015100110530             05 lc_C_PCG_FirstName           PIC  X(20).
+015200110530          03 lc_C_PCG_BenRelation            PIC  X(01).
+015300110530          03 lc_C_PCG_Address                PIC  X(165).
+015400110530          03 lc_C_PCG_PhoneNumber            PIC  X(10).
+015500110530          03 lc_C_IQEE_Trnsfr_Ind            PIC S9(01).
+015600111107          03 lc_C_PCG_AndAll_Filler          PIC  X(154).
+015700110527          03 lc_C_PCG_AndAll_FillerX REDEFINES lc_C_PCG_AndAll_Filler.
+015800110530             05 lc_C_Status                  PIC  X(01).
+015900110530             05 lc_C_Mrq_File_DateX          PIC  X(08).
+016000110527             05 lc_C_Mrq_File_Date_1 REDEFINES lc_C_Mrq_File_DateX.
+016100110530                07 lc_C_Mrq_File_Date        PIC S9(08).
+016200110530             05 lc_C_Ben_seq_nox             PIC  X(03).
+016300110527             05 li_C_Ben_seq_no_1 REDEFINES lc_C_Ben_seq_nox.
+016400110530                07 li_C_Ben_seq_no           PIC S9(03).
+016500111107             05 lc_C_Filler                  PIC  X(141).
+016600110527      * IQEE Transaction Request File Type 03
+016700110527      * Beneficiary Replacement Events
+016800110527       01 lc_Current_03_Record.
+016900111103          03 li_C3_RecordType                PIC  X(02).
+017000110530          03 li_C3_Trxn_VersCde              PIC S9(01).
+017100110530          03 lc_C3_PromoterID                PIC  X(10).
+017200110530          03 li_C3_Account_No                PIC S9(15).
+017300110530          03 li_C3_SpecimenPlanNo            PIC S9(10).
+017400110530          03 li_C3_Replacement_Date          PIC S9(08).
+017500110530          03 lc_C3_Resp_Type_Code            PIC S9(01).
+017600110530          03 li_C3_Benef_SIN_Old             PIC S9(09).
+017700110530          03 lc_C3_Benef_LastName_Old        PIC  X(20).
+017800110530          03 lc_C3_Benef_FirstName_Old       PIC  X(20).
+017900110530          03 li_C3_Benef_DOB_Old             PIC S9(08).
+018000110530          03 lc_C3_Benef_Sex_Old             PIC S9(01).
+018100110530          03 li_C3_Benef_SIN_New             PIC S9(09).
+018200110530          03 lc_C3_Benef_LastName_New        PIC  X(20).
+018300110530          03 lc_C3_Benef_FirstName_New       PIC  X(20).
+018400110530          03 li_C3_Benef_DOB_New             PIC S9(08).
+018500110530          03 lc_C3_Benef_Sex_New             PIC S9(01).
+018600110530          03 lc_C3_Benef_AptNo               PIC  X(06).
+018700110530          03 lc_C3_Benef_StreetNo            PIC  X(10).
+018800110530          03 lc_C3_Benef_StreetName          PIC  X(50).
+018900110530          03 lc_C3_Benef_AddLine2            PIC  X(14).
+019000110530          03 lc_C3_Benef_AddLine3            PIC  X(40).
+019100110530          03 lc_C3_Benef_City                PIC  X(30).
+019200110530          03 lc_C3_Benef_Prov                PIC  X(02).
+019300110530          03 lc_C3_Benef_Country             PIC  X(03).
+019400110530          03 lc_C3_Benef_PostalCode          PIC  X(10).
+019500110530          03 lc_C3_Subsc_Type                PIC S9(01).
+019600110530          03 li_C3_Benef_QcResident          PIC S9(01).
+019700110629          03 lc_C3_Subsc_BenRelation         PIC S9(01).
+019800110720          03 lc_C3_Filler                    PIC X(669).
+019900110527
+020000110527      * IQEE Transaction Request File Type 04
+020100110527      * Notional Transfer Events
+020200110527       01 lc_Current_04_Record.
+020300110527          03 lc_C4_Detail.
+020400111103             05 li_C4_RecordType          PIC  X(02).
+020500110606             05 li_C4_Trxn_VersCde        PIC S9(01).
+020600110606             05 li_C4_TrusteeType         PIC S9(02).
+020700110606             05 lc_C4_PromoterID          PIC  X(10).
+020800110606             05 li_C4_Account_No          PIC S9(15).
+020900110606             05 li_C4_SpecimenPlanNo      PIC S9(10).
+021000110606             05 li_C4_Plan_Setup_Date     PIC S9(08).
+021100110606             05 li_C4_Transfer_Date       PIC S9(08).
+021200110606             05 ln_C4_Tot_Transfer_Amt    PIC S9(07)V99.
+021300110606             05 ln_C4_MRQ_Assisted_Amt    PIC S9(07)V99.
+021400110606             05 ln_C4_MRQ_Unassisted_Amt  PIC S9(07)V99.
+021500110606             05 ln_C4_MRQ_Unassisted_Amt_1 REDEFINES
+021600110606                ln_C4_MRQ_Unassisted_Amt           .
+021700110606                07 ln_C4_MRQ_Unassisted_Amt_Sign PIC X(1).
+021800110606                07 ln_C4_MRQ_Unassisted_Amt_R PIC S9(06)V99.
+021900110606             05 li_C4_IQEE_Trnsfr_Amt     PIC S9(07)V99.
+022000110606             05 lc_C4_PromoterID_Othr     PIC  X(10).
+022100110606             05 li_C4_Account_No_Othr     PIC  X(15).
+022200110606             05 li_C4_SpecimenPlanNo_Othr PIC S9(10).
+022300110606             05 li_C4_Benef_SIN           PIC S9(09).
+022400110606             05 lc_C4_Benef_LastName      PIC  X(20).
+022500110606             05 lc_C4_Benef_FirstName     PIC  X(20).
+022600110606             05 li_C4_Benef_DOB           PIC S9(08).
+022700110606             05 lc_C4_Benef_Sex           PIC S9(01).
+022800110606             05 lc_C4_Benef_AptNo         PIC  X(06).
+022900110606             05 lc_C4_Benef_StreetNo      PIC  X(10).
+023000110606             05 lc_C4_Benef_StreetName    PIC  X(50).
+023100110606             05 lc_C4_Benef_AddLine2      PIC  X(14).
+023200110606             05 lc_C4_Benef_AddLine3      PIC  X(40).
+023300110606             05 lc_C4_Benef_City          PIC  X(30).
+023400110606             05 lc_C4_Benef_Prov          PIC  X(02).
+023500110606             05 lc_C4_Benef_Country       PIC  X(03).
+023600110606             05 lc_C4_Benef_PostalCode    PIC  X(10).
+023700110606             05 li_C4_Tot_Trnsfr_Ind      PIC S9(01).
+023800110606             05 li_C4_AIP_Paid_Ind        PIC S9(01).
+023900110606             05 ln_C4_Fair_Mkt_Value      PIC S9(07)V99.
+024000110606             05 ln_C4_CLB_Amt             PIC S9(07)V99.
+024100110606             05 li_C4_Auth_Trnsfr_Ind     PIC S9(01).
+024200110606             05 lc_C4_Subsc_Type          PIC S9(01).
+024300110606             05 li_C4_Subsc_SIN           PIC S9(09).
+024400110606             05 lc_C4_Subsc_BusNumber     PIC  X(10).
+024500110606             05 lc_C4_Subsc_Name          PIC  X(40).
+024600110606             05 lc_C4_Subsc_NameFields REDEFINES lc_C4_Subsc_Name.
+024700110606                07 lc_C4_Subsc_LastName   PIC  X(20).
+024800110606                07 lc_C4_Subsc_FirstName  PIC  X(20).
+024900110606             05 lc_C4_Subsc_BenRelation   PIC S9(01).
+025000110606             05 lc_C4_Subsc_Address       PIC  X(175).
+025100110606             05 lc_C4_Subsc_AddressFields
+025200110606                      REDEFINES lc_C4_Subsc_Address.
+025300110606                07 lc_C4_Subsc_AptNo      PIC X(06).
+025400110606                07 lc_C4_Subsc_StreetNo   PIC X(10).
+025500110606                07 lc_C4_Subsc_StreetName PIC X(50).
+025600110606                07 lc_C4_Subsc_AddrLine2  PIC X(14).
+025700110606                07 lc_C4_Subsc_AddrLine3  PIC X(40).
+025800110606                07 lc_C4_Subsc_City       PIC X(30).
+025900110606                07 lc_C4_Subsc_Prov       PIC X(02).
+026000110606                07 lc_C4_Subsc_Country    PIC X(03).
+026100110606                07 lc_C4_Subsc_PostalCode PIC X(10).
+026200110606                07 lc_C4_Subsc_Phone      PIC X(10).
+026300110606             05 li_C4_JoinSub_SIN         PIC S9(09).
+026400110606             05 lc_C4_JoinSub_LastName    PIC  X(20).
+026500110606             05 lc_C4_JoinSub_FirstName   PIC  X(20).
+026600110606             05 li_C4_JoinSub_BenRelation PIC S9(01).
+026700110606             05 li_C4_JoinSub_Phone       PIC S9(10).
+026800110527          03 lc_C4_Filler.
+026900110606             05 li_C4_TrnsfrSeq_No        PIC S9(07).
+027000110606             05 li_C4_BenSeq_No           PIC S9(03).
+027100110606             05 lc_C4_Filler2             PIC X(323).
+027200110527      * end reformat lc_Current_04_Record
+027300110527
+027400110527      * IQEE Transaction Request File Type 05
+027500110527      * EAP/PSE Redemption Events
+027600110527       01 lc_Current_05_Record.
+027700111107          03 li_C5_RecordType          PIC  X(02).
+027800110527          03 li_C5_Trxn_VersCde        PIC S9(01).
+027900111103          03 li_C5_Payment_Type        PIC  X(02).
+028000110527          03 lc_C5_PromoterID          PIC  X(10).
+028100110527          03 li_C5_Account_No          PIC S9(15).
+028200110527          03 li_C5_SpecimenPlanNo      PIC S9(10).
+028300110527          03 li_C5_Payment_Date        PIC S9(08).
+028400110527          03 li_C5_Accum_Income_Ind    PIC S9(01).
+028500110527          03 ln_C5_Contr_Withdr_Amt    PIC S9(07)V99.
+028600110527          03 ln_C5_IQEE_Amt_Paid       PIC S9(07)V99.
+028700110527          03 ln_C5_EAP_Amt_Paid        PIC S9(07)V99.
+028800110527          03 ln_C5_IQEE_Balance        PIC S9(07)V99.
+028900110527          03 ln_C5_Fair_Mkt_Amt        PIC S9(07)V99.
+029000110527          03 ln_C5_Tot_Contr_Paid      PIC S9(07)V99.
+029100110527          03 ln_C5_OthrBen_CLB_Amt     PIC S9(07)V99.
+029200110527          03 ln_C5_Benef_CLB_Amt       PIC S9(07)V99.
+029300110527          03 ln_C5_Bal_Cdn_Grant       PIC S9(07)V99.
+029400110527          03 ln_C5_Othr_ProvPgm_Amt    PIC S9(07)V99.
+029500110527          03 li_C5_Benef_SIN           PIC S9(09).
+029600110527          03 lc_C5_Benef_LastName      PIC  X(20).
+029700110527          03 lc_C5_Benef_FirstName     PIC  X(20).
+029800110527          03 li_C5_Benef_DOB           PIC S9(08).
+029900110527          03 lc_C5_Benef_Sex           PIC S9(01).
+030000110527          03 lc_C5_Benef_QcResident    PIC S9(01).
+030100110527          03 li_C5_PSE_Pgm_Type        PIC S9(01).
+030200110527          03 li_C5_PSE_Pgm_Length      PIC S9(01).
+030300110527          03 li_C5_PSE_Pgm_Year        PIC S9(01).
+030400110527          03 li_C5_AcadYr_Start_Date   PIC S9(08).
+030500110527          03 li_C5_AcadYr_Lgth_Weeks   PIC S9(02).
+030600110527          03 lc_C5_Educ_Postal_Code    PIC  X(10).
+030700110527          03 lc_C5_Educ_Name           PIC  X(150).
+030800110527          03 lc_C5_Filler              PIC  X(629).
+030900110527
+031000110527      * IQEE Transaction Request File Type 06
+031100110527      * Special Tax/Grant Repayment Events
+031200110527       01 lc_Current_06_Record.
+031300111103          03 li_C6_RecordType          PIC  X(02).
+031400110527          03 li_C6_Trxn_VersCde        PIC S9(01).
+031500110527          03 lc_C6_PromoterID          PIC  X(10).
+031600110527          03 li_C6_Account_No          PIC S9(15).
+031700110527          03 li_C6_SpecimenPlanNo      PIC S9(10).
+031800110527          03 li_C6_Event_Date          PIC S9(08).
+031900110527          03 ln_C6_Contr_Withdr_Amt    PIC S9(07)V99.
+032000110527          03 ln_C6_IQEE_Refund_Amt     PIC S9(07)V99.
+032100110527          03 ln_C6_EAP_WriteOff_Amt    PIC S9(07)V99.
+032200110527          03 ln_C6_IQEE_Tot_Contr_Amt  PIC S9(07)V99.
+032300110527          03 ln_C6_Fair_Mkt_Val_Amt    PIC S9(07)V99.
+032400110527          03 ln_C6_CLB_Amt             PIC S9(07)V99.
+032500110527          03 ln_C6_Cdn_Grant_Amt       PIC S9(07)V99.
+032600110527          03 ln_C6_IQEE_Balance        PIC S9(07)V99.
+032700110527          03 li_C6_Benef_SIN           PIC S9(09).
+032800110527          03 lc_C6_Benef_LastName      PIC  X(20).
+032900110527          03 lc_C6_Benef_FirstName     PIC  X(20).
+033000110527          03 li_C6_Benef_DOB           PIC S9(08).
+033100110527          03 li_C6_Benef_Sex           PIC S9(01).
+033200110527          03 lc_C6_Tax_Reason_Code     PIC  X(02).
+033300110527          03 lc_C6_Estb_Postal_Code    PIC  X(10).
+033400110527          03 lc_C6_Estb_Name           PIC  X(150).
+033500110704          03 lc_C6_Filler              PIC  X(662).
+033600120925
+033700120925      *RFS99609 - Start
+033800120927       01 lc_Current-22-Record.
+033900120927          03 li_C22-RecordType             PIC S9(02).
+034000120927          03 li_C22-TaxYear                PIC S9(04).
+034100120927          03 lc_C22-IdTrustee              PIC X(10).
+034200121001          03 lc_C22-ContractIDX            PIC X(15).
+034300121001          03 lc_C22-ContractID  REDEFINES lc_C22-ContractIDX.
+034400121001             05 li_C22-ContractID          PIC S9(15).
+034500120927          03 li_C22-IDPlanType             PIC S9(10).
+034600120927          03 li_C22-BenSIN                 PIC S9(09).
+034700120927          03 lc_C22-Ben-LastName           PIC X(20).
+034800120927          03 lc_C22-Ben-FirstName          PIC X(20).
+034900120927          03 li_C22-BenDOB                 PIC S9(08).
+035000120927          03 li_C22-Org-RecordType         PIC S9(02).
+035100120927          03 lc_C22-GLob-JustCode1         PIC X(02).
+035200120927          03 lc_C22-GLob-JustCode2         PIC X(02).
+035300120927          03 li_C22-AmtOf-BasicAmt         PIC S9(07)V99.
+035400120927          03 lc_C22-BasicAmt-JustCode      PIC X(02).
+035500140113107500*   03 li_C22-BasicAmt-Shar-Ind      PIC S9(01).
+035600140113107500    03 li_C22-BasicAmt-Shar-Ind      PIC X(01).
+035700120927          03 li_C22-IncreaseAmt            PIC S9(07)V99.
+035800120927          03 lc_C22-IncAmt-JustCode        PIC X(02).
+035900120927          03 lc_C22-IncAmt-ExpCode         PIC X(02).
+036000140113107500*   03 li_C22-IncAmt-Shar-Ind        PIC S9(01).
+036100140113107500    03 li_C22-IncAmt-Shar-Ind        PIC X(01).
+036200120927          03 li_C22-Interest               PIC S9(07)V99.
+036300120927          03 li_C22-AmtOfContri            PIC S9(07)V99.
+036400120927          03 li_C22-CumuQESI               PIC S9(07)V99.
+036500120927          03 li_C22-QESIBalance            PIC S9(07)V99.
+036600120927          03 li_C22-BalOfContri            PIC S9(07)V99.
+036700120927          03 li_C22-IndicatorOfQESI        PIC S9(01).
+036800120927          03 li_C22-PaymentDate            PIC S9(08).
+036900120927          03 lc_C22-Title-OfPosition       PIC X(44).
+037000120927          03 lc_C22-Filler                 PIC X(772).
+037100120925
+037200120927       01 lc_Current-32-Record.
+037300120927          03 li_C32-RecordType             PIC S9(02).
+037400120927          03 li_C32-TaxYear                PIC S9(04).
+037500120927          03 lc_C32-IdTrustee              PIC X(10).
+037600121001          03 lc_C32-ContractIDX            PIC X(15).
+037700121001          03 lc_C32-ContractID  REDEFINES lc_C32-ContractIDX.
+037800121001             05 li_C32-ContractID          PIC S9(15).
+037900120927          03 li_C32-IdPlanType             PIC S9(10).
+038000120927          03 li_C32-BenSIN                 PIC S9(09).
+038100120927          03 lc_C32-Ben-LastName           PIC X(20).
+038200120927          03 lc_C32-Ben-FirstName          PIC X(20).
+038300120927          03 li_C32-Ben-DOB                PIC S9(08).
+038400120927          03 li_C32-BasicAmt               PIC S9(07)V99.
+038500120927          03 li_C32-IncreaseAmt            PIC S9(07)V99.
+038600120927          03 li_C32-Interest               PIC S9(07)V99.
+038700120927          03 li_C32-ContriAmt              PIC S9(07)V99.
+038800120927          03 lc_C32-New-GLob-JustCode1     PIC X(02).
+038900120927          03 lc_C32-New-GLob-JustCode2     PIC X(02).
+039000120927          03 li_C32-New-BasicAmt           PIC S9(07)V99.
+039100120927          03 lc_C32-New-BasicAmt-JustCode  PIC X(02).
+039200140113107500*   03 li_C32-New-BasicAmt-Shar-Ind  PIC S9(01).
+039300140113107500    03 li_C32-New-BasicAmt-Shar-Ind  PIC  X(01).
+039400120927          03 li_C32-New-IncreaseAmt        PIC S9(07)V99.
+039500120927          03 lc_C32-New-IncAmt-JustCode    PIC X(02).
+039600120927          03 lc_C32-New-IncAmt-ExpCode     PIC X(02).
+039700140113107500*   03 li_C32-New-IncAmt-Shar-Ind    PIC S9(01).
+039800140113107500    03 li_C32-New-IncAmt-Shar-Ind    PIC  X(01).
+039900120927          03 li_C32-New-ContrAmt           PIC S9(07)V99.
+040000120927          03 li_C32-Diff-BasicAmt          PIC S9(07)V99.
+040100120927          03 li_C32-Diff-IncreaseAmt       PIC S9(07)V99.
+040200140113107500*   03 li_C32-Interest               PIC S9(07)V99.
+040300140113107500    03 li_C32-New-Interest           PIC S9(07)V99.
+040400120927          03 li_C32-New-CumuQESI           PIC S9(07)V99.
+040500120927          03 li_C32-New-QESIBalance        PIC S9(07)V99.
+040600120927          03 li_C32-New-BalOfContrib       PIC S9(07)V99.
+040700120927          03 li_C32-IndicatorOfQESI        PIC S9(01).
+040800120927          03 li_C32-Determination-Date     PIC S9(08).
+040900120927          03 lc_C32-Title-OfPosition       PIC X(44).
+041000121001          03 lc_C32-Filler                 PIC X(720).
+041100120925      *RFS99609 - End
+041200120925
+041300121109      *103860 - begin - Add record type 12 (copied from RSPERRIQ)
+041400121109       01 lc_Current_12_Record.
+041500121126          05 lc_RecordType_Err    PIC X(02) VALUE SPACES.
+041600121109          05 lc_Year              PIC X(04) JUSTIFIED RIGHT.
+041700121126          05 li_Year_Err REDEFINES lc_Year PIC S9(04).
+041800121109          05 lc_PromoterID        PIC X(10) VALUE SPACES.
+041900121109          05 lc_OrigContractID.
+042000121109             10 lc_leadingSpaces  PIC X(06) VALUE SPACES.
+042100121109             10 lc_AccountNo      PIC X(09) JUSTIFIED RIGHT.
+042200121109             10 li_AcctNo     REDEFINES lc_AccountNo
+042300121109                                       PIC S9(09).
+042400121109          05 lc_SpecimenPlanNo    PIC X(10) VALUE SPACES.
+042500121109          05 lc_OrigBenefSIN      PIC X(09) JUSTIFIED RIGHT.
+042600121109          05 li_SIN          REDEFINES lc_OrigBenefSIN
+042700121109                                       PIC S9(09).
+042800121109          05 lc_OrigRecType       PIC X(02).
+042900121126             88 lncc_OrigRecType02 VALUE "02".
+043000121126             88 lncc_OrigRecType03 VALUE "03".
+043100121126             88 lncc_OrigRecType04 VALUE "04".
+043200121126             88 lncc_OrigRecType05 VALUE "05".
+043300121126             88 lncc_OrigRecType06 VALUE "06".
+043400121109          05 lc_StructErrCode     PIC X(04) VALUE SPACES.
+043500121109          05 lc_StructErrDesc     PIC X(30) VALUE SPACES.
+043600121109          05 lc_DetailRecErrCode  PIC X(04) VALUE SPACES.
+043700121109          05 lc_DetailRecErrDesc  PIC X(30) VALUE SPACES.
+043800121109          05 lc_ErroneusField     PIC X(40) VALUE SPACES.
+043900121109          05 lc_VersionCode       PIC X(01) VALUE SPACE.
+044000121109          05 lc_SubtypeRecord     PIC X(02) VALUE SPACES.
+044100121109          05 lc_OrigTransDate_X   PIC X(08) VALUE SPACES.
+044200121109          05 li_OrigTransDate redefines
+044300121109             lc_OrigTransDate_X   PIC S9(8).
+044400121109          05 lc_Filler            PIC X(829) VALUE SPACES.
+044500121109
+044600121112       01 li_Beneficiary_Seq_No            PIC S9(3) VALUE 0.
+044700121112       01 li_MRQ_File_Date_Max             PIC S9(8) VALUE 0.
+044800121112       01 lc_MRQ_Error_Code                PIC X(4) VALUE SPACES.
+044900121109      *103860 - end
+045000121109
+045100110523       01 Li_Fetch-Ben-AddrNo          PIC S9(07).
+045200110523       01 Li_Fetch-Sub-AddrNo          PIC S9(07).
+045300110701       01 Li_Fetch-AddrNo              PIC S9(07).
+045400110701       01 Lc_Fetch-AptNo               PIC X(06).
+045500110701       01 Lc_Fetch-CivicNo             PIC X(10).
+045600110701       01 Lc_Fetch-Street              PIC X(50).
+045700110701       01 Lc_Fetch-Addr2               PIC X(14).
+045800110701       01 Lc_Fetch-Addr3               PIC X(40).
+045900110701       01 Lc_Fetch-City                PIC X(30).
+046000110701       01 Lc_Fetch-Prov                PIC X(02).
+046100110701       01 Lc_Fetch-Country             PIC X(03).
+046200110701       01 Lc_Fetch-Postal              PIC X(10).
+046300110701       01 Li_Validate-AddrNo           PIC S9(07) VALUE ZEROS.
+046400110701       01 Lc_Validate-AptNo            PIC X(06)  VALUE SPACES.
+046500110701       01 Lc_Validate-CivicNo          PIC X(10)  VALUE SPACES.
+046600110701       01 Lc_Validate-Street           PIC X(50)  VALUE SPACES.
+046700110701       01 Lc_Validate-Addr2            PIC X(14)  VALUE SPACES.
+046800110701       01 Lc_Validate-Addr3            PIC X(40)  VALUE SPACES.
+046900110701       01 Lc_Validate-City             PIC X(30)  VALUE SPACES.
+047000110701       01 Lc_Validate-Prov             PIC X(02)  VALUE SPACES.
+047100110701       01 Lc_Validate-Country          PIC X(03)  VALUE SPACES.
+047200110701       01 Lc_Validate-Postal           PIC X(10)  VALUE SPACES.
+047300110701       01 Li_StartAddrNo               PIC S9(09) VALUE ZEROS.
+047400110623       01 LI_InputRec                  PIC S9(09) VALUE ZEROS.
+047500120926      *RFS99609 - Start
+047600120927       01 li_AccountNo                 PIC S9(09).
+047700120927       01 li_Year                      PIC S9(04).
+047800120927       01 li_MRQ-File-Date             PIC S9(08).
+047900120927       01 li_MRQ-Version-Code          PIC S9(01).
+048000120926      *RFS99609 -End
+048100110523
+048200110701       01 Lc_IQ02YYMMDD                PIC X(10)    VALUE SPACES.
+048300110606       01 Lc_YYMMDD     REDEFINES  Lc_IQ02YYMMDD.
+048400110601          03 FILLER                    PIC X(04).
+048500110601          03 YYMMDD                    PIC S9(06).
+048600110701       01 Li_MRQFileDate               PIC S9(08)   VALUE ZEROS.
+048700110518
+048800110701       01 Lc_RecordIn                  PIC X(1000).
+048900110518       01 Lc_RecordInR  REDEFINES  Lc_RecordIn.
+049000110701          03 Lc_RecordType             PIC X(02).
+049100110701          03 Lc_RecFiller              PIC X(998).
+049200110518
+049300110606       01 Lncc_00                      PIC X(02)    VALUE "00".
+049400110606       01 Lncc_01                      PIC X(02)    VALUE "01".
+049500110606       01 Lncc_02                      PIC X(02)    VALUE "02".
+049600110606       01 Lncc_03                      PIC X(02)    VALUE "03".
+049700110606       01 Lncc_04                      PIC X(02)    VALUE "04".
+049800110606       01 Lncc_05                      PIC X(02)    VALUE "05".
+049900110606       01 Lncc_06                      PIC X(02)    VALUE "06".
+050000110606       01 Lncc_12                      PIC X(02)    VALUE "12".
+050100110606       01 Lncc_22                      PIC X(02)    VALUE "22".
+050200120927      *RFS99609 - Start
+050300121015       01 lncc_32                      PIC X(02)    VALUE "32".
+050400120927       01 lncc_FileName                PIC X(09)    VALUE "MFAMRQRQP".
+050500120927      *RFS99609 - End
+050600110606       01 Lncc_23                      PIC X(02)    VALUE "23".
+050700110606       01 Lncc_99                      PIC X(02)    VALUE "99".
+050800110606       01 Lncc_100                     PIC X(03)    VALUE "100".
+050900110701       01 Lncc_1231                    PIC X(04)    VALUE "1231".
+051000110606       01 Lncc_A                       PIC X(01)    VALUE "A".
+051100110606       01 Lncc_R                       PIC X(01)    VALUE "R".
+051200110606       01 Lncc_C                       PIC X(01)    VALUE "C".
+051300121126103860 01 Lncc_E                       PIC X(01)    VALUE "E".
+051400110606       01 Lncc_AUT                     PIC X(03)    VALUE "AUT".
+051500110704       01 Lncc_RSPTRNIQ                PIC X(08)    VALUE "RSPTRNIQ".
+051600110518       01 Li_BenSeqNo                  PIC S9(03).
+051700110518       01 Lc_MRQStatus                 PIC X(01).
+051800110518       01 Lc_MRQStatusReason           PIC X(04).
+051900110518       01 Li_BaseGrant                 PIC S9(11)V99.
+052000110518       01 Li_IncreaseGrant             PIC S9(11)V99.
+052100110518       01 Li_Interest                  PIC S9(11)V99.
+052200140113107500 01 Li_assistedcap               PIC S9(11)V99.
+052300140113107500 01 Li_description               PIC X(100).
+052400140113107500 01 li_C4_Tot_Transfer_Amt       PIC X(10).
+052500110518       01 Li_BIRPFileDate              PIC S9(08).
+052600110518       01 Li_ToBenSeqNo                PIC S9(03).
+052700110518       01 Li_TransferSeqNo             PIC S9(03).
+052800110610       01 WS-TAN                       PIC S9(07)   VALUE ZEROS.
+052900110610       01 Lncc_AddressNo               PIC X(04)    VALUE "ADD#".
+053000110610       01 lncc_GetAddNum               PIC X(45)    VALUE "Error while
+053100110610      -                                  "retrieving address #".
+053200110624       01 lc_Normal                    PIC X(2)     VALUE ZEROS.
+053300110624       01 COMM-CONTROL-CODE            PIC X(4)     VALUE SPACES.
+053400110701       01 COMM-NEXT-NUMBER             PIC S9(09) COMP-3
+053500110701                                                    VALUE ZEROS.
+053600110624       01 COMM-RETURN-CODE             PIC X(2)     VALUE SPACES.
+053700110520
+053800110606       01 lc_MAINFlag                  PIC X(01)    VALUE SPACE.
+053900110606          88 lncc_MAINStart                         VALUE SPACE.
+054000110606          88 lncc_MAINEnd                           VALUE "Y".
+054100110520
+054200110610       01 lc_ADDRSUMFlag               PIC X(01)    VALUE SPACE.
+054300110610          88 lncc_ADDRSUM_Start                     VALUE SPACE.
+054400110610          88 lncc_ADDRSUM_End                       VALUE "Y".
+054500110613
+054600110623       01 lc_ADDRDTLFlag               PIC X(01)    VALUE SPACE.
+054700110623          88 lncc_ADDRDTL_Start                     VALUE SPACE.
+054800110623          88 lncc_ADDRDTL_End                       VALUE "Y".
+054900110615
+055000110701       01 lncc_ErrorSelectingFile.
+055100110701          03 Filler_Ins                PIC X(22)
+055200110527                             VALUE "Error while Selecting ".
+055300110701          03 lncc_SelectFileName       PIC X(20)    VALUE SPACES.
+055400110527       01 lncc_ErrorUpdatingFile.
+055500110701          03 Filler_Upd                PIC X(21)
+055600110701                             VALUE "Error while Updating ".
+055700110701          03 lncc_UpdateFileName       PIC X(20)    VALUE SPACES.
+055800110701       01 lncc_ErrorInsertingFile.
+055900110701          03 Filler_Ins                PIC X(22)
+056000110527                             VALUE "Error while Inserting ".
+056100110701          03 lncc_InsertFileName       PIC X(20)    VALUE SPACES.
+056200110701       01 lncc_ErrorOpeningCursor.
+056300110701          03 Filler_Open               PIC X(22)
+056400110701                             VALUE "Error while Opening ".
+056500110701          03 lncc_OpenCursor           PIC X(20)    VALUE SPACES.
+056600110530
+056700110701       01 lncc_ErrorFetchingCursor.
+056800110701          03 Filler_Fetch              PIC X(22)
+056900110701                             VALUE "Error while Fetching ".
+057000110701          03 lncc_FetchCursor          PIC X(20)    VALUE SPACES.
+057100110527
+057200110527          COPY CPYSQLFLD
+057300121112103860*        REPLACING == "CURRENT_PROGRAM" == BY == "U7826801" ==.
+057400121112103860         REPLACING == "CURRENT_PROGRAM" == BY == "RSPMRFELD" ==.
+057500110527
+057600110527           EXEC SQL
+057700110527             INCLUDE SQLCA
+057800110527           END-EXEC.
+057900110527
+058000110527      *Error Codes, Uniquely Identify where the error happened
+058100110606       01 Ws-Err-Code                  PIC X(02)    VALUE SPACES.
+058200110701          88 lncc_Err_S1                            VALUE "S1".
+058300110701          88 lncc_Err_S2                            VALUE "S2".
+058400110701          88 lncc_Err_S3                            VALUE "S3".
+058500110701          88 lncc_Err_S4                            VALUE "S4".
+058600110701          88 lncc_Err_S5                            VALUE "S5".
+058700110701          88 lncc_Err_S6                            VALUE "S6".
+058800110701          88 lncc_Err_S7                            VALUE "S7".
+058900121112103860    88 lncc_Err_S8                            VALUE "S8".
+059000110701          88 lncc_Err_I1                            VALUE "I1".
+059100110701          88 lncc_Err_I2                            VALUE "I2".
+059200110701          88 lncc_Err_I3                            VALUE "I3".
+059300110701          88 lncc_Err_I4                            VALUE "I4".
+059400110701          88 lncc_Err_I5                            VALUE "I5".
+059500110701          88 lncc_Err_I6                            VALUE "I6".
+059600110701          88 lncc_Err_I7                            VALUE "I7".
+059700110701          88 lncc_Err_I8                            VALUE "I8".
+059800110701          88 lncc_Err_I9                            VALUE "I9".
+059900110701          88 lncc_Err_Open1                         VALUE "O1".
+060000110701          88 lncc_Err_Open2                         VALUE "O2".
+060100110701          88 lncc_Err_Open3                         VALUE "O3".
+060200110701          88 lncc_Err_Fetch1                        VALUE "F1".
+060300110701          88 lncc_Err_Fetch2                        VALUE "F2".
+060400110701          88 lncc_Err_Fetch3                        VALUE "F3".
+060500110701          88 lncc_Err_U1                            VALUE "U1".
+060600110701          88 lncc_Err_U2                            VALUE "U2".
+060700110701          88 lncc_Err_U3                            VALUE "U3".
+060800110701          88 lncc_Err_U4                            VALUE "U4".
+060900110701          88 lncc_Err_U5                            VALUE "U5".
+061000110701          88 lncc_Err_U6                            VALUE "U6".
+061100120203          88 lncc_Err_U7                            VALUE "U7".
+061200120925      *RFS99609 - Start
+061300120928       01 lc-Err-Code1                 PIC X(03)    VALUE SPACES.
+061400120925          88 lncc_Err_S22                           VALUE "S22".
+061500120926          88 lncc_Err_P22                           VALUE "P22".
+061600120925          88 lncc_Err_S32                           VALUE "S32".
+061700120926          88 lncc_Err_P32                           VALUE "P32".
+061800120925      *RFS99609 - End
+061900110527
+062000110530       01 lc_ErrCode                   PIC X(02)    VALUE SPACES.
+06210012092899609  01 lc_ErrCode1                  PIC X(03)    VALUE SPACES.
+062200110530       01 lc_ErrDesc                   PIC X(80)    VALUE SPACES.
+062300110530
+062400110606       01 WS-SQL-SELECT                PIC X(100)   VALUE SPACES.
+062500110613
+062600110613       01 lc_ADDRSUM_Record.
+062700110701          03 lc_Temp_AddrNo            PIC S9(07).
+062800110701          03 lc_AptNo                  PIC X(06).
+062900110701          03 lc_CivicNo                PIC X(10).
+063000110701          03 lc_Street                 PIC X(50).
+063100110701          03 lc_Addr2                  PIC X(14).
+063200110701          03 lc_Addr3                  PIC X(40).
+063300110701          03 lc_City                   PIC X(30).
+063400110701          03 lc_Prov                   PIC X(02).
+063500110701          03 lc_Country                PIC X(03).
+063600110701          03 lc_Postal                 PIC X(10).
+063700110613
+063800110615       01 lc_ADDRDTL_Record.
+063900110701          03 lc_Temp_AddrNo_dtl        PIC S9(07).
+064000110701          03 lc_AptNo_dtl              PIC X(06).
+064100110701          03 lc_CivicNo_dtl            PIC X(10).
+064200110701          03 lc_Street_dtl             PIC X(50).
+064300110701          03 lc_Addr2_dtl              PIC X(14).
+064400110701          03 lc_Addr3_dtl              PIC X(40).
+064500110701          03 lc_City_dtl               PIC X(30).
+064600110701          03 lc_Prov_dtl               PIC X(02).
+064700110701          03 lc_Country_dtl            PIC X(03).
+064800110701          03 lc_Postal_dtl             PIC X(10).
+064900110701          03 lc_Final_AddrNo_dtl       PIC S9(07).
+065000111109
+065100111109       01 Lc_BirpFail                  PIC X(01).
+065200111109       01 Lncc_Y                       PIC X(01) VALUE "Y".
+065300111109       01 Lncc_N                       PIC X(01) VALUE "N".
+065400110615
+065500111219       01 Old_Format_In                PIC X(1000).
+065600111219       01 Old_Format_InR REDEFINES  Old_Format_In.
+065700111216          03 lc_OFI_RecordType         PIC X(02).
+065800111216          03 lc_OFI_DataBlock1         PIC X(48).
+065900120523      * RFS107921 - Start
+066000120523          03 Li_OFI_YTDCont            PIC S9(07)V99.
+066100120523          03 Li_OFI_YTDXfr             PIC S9(07)V99.
+066200120523          03 lc_OFI_DataBlock2         PIC X(933).
+066300120523      *   03 lc_OFI_DataBlock2         PIC X(947).
+066400120523      * RFS107921 - End
+066500111216          03 lc_OFI_Filler             PIC X(03).
+066600111216
+066700111219       01 New_Format_Out               PIC X(1000).
+066800111219       01 New_Format_OutR REDEFINES  New_Format_Out.
+066900111216          03 lc_NFO_RecordType         PIC X(02).
+067000111216          03 lc_NFO_VersionCod         PIC X(01).
+067100111216          03 lc_NFO_DataBlock1         PIC X(48).
+067200111216          03 li_NFO_NoYearsRes         PIC S9(02).
+067300120523      * RFS107921 - Start
+067400120523          03 Li_NFO_YTDCont            PIC S9(07)V99.
+067500120523          03 Li_NFO_YTDXfr             PIC S9(07)V99.
+067600120523          03 Li_NFO_YTDDeposit         PIC S9(07)V99.
+067700120523          03 lc_NFO_DataBlock2         PIC X(933).
+067800120523      *   03 lc_NFO_DataBlock2         PIC X(947).
+067900120523      * RFS107921 - End
+068000111219
+068100110530       COPY Cpctlp.
+068200110530
+068300110518       LINKAGE SECTION.
+068400110709       01 Lc_LibraryName               PIC  X(10).
+068500110709       01 Lc_FileName                  PIC  X(10).
+068600140113107500 01 Lc_First                     PIC  X(01).
+068700110518
+068800110603       PROCEDURE DIVISION USING  Lc_LibraryName
+068900140113107500*                          Lc_FileName.
+069000140113107500                           Lc_FileName
+069100140113107500                           Lc_First.
+069200110518
+069300110520       Mainline.
+069400110520
+069500110520           EXEC SQL
+069600110523              WHENEVER SQLERROR CONTINUE
+069700110520           END-EXEC.
+069800110518
+069900110520           PERFORM Initial-Logic.
+070000110520           PERFORM Detail-Process.
+070100120201           PERFORM Set-Request-File-Date.
+070200110520           PERFORM End-of-Program.
+070300110518
+070400110520       Initial-Logic.
+070500110518
+070600110606           Move Lc_FileName                  TO Lc_IQ02YYMMDD.
+070700140117
+070800140117      *RFS107500 - Start
+070900140117           IF Lc_IQ02YYMMDD(1:3) = 'IQ1' OR 'IQ2'
+071000140117              MOVE Lc_IQ02YYMMDD(4:6) TO YYMMDD
+071100140117           END-IF.
+071200140117      *RFS107500 - End
+071300140117
+071400110520           COMPUTE Li_MRQFileDate  = YYMMDD + 20000000.
+071500110520
+071600110526           EXEC SQL
+071700110526             SELECT Next_Number
+071800110606             INTO   :Li_StartAddrNo
+071900110606             FROM   MFACTLP CTLP
+072000110613             WHERE  CTLP.Control_Code = "ADD#"
+072100110526           END-EXEC.
+072200110527
+072300110527           MOVE SQLSTATE TO lc_sqlStates.
+072400110527           IF  NOT lncc_sqlSuccessful
+072500110527               SET lncc_Err_S1               TO TRUE
+072600110527               MOVE "MFACTLP"                TO lncc_SelectFileName
+072700110527               MOVE lncc_ErrorSelectingFile  TO lc_sqlErrShortDESCR
+072800110527               PERFORM SQLFailProcess
+072900110527           END-IF.
+073000110526
+073100110613
+073200110526           EXEC SQL
+073300110526             DROP TABLE QTEMP/ADDRDTL
+073400110526           END-EXEC.
+073500110526
+073600110526           EXEC SQL
+073700110526             CREATE TABLE QTEMP/ADDRDTL (
+073800110526               Temp_AddrNo        NUMERIC ( 7) NOT NULL WITH DEFAULT,
+073900110526               AptNo                 CHAR (06) NOT NULL WITH DEFAULT,
+074000110526               CivicNo               CHAR (10) NOT NULL WITH DEFAULT,
+074100110526               Street                CHAR (50) NOT NULL WITH DEFAULT,
+074200110526               Addr2                 CHAR (14) NOT NULL WITH DEFAULT,
+074300110526               Addr3                 CHAR (40) NOT NULL WITH DEFAULT,
+074400110526               City                  CHAR (30) NOT NULL WITH DEFAULT,
+074500110526               Prov                  CHAR (02) NOT NULL WITH DEFAULT,
+074600110526               Country               CHAR (03) NOT NULL WITH DEFAULT,
+074700110526               Postal                CHAR (10) NOT NULL WITH DEFAULT,
+074800110526               Final_AddrNo       NUMERIC ( 7) NOT NULL WITH DEFAULT
+074900110526             )
+075000110526           END-EXEC.
+075100110526
+075200110526           EXEC SQL
+075300110526             DROP TABLE QTEMP/ADDRSUM
+075400110526           END-EXEC.
+075500110526
+075600110526           EXEC SQL
+075700110526             CREATE TABLE QTEMP/ADDRSUM (
+075800110526               Temp_AddrNo        NUMERIC ( 7) NOT NULL WITH DEFAULT,
+075900110526               AptNo                 CHAR (06) NOT NULL WITH DEFAULT,
+076000110526               CivicNo               CHAR (10) NOT NULL WITH DEFAULT,
+076100110526               Street                CHAR (50) NOT NULL WITH DEFAULT,
+076200110526               Addr2                 CHAR (14) NOT NULL WITH DEFAULT,
+076300110526               Addr3                 CHAR (40) NOT NULL WITH DEFAULT,
+076400110526               City                  CHAR (30) NOT NULL WITH DEFAULT,
+076500110526               Prov                  CHAR (02) NOT NULL WITH DEFAULT,
+076600110526               Country               CHAR (03) NOT NULL WITH DEFAULT,
+076700110526               Postal                CHAR (10) NOT NULL WITH DEFAULT
+076800110526             )
+076900110526           END-EXEC.
+077000110526
+077100110526           EXEC SQL
+077200110526           CREATE INDEX QTEMP/ADDRSUMA ON
+077300110606             QTEMP/ADDRSUM (
+077400110606              AptNo,
+077500110526              CivicNo,
+077600110526              Street,
+077700110526              Addr2,
+077800110526              Addr3,
+077900110526              City,
+078000110526              Prov,
+078100110526              Country,
+078200110606              Postal
+078300110606              )
+078400110526           END-EXEC.
+078500110601
+078600140113107500     IF Lc_FIRST = 'Y'
+078700110624           EXEC SQL
+078800110624             DROP TABLE SFMRQNTFND
+078900140113107500*    END-EXEC.
+079000140113107500     END-EXEC
+079100110624           EXEC SQL
+079200110624             CREATE TABLE SFMRQNTFND (
+079300110624               MRQNTFND             CHAR (1000) NOT NULL WITH DEFAULT,
+079400110624               LIB                  CHAR (  10) NOT NULL WITH DEFAULT,
+079500140113107500*        FILE                 CHAR (  10) NOT NULL WITH DEFAULT
+079600140113107500         FILE                 CHAR (  10) NOT NULL WITH DEFAULT,
+079700140113107500         DESCRIPTION          CHAR ( 100) NOT NULL WITH DEFAULT
+079800110624               )
+079900140113107500*    END-EXEC.
+080000140113107500     END-EXEC
+080100140113107500     END-IF.
+080200110624
+080300110624           INITIALIZE WS-SQL-SELECT.
+080400110601           STRING
+080500120531      *      RFS107921.1 - Begins - change delimiters from ' to "
+080600120531             "SELECT * "
+080700111107             DELIMITED BY SIZE
+080800120531             " FROM "
+080900111107             DELIMITED BY SIZE
+081000110603             Lc_LibraryName
+081100120531             DELIMITED BY " "
+081200120531             "/"
+081300120531      *      RFS107921.1 - Ends
+081400111107             DELIMITED BY SIZE
+081500110601             Lc_FileName    DELIMITED BY SIZE
+081600110601             INTO WS-SQL-SELECT.
+081700110601
+081800110601           EXEC SQL
+081900110601             PREPARE MAIN_QRY_PRE FROM :WS-SQL-SELECT
+082000110601           END-EXEC.
+082100110601
+082200110601           EXEC SQL
+082300110601             DECLARE MAIN_Cursor CURSOR FOR MAIN_QRY_PRE
+082400110601           END-EXEC.
+082500110601
+082600110518           EXEC SQL
+082700110601             OPEN MAIN_Cursor
+082800110518           END-EXEC.
+082900110518
+083000110606           MOVE SQLSTATE                     TO lc_sqlStates.
+083100110606           IF  NOT lncc_sqlSuccessful
+083200110610               SET lncc_Err_Open1            TO TRUE
+083300110606               MOVE "CURSOR MAIN"            TO lncc_OpenCursor
+083400110606               MOVE lncc_ErrorOpeningCursor  TO lc_sqlErrShortDESCR
+083500110530               PERFORM SQLFailProcess
+083600110530           END-IF.
+083700110624
+083800110624           INITIALIZE Li_InputRec.
+083900110624           SET lncc_MAINStart            TO TRUE.
+084000110624           PERFORM  ProcessInputRecCnt UNTIL lncc_MAINEnd.
+084100110624           COMPUTE Li_StartAddrNo  = Li_StartAddrNo + Li_InputRec.
+084200110624
+084300110624           EXEC SQL
+084400110624             CLOSE MAIN_Cursor
+084500110624           END-EXEC.
+084600110624
+084700110624           EXEC SQL
+084800110624             OPEN MAIN_Cursor
+084900110624           END-EXEC.
+085000110624
+085100110624           MOVE SQLSTATE                     TO lc_sqlStates.
+085200110624           IF  NOT lncc_sqlSuccessful
+085300110624               SET lncc_Err_Open1            TO TRUE
+085400110624               MOVE "CURSOR MAIN"            TO lncc_OpenCursor
+085500110624               MOVE lncc_ErrorOpeningCursor  TO lc_sqlErrShortDESCR
+085600110624               PERFORM SQLFailProcess
+085700110624           END-IF.
+085800110624
+085900110624        ProcessInputRecCnt.
+086000110624           EXEC SQL
+086100110624             FETCH NEXT FROM MAIN_Cursor
+086200110624           END-EXEC.
+086300110624
+086400110624           MOVE SQLSTATE                     TO lc_sqlStates.
+086500110624           IF  lncc_sqlSuccessful
+086600110624               COMPUTE Li_InputRec =  Li_InputRec + 1
+086700110624           ELSE IF lncc_sqlEnd
+086800110624                SET lncc_MAINEnd             TO TRUE
+086900110624           ELSE
+087000110624               SET lncc_Err_Fetch1           TO TRUE
+087100110624               MOVE "FETCH MAIN"             TO lncc_FetchCursor
+087200110624               MOVE lncc_ErrorFetchingCursor TO lc_sqlErrShortDESCR
+087300110624               PERFORM SQLFailProcess
+087400110624           END-IF.
+087500110624
+087600110520       Detail-Process.
+087700110606           SET lncc_MAINStart                TO TRUE.
+087800111107           PERFORM ProcessRecord UNTIL lncc_MAINEnd
+087900111107                                    OR lncc_Err_Fetch1
+088000110610           PERFORM SetFinalAddress.
+088100110518
+088200110518       ProcessRecord.
+088300110527
+088400110527           INITIALIZE Lc_RecordIn.
+088500110526           EXEC SQL
+088600110601             FETCH NEXT FROM MAIN_Cursor
+088700110526             INTO :Lc_RecordIn
+088800110526           END-EXEC.
+088900110526
+089000110606           MOVE SQLSTATE                     TO lc_sqlStates.
+089100110606           IF  NOT lncc_sqlSuccessful
+089200110610               SET lncc_Err_Fetch1           TO TRUE
+089300110606               MOVE "FETCH MAIN"             TO lncc_FetchCursor
+089400110530               MOVE lncc_ErrorFetchingCursor TO lc_sqlErrShortDESCR
+089500110530               PERFORM SQLFailProcess
+089600110530           END-IF.
+089700110530
+089800110608           INITIALIZE Li_Fetch-Ben-AddrNo
+089900110608                      Li_Fetch-Sub-AddrNo
+090000110701                      Li_Fetch-AddrNo
+090100110608                      Lc_Fetch-AptNo
+090200110608                      Lc_Fetch-CivicNo
+090300110608                      Lc_Fetch-Street
+090400110608                      Lc_Fetch-Addr2
+090500110608                      Lc_Fetch-Addr3
+090600110608                      Lc_Fetch-City
+090700110608                      Lc_Fetch-Prov
+090800110608                      Lc_Fetch-Country
+090900110608                      Lc_Fetch-Postal.
+091000110518
+091100110701           EVALUATE Lc_RecordType
+091200110701             WHEN Lncc_02
+091300120203                  Perform Preprocess02
+091400110701             WHEN Lncc_03
+091500110701                  Perform Process03
+091600110701             WHEN Lncc_04
+091700110701                  Perform Process04
+091800110701             WHEN Lncc_05
+091900110701                  Perform Process05
+092000110701             WHEN Lncc_06
+092100110701                  Perform Process06
+092200120924      *RFS99609 - Start
+092300120924             WHEN Lncc_22
+092400120924                  Perform Process22
+092500121015             WHEN lncc_32
+092600120924                  Perform Process32
+092700120924      *RFS99609 - End
+092800121109      *103860   - Start
+092900121109             WHEN lncc_12
+093000121109                  Perform Process12
+093100121109      *103860   - End
+093200110701             WHEN Lncc_99
+093300110701                  SET lncc_MAINEnd             TO TRUE
+093400110701           END-EVALUATE.
+093500111216
+093600111216       Preprocess02.
+093700111216           Move  Lc_RecordIn                 TO lc_Current_02_Record.
+093800111216           IF li_C_FilingYear is NUMERIC
+093900111216              IF li_C_FilingYear < 2007
+094000111216                 MOVE Lc_RecordIn TO Old_Format_In
+094100111219                 MOVE lc_OFI_RecordType TO lc_NFO_RecordType
+094200111219                 MOVE lc_OFI_DataBlock1 TO lc_NFO_DataBlock1
+094300111216                 MOVE lc_OFI_DataBlock2 TO lc_NFO_DataBlock2
+094400120523      * RFS107921 - Start
+094500120523                 MOVE Li_OFI_YTDCont    TO Li_NFO_YTDCont
+094600120523                 MOVE Li_OFI_YTDXfr     TO Li_NFO_YTDXfr
+094700120523                 COMPUTE Li_NFO_YTDDeposit = Li_OFI_YTDCont +
+094800120523                                             Li_OFI_YTDXfr
+094900120523      * RFS107921 - End
+095000111216                 MOVE "0" TO lc_NFO_VersionCod
+095100111216                 MOVE ZEROS TO li_NFO_NoYearsRes
+095200111216                 MOVE New_format_Out TO lc_Current_02_Record
+095300120523      * RFS107921 - Start
+095400120523                 IF lc_C_IQEE_Trnsfr_Ind IS NOT NUMERIC
+095500120523                   MOVE 0 TO lc_C_IQEE_Trnsfr_Ind
+095600120523                 END-IF
+095700120523                 IF li_C_PCG_Type_Code  IS NOT NUMERIC
+095800120523                   MOVE 0 TO li_C_PCG_Type_Code
+095900120523                 END-IF
+096000120531      *   RFS 107921.1 - Begins - li_C_Resp_Type_Code was O/N (Oui/Non or Y/N)
+096100120531                 IF lc_C_Resp_Type_Code
+096200120531                    IS NOT NUMERIC
+096300120531                    EVALUATE lc_C_Resp_Type_Code
+096400120531                    WHEN "O"
+096500120531                       MOVE "1" TO lc_C_Resp_Type_Code
+096600120531                    WHEN OTHER
+096700120531                       MOVE "0" TO lc_C_Resp_Type_Code
+096800120531                    END-EVALUATE
+096900120531                 END-IF
+097000120531                 IF lc_C_Benef_Sex_X
+097100120531                    IS NOT NUMERIC
+097200120531                    EVALUATE lc_C_Benef_Sex_X
+097300120531                    WHEN "F"
+097400120531                       MOVE "1" TO lc_C_Benef_Sex_X
+097500120531                    WHEN OTHER
+097600120531                       MOVE "2" TO lc_C_Benef_Sex_X
+097700120531                    END-EVALUATE
+097800120531                 END-IF
+097900120531                 IF li_C_Benef_QcResident_X
+098000120531                    IS NOT NUMERIC
+098100120531                    EVALUATE li_C_Benef_QcResident_X
+098200120531                    WHEN "O"
+098300120531                       MOVE "1" TO li_C_Benef_QcResident_X
+098400120531                    WHEN OTHER
+098500120531                       MOVE "0" TO li_C_Benef_QcResident_X
+098600120531                    END-EVALUATE
+098700120531                 END-IF
+098800120531                 IF li_C_Subsc_Type_X
+098900120531                    IS NOT NUMERIC
+099000120531                    EVALUATE li_C_Subsc_Type_X
+099100120531                    WHEN "P"
+099200120531                       MOVE "1" TO li_C_Subsc_Type_X
+099300120531                    WHEN OTHER
+099400120531                       MOVE "2" TO li_C_Subsc_Type_X
+099500120531                    END-EVALUATE
+099600120531                 END-IF
+099700120531                 IF li_C_PCG_Type_Code_X
+099800120531                    IS NOT NUMERIC
+099900120531                    EVALUATE li_C_PCG_Type_Code_X
+100000120531                    WHEN "P"
+100100120531                       MOVE "1" TO li_C_PCG_Type_Code_X
+100200120531                    WHEN OTHER
+100300120531                       MOVE "2" TO li_C_PCG_Type_Code_X
+100400120531                    END-EVALUATE
+100500120531                 END-IF
+100600120608                 IF lc_C_JoinSub_BenRelation
+100700120608                    IS NOT NUMERIC
+100800120608                    MOVE "0"
+100900120608                      TO lc_C_JoinSub_BenRelation
+101000120608                 END-IF
+101100120608                 IF lc_C_JoinSub_Phone
+101200120608                    IS NOT NUMERIC
+101300120608                    MOVE "0000000000"
+101400120608                      TO lc_C_JoinSub_Phone
+101500120608                 END-IF
+101600120608                 IF li_C_Subsc_SIN
+101700120608                    IS NOT NUMERIC
+101800120608                    MOVE 0
+101900120608                      TO li_C_Subsc_SIN
+102000120608                 END-IF
+102100120608                 IF lc_C_Subsc_BenRelation
+102200120608                    IS NOT NUMERIC
+102300120608                    MOVE 0
+102400120608                      TO lc_C_Subsc_BenRelation
+102500120608                 END-IF
+102600120608                 IF lc_C_Subsc_Phone
+102700120608                    IS NOT NUMERIC
+102800120608                    MOVE 0
+102900120608                      TO lc_C_Subsc_Phone
+103000120608                 END-IF
+103100120608                 IF li_C_JoinSub_SIN
+103200120608                    IS NOT NUMERIC
+103300120608                    MOVE 0
+103400120608                      TO li_C_JoinSub_SIN
+103500120608                 END-IF
+103600120608                 IF lc_C_JoinSub_BenRelation
+103700120608                    IS NOT NUMERIC
+103800120608                    MOVE 0
+103900120608                      TO lc_C_JoinSub_BenRelation
+104000120608                 END-IF
+104100120608                 IF lc_C_JoinSub_Phone
+104200120608                    IS NOT NUMERIC
+104300120608                    MOVE 0
+104400120608                      TO lc_C_JoinSub_Phone
+104500120608                 END-IF
+104600120608                 IF li_C_PCG_SIN
+104700120608                    IS NOT NUMERIC
+104800120608                    MOVE 0
+104900120608                      TO li_C_PCG_SIN
+105000120608                 END-IF
+105100120608                 IF lc_C_PCG_BenRelation
+105200120608                    IS NOT NUMERIC
+105300120608                    MOVE 0
+105400120608                      TO lc_C_PCG_BenRelation
+105500120608                 END-IF
+105600120608                 IF lc_C_PCG_PhoneNumber
+105700120608                    IS NOT NUMERIC
+105800120608                    MOVE 0
+105900120608                      TO lc_C_PCG_PhoneNumber
+106000120608                 END-IF
+106100120531      *   RFS 107921.1 - Ends
+106200120523      * RFS107921 - End
+106300111216                 PERFORM Process02
+106400111216             ELSE
+106500120523      * RFS107921 - Start
+106600120523                 IF lc_C_IQEE_Trnsfr_Ind IS NOT NUMERIC
+106700120523                   MOVE 0 TO lc_C_IQEE_Trnsfr_Ind
+106800120523                 END-IF
+106900120523                 IF li_C_PCG_Type_Code  IS NOT NUMERIC
+107000120523                   MOVE 0 TO li_C_PCG_Type_Code
+107100120523                 END-IF
+107200120523      * RFS107921 - End
+107300111216                 PERFORM Process02
+107400111216             END-IF
+107500111216           END-IF.
+107600111216
+107700110518       Process02.
+107800110518           INITIALIZE  Li_BenSeqNo
+107900110518                       Lc_MRQStatus
+108000110518                       Lc_MRQStatusReason
+108100110518                       Li_BaseGrant
+108200110518                       Li_IncreaseGrant
+108300110518                       Li_Interest
+108400140113107500                 Li_assistedcap
+108500140113107500                 Li_description
+108600110518                       Li_BIRPFileDate.
+108700110518           EXEC SQL
+108800110518             SELECT Beneficiary_seq_no,
+108900110518                    MRQ_Approval_status,
+109000110518                    MRQ_Approval_Status_Reason,
+109100110518                    REQUEST_AMT_BASE,
+109200110518                    REQUEST_AMT_INCREASE,
+109300110518                    REQUEST_AMT_INTEREST,
+109400140113107500              ASSISTED_CAPITAL,
+109500110518                    MRQ_File_date
+109600110518             INTO   :Li_BenSeqNo,
+109700110518                    :Lc_MRQStatus,
+109800110518                    :Lc_MRQStatusReason,
+109900110518                    :Li_BaseGrant,
+110000110518                    :Li_IncreaseGrant,
+110100110518                    :Li_Interest,
+110200140113107500              :Li_assistedcap,
+110300110603                    :Li_BIRPFileDate
+110400110518             FROM   MFAACBIRP
+110500110518             WHERE  Account_no          = :li_C_Account_No
+110600110518             AND    Year                = :li_C_FilingYear
+110700110520             AND    Social_insurance_No = :li_C_Benef_SIN
+110800110518           END-EXEC.
+110900110520
+111000110608           MOVE SQLSTATE                     TO lc_sqlStates.
+111100110527           IF  NOT lncc_sqlSuccessful
+111200110527               SET lncc_Err_S2               TO TRUE
+111300110527               MOVE "MFAACBIRP"              TO lncc_SelectFileName
+111400110527               MOVE lncc_ErrorSelectingFile  TO lc_sqlErrShortDESCR
+111500110527               PERFORM SQLFailProcess
+111600140113107500         STRING "Account # = "            DELIMITED BY SIZE
+111700140113  |                   li_C_Account_No           DELIMITED BY SIZE
+111800140113  |                   " Year = "                DELIMITED BY SIZE
+111900140113  |                   li_C_FilingYear           DELIMITED BY SIZE
+112000140113  |                   " Social_insurance_No = " DELIMITED BY SIZE
+112100140113  |                   li_C_Benef_SIN            DELIMITED BY SIZE
+112200140113  |                   " Missing from "          DELIMITED BY SIZE
+112300140113  |                   lncc_SelectFileName       DELIMITED BY SIZE
+112400140113107500                INTO                      Li_description
+112500110527               PERFORM LogError
+112600140113107500         GO TO ProcessRecord
+112700140113  |        ELSE
+112800140113107500         PERFORM Process02Continued
+112900110527           END-IF.
+113000110526
+113100140113107500 Process02Continued.
+113200140113
+113300110530           IF  Lc_MRQStatus NOT = Lncc_A
+113400110530           OR  Li_MRQFileDate = Li_BIRPFileDate
+113500110608               MOVE ZEROS                    TO Li_BIRPFileDate
+113600110526           END-IF.
+113700110520
+113800110526           EXEC SQL
+113900110601             SELECT    COALESCE(RQP.Ben_Addr_No,0),
+114000110601                       COALESCE(RQP.Sub_Addr_No,0)
+114100110601             INTO      :Li_Fetch-Ben-AddrNo,
+114200110601                       :Li_Fetch-Sub-AddrNo
+114300110601             FROM      MFAACCNTP ACCNTP
+114400110606             LEFT JOIN MFAMRQRQP RQP
+114500110601             ON        ACCNTP.Account_no      = RQP.Account_no
+114600110601             AND       RQP.Beneficiary_Seq_No = :Li_BenSeqNo
+114700110601             WHERE     ACCNTP.Account_no      = :li_C_Account_No
+114800110704             AND       RQP.MRQ_Version_Code   <> 1
+114900110606             ORDER BY  RQP.MRQ_File_Date Desc,
+115000110601                       RQP.MRQ_Version_Code
+115100110526             FETCH FIRST ROW ONLY
+115200110526           END-EXEC.
+115300110530
+115400110606           MOVE Li_Fetch-Ben-AddrNo           TO Li_Validate-AddrNo.
+115500110606           MOVE lc_C_Benef_AptNo              TO Lc_Validate-AptNo.
+115600110606           MOVE lc_C_Benef_StreetNo           TO Lc_Validate-CivicNo.
+115700110606           MOVE lc_C_Benef_StreetName         TO Lc_Validate-Street.
+115800110606           MOVE lc_C_Benef_AddLine2           TO Lc_Validate-Addr2.
+115900110606           MOVE lc_C_Benef_AddLine3           TO Lc_Validate-Addr3.
+116000110606           MOVE lc_C_Benef_City               TO Lc_Validate-City.
+116100110606           MOVE lc_C_Benef_Prov               TO Lc_Validate-Prov.
+116200110606           MOVE lc_C_Benef_Country            TO Lc_Validate-Country.
+116300110606           MOVE lc_C_Benef_PostalCode         TO Lc_Validate-Postal.
+116400110526           PERFORM Validate_Address.
+116500110526
+116600110704           IF  Li_Validate-AddrNo = 0
+116700110526               Perform Create_TempAddress
+116800110606               MOVE  Li_Validate-AddrNo       TO Li_Fetch-Ben-AddrNo
+116900110606           END-IF.
+117000110527
+117100110704           IF  li_Fetch-Sub-AddrNo = 0
+117200110606             MOVE  Li_Fetch-Ben-AddrNo        TO li_Fetch-Sub-AddrNo
+117300110606           END-IF.
+117400110606
+117500110606           MOVE Li_Fetch-Sub-AddrNo           TO Li_Validate-AddrNo.
+117600110606           MOVE lc_C_Subsc_AptNo              TO Lc_Validate-AptNo.
+117700110606           MOVE lc_C_Subsc_StreetNo           TO Lc_Validate-CivicNo.
+117800110606           MOVE lc_C_Subsc_StreetName         TO Lc_Validate-Street.
+117900110606           MOVE lc_C_Subsc_AddrLine2          TO Lc_Validate-Addr2.
+118000110606           MOVE lc_C_Subsc_AddrLine3          TO Lc_Validate-Addr3.
+118100110606           MOVE lc_C_Subsc_City               TO Lc_Validate-City.
+118200110606           MOVE lc_C_Subsc_Prov               TO Lc_Validate-Prov.
+118300110606           MOVE lc_C_Subsc_Country            TO Lc_Validate-Country.
+118400110606           MOVE lc_C_Subsc_PostalCode         TO Lc_Validate-Postal.
+118500110526           Perform Validate_Address.
+118600110526
+118700110704           IF  Li_Validate-AddrNo = 0
+118800110606             IF  Li_Fetch-Sub-AddrNo = Li_Fetch-Ben-AddrNo
+118900110606                 PERFORM Create_TempAddress
+119000110606                 MOVE  Li_Validate-AddrNo     TO Li_Fetch-Sub-AddrNo
+119100110606             ELSE
+119200110606                 MOVE Li_Fetch-Ben-AddrNo     TO Li_Fetch-Sub-AddrNo
+119300110606                 PERFORM Validate_Address
+119400110704                 IF  Li_Validate-AddrNo = 0
+119500110606                     PERFORM Create_TempAddress
+119600110606                     MOVE  Li_Validate-AddrNo TO Li_Fetch-Sub-AddrNo
+119700110606                 END-IF
+119800110606             END-IF
+119900110606           END-IF.
+120000110523
+120100140113107500* insert value of assisted_capital***
+120200140113
+120300110527           EXEC SQL
+120400110523               INSERT INTO MFAMRQRQP (
+120500110523                      ACCOUNT_NO,
+120600110523                      BENEFICIARY_SEQ_NO,
+120700110523                      REQUEST_AMT_BASE,
+120800110523                      REQUEST_AMT_INCREASE,
+120900110523                      REQUEST_AMT_INTEREST,
+121000140113107500                ASSISTED_CAPITAL,
+121100110523                      MRQ_FILE_DATE,
+121200110523                      MRQ_RESPONSE_DATE,
+121300110523                      MRQ_APPROVAL_STATUS,
+121400110523                      MRQ_APPROVAL_STATUS_REASON,
+121500111107                      RECORD_TYPE_2,
+121600110523                      MRQ_VERSION_CODE,
+121700110523                      YEAR,
+121800110523                      VENDOR_BN,
+121900110627                      SPECIMEN_ID,
+122000110523                      PLAN_SETUP_DATE,
+122100110523                      IND_SIBLING_ONLY,
+122200110523                      NO_OF_YEARS_QC_RESIDENT,
+122300110523                      YTD_AMOUNT,
+122400110523                      YTD_TRANSFER_AMOUNT,
+122500120418108242                NET_CONTRIBUTION,
+122600110523                      LTD_AMOUNT,
+122700110523                      BEN_SIN,
+122800110523                      BEN_LAST_NAME,
+122900110523                      BEN_FIRST_NAME,
+123000110530                      BEN_DATE_OF_BIRTH,
+123100110530                      BEN_GENDER,
+123200110523                      Ben_Addr_No,
+123300110523                      BEN_QC_RESIDENT_IND,
+123400110523                      SUBSCRIBER_TYPE,
+123500110523                      IVR_SIN,
+123600110523                      IVR_BUSINESS_NUMBER_REVQ,
+123700110523                      IVR_NAME,
+123800110523                      IVR_BEN_RELATION,
+123900110523                      Sub_Addr_No,
+124000110523                      IVR_PHONE_NUMBER,
+124100110523                      JNT_SIN,
+124200110523                      JNT_LAST_NAME,
+124300110523                      JNT_FIRST_NAME,
+124400110523                      JNT_BEN_RELATION,
+124500110523                      JNT_PHONE_NUMBER,
+124600110523                      PCG_TYPE,
+124700110523                      PCG_SIN,
+124800110523                      PCG_BUSINESS_NUMBER_REVQ,
+124900110523                      PCG_NAME,
+125000110523                      PCG_BEN_RELATION,
+125100110523                      PCG_PHONE_NUMBER,
+125200110530                      QESI_ASSIGNMENT_IND
+125300110606               ) VALUES (
+125400110523                      :li_C_Account_No,
+125500110523                      :Li_BenSeqNo,
+125600110523                      :Li_BaseGrant,
+125700110523                      :Li_IncreaseGrant,
+125800110523                      :Li_Interest,
+125900140113107500                :Li_assistedcap,
+126000110523                      :Li_MRQFileDate,
+126100110523                      :Li_BIRPFileDate,
+126200110523                      :Lc_MRQStatus,
+126300110523                      :Lc_MRQStatusReason,
+126400111107                      :li_C_RecordType,
+126500111107                      :li_C_Trxn_VersCde,
+126600110523                      :li_C_FilingYear,
+126700110523                      :lc_C_PromoterID,
+126800110523                      :li_C_SpecimenPlanNo,
+126900110523                      :li_C_Plan_Setup_Date,
+127000110527                      :li_C_Resp_Type_Code,
+127100110523                      :li_C_No_Years_QcResident,
+127200110523                      :ln_C_YTD_Amount,
+127300110523                      :ln_C_YTD_Transfer_Amount,
+127400120418108242                :ln_C_YTD_Deposit_Amount,
+127500110523                      :ln_C_LTD_Amount,
+127600110523                      :li_C_Benef_SIN,
+127700110523                      :lc_C_Benef_LastName,
+127800110523                      :lc_C_Benef_FirstName,
+127900110523                      :li_C_Benef_DOB,
+128000110523                      :lc_C_Benef_Sex,
+128100110527                      :Li_Fetch-Ben-AddrNo,
+128200110523                      :li_C_Benef_QcResident,
+128300110527                      :li_C_Subsc_Type,
+128400110523                      :li_C_Subsc_SIN,
+128500110523                      :lc_C_Subsc_BusNumber,
+128600110523                      :lc_C_Subsc_Name,
+128700110523                      :lc_C_Subsc_BenRelation,
+128800110527                      :Li_Fetch-Sub-AddrNo,
+128900110523                      :lc_C_Subsc_Phone,
+129000110523                      :li_C_JoinSub_SIN,
+129100110523                      :lc_C_JoinSub_LastName,
+129200110523                      :lc_C_JoinSub_FirstName,
+129300110523                      :lc_C_JoinSub_BenRelation,
+129400110523                      :lc_C_JoinSub_Phone,
+129500110523                      :li_C_PCG_Type_Code,
+129600110523                      :li_C_PCG_SIN,
+129700110523                      :lc_C_PCG_BusinessNo,
+129800110523                      :lc_C_PCG_Name,
+129900110523                      :lc_C_PCG_BenRelation,
+130000110523                      :lc_C_PCG_PhoneNumber,
+130100110523                      :lc_C_IQEE_Trnsfr_Ind
+130200110523                       )
+130300110527           END-EXEC.
+130400110523
+130500110608           MOVE SQLSTATE                       TO lc_sqlStates.
+130600110527           IF  lncc_sqlSuccessful
+130700110530               EXEC SQL
+130800110530                 UPDATE MFAACBIRP
+130900110530                 SET MRQ_File_Date          = :Li_MRQFileDate
+131000110530                 WHERE  Account_no          = :li_C_Account_No
+131100110530                 AND    Year                = :li_C_FilingYear
+131200110530                 AND    Social_insurance_No = :li_C_Benef_SIN
+131300110530               END-EXEC
+131400110606
+131500110608               MOVE SQLSTATE                   TO lc_sqlStates
+131600110601               IF  NOT lncc_sqlSuccessful
+131700110608                   SET lncc_Err_U1             TO TRUE
+131800110608                   MOVE "MFAACBIRP"            TO lncc_UpdateFileName
+131900110608                   MOVE lncc_ErrorUpdatingFile TO lc_sqlErrShortDESCR
+132000110530                   PERFORM SQLFailProcess
+132100110530               END-IF
+132200110527           ELSE
+132300110606               SET lncc_Err_I2                TO TRUE
+132400110606               MOVE "MFAMRQRQP "              TO lncc_InsertFileName
+132500110606               MOVE lncc_ErrorInsertingFile   TO lc_sqlErrShortDESCR
+132600110527               PERFORM SQLFailProcess
+132700110527           END-IF.
+132800110523
+132900110518       Process03.
+133000110606           Move  Lc_RecordIn                  TO lc_Current_03_Record.
+133100110518           INITIALIZE  Li_BenSeqNo
+133200110518                       Li_ToBenSeqNo
+133300110518                       Lc_MRQStatus
+133400140113107500                 Li_description
+133500110518                       Lc_MRQStatusReason.
+133600110518           EXEC SQL
+133700110518             SELECT Beneficiary_seq_no,
+133800110518                    To_Beneficiary_seq_no,
+133900110518                    MRQ_Approval_status,
+134000110518                    MRQ_Approval_Status_Reason
+134100110518             INTO   :Li_BenSeqNo,
+134200110518                    :Li_ToBenSeqNo,
+134300110518                    :Lc_MRQStatus,
+134400110518                    :Lc_MRQStatusReason
+134500110518             FROM   MFAACCBRP
+134600110601             WHERE  Account_no          = :li_C3_Account_No
+134700110601             AND    Replacement_Date    = :li_C3_Replacement_Date
+134800110518             AND    Social_insurance_No = :li_C3_Benef_SIN_Old
+134900110518           END-EXEC.
+135000110526
+135100110608           MOVE SQLSTATE                     TO lc_sqlStates.
+135200110606           IF  NOT lncc_sqlSuccessful
+135300110606               SET lncc_Err_S3               TO TRUE
+135400110606               MOVE "MFAACCBRP"              TO lncc_SelectFileName
+135500110606               MOVE lncc_ErrorSelectingFile  TO lc_sqlErrShortDESCR
+135600110606               PERFORM SQLFailProcess
+135700140113107500         STRING "Account # = "            DELIMITED BY SIZE
+135800140113  |                   li_C3_Account_No          DELIMITED BY SIZE
+135900140113  |                   " Replacement Date = "    DELIMITED BY SIZE
+136000140113  |                   li_C3_Replacement_Date    DELIMITED BY SIZE
+136100140113  |                   " Social_insurance_No = " DELIMITED BY SIZE
+136200140113  |                   li_C3_Benef_SIN_Old       DELIMITED BY SIZE
+136300140113  |                   " Missing from "          DELIMITED BY SIZE
+136400140113  |                   lncc_SelectFileName       DELIMITED BY SIZE
+136500140113107500                INTO                      Li_description
+136600110606               PERFORM LogError
+136700140113107500         GO TO ProcessRecord
+136800140113  |        ELSE
+136900140113107500         PERFORM Process03Continued
+137000110527           END-IF.
+137100110526
+137200140113107500 Process03Continued.
+137300140113
+137400110526           EXEC SQL
+137500110608             SELECT    COALESCE(BRP.Ben_Addr_No,0)
+137600110601             INTO      :Li_Fetch-Ben-AddrNo
+137700110601             FROM      MFAACCNTP ACCNTP
+137800110601             LEFT JOIN MFAMRQBRP BRP
+137900110601             ON        ACCNTP.Account_no    = BRP.Account_no
+138000110601             WHERE     ACCNTP.Account_no    = :li_C3_Account_No
+138100110704             AND       BRP.MRQ_Version_Code <> 1
+138200110601             ORDER BY  BRP.MRQ_File_Date Desc,
+138300110601                       BRP.MRQ_Version_Code
+138400110526             FETCH FIRST ROW ONLY
+138500110526           END-EXEC.
+138600110526
+138700110608           Move Li_Fetch-Ben-AddrNo     TO Li_Validate-AddrNo.
+138800110606           Move lc_C3_Benef_AptNo       TO Lc_Validate-AptNo.
+138900110606           Move lc_C3_Benef_StreetNo    TO Lc_Validate-CivicNo.
+139000110606           Move lc_C3_Benef_StreetName  TO Lc_Validate-Street.
+139100110606           Move lc_C3_Benef_AddLine2    TO Lc_Validate-Addr2.
+139200110606           Move lc_C3_Benef_AddLine3    TO Lc_Validate-Addr3.
+139300110606           Move lc_C3_Benef_City        TO Lc_Validate-City.
+139400110606           Move lc_C3_Benef_Prov        TO Lc_Validate-Prov.
+139500110606           Move lc_C3_Benef_Country     TO Lc_Validate-Country.
+139600110606           Move lc_C3_Benef_PostalCode  TO Lc_Validate-Postal.
+139700110526           Perform Validate_Address.
+139800110526
+139900110704           IF  Li_Validate-AddrNo = 0
+140000110526               PERFORM Create_TempAddress
+140100110606               MOVE  Li_Validate-AddrNo TO Li_Fetch-Ben-AddrNo
+140200110526           END-IF.
+140300110518
+140400110526           EXEC SQL
+140500110523               INSERT INTO MFAMRQBRP  (
+140600110523                      BENEFICIARY_SEQ_NO,
+140700110523                      TO_BENEFICIARY_SEQ_NO,
+140800110523                      MRQ_FILE_DATE,
+140900110523                      MRQ_APPROVAL_STATUS,
+141000110523                      MRQ_APPROVAL_STATUS_REASON,
+141100110523                      RECORD_TYPE_2,
+141200110523                      MRQ_VERSION_CODE,
+141300110523                      VENDOR_BN,
+141400110523                      ACCOUNT_NO,
+141500110627                      SPECIMEN_ID,
+141600110523                      REPLACEMENT_DATE,
+141700110523                      IND_SIBLING_ONLY,
+141800110523                      OLD_BEN_SIN,
+141900110523                      OLD_BEN_LAST_NAME,
+142000110523                      OLD_BEN_FIRST_NAME,
+142100110523                      OLD_BEN_BIRTH_DATE,
+142200110523                      OLD_BEN_GENDER,
+142300110530                      TO_SOCIAL_INSURANCE_NO,
+142400110530                      TO_BEN_LAST_NAME,
+142500110530                      TO_BEN_FIRST_NAME,
+142600110530                      TO_BEN_DATE_OF_BIRTH,
+142700110530                      TO_BEN_GENDER,
+142800110526                      BEN_Addr_NO,
+142900110523                      SUBSCRIBER_TYPE,
+143000110523                      BEN_QC_RESIDENT_IND,
+143100110720                      IVR_BEN_RELATION
+143200110606               ) VALUES (
+143300110523                      :Li_BenSeqNo,
+143400110523                      :Li_ToBenSeqNo,
+143500110523                      :Li_MRQFileDate,
+143600110523                      :Lc_MRQStatus,
+143700110523                      :Lc_MRQStatusReason,
+143800110523                      :li_C3_RecordType,
+143900110523                      :li_C3_Trxn_VersCde,
+144000110523                      :lc_C3_PromoterID,
+144100110523                      :li_C3_Account_No,
+144200110523                      :li_C3_SpecimenPlanNo,
+144300110523                      :li_C3_Replacement_Date,
+144400110523                      :lc_C3_Resp_Type_Code,
+144500110523                      :li_C3_Benef_SIN_Old,
+144600110523                      :lc_C3_Benef_LastName_Old,
+144700110523                      :lc_C3_Benef_FirstName_Old,
+144800110523                      :li_C3_Benef_DOB_Old,
+144900110523                      :lc_C3_Benef_Sex_Old,
+145000110523                      :li_C3_Benef_SIN_New,
+145100110523                      :lc_C3_Benef_LastName_New,
+145200110523                      :lc_C3_Benef_FirstName_New,
+145300110523                      :li_C3_Benef_DOB_New,
+145400110523                      :lc_C3_Benef_Sex_New,
+145500110527                      :Li_Fetch-Ben-AddrNo,
+145600110523                      :lc_C3_Subsc_Type,
+145700110523                      :li_C3_Benef_QcResident,
+145800110720                      :lc_C3_Subsc_BenRelation
+145900110523                      )
+146000110526           END-EXEC.
+146100110527
+146200110606           MOVE SQLSTATE                    TO lc_sqlStates.
+146300110606           IF  NOT lncc_sqlSuccessful
+146400110606               SET lncc_Err_I3              TO TRUE
+146500110606               MOVE "MFAMRQBRP "            TO lncc_InsertFileName
+146600110527               MOVE lncc_ErrorInsertingFile TO lc_sqlErrShortDESCR
+146700110527               PERFORM SQLFailProcess
+146800110527           END-IF.
+146900110518
+147000110518       Process04.
+147100110606           Move  Lc_RecordIn                TO lc_Current_04_Record.
+147200110518           INITIALIZE  Li_TransferSeqNo
+147300110518                       Li_BenSeqNo
+147400110518                       Lc_MRQStatus
+147500140113107500                 Li_description
+147600110518                       Lc_MRQStatusReason.
+147700110518           EXEC SQL
+147800110518             SELECT NDP.Transfer_Seq_No,
+147900110518                    NDP.Beneficiary_seq_no,
+148000110518                    NDP.MRQ_Approval_status,
+148100110518                    NDP.MRQ_Approval_status_Reason
+148200110518             INTO   :Li_TransferSeqNo,
+148300110518                    :Li_BenSeqNo,
+148400110518                    :Lc_MRQStatus ,
+148500110518                    :Lc_MRQStatusReason
+148600110527             FROM   MFAARTNDP NDP
+148700110518             INNER JOIN MFAARTNP ARTNP
+148800110518             ON    NDP.Account_No             = ARTNP.Account_No
+148900110518             AND   NDP.Transfer_Seq_No        = ARTNP.Transfer_Seq_No
+149000120201             LEFT  JOIN MFAMRQXFP XFP
+149100120201             ON    NDP.Account_no             = XFP.Account_No
+149200120201             AND   NDP.Transfer_Seq_no        = XFP.Transfer_Seq_no
+149300120203             AND   XFP.Mrq_File_Date          = :Li_MRQFileDate
+149400110603             WHERE NDP.Account_no             = :li_C4_Account_No
+149500110518             AND   ARTNP.Transfer_Date        = :li_C4_Transfer_Date
+149600110518             AND   NDP.Social_insurance_No    = :li_C4_Benef_SIN
+149700110518             AND   ARTNP.Total_Transfer_Value = :ln_C4_Tot_Transfer_Amt
+149800110518             AND   CASE
+149900110518                   WHEN ARTNP.TRANSFER_CONTR_OR_REDEM = :Lncc_R
+150000110518                   THEN  :Lncc_01
+150100110518                   WHEN ARTNP.TRANSFER_CONTR_OR_REDEM = :Lncc_C
+150200110518                   THEN  :Lncc_02
+150300110518                   ELSE  :Lncc_01
+150400110518                   END = :li_C4_TrusteeType
+150500120203              ORDER BY ARTNP.TRANSFER_STATUS,
+150600120203                    CASE WHEN XFP.Account_no IS NULL THEN 0 ELSE 1 END,
+150700120203                     ARTNP.Transfer_seq_no
+150800111107           FETCH FIRST ROW ONLY
+150900111107           END-EXEC.
+151000111107
+151100110606           MOVE SQLSTATE                      TO lc_sqlStates.
+151200110606           IF  NOT lncc_sqlSuccessful
+151300110606               SET lncc_Err_S4                TO TRUE
+151400110606               MOVE "MFAARTNDP"               TO lncc_SelectFileName
+151500110606               MOVE lncc_ErrorSelectingFile   TO lc_sqlErrShortDESCR
+151600110606               PERFORM SQLFailProcess
+151700140113107500         MOVE ln_C4_Tot_Transfer_Amt    TO li_C4_Tot_Transfer_Amt
+151800140113  |            STRING "Account # = "            DELIMITED BY SIZE
+151900140113  |                   li_C4_Account_No          DELIMITED BY SIZE
+152000140113  |                   " Transfer Date = "       DELIMITED BY SIZE
+152100140113  |                   li_C4_Transfer_Date       DELIMITED BY SIZE
+152200140113  |                   " Social_insurance_No = " DELIMITED BY SIZE
+152300140113  |                   li_C4_Benef_SIN           DELIMITED BY SIZE
+152400140113  |                   " Total Transfer Amt = "  DELIMITED BY SIZE
+152500140113  |                   li_C4_Tot_Transfer_Amt    DELIMITED BY SIZE
+152600140113  |                   " Missing from "          DELIMITED BY SIZE
+152700140113  |                   lncc_SelectFileName       DELIMITED BY SIZE
+152800140113107500                INTO                      Li_description
+152900110606               PERFORM LogError
+153000140113107500         GO TO ProcessRecord
+153100140113  |        ELSE
+153200140113107500         PERFORM Process04Continued
+153300110527           END-IF.
+153400110526
+153500140113107500 Process04Continued.
+153600140113
+153700110526           EXEC SQL
+153800110601             SELECT    COALESCE(XFP.Ben_Addr_No,0),
+153900110601                       COALESCE(XFP.Sub_Addr_No,0)
+154000110601             INTO      :Li_Fetch-Ben-AddrNo,
+154100110601                       :Li_Fetch-Sub-AddrNo
+154200110601             FROM      MFAACCNTP ACCNTP
+154300110601             LEFT JOIN MFAMRQXFP XFP
+154400110601             ON        ACCNTP.Account_no    = XFP.Account_no
+154500110601             WHERE     ACCNTP.Account_no    = :li_C4_Account_No
+154600110601             AND       XFP.Transfer_Seq_no  = :Li_TransferSeqNo
+154700110704             AND       XFP.MRQ_Version_Code <> 1
+154800110601             ORDER BY  XFP.MRQ_File_Date Desc,
+154900110601                       XFP.MRQ_Version_Code
+155000110526             FETCH FIRST ROW ONLY
+155100110526           END-EXEC.
+155200110526
+155300110606           Move Li_Fetch-Ben-AddrNo           TO Li_Validate-AddrNo.
+155400110606           Move lc_C4_Benef_AptNo             TO Lc_Validate-AptNo.
+155500110606           Move lc_C4_Benef_StreetNo          TO Lc_Validate-CivicNo.
+155600110606           Move lc_C4_Benef_StreetName        TO Lc_Validate-Street.
+155700110606           Move lc_C4_Benef_AddLine2          TO Lc_Validate-Addr2.
+155800110606           Move lc_C4_Benef_AddLine3          TO Lc_Validate-Addr3.
+155900110606           Move lc_C4_Benef_City              TO Lc_Validate-City.
+156000110606           Move lc_C4_Benef_Prov              TO Lc_Validate-Prov.
+156100110606           Move lc_C4_Benef_Country           TO Lc_Validate-Country.
+156200110606           Move lc_C4_Benef_PostalCode        TO Lc_Validate-Postal.
+156300110526           Perform Validate_Address.
+156400110526
+156500110704           If  Li_Validate-AddrNo = 0
+156600110526               PERFORM Create_TempAddress
+156700110606               MOVE  Li_Validate-AddrNo       TO Li_Fetch-Ben-AddrNo
+156800110526           END-IF.
+156900110603
+157000110704           IF  li_Fetch-Sub-AddrNo = 0
+157100110606             MOVE  Li_Fetch-Ben-AddrNo        TO li_Fetch-Sub-AddrNo
+157200110603           END-IF.
+157300110526
+157400110606           Move li_Fetch-Sub-AddrNo           TO Li_Validate-AddrNo.
+157500110606           Move lc_C4_Subsc_AptNo             TO Lc_Validate-AptNo.
+157600110606           Move lc_C4_Subsc_StreetNo          TO Lc_Validate-CivicNo.
+157700110606           Move lc_C4_Subsc_StreetName        TO Lc_Validate-Street.
+157800110606           Move lc_C4_Subsc_AddrLine2         TO Lc_Validate-Addr2.
+157900110606           Move lc_C4_Subsc_AddrLine3         TO Lc_Validate-Addr3.
+158000110606           Move lc_C4_Subsc_City              TO Lc_Validate-City.
+158100110606           Move lc_C4_Subsc_Prov              TO Lc_Validate-Prov.
+158200110606           Move lc_C4_Subsc_Country           TO Lc_Validate-Country.
+158300110606           Move lc_C4_Subsc_PostalCode        TO Lc_Validate-Postal.
+158400110606           Perform Validate_Address.
+158500110603
+158600110704           IF  Li_Validate-AddrNo = 0
+158700110603             IF  Li_Fetch-Sub-AddrNo = Li_Fetch-Ben-AddrNo
+158800110603                 PERFORM Create_TempAddress
+158900110606                 MOVE  Li_Validate-AddrNo     TO Li_Fetch-Sub-AddrNo
+159000110603             ELSE
+159100110606                 MOVE Li_Fetch-Ben-AddrNo     TO Li_Fetch-Sub-AddrNo
+159200110603                 PERFORM Validate_Address
+159300110704                 IF  Li_Validate-AddrNo = 0
+159400110603                     PERFORM Create_TempAddress
+159500110603                     MOVE  Li_Validate-AddrNo TO Li_Fetch-Sub-AddrNo
+159600110603                 END-IF
+159700110603             END-IF
+159800110603           END-IF.
+159900110523
+160000110526           EXEC SQL
+160100110524               INSERT INTO MFAMRQXFP (
+160200110524                      BENEFICIARY_SEQ_NO,
+160300110524                      TRANSFER_SEQ_NO,
+160400110524                      MRQ_APPROVAL_STATUS,
+160500110524                      MRQ_APPROVAL_STATUS_REASON,
+160600110524                      MRQ_FILE_DATE,
+160700110530                      RECORD_TYPE_2,
+160800110524                      MRQ_VERSION_CODE,
+160900110524                      TRUSTEE_TYPE,
+161000110524                      VENDOR_BN,
+161100110524                      ACCOUNT_NO,
+161200110627                      SPECIMEN_ID,
+161300110524                      PLAN_SETUP_DATE,
+161400110524                      TRANSFER_DATE,
+161500110524                      TOTAL_TRANSFER_VALUE,
+161600110524                      MRQ_ASSISTED_CAPITAL,
+161700110524                      MRQ_UNASSISTED_CAPITAL,
+161800110524                      IQEE_RECEIVED_AMT,
+161900110524                      QUEBEC_ENTERPRISE_NO,
+162000110524                      CONTRACT,
+162100110627                      OTHER_SPECIMEN_ID,
+162200110524                      BEN_SIN,
+162300110524                      BEN_LAST_NAME,
+162400110524                      BEN_FIRST_NAME,
+162500110524                      BEN_DATE_OF_BIRTH,
+162600110524                      BEN_GENDER,
+162700110530                      BEN_Addr_NO,
+162800110524                      TOTAL_TRANSFER_IND_1,
+162900110524                      AIP_PAID_IND,
+163000110524                      AUTHORIZED_TRANSFER_1,
+163100110524                      SUBSCRIBER_TYPE,
+163200110524                      IVR_SIN,
+163300110524                      IVR_BUSINESS_NUMBER_REVQ,
+163400110524                      IVR_NAME,
+163500110524                      IVR_BEN_RELATION,
+163600110524                      SUB_ADDR_NO,
+163700110524                      IVR_PHONE_NUMBER,
+163800110524                      JNT_SIN,
+163900110524                      JNT_LAST_NAME,
+164000110524                      JNT_FIRST_NAME,
+164100110524                      JNT_BEN_RELATION,
+164200110524                      JNT_PHONE_NUMBER
+164300110606               ) VALUES (
+164400110524                      :Li_BenSeqNo,
+164500110524                      :Li_TransferSeqNo,
+164600110524                      :Lc_MRQStatus,
+164700110524                      :Lc_MRQStatusReason,
+164800110524                      :Li_MRQFileDate,
+164900110524                      :li_C4_RecordType,
+165000110524                      :li_C4_Trxn_VersCde,
+165100110524                      :li_C4_TrusteeType,
+165200110524                      :lc_C4_PromoterID,
+165300110524                      :li_C4_Account_No,
+165400110524                      :li_C4_SpecimenPlanNo,
+165500110524                      :li_C4_Plan_Setup_Date,
+165600110524                      :li_C4_Transfer_Date,
+165700110524                      :ln_C4_Tot_Transfer_Amt,
+165800110524                      :ln_C4_MRQ_Assisted_Amt,
+165900110524                      :ln_C4_MRQ_Unassisted_Amt,
+166000110524                      :li_C4_IQEE_Trnsfr_Amt,
+166100110524                      :lc_C4_PromoterID_Othr,
+166200110524                      :li_C4_Account_No_Othr,
+166300110524                      :li_C4_SpecimenPlanNo_Othr,
+166400110524                      :li_C4_Benef_SIN,
+166500110524                      :lc_C4_Benef_LastName,
+166600110524                      :lc_C4_Benef_FirstName,
+166700110524                      :li_C4_Benef_DOB,
+166800110524                      :lc_C4_Benef_Sex,
+166900110527                      :Li_Fetch-Ben-AddrNo,
+167000110524                      :li_C4_Tot_Trnsfr_Ind,
+167100110524                      :li_C4_AIP_Paid_Ind,
+167200110524                      :li_C4_Auth_Trnsfr_Ind,
+167300110524                      :lc_C4_Subsc_Type,
+167400110524                      :li_C4_Subsc_SIN,
+167500110524                      :lc_C4_Subsc_BusNumber,
+167600110524                      :lc_C4_Subsc_Name,
+167700110524                      :lc_C4_Subsc_BenRelation,
+167800110527                      :Li_Fetch-Sub-AddrNo,
+167900110524                      :lc_C4_Subsc_Phone,
+168000110524                      :li_C4_JoinSub_SIN,
+168100110524                      :lc_C4_JoinSub_LastName,
+168200110524                      :lc_C4_JoinSub_FirstName,
+168300110524                      :li_C4_JoinSub_BenRelation,
+168400110524                      :li_C4_JoinSub_Phone
+168500110524                       )
+168600110527           END-EXEC.
+168700110527
+168800110606           MOVE SQLSTATE                    TO lc_sqlStates.
+168900110606           IF  NOT lncc_sqlSuccessful
+169000110606               SET lncc_Err_I4              TO TRUE
+169100110606               MOVE "MFAMRQXFP "            TO lncc_InsertFileName
+169200110527               MOVE lncc_ErrorInsertingFile TO lc_sqlErrShortDESCR
+169300110527               PERFORM SQLFailProcess
+169400110527           END-IF.
+169500110523
+169600110518       Process05.
+169700110606           Move  Lc_RecordIn                TO lc_Current_05_Record.
+169800110518           INITIALIZE  Li_BenSeqNo
+169900110518                       Lc_MRQStatus
+170000140113107500                 Li_description
+170100110518                       Lc_MRQStatusReason.
+170200110518           EXEC SQL
+170300110518             SELECT QAP.Beneficiary_seq_no,
+170400110518                    QAP.MRQ_Approval_status,
+170500110518                    QAP.MRQ_Approval_status_Reason
+170600110518             INTO   :Li_BenSeqNo,
+170700110518                    :Lc_MRQStatus,
+170800110518                    :Lc_MRQStatusReason
+170900110527             FROM   MFATRNQAP QAP
+171000110518             INNER  JOIN MFATRNP TRNP
+171100110518             ON     QAP.Placement_Date       = TRNP.Placement_Date
+171200110518             AND    QAP.Trans_No             = TRNP.Trans_No
+171300110518             INNER  JOIN MFAACCNTP ACCNTP
+171400110518             ON     TRNP.Account_no          = ACCNTP.Account_no
+171500110518             INNER  JOIN MFACNTRRP CNTRRP
+171600110518             ON     ACCNTP.Account_type_code = CNTRRP.Account_type_Code
+171700110518             AND    TRNP.Contr_Redem_Code    = CNTRRP.Contr_Redem_Code
+171800110518             WHERE  QAP.Account_no           = :li_C5_Account_No
+171900110518             AND    TRNP.Trade_Date          = :li_C5_Payment_Date
+172000110518             AND    QAP.Social_Insurance_No  = :li_C5_Benef_SIN
+172100110518             AND    CASE
+172200110704                    WHEN CNTRRP.Contr_Redem_Code_Rule = :Lncc_12
+172300110518                    THEN  :Lncc_02
+172400110518                    WHEN CNTRRP.Contr_Redem_Code_Rule IN (28,30)
+172500110518                    THEN  :Lncc_01
+172600110518                    ELSE  :Lncc_00
+172700110518                    END = :li_C5_Payment_Type
+172800110518             FETCH FIRST ROW ONLY
+172900110518           END-EXEC.
+173000110523
+173100110527           MOVE SQLSTATE TO lc_sqlStates.
+173200110606           IF  NOT lncc_sqlSuccessful
+173300110606               SET lncc_Err_S5                TO TRUE
+173400110606               MOVE "MFATRNQAP"               TO lncc_SelectFileName
+173500110606               MOVE lncc_ErrorSelectingFile   TO lc_sqlErrShortDESCR
+173600110606               PERFORM SQLFailProcess
+173700140113107500         STRING "Account # = "            DELIMITED BY SIZE
+173800140113  |                   li_C5_Account_No          DELIMITED BY SIZE
+173900140113  |                   " Payment Date = "        DELIMITED BY SIZE
+174000140113  |                   li_C5_Payment_Date        DELIMITED BY SIZE
+174100140113  |                   " Social_insurance_No = " DELIMITED BY SIZE
+174200140113  |                   li_C5_Benef_SIN           DELIMITED BY SIZE
+174300140113  |                   " Missing from "          DELIMITED BY SIZE
+174400140113  |                   lncc_SelectFileName       DELIMITED BY SIZE
+174500140113107500                INTO                      Li_description
+174600110606               PERFORM LogError
+174700140113107500         GO TO ProcessRecord
+174800140113  |        ELSE
+174900140113107500         PERFORM Process05Continued
+175000110527           END-IF.
+175100110523
+175200140113107500 Process05Continued.
+175300140113
+175400110527           EXEC SQL
+175500110524               INSERT INTO MFAMRQTP (
+175600110524                      ACCOUNT_NO,
+175700110524                      BENEFICIARY_SEQ_NO,
+175800110524                      MRQ_FILE_DATE,
+175900110524                      MRQ_APPROVAL_STATUS,
+176000110524                      MRQ_APPROVAL_STATUS_REASON,
+176100110524                      RECORD_TYPE_2,
+176200110524                      MRQ_VERSION_CODE,
+176300110524                      PAYMENT_TYPE_2,
+176400110524                      VENDOR_BN,
+176500110627                      SPECIMEN_ID,
+176600110524                      PAYMENT_DATE_MRQ,
+176700110524                      ACCUMULATED_INCOME_IND,
+176800110524                      CONTRIBUTION_WITHDRAWN_AMT,
+176900110524                      IQEE_AMOUNT_PAID,
+177000110524                      EAP_AMOUNT_PAID,
+177100110524                      BEN_SIN,
+177200110524                      BEN_LAST_NAME,
+177300110524                      BEN_FIRST_NAME,
+177400110524                      BEN_DATE_OF_BIRTH,
+177500110524                      BEN_GENDER,
+177600110524                      BEN_QC_RESIDENT_IND,
+177700110524                      PSE_PROGRAM_TYPE,
+177800110524                      PSE_PROGRAM_LENGTH,
+177900110524                      PSE_PROGRAM_YEAR,
+178000110524                      ACADEMIC_YEAR_START_DATE,
+178100110524                      ACADEMIC_YEAR_LENGTH_WEEKS,
+178200110524                      EDUCATIONAL_INST_POSTAL_CODE
+178300110606               ) VALUES (
+178400110524                      :li_C5_Account_No,
+178500110524                      :Li_BenSeqNo,
+178600110602                      :Li_MRQFileDate,
+178700110524                      :Lc_MRQStatus,
+178800110524                      :Lc_MRQStatusReason,
+178900110524                      :li_C5_RecordType,
+179000110524                      :li_C5_Trxn_VersCde,
+179100110524                      :li_C5_Payment_Type,
+179200110524                      :lc_C5_PromoterID,
+179300110524                      :li_C5_SpecimenPlanNo,
+179400110524                      :li_C5_Payment_Date,
+179500110524                      :li_C5_Accum_Income_Ind,
+179600110524                      :ln_C5_Contr_Withdr_Amt,
+179700110524                      :ln_C5_IQEE_Amt_Paid,
+179800110524                      :ln_C5_EAP_Amt_Paid,
+179900110524                      :li_C5_Benef_SIN,
+180000110524                      :lc_C5_Benef_LastName,
+180100110524                      :lc_C5_Benef_FirstName,
+180200110524                      :li_C5_Benef_DOB,
+180300110524                      :lc_C5_Benef_Sex,
+180400110524                      :lc_C5_Benef_QcResident,
+180500110524                      :li_C5_PSE_Pgm_Type,
+180600110524                      :li_C5_PSE_Pgm_Length,
+180700110524                      :li_C5_PSE_Pgm_Year,
+180800110524                      :li_C5_AcadYr_Start_Date,
+180900110524                      :li_C5_AcadYr_Lgth_Weeks,
+181000110524                      :lc_C5_Educ_Postal_Code
+181100110606                      )
+181200110527             END-EXEC.
+181300110523
+181400110606             MOVE SQLSTATE                    TO lc_sqlStates.
+181500110606             IF  NOT lncc_sqlSuccessful
+181600110606                 SET lncc_Err_I5              TO TRUE
+181700110606                 MOVE "MFAMRQTP "             TO lncc_InsertFileName
+181800110527                 MOVE lncc_ErrorInsertingFile TO lc_sqlErrShortDESCR
+181900110527                 PERFORM SQLFailProcess
+182000110527             END-IF.
+182100110518
+182200110518       Process06.
+182300110606           Move  Lc_RecordIn                  TO lc_Current_06_Record.
+182400111109           MOVE Lncc_N TO Lc_BirpFail.
+182500110518           INITIALIZE  Li_BenSeqNo
+182600110518                       Lc_MRQStatus
+182700140113107500                 Li_description
+182800110518                       Lc_MRQStatusReason.
+182900110523
+183000110530           IF  lc_C6_Tax_Reason_Code  =  Lncc_23
+183100110530           AND li_C6_Event_Date(5:4)  =  Lncc_1231
+183200110523               EXEC SQL
+183300110523                 SELECT BIRP.Beneficiary_seq_no,
+183400110523                        BIRP.MRQ_Approval_status,
+183500110523                        BIRP.MRQ_Approval_status_Reason
+183600110523                 INTO   :Li_BenSeqNo,
+183700110523                        :Lc_MRQStatus ,
+183800110523                        :Lc_MRQStatusReason
+183900110523                 FROM    MFAACBIRP BIRP
+184000110523                 WHERE  BIRP.Account_no            = :li_C6_Account_No
+184100110606                 AND  ((BIRP.YEAR * 10000) + 1231) = :li_C6_Event_Date
+184200110523                 AND    BIRP.Social_Insurance_No   = :li_C6_Benef_SIN
+184300110523               END-EXEC
+184400110527
+184500110606               MOVE SQLSTATE                  TO lc_sqlStates
+184600111109               IF  NOT lncc_sqlSuccessful
+184700111109                  MOVE Lncc_Y TO Lc_BirpFail
+184800111109               END-IF
+184900111109           END-IF.
+185000111109
+185100111109           IF Lc_BirpFail = Lncc_Y
+185200111109           OR NOT(lc_C6_Tax_Reason_Code  =  Lncc_23
+185300111109           AND li_C6_Event_Date(5:4)  =  Lncc_1231)
+185400110527                   EXEC SQL
+185500110527                     SELECT QAP.Beneficiary_seq_no,
+185600110527                            QAP.MRQ_Approval_status,
+185700110527                            QAP.MRQ_Approval_status_Reason
+185800110527                     INTO   :Li_BenSeqNo,
+185900110527                            :Lc_MRQStatus ,
+186000110527                            :Lc_MRQStatusReason
+186100110527                     FROM  MFATRNQAP QAP
+186200110527                     INNER JOIN MFATRNP TRNP
+186300110527                     ON    QAP.Placement_Date = TRNP.Placement_Date
+186400110606                     AND   QAP.Trans_No       = TRNP.Trans_No
+186500110527                     INNER JOIN MFATRNRRP TRNRRP
+186600110527                     ON    QAP.Placement_Date = TRNRRP.Placement_Date
+186700110606                     AND   QAP.Trans_No       = TRNRRP.Trans_No
+186800110606                     WHERE QAP.Account_no     = :li_C6_Account_No
+186900110527                     AND CASE
+187000110527                         WHEN TRNRRP.Repayment_Reason_Code = :Lncc_22
+187100110527                         THEN ( TRNRRP.YEAR * 10000 + 1231)
+187200110527                         ELSE TRNP.Trade_Date
+187300110527                         END  = :li_C6_Event_Date
+187400110606                     AND QAP.Social_Insurance_No    = :li_C6_Benef_SIN
+187500110527                     AND TRNRRP.Repayment_Reason_Code =
+187600110527                                             :lc_C6_Tax_Reason_Code
+187700110527                     FETCH FIRST ROW ONLY
+187800110527                   END-EXEC
+187900110527
+188000110606                   MOVE SQLSTATE         TO lc_sqlStates
+188100111109           END-IF.
+188200111109           IF  NOT lncc_sqlSuccessful
+188300111109               SET lncc_Err_S6   TO TRUE
+188400111109               MOVE "MFATRNQAP"  TO  lncc_SelectFileName
+188500111109               MOVE lncc_ErrorSelectingFile
+188600111109                                 TO lc_sqlErrShortDESCR
+188700111109               PERFORM SQLFailProcess
+188800140113107500         STRING "Account # = "            DELIMITED BY SIZE
+188900140113  |                   li_C6_Account_No          DELIMITED BY SIZE
+189000140113  |                   " Social_insurance_No = " DELIMITED BY SIZE
+189100140113  |                   li_C6_Benef_SIN           DELIMITED BY SIZE
+189200140113  |                   " Missing from "          DELIMITED BY SIZE
+189300140113  |                   lncc_SelectFileName       DELIMITED BY SIZE
+189400140113107500                INTO                      Li_description
+189500111109               PERFORM LogError
+189600111109           ELSE
+189700110523
+189800111109              EXEC SQL
+189900111109                  INSERT INTO MFAMRQTXP (
+190000111109                         ACCOUNT_NO,
+190100111109                         BENEFICIARY_SEQ_NO,
+190200111109                         MRQ_FILE_DATE,
+190300111109                         MRQ_APPROVAL_STATUS,
+190400111109                         MRQ_APPROVAL_STATUS_REASON,
+190500111109                         RECORD_TYPE_2,
+190600111109                         MRQ_VERSION_CODE,
+190700111109                         VENDOR_BN,
+190800111109                         SPECIMEN_ID,
+190900111109                         EVENT_DATE,
+191000111109                         CONTRIBUTION_WITHDRAWN_AMT,
+191100111109                         IQEE_GRANT_REPAYMENT,
+191200111109                         WRITE_OFF_AMOUNT,
+191300111109                         BEN_SIN,
+191400111109                         BEN_LAST_NAME,
+191500111109                         BEN_FIRST_NAME,
+191600111109                         BEN_DATE_OF_BIRTH,
+191700111109                         BEN_GENDER,
+191800120203                         SPECIAL_TAX_REASON ,
+191900120203                         EDUCATIONAL_INST_POSTAL_CODE
+192000120203                         )
+192100120203                         VALUES (
+192200111109                         :li_C6_Account_No,
+192300111109                         :Li_BenSeqNo,
+192400111109                         :Li_MRQFileDate,
+192500111109                         :Lc_MRQStatus,
+192600111109                         :Lc_MRQStatusReason,
+192700111109                         :li_C6_RecordType,
+192800111109                         :li_C6_Trxn_VersCde,
+192900111109                         :lc_C6_PromoterID,
+193000111109                         :li_C6_SpecimenPlanNo,
+193100111109                         :li_C6_Event_Date,
+193200111109                         :ln_C6_Contr_Withdr_Amt,
+193300111109                         :ln_C6_IQEE_Refund_Amt,
+193400111109                         :ln_C6_EAP_WriteOff_Amt,
+193500111109                         :li_C6_Benef_SIN,
+193600111109                         :lc_C6_Benef_LastName,
+193700111109                         :lc_C6_Benef_FirstName,
+193800111109                         :li_C6_Benef_DOB,
+193900111109                         :li_C6_Benef_Sex,
+194000120203                         :lc_C6_Tax_Reason_Code,
+194100120203                         :lc_C6_Estb_Postal_Code
+194200111109                         )
+194300111109                 END-EXEC
+194400110520
+194500111109              MOVE SQLSTATE                    TO lc_sqlStates
+194600111109              IF  NOT lncc_sqlSuccessful
+194700111109                  SET lncc_Err_I6              TO TRUE
+194800111109                  MOVE "MFAMRQTXP "            TO lncc_InsertFileName
+194900111109                  MOVE lncc_ErrorInsertingFile TO lc_sqlErrShortDESCR
+195000111109                  PERFORM SQLFailProcess
+195100111109              END-IF
+195200111109           END-IF.
+195300110523
+195400120925      *RFS99609 -Start
+195500121010      *This para will process 22 level records from input file
+195600121010      *depending on the key field values and update it in the MFAMRQRQP table
+195700121010
+195800120926       Process22.
+195900121001           MOVE Lc_RecordIn                  TO lc_Current-22-Record.
+196000121001           INITIALIZE li_AccountNo
+196100121001                      Li_BenSeqNo
+196200121001                      li_Year
+196300121001                      li_MRQ-File-Date
+196400140113107500                Li_description
+196500121001                      li_MRQ-Version-Code.
+196600121001
+196700140113107500       IF li_C22-AmtOfContri NOT numeric
+196800140113  |             MOVE 0 TO li_C22-AmtOfContri
+196900140113  |          END-IF.
+197000140113  |
+197100140113  |          IF li_C22-CumuQESI NOT numeric
+197200140113  |             MOVE 0 TO li_C22-CumuQESI
+197300140113  |          END-IF.
+197400140113  |
+197500140113  |          IF li_C22-QESIBalance NOT numeric
+197600140113  |            MOVE 0 TO li_C22-QESIBalance
+197700140113  |          END-IF.
+197800140113  |
+197900140113  |          IF li_C22-BalOfContri NOT numeric
+198000140113  |            MOVE 0 TO li_C22-BalOfContri
+198100140113  |          END-IF.
+198200140113  |
+198300140113  |          IF li_C22-PaymentDate NOT numeric
+198400140113  |             MOVE 0 TO li_C22-PaymentDate
+198500140113  |          END-IF.
+198600140113  |
+198700140113  |          IF li_C22-AmtOf-BasicAmt NOT numeric
+198800140113  |             MOVE 0 TO li_C22-AmtOf-BasicAmt
+198900140113  |          END-IF.
+199000140113  |
+199100140113  |          IF li_C22-IncreaseAmt NOT numeric
+199200140113  |             MOVE 0 TO li_C22-IncreaseAmt
+199300140113  |          END-IF.
+199400140113  |
+199500140113  |          IF li_C22-Interest NOT numeric
+199600140113  |             MOVE 0 TO li_C22-Interest
+199700140113107500       END-IF.
+199800140113
+199900120925              EXEC SQL
+200000120926                  SELECT ACCOUNT_NO,
+200100120926                         BENEFICIARY_SEQ_NO,
+200200120927                         YEAR,
+200300120926                         MRQ_FILE_DATE,
+200400120926                         MRQ_VERSION_CODE
+200500120927                  INTO   :li_AccountNo,
+200600120927                         :Li_BenSeqNo,
+200700120927                         :li_Year,
+200800120927                         :li_MRQ-File-Date,
+200900120927                         :li_MRQ-Version-Code
+201000120926                 FROM MFAMRQRQP
+201100121001                 WHERE ACCOUNT_NO = :li_C22-ContractID
+201200120927                       AND  MRQ_FILE_DATE <= :Li_MRQFileDate
+201300120927                       AND  YEAR = :li_C22-TaxYear
+201400120926                       AND  MRQ_VERSION_CODE = 0
+201500120927                       AND  BEN_SIN = :li_C22-BenSIN
+201600120926
+201700120926                 ORDER BY MRQ_FILE_DATE DESC
+201800120926                 FETCH FIRST ROW ONLY
+201900120925               END-EXEC.
+202000120925
+202100120925              MOVE SQLSTATE                    TO lc_sqlStates
+202200120925              IF  NOT lncc_sqlSuccessful
+202300120925                  SET lncc_Err_S22             TO TRUE
+202400120927                  MOVE lncc_FileName           TO lncc_SelectFileName
+202500120925                  MOVE lncc_ErrorSelectingFile TO lc_sqlErrShortDESCR
+202600120925                  PERFORM SQLFailProcess
+202700140113107500         STRING "Account # = "            DELIMITED BY SIZE
+202800140113  |                   li_C22-ContractID         DELIMITED BY SIZE
+202900140113  |                   " MRQ File Date <= "      DELIMITED BY SIZE
+203000140113  |                   Li_MRQFileDate            DELIMITED BY SIZE
+203100140113  |                   " Year = "                DELIMITED BY SIZE
+203200140113  |                   li_C22-TaxYear            DELIMITED BY SIZE
+203300140113  |                   " MRQ_VERSION_CODE = 0 "  DELIMITED BY SIZE
+203400140113  |                   " Social Insurance No = " DELIMITED BY SIZE
+203500140113  |                   li_C22-BenSIN             DELIMITED BY SIZE
+203600140113  |                   " Missing from "          DELIMITED BY SIZE
+203700140113  |                   lncc_SelectFileName       DELIMITED BY SIZE
+203800140113107500                INTO                      Li_description
+203900120925                  PERFORM LogError
+204000120925              END-IF.
+204100120926
+204200120926           EXEC SQL
+204300120927              UPDATE MFAMRQRQP
+204400120926              SET MRQ_RESPONSE_DATE      = :Li_MRQFileDate,
+204500120927                  GLOBAL_JUST_CODE1      = :lc_C22-GLob-JustCode1,
+204600120927                  GLOBAL_JUST_CODE2      = :lc_C22-GLob-JustCode2,
+204700120927                  BASIC_CREDIT_JUST_CODE = :lc_C22-BasicAmt-JustCode,
+204800120927                  BASIC_CREDIT_SHARE_IND = :li_C22-BasicAmt-Shar-Ind,
+204900120927                  INCREASE_JUST_CODE     = :lc_C22-IncAmt-JustCode,
+205000120927                  INCREASE_AMT_EXPL_CODE = :lc_C22-IncAmt-ExpCode,
+205100120927                  INCREASE_SHARE_IND     = :li_C22-IncAmt-Shar-Ind,
+205200120926                  PAYMENT_DETRM_DATE     = :li_C22-PaymentDate,
+205300140113                  TITLE_OF_POSITION      = :lc_C22-Title-OfPosition,
+205400140113107500*           REQUEST_AMT_BASE       = :li_C22-AmtOf-BasicAmt
+205500140113107500            REQUEST_AMT_BASE       = :li_C22-AmtOf-BasicAmt,
+205600140113   |              REQUEST_AMT_INCREASE   = :li_C22-IncreaseAmt,
+205700140113   |              REQUEST_AMT_INTEREST   = :li_C22-Interest,
+205800140113107500            ASSISTED_CAPITAL       = :li_C22-AmtOfContri
+205900120927
+206000121001               WHERE ACCOUNT_NO = :li_C22-ContractID
+206100120927                     AND BENEFICIARY_SEQ_NO = :Li_BenSeqNo
+206200120927                     AND YEAR = :li_Year
+206300120927                     AND  MRQ_FILE_DATE = :li_MRQ-File-Date
+206400120927                     AND  MRQ_VERSION_CODE = :li_MRQ-Version-Code
+206500120926
+206600120926           END-EXEC.
+206700120926              MOVE SQLSTATE                    TO lc_sqlStates
+206800120926              IF  NOT lncc_sqlSuccessful
+206900120926                  SET lncc_Err_P22             TO TRUE
+207000120927                  MOVE lncc_FileName           TO lncc_UpdateFileName
+207100120927                  MOVE lncc_ErrorUpdatingFile  TO lc_sqlErrShortDESCR
+207200120926                  PERFORM SQLFailProcess
+207300140113107500         STRING "Account # = "            DELIMITED BY SIZE
+207400140113  |                   li_C22-ContractID         DELIMITED BY SIZE
+207500140113  |                   " Beneficiary Seq No = "  DELIMITED BY SIZE
+207600140113  |                   Li_BenSeqNo               DELIMITED BY SIZE
+207700140113  |                   " Year = "                DELIMITED BY SIZE
+207800140113  |                   li_C22-TaxYear            DELIMITED BY SIZE
+207900140113  |                   " MRQ File Date = "       DELIMITED BY SIZE
+208000140113  |                   li_MRQ-File-Date          DELIMITED BY SIZE
+208100140113  |                   " MRQ VERSION CODE = "    DELIMITED BY SIZE
+208200140113  |                   li_MRQ-Version-Code       DELIMITED BY SIZE
+208300140113  |                   " Missing from "          DELIMITED BY SIZE
+208400140113  |                   lncc_SelectFileName       DELIMITED BY SIZE
+208500140113107500                INTO                      Li_description
+208600120926                  PERFORM LogError
+208700120926              END-IF.
+208800120926
+208900120925       Process32.
+209000121010      *This para will process 32 level records from input file
+209100121010      *depending on the key field values and update it in the MFAMRQRQP table
+209200121010
+209300121001           MOVE Lc_RecordIn                  TO lc_Current-32-Record.
+209400121001           INITIALIZE li_AccountNo
+209500121001                      Li_BenSeqNo
+209600121001                      li_Year
+209700121001                      li_MRQ-File-Date
+209800140113107500                Li_description
+209900121001                      li_MRQ-Version-Code.
+210000121001
+210100140113107500       IF li_C32-New-BasicAmt NOT numeric
+210200140113  |             MOVE 0 TO li_C32-New-BasicAmt
+210300140113  |          END-IF.
+210400140113  |
+210500140113  |          IF li_C32-New-IncreaseAmt NOT numeric
+210600140113  |             MOVE 0 TO li_C32-New-IncreaseAmt
+210700140113  |          END-IF.
+210800140113  |
+210900140113  |          IF li_C32-New-Interest NOT numeric
+211000140113  |             MOVE 0 TO li_C32-New-Interest
+211100140113  |          END-IF.
+211200140113  |
+211300140113  |          IF li_C32-New-ContrAmt NOT numeric
+211400140113  |             MOVE 0 TO li_C32-New-ContrAmt
+211500140113  |          END-IF.
+211600140113  |
+211700140113  |          IF li_C32-Determination-Date NOT numeric
+211800140113  |             MOVE 0 TO li_C32-Determination-Date
+211900140113107500       END-IF.
+212000140113
+212100120926              EXEC SQL
+212200120926                  SELECT ACCOUNT_NO,
+212300120926                         BENEFICIARY_SEQ_NO,
+212400120927                         YEAR,
+212500120926                         MRQ_FILE_DATE,
+212600120926                         MRQ_VERSION_CODE
+212700120927                  INTO   :li_AccountNo,
+212800120927                         :Li_BenSeqNo,
+212900120927                         :li_Year,
+213000120927                         :li_MRQ-File-Date,
+213100120927                         :li_MRQ-Version-Code
+213200120926                 FROM MFAMRQRQP
+213300121001                 WHERE ACCOUNT_NO =:li_C32-ContractID
+213400120927                       AND  MRQ_FILE_DATE <= :Li_MRQFileDate
+213500120927                       AND  YEAR = :li_C32-TaxYear
+213600120926                       AND  MRQ_VERSION_CODE = 2
+213700120927                       AND  BEN_SIN =:li_C32-BenSIN
+213800120926
+213900120926                 ORDER BY MRQ_FILE_DATE DESC
+214000120926                 FETCH FIRST ROW ONLY
+214100120926               END-EXEC.
+214200120926
+214300120926              MOVE SQLSTATE                    TO lc_sqlStates
+214400120926              IF  NOT lncc_sqlSuccessful
+214500120926                  SET lncc_Err_S32             TO TRUE
+214600120927                  MOVE lncc_FileName           TO lncc_SelectFileName
+214700120926                  MOVE lncc_ErrorSelectingFile TO lc_sqlErrShortDESCR
+214800120926                  PERFORM SQLFailProcess
+214900140113107500         STRING "Account # = "            DELIMITED BY SIZE
+215000140113  |                   li_C32-ContractID         DELIMITED BY SIZE
+215100140113  |                   " MRQ File Date <= "      DELIMITED BY SIZE
+215200140113  |                   Li_MRQFileDate            DELIMITED BY SIZE
+215300140113  |                   " Year = "                DELIMITED BY SIZE
+215400140113  |                   li_C32-TaxYear            DELIMITED BY SIZE
+215500140113  |                   " MRQ_VERSION_CODE = 2 "  DELIMITED BY SIZE
+215600140113  |                   " Social Insurance No = " DELIMITED BY SIZE
+215700140113  |                   li_C32-BenSIN             DELIMITED BY SIZE
+215800140113  |                   " Missing from "          DELIMITED BY SIZE
+215900140113  |                   lncc_SelectFileName       DELIMITED BY SIZE
+216000140113107500                INTO                      Li_description
+216100120926                  PERFORM LogError
+216200120926              END-IF.
+216300120926
+216400120926           EXEC SQL
+216500120927             UPDATE MFAMRQRQP
+216600120927             SET MRQ_RESPONSE_DATE      = :Li_MRQFileDate,
+216700120927                 GLOBAL_JUST_CODE1      = :lc_C32-New-GLob-JustCode1,
+216800120927                 GLOBAL_JUST_CODE2      = :lc_C32-New-GLob-JustCode2,
+216900120927                 BASIC_CREDIT_JUST_CODE = :lc_C32-New-BasicAmt-JustCode,
+217000120927                 BASIC_CREDIT_SHARE_IND = :li_C32-New-BasicAmt-Shar-Ind,
+217100120927                 INCREASE_JUST_CODE     = :lc_C32-New-IncAmt-JustCode,
+217200120927                 INCREASE_AMT_EXPL_CODE = :lc_C32-New-IncAmt-ExpCode,
+217300120927                 INCREASE_SHARE_IND     = :li_C32-New-IncAmt-Shar-Ind,
+217400120927                 PAYMENT_DETRM_DATE     = :li_C32-Determination-Date,
+217500140113                 TITLE_OF_POSITION      = :lc_C32-Title-OfPosition,
+217600140113107500*          REQUEST_AMT_BASE       = :li_C22-AmtOf-BasicAmt
+217700140113107500           REQUEST_AMT_BASE       = :li_C32-New-BasicAmt,
+217800140113  |              REQUEST_AMT_INCREASE   = :li_C32-New-IncreaseAmt,
+217900140113  |              REQUEST_AMT_INTEREST   = :li_C32-New-Interest,
+218000140113107500           ASSISTED_CAPITAL       = :li_C32-New-ContrAmt
+218100120926
+218200121001              WHERE ACCOUNT_NO = :li_C32-ContractID
+218300120927                    AND BENEFICIARY_SEQ_NO = :Li_BenSeqNo
+218400120927                    AND YEAR = :li_Year
+218500120927                    AND MRQ_FILE_DATE = :li_MRQ-File-Date
+218600120927                    AND MRQ_VERSION_CODE = :li_MRQ-Version-Code
+218700120926
+218800120926           END-EXEC.
+218900120926              MOVE SQLSTATE                    TO lc_sqlStates
+219000120926              IF  NOT lncc_sqlSuccessful
+219100120926                  SET lncc_Err_P32             TO TRUE
+219200120927                  MOVE lncc_FileName           TO lncc_UpdateFileName
+219300120927                  MOVE lncc_ErrorUpdatingFile  TO lc_sqlErrShortDESCR
+219400120926                  PERFORM SQLFailProcess
+219500140113107500         STRING "Account # = "            DELIMITED BY SIZE
+219600140113  |                   li_C32-ContractID         DELIMITED BY SIZE
+219700140113  |                   " Benficiary Seq No = "   DELIMITED BY SIZE
+219800140113  |                   Li_BenSeqNo               DELIMITED BY SIZE
+219900140113  |                   " Year = "                DELIMITED BY SIZE
+220000140113  |                   li_Year                   DELIMITED BY SIZE
+220100140113  |                   " MRQ File Date = "       DELIMITED BY SIZE
+220200140113  |                   li_MRQ-File-Date          DELIMITED BY SIZE
+220300140113  |                   " MRQ VERSION CODE = "    DELIMITED BY SIZE
+220400140113  |                   li_MRQ-Version-Code       DELIMITED BY SIZE
+220500140113  |                   " Missing from "          DELIMITED BY SIZE
+220600140113  |                   lncc_SelectFileName       DELIMITED BY SIZE
+220700140113107500                INTO                      Li_description
+220800120926                  PERFORM LogError
+220900120926              END-IF.
+221000120926
+221100120925      *RFS99609 - End
+221200121109      *103860 - begin
+221300121109       Process12.
+221400121109           MOVE Lc_RecordIn TO lc_Current_12_Record.
+221500121109           IF li_AcctNo IS NOT NUMERIC
+221600121109               MOVE ZEROES TO li_AcctNo
+221700121109           END-IF.
+221800121109
+221900121109           IF li_OrigTransDate IS NOT NUMERIC
+222000121109               MOVE ZEROES TO li_OrigTransDate
+222100121109           END-IF.
+222200121112
+222300121112      *Set error code as received using same format as in RSPERRIQ
+222400121112           INITIALIZE lc_MRQ_Error_Code.
+222500121112
+222600121112           IF lc_DetailRecErrCode NOT = SPACES
+222700121112              MOVE lc_DetailRecErrCode TO lc_MRQ_Error_Code
+222800121112           ELSE
+222900121112              MOVE lc_StructErrCode    TO lc_MRQ_Error_Code
+223000121112           END-IF.
+223100121112
+223200121123      *Get the latest MRQ file date for error file being processed
+223300121123
+223400121109           IF lncc_OrigRecType02
+223500121123              PERFORM Get_Latest_File_Date_MRQRQP
+223600121130              PERFORM Get-Beneficiary-Seq-No-02
+223700121109           END-IF.
+223800121109           IF lncc_OrigRecType03
+223900121123              PERFORM Get_Latest_File_Date_MRQBRP
+224000121128      *For ben replacement error, get old ben SIN to match the received original
+224100121128              PERFORM GET-OLD-BEN-SEQ-NO
+224200121109           END-IF.
+224300121109           IF lncc_OrigRecType04
+224400121123              PERFORM Get_Latest_File_Date_MRQXFP
+224500121130              PERFORM Get-Beneficiary-Seq-No-04
+224600121109           END-IF.
+224700121109           IF lncc_OrigRecType05
+224800121123              PERFORM Get_Latest_File_Date_MRQTP
+224900121130              PERFORM Get-Beneficiary-Seq-No-05
+225000121109           END-IF.
+225100121109           IF lncc_OrigRecType06
+225200121123              PERFORM Get_Latest_File_Date_MRQTXP
+225300121130              PERFORM Get-Beneficiary-Seq-No-06
+225400121109           END-IF.
+225500121109
+225600121204      *Load incoming record type 12 into error log file if record found
+225700121204           IF Ws-Err-Code = SPACES
+225800121204              PERFORM Insert-MFAMRQERP-Record
+225900121204           END-IF.
+226000121109
+226100121123       Get_Latest_File_Date_MRQRQP.
+226200121112           INITIALIZE li_MRQ_File_Date_Max.
+226300121112
+226400121112           EXEC SQL
+226500121112             SELECT MAX(MRQ_FILE_DATE)
+226600121112             INTO :li_MRQ_File_Date_Max
+226700121112             FROM MFAMRQRQP
+226800121112             WHERE Account_No       = :li_AcctNo
+226900121126               AND Year             = :li_Year_Err
+227000121112               AND Ben_SIN          = :li_SIN
+227100121112               AND Record_Type_2    = :lc_OrigRecType
+227200121112               AND MRQ_Version_Code = :lc_VersionCode
+227300121123               AND MRQ_FILE_DATE    < :Li_MRQFileDate
+227400121123               AND MRQ_APPROVAL_STATUS = :lncc_E
+227500121112           END-EXEC.
+227600121112
+227700121112           MOVE SQLSTATE TO lc_sqlStates.
+227800121112           IF NOT lncc_sqlSuccessful
+227900121112              SET lncc_Err_S8 TO TRUE
+228000121112              MOVE "MFAMRQRQP"              TO lncc_SelectFileName
+228100121112              MOVE lncc_ErrorSelectingFile  TO lc_sqlErrShortDESCR
+228200121112              DISPLAY "Record not found in MFAMRQRQP. "
+228300121112              DISPLAY "Account Number: " li_AcctNo
+228400121112              DISPLAY "Ben SIN: " li_SIN
+228500121126              DISPLAY "Year: " li_Year_Err
+228600121112              DISPLAY "Record Type: " lc_OrigRecType
+228700121123              DISPLAY "MRQ Version Code: " lc_VersionCode
+228800121112              PERFORM DSP-ERROR
+228900121129              PERFORM LogError
+229000121122           END-IF.
+229100121112
+229200121130       Get-Beneficiary-Seq-No-02.
+229300121130           INITIALIZE li_Beneficiary_Seq_No.
+229400121130
+229500121130           EXEC SQL
+229600121130             SELECT BENEFICIARY_SEQ_NO
+229700121130             INTO   :li_Beneficiary_Seq_No
+229800121130             FROM MFAMRQRQP
+229900121130             WHERE Account_No       = :li_AcctNo
+230000121130               AND Year             = :li_Year_Err
+230100121130               AND Ben_SIN          = :li_SIN
+230200121130               AND Record_Type_2    = :lc_OrigRecType
+230300121130               AND MRQ_Version_Code = :lc_VersionCode
+230400121130               AND MRQ_FILE_DATE    = :li_MRQ_File_Date_Max
+230500121204               AND MRQ_APPROVAL_STATUS = :lncc_E
+230600121130           END-EXEC.
+230700121130
+230800121130           MOVE SQLSTATE TO lc_sqlStates.
+230900121130           IF NOT lncc_sqlSuccessful
+231000121130              SET lncc_Err_S8 TO TRUE
+231100121130              MOVE "MFAMRQRQP"              TO lncc_SelectFileName
+231200121130              MOVE lncc_ErrorSelectingFile  TO lc_sqlErrShortDESCR
+231300121130              DISPLAY "Beneficiary seq no not found."
+231400121130              DISPLAY "Account Number: " li_AcctNo
+231500121130              DISPLAY "Ben SIN: " li_SIN
+231600121130              DISPLAY "Year: " li_Year_Err
+231700121130              DISPLAY "Record Type: " lc_OrigRecType
+231800121130              DISPLAY "MRQ Version Code: " lc_VersionCode
+231900121130              PERFORM DSP-ERROR
+232000121130              PERFORM LogError
+232100121130           END-IF.
+232200121130
+232300121123       Get_Latest_File_Date_MRQBRP.
+232400121123           INITIALIZE li_MRQ_File_Date_Max.
+232500121123
+232600121123           EXEC SQL
+232700121123             SELECT MAX(MRQ_FILE_DATE)
+232800121123             INTO :li_MRQ_File_Date_Max
+232900121123             FROM MFAMRQBRP
+233000121123             WHERE Account_No       = :li_AcctNo
+233100121123               AND Old_Ben_SIN      = :li_SIN
+233200121123               AND Replacement_Date = :li_OrigTransDate
+233300121123               AND MRQ_Version_Code = :lc_VersionCode
+233400121123               AND MRQ_FILE_DATE    < :Li_MRQFileDate
+233500121123               AND MRQ_APPROVAL_STATUS = :lncc_E
+233600121123               AND Record_Type_2    = :lc_OrigRecType
+233700121123           END-EXEC.
+233800121123
+233900121123           MOVE SQLSTATE TO lc_sqlStates.
+234000121123           IF NOT lncc_sqlSuccessful
+234100121123              SET lncc_Err_S8 TO TRUE
+234200121123              MOVE "MFAMRQBRP"              TO lncc_SelectFileName
+234300121123              MOVE lncc_ErrorSelectingFile  TO lc_sqlErrShortDESCR
+234400121123              DISPLAY "Record not found in MFAMRQBRP. "
+234500121123              DISPLAY "Account Number: " li_AcctNo
+234600121123              DISPLAY "Ben SIN: " li_SIN
+234700121123              DISPLAY "Replacement Date: " li_OrigTransDate
+234800121123              DISPLAY "Record Type: " lc_OrigRecType
+234900121123              DISPLAY "MRQ Version Code: " lc_VersionCode
+235000121123              PERFORM DSP-ERROR
+235100121129              PERFORM LogError
+235200121123           END-IF.
+235300121123
+235400121130       GET-OLD-BEN-SEQ-NO.
+235500121130           INITIALIZE li_Beneficiary_Seq_No.
+235600121130
+235700121130           EXEC SQL
+235800121130             SELECT BENEFICIARY_SEQ_NO
+235900121130               INTO :li_Beneficiary_Seq_No
+236000121130               FROM MFAMRQBRP
+236100121130             WHERE Account_No       = :li_AcctNo
+236200121130               AND Old_Ben_SIN      = :li_SIN
+236300121130               AND Replacement_Date = :li_OrigTransDate
+236400121130               AND MRQ_Version_Code = :lc_VersionCode
+236500121130               AND MRQ_FILE_DATE    = :li_MRQ_File_Date_Max
+236600121204               AND MRQ_APPROVAL_STATUS = :lncc_E
+236700121130             FETCH FIRST ROW ONLY
+236800121130           END-EXEC.
+236900121130
+237000121130           MOVE SQLSTATE TO lc_sqlStates.
+237100121130           IF NOT lncc_sqlSuccessful
+237200121130              SET lncc_Err_S2 TO TRUE
+237300121130              MOVE "MFAMRQBRP 2"            TO lncc_SelectFileName
+237400121130              MOVE lncc_ErrorSelectingFile  TO lc_sqlErrShortDESCR
+237500121130              DISPLAY "Old Beneficiary seq no not found. "
+237600121130              DISPLAY "Account Number: " li_AcctNo
+237700121130              DISPLAY "Old beneficiary SIN: " li_SIN
+237800121130              DISPLAY "Year: " li_Year
+237900121130              PERFORM DSP-ERROR
+238000121130           END-IF.
+238100121130
+238200121123       Get_Latest_File_Date_MRQXFP.
+238300121123           INITIALIZE li_MRQ_File_Date_Max.
+238400121123
+238500121123           EXEC SQL
+238600121123             SELECT MAX(MRQ_FILE_DATE)
+238700121123             INTO :li_MRQ_File_Date_Max
+238800121123             FROM MFAMRQXFP
+238900121123             WHERE Account_No       = :li_AcctNo
+239000121123               AND Ben_SIN          = :li_SIN
+239100121123               AND Transfer_Date    = :li_OrigTransDate
+239200121123               AND MRQ_Version_Code = :lc_VersionCode
+239300121123               AND MRQ_FILE_DATE    < :Li_MRQFileDate
+239400121123               AND Record_Type_2    = :lc_OrigRecType
+239500121123               AND MRQ_APPROVAL_STATUS = :lncc_E
+239600121126               AND :lc_SubtypeRecord IN ("01", "02")
+239700121123           END-EXEC.
+239800121123
+239900121123           MOVE SQLSTATE TO lc_sqlStates.
+240000121123           IF NOT lncc_sqlSuccessful
+240100121123              SET lncc_Err_S8 TO TRUE
+240200121123              MOVE "MFAMRQXFP"              TO lncc_SelectFileName
+240300121123              MOVE lncc_ErrorSelectingFile  TO lc_sqlErrShortDESCR
+240400121123              DISPLAY "Record not found in MFAMRQXFP. "
+240500121123              DISPLAY "Account Number: " li_AcctNo
+240600121123              DISPLAY "Ben SIN: " li_SIN
+240700121123              DISPLAY "Transfer Date: " li_OrigTransDate
+240800121123              DISPLAY "Record Type: " lc_OrigRecType
+240900121123              DISPLAY "MRQ Version Code: " lc_VersionCode
+241000121123              PERFORM DSP-ERROR
+241100121129              PERFORM LogError
+241200121123           END-IF.
+241300121123
+241400121130       Get-Beneficiary-Seq-No-04.
+241500121130           INITIALIZE li_Beneficiary_Seq_No.
+241600121130
+241700121130           EXEC SQL
+241800121130             SELECT BENEFICIARY_SEQ_NO
+241900121130             INTO   :li_Beneficiary_Seq_No
+242000121130             FROM MFAMRQXFP
+242100121130             WHERE Account_No       = :li_AcctNo
+242200121130               AND Ben_SIN          = :li_SIN
+242300121130               AND Transfer_Date    = :li_OrigTransDate
+242400121130               AND MRQ_Version_Code = :lc_VersionCode
+242500121130               AND MRQ_FILE_DATE    = :li_MRQ_File_Date_Max
+242600121130               AND Record_Type_2    = :lc_OrigRecType
+242700121130               AND :lc_SubtypeRecord IN ("01", "02")
+242800121204               AND MRQ_APPROVAL_STATUS = :lncc_E
+242900121130             FETCH FIRST ROW ONLY
+243000121130           END-EXEC.
+243100121130
+243200121130           MOVE SQLSTATE TO lc_sqlStates.
+243300121130           IF NOT lncc_sqlSuccessful
+243400121130              SET lncc_Err_S8 TO TRUE
+243500121130              MOVE "MFAMRQXFP"              TO lncc_SelectFileName
+243600121130              MOVE lncc_ErrorSelectingFile  TO lc_sqlErrShortDESCR
+243700121130              DISPLAY "Beneficiary seq no not found. "
+243800121130              DISPLAY "Account Number: " li_AcctNo
+243900121130              DISPLAY "Ben SIN: " li_SIN
+244000121130              DISPLAY "Transfer Date: " li_OrigTransDate
+244100121130              DISPLAY "Record Type: " lc_OrigRecType
+244200121130              DISPLAY "MRQ Version Code: " lc_VersionCode
+244300121130              PERFORM DSP-ERROR
+244400121130              PERFORM LogError
+244500121130           END-IF.
+244600121130
+244700121130
+244800121123       Get_Latest_File_Date_MRQTP.
+244900121123           INITIALIZE li_MRQ_File_Date_Max.
+245000121123
+245100121123           EXEC SQL
+245200121123             SELECT MAX(MRQ_FILE_DATE)
+245300121123             INTO :li_MRQ_File_Date_Max
+245400121123             FROM MFAMRQTP
+245500121123             WHERE Account_No       = :li_AcctNo
+245600121123               AND Ben_SIN          = :li_SIN
+245700121123               AND Payment_Date_MRQ = :li_OrigTransDate
+245800121123               AND MRQ_Version_Code = :lc_VersionCode
+245900121123               AND MRQ_FILE_DATE    < :Li_MRQFileDate
+246000121123               AND Record_Type_2    = :lc_OrigRecType
+246100121123               AND MRQ_APPROVAL_STATUS = :lncc_E
+246200121203               AND PAYMENT_TYPE_2   = :lc_SubtypeRecord
+246300121203      *        AND :lc_SubtypeRecord = "01"
+246400121123           END-EXEC.
+246500121123
+246600121123           MOVE SQLSTATE TO lc_sqlStates.
+246700121123           IF NOT lncc_sqlSuccessful
+246800121123              SET lncc_Err_S8 TO TRUE
+246900121123              MOVE "MFAMRQTP"              TO lncc_SelectFileName
+247000121123              MOVE lncc_ErrorSelectingFile  TO lc_sqlErrShortDESCR
+247100121123              DISPLAY "Record not found in MFAMRQTP. "
+247200121123              DISPLAY "Account Number: " li_AcctNo
+247300121123              DISPLAY "Ben SIN: " li_SIN
+247400121123              DISPLAY "Payment Date: " li_OrigTransDate
+247500121123              DISPLAY "Record Type: " lc_OrigRecType
+247600121123              DISPLAY "MRQ Version Code: " lc_VersionCode
+247700121123              PERFORM DSP-ERROR
+247800121129              PERFORM LogError
+247900121123           END-IF.
+248000121123
+248100121130       Get-Beneficiary-Seq-No-05.
+248200121130           INITIALIZE li_Beneficiary_Seq_No.
+248300121130
+248400121130           EXEC SQL
+248500121130             SELECT BENEFICIARY_SEQ_NO
+248600121130             INTO   :li_Beneficiary_Seq_No
+248700121130             FROM MFAMRQTP
+248800121130             WHERE Account_No       = :li_AcctNo
+248900121130               AND Ben_SIN          = :li_SIN
+249000121130               AND Payment_Date_MRQ = :li_OrigTransDate
+249100121130               AND MRQ_Version_Code = :lc_VersionCode
+249200121130               AND MRQ_FILE_DATE    = :li_MRQ_File_Date_Max
+249300121130               AND Record_Type_2    = :lc_OrigRecType
+249400121204               AND MRQ_APPROVAL_STATUS = :lncc_E
+249500121203               AND PAYMENT_TYPE_2   = :lc_SubtypeRecord
+249600121203      *        AND :lc_SubtypeRecord = "01"
+249700121130           END-EXEC.
+249800121130
+249900121130           MOVE SQLSTATE TO lc_sqlStates.
+250000121130           IF NOT lncc_sqlSuccessful
+250100121130              SET lncc_Err_S8 TO TRUE
+250200121130              MOVE "MFAMRQTP"              TO lncc_SelectFileName
+250300121130              MOVE lncc_ErrorSelectingFile  TO lc_sqlErrShortDESCR
+250400121130              DISPLAY "Beneficiary seq no not found. "
+250500121130              DISPLAY "Account Number: " li_AcctNo
+250600121130              DISPLAY "Ben SIN: " li_SIN
+250700121130              DISPLAY "Payment Date: " li_OrigTransDate
+250800121130              DISPLAY "Record Type: " lc_OrigRecType
+250900121130              DISPLAY "MRQ Version Code: " lc_VersionCode
+251000121130              PERFORM DSP-ERROR
+251100121130              PERFORM LogError
+251200121130           END-IF.
+251300121130
+251400121123       Get_Latest_File_Date_MRQTXP.
+251500121123           INITIALIZE li_MRQ_File_Date_Max.
+251600121123
+251700121123           EXEC SQL
+251800121123             SELECT MAX(MRQ_FILE_DATE)
+251900121123             INTO :li_MRQ_File_Date_Max
+252000121123             FROM MFAMRQTXP
+252100121123             WHERE Account_No       = :li_AcctNo
+252200121123               AND Ben_SIN          = :li_SIN
+252300121123               AND Event_Date       = :li_OrigTransDate
+252400121123               AND MRQ_Version_Code = :lc_VersionCode
+252500121123               AND MRQ_FILE_DATE    < :Li_MRQFileDate
+252600121123               AND Record_Type_2    = :lc_OrigRecType
+252700121126               AND Special_Tax_Reason = :lc_SubtypeRecord
+252800121123               AND MRQ_APPROVAL_STATUS = :lncc_E
+252900121123           END-EXEC.
+253000121123
+253100121123           MOVE SQLSTATE TO lc_sqlStates.
+253200121123           IF NOT lncc_sqlSuccessful
+253300121123              SET lncc_Err_S8 TO TRUE
+253400121123              MOVE "MFAMRQTXP"              TO lncc_SelectFileName
+253500121123              MOVE lncc_ErrorSelectingFile  TO lc_sqlErrShortDESCR
+253600121123              DISPLAY "Record not found in MFAMRQTXP. "
+253700121123              DISPLAY "Account Number: " li_AcctNo
+253800121123              DISPLAY "Ben SIN: " li_SIN
+253900121123              DISPLAY "Event Date: " li_OrigTransDate
+254000121123              DISPLAY "Record Type: " lc_OrigRecType
+254100121123              DISPLAY "MRQ Version Code: " lc_VersionCode
+254200121123              DISPLAY "Special Tax Reason: " lc_SubtypeRecord
+254300121123              PERFORM DSP-ERROR
+254400121129              PERFORM LogError
+254500121123           END-IF.
+254600121123
+254700121130       Get-Beneficiary-Seq-No-06.
+254800121130           INITIALIZE li_Beneficiary_Seq_No.
+254900121130
+255000121130           EXEC SQL
+255100121130             SELECT BENEFICIARY_SEQ_NO
+255200121130             INTO   :li_Beneficiary_Seq_No
+255300121130             FROM MFAMRQTXP
+255400121130             WHERE Account_No       = :li_AcctNo
+255500121130               AND Ben_SIN          = :li_SIN
+255600121130               AND Event_Date       = :li_OrigTransDate
+255700121130               AND MRQ_Version_Code = :lc_VersionCode
+255800121130               AND MRQ_FILE_DATE    = :li_MRQ_File_Date_Max
+255900121130               AND Record_Type_2    = :lc_OrigRecType
+256000121204               AND MRQ_APPROVAL_STATUS = :lncc_E
+256100121130               AND Special_Tax_Reason = :lc_SubtypeRecord
+256200121130           END-EXEC.
+256300121130
+256400121130           MOVE SQLSTATE TO lc_sqlStates.
+256500121130           IF NOT lncc_sqlSuccessful
+256600121130              SET lncc_Err_S8 TO TRUE
+256700121130              MOVE "MFAMRQTXP"              TO lncc_SelectFileName
+256800121130              MOVE lncc_ErrorSelectingFile  TO lc_sqlErrShortDESCR
+256900121130              DISPLAY "Beneficiary seq no not found. "
+257000121130              DISPLAY "Account Number: " li_AcctNo
+257100121130              DISPLAY "Ben SIN: " li_SIN
+257200121130              DISPLAY "Event Date: " li_OrigTransDate
+257300121130              DISPLAY "Record Type: " lc_OrigRecType
+257400121130              DISPLAY "MRQ Version Code: " lc_VersionCode
+257500121130              DISPLAY "Special Tax Reason: " lc_SubtypeRecord
+257600121130              PERFORM DSP-ERROR
+257700121130              PERFORM LogError
+257800121130           END-IF.
+257900121130
+258000121109       Insert-MFAMRQERP-Record.
+258100121112           EXEC SQL
+258200121112             INSERT INTO MFAMRQERP
+258300121112                   (Account_No,
+258400121112                    Beneficiary_Seq_No,
+258500121112                    Record_Type_2,
+258600121112                    MRQ_Version_Code,
+258700121112                    MRQ_File_Date,
+258800121112                    Year,
+258900121112                    Orig_Trans_Date,
+259000121112                    Subtype_Record,
+259100121112                    MRQ_Error_Code
+259200121112                   )
+259300121112             VALUES (:li_AcctNo,
+259400121112                     :li_Beneficiary_Seq_No,
+259500121112                     :lc_OrigRecType,
+259600121112                     :lc_VersionCode,
+259700121112                     :li_MRQ_File_Date_Max,
+259800121126                     :li_Year_Err,
+259900121112                     :li_OrigTransDate,
+260000121112                     :lc_SubtypeRecord,
+260100121112                     :lc_MRQ_Error_Code
+260200121112                    )
+260300121112           END-EXEC.
+260400121112           MOVE SQLSTATE TO lc_sqlStates.
+260500121112           IF NOT lncc_sqlSuccessful
+260600121112              SET lncc_Err_I2               TO TRUE
+260700121126              MOVE "MFAMRQERP "             TO lncc_InsertFileName
+260800121112              MOVE lncc_ErrorInsertingFile  TO lc_sqlErrShortDESCR
+260900121112              DISPLAY "Account Number: " li_AcctNo
+261000121112              DISPLAY "Beneficiary SIN: " li_SIN
+261100121112              DISPLAY "Beneficiary SEQ: " li_Beneficiary_Seq_No
+261200121112              DISPLAY "Record Type: "  lc_OrigRecType
+261300121112              DISPLAY "MRQ File Date: " li_MRQ_File_Date_Max
+261400121126              DISPLAY "Year: " li_Year_Err
+261500121112              DISPLAY "MRQ Version Code: " lc_VersionCode
+261600121122              DISPLAY "MRQ Error Code: " lc_MRQ_Error_Code
+261700121112              PERFORM SQLFailProcess
+261800121112           END-IF.
+261900121112
+262000121109      *103860 - end
+262100120925
+262200110526       Validate_Address.
+262300110606           Move  Li_Validate-AddrNo         TO Li_Fetch-AddrNo.
+262400110526           Perform Fetch_Address.
+262500110526
+262600110530           IF  lc_Validate-AptNo   NOT = lc_Fetch-AptNo
+262700110530           OR  lc_Validate-CivicNo NOT = lc_Fetch-CivicNo
+262800110530           OR  lc_Validate-Street  NOT = lc_Fetch-Street
+262900110530           OR  lc_Validate-Addr2   NOT = lc_Fetch-Addr2
+263000110530           OR  lc_Validate-Addr3   NOT = lc_Fetch-Addr3
+263100110530           OR  lc_Validate-City    NOT = lc_Fetch-City
+263200110530           OR  lc_Validate-Prov    NOT = lc_Fetch-Prov
+263300110530           OR  lc_Validate-Country NOT = lc_Fetch-Country
+263400110530           OR  lc_Validate-Postal  NOT = lc_Fetch-Postal
+263500110602               MOVE ZEROS          TO    li_Validate-AddrNo
+263600110530           END-IF.
+263700110530
+263800110523        Fetch_Address.
+263900110523           EXEC SQL
+264000110523             SELECT ADDP.Misc_First_Addr_Line,
+264100110523                    ADDP.Street_No,
+264200110523                    SUBSTR (ADDP.Street_Name,1,30) CONCAT
+264300110523                    SUBSTR (ADDP.Street_Type_Code,1,6) CONCAT
+264400110523                    SUBSTR (ADDP.Street_Dirct_Code,1,2),
+264500110523                    ADDP.Misc_Second_Addr_Line,
+264600110523                    CASE
+264700110523                    WHEN ADDP.Country_Code = "CAN"
+264800110523                    THEN " "
+264900110523                    WHEN ADDP.Country_Code = "USA"
+265000110523                    THEN PRVDC.Province_Code_Descr
+265100110523                    ELSE CNTRY.Country_Name
+265200110523                    END,
+265300110523                    ADDP.City,
+265400110523                    CASE
+265500110523                    WHEN ADDP.Country_Code = "CAN"
+265600110523                    THEN ADDP.Province_Code
+265700110523                    ELSE " "
+265800110523                    END,
+265900110523                    CASE
+266000110523                    WHEN ADDP.Country_Code IN("CAN","USA")
+266100110523                    THEN ADDP.Country_Code
+266200110523                    ELSE :lncc_AUT
+266300110523                    END,
+266400110523                    ADDP.Postal_Code
+266500110523             INTO   :Lc_Fetch-AptNo,
+266600110523                    :Lc_Fetch-CivicNo,
+266700110523                    :Lc_Fetch-Street,
+266800110523                    :Lc_Fetch-Addr2,
+266900110523                    :Lc_Fetch-Addr3,
+267000110523                    :Lc_Fetch-City,
+267100110523                    :Lc_Fetch-Prov,
+267200110523                    :Lc_Fetch-Country,
+267300110523                    :Lc_Fetch-Postal
+267400110523             FROM   MFAADDP ADDP
+267500110523             LEFT JOIN MFAPRVDCP PRVDC
+267600110523             ON     ADDP.Country_Code  = PRVDC.Country_Code
+267700110523             AND    ADDP.Province_Code = PRVDC.Province_Code
+267800120203             AND    PRVDC.Language_Code = "E"
+267900111216
+268000110523             LEFT JOIN MFACOUP CNTRY
+268100110606             ON ADDP.Country_Code      = CNTRY.Country_Code
+268200110606             WHERE ADDP.Addr_no        = :Li_Fetch-AddrNo
+268300110523           END-EXEC.
+268400110601
+268500110606           MOVE SQLSTATE                    TO lc_sqlStates.
+268600110606           IF  NOT lncc_sqlSuccessful
+268700110606               SET lncc_Err_S7              TO TRUE
+268800110606               MOVE "MFAADDP"               TO lncc_SelectFileName
+268900110606               MOVE lncc_ErrorSelectingFile TO lc_sqlErrShortDESCR
+269000110606               PERFORM SQLFailProcess
+269100110606           END-IF.
+269200110523
+269300110526        Create_TempAddress.
+269400110526           EXEC SQL
+269500110526             INSERT INTO  QTEMP/ADDRDTL  VALUES (
+269600110526                          CASE
+269700110704                          WHEN :Li_Validate-AddrNo = 0
+269800110526                          THEN :Li_StartAddrNo
+269900110526                          ELSE :Li_Validate-AddrNo
+270000110526                          END,
+270100110526                          :Lc_Validate-AptNo,
+270200110526                          :Lc_Validate-CivicNo,
+270300110526                          :Lc_Validate-Street,
+270400110526                          :Lc_Validate-Addr2,
+270500110526                          :Lc_Validate-Addr3,
+270600110526                          :Lc_Validate-City,
+270700110526                          :Lc_Validate-Prov,
+270800110526                          :Lc_Validate-Country,
+270900110526                          :Lc_Validate-Postal,
+271000110526                          :Li_Validate-AddrNo
+271100110526                          )
+271200110526           END-EXEC.
+271300110606
+271400110606           MOVE SQLSTATE                     TO lc_sqlStates.
+271500110530           IF   NOT lncc_sqlSuccessful
+271600110606                SET lncc_Err_I7              TO TRUE
+271700110606                MOVE "ADDRDTL   "            TO lncc_InsertFileName
+271800110530                MOVE lncc_ErrorInsertingFile TO lc_sqlErrShortDESCR
+271900110530                PERFORM SQLFailProcess
+272000110530           END-IF.
+272100110530
+272200110606           IF  Li_Validate-AddrNo = 0
+272300110606               MOVE    Li_StartAddrNo        TO  Li_Validate-AddrNo
+272400110606               COMPUTE Li_StartAddrNo        =   Li_StartAddrNo + 1
+272500110526           END-IF.
+272600110530
+272700110610       SetFinalAddress.
+272800110623           EXEC SQL
+272900110623           INSERT INTO QTEMP/ADDRSUM (
+273000110623                         AptNo,
+273100110623                         CivicNo,
+273200110623                         Street,
+273300110623                         Addr2,
+273400110623                         Addr3,
+273500110623                         City,
+273600110623                         Prov,
+273700110623                         Country,
+273800110623                         Postal
+273900110623                         )
+274000110623                  SELECT AptNo,
+274100110623                         CivicNo,
+274200110623                         Street,
+274300110623                         Addr2,
+274400110623                         Addr3,
+274500110623                         City,
+274600110623                         Prov,
+274700110623                         Country,
+274800110623                         Postal
+274900110623                  FROM   QTEMP/ADDRDTL
+275000110623                  GROUP BY AptNo,
+275100110623                           CivicNo,
+275200110623                           Street,
+275300110623                           Addr2,
+275400110623                           Addr3,
+275500110623                           City,
+275600110623                           Prov,
+275700110623                           Country,
+275800110623                           Postal
+275900110623           END-EXEC.
+276000110623
+276100110623           MOVE SQLSTATE                    TO lc_sqlStates.
+276200110623           IF  NOT lncc_sqlSuccessful
+276300110623               SET lncc_Err_I8              TO TRUE
+276400110623               MOVE "ADDRSUM"               TO lncc_InsertFileName
+276500110623               MOVE lncc_ErrorInsertingFile TO lc_sqlErrShortDESCR
+276600110623               PERFORM SQLFailProcess
+276700110623           END-IF.
+276800110623
+276900110623           EXEC SQL
+277000110623               UPDATE QTEMP/ADDRSUM
+277100110623               SET    Temp_AddrNo  = RRN(ADDRSUM)
+277200110623           END-EXEC.
+277300110610
+277400110610           EXEC SQL
+277500110610             DECLARE ADDRSUM_Cur CURSOR FOR
+277600110610                     SELECT * FROM QTEMP/ADDRSUM
+277700110610           END-EXEC.
+277800110610
+277900110610           EXEC SQL
+278000110610             OPEN ADDRSUM_Cur
+278100110610           END-EXEC.
+278200110610
+278300110610           MOVE SQLSTATE                     TO lc_sqlStates.
+278400110610           IF  NOT lncc_sqlSuccessful
+278500110623               SET lncc_Err_Open2            TO TRUE
+278600110610               MOVE "ADDRSUM CUR "           TO lncc_OpenCursor
+278700110610               MOVE lncc_ErrorOpeningCursor  TO lc_sqlErrShortDESCR
+278800110610               PERFORM SQLFailProcess
+278900110610           END-IF.
+279000110610
+279100110610           SET lncc_ADDRSUM_Start            TO TRUE.
+279200110610           PERFORM ProcessADDRSUMRec UNTIL lncc_ADDRSUM_End.
+279300110613
+279400110615           EXEC SQL
+279500110615             UPDATE QTEMP/ADDRDTL RDTL
+279600110615             SET   RDTL.Final_AddrNo =
+279700110615             (SELECT  RSUM.Temp_AddrNo
+279800110615              FROM QTEMP/ADDRSUM RSUM
+279900110624              WHERE  RDTL.AptNo        =   RSUM.AptNo
+280000110615              AND    RDTL.CivicNo      =   RSUM.CivicNo
+280100110615              AND    RDTL.Street       =   RSUM.Street
+280200110615              AND    RDTL.Addr2        =   RSUM.Addr2
+280300110615              AND    RDTL.Addr3        =   RSUM.Addr3
+280400110615              AND    RDTL.City         =   RSUM.City
+280500110615              AND    RDTL.Prov         =   RSUM.Prov
+280600110615              AND    RDTL.Country      =   RSUM.Country
+280700110615              AND    RDTL.Postal       =   RSUM.Postal)
+280800110624              WHERE  RDTL.Final_AddrNo =   0
+280900110615           END-EXEC.
+281000110615
+281100110615           EXEC SQL
+281200110623             DECLARE ADDRDTL_Cur Cursor For
+281300110615                     SELECT * FROM QTEMP/ADDRDTL
+281400110615           END-EXEC.
+281500110615
+281600110615           EXEC SQL
+281700110623             OPEN ADDRDTL_Cur
+281800110615           END-EXEC.
+281900110615
+282000110615           MOVE SQLSTATE                     TO lc_sqlStates.
+282100110615           IF  NOT lncc_sqlSuccessful
+282200110623               SET lncc_Err_Open3            TO TRUE
+282300110615               MOVE "ADDRDTL CUR "           TO lncc_OpenCursor
+282400110615               MOVE lncc_ErrorOpeningCursor  TO lc_sqlErrShortDESCR
+282500110615               PERFORM SQLFailProcess
+282600110615           END-IF.
+282700110615
+282800110623           SET lncc_ADDRDTL_Start            TO TRUE.
+282900110623           PERFORM ProcessADDRDTLRec  UNTIL lncc_ADDRDTL_End.
+283000110615
+283100110623       ProcessADDRDTLRec.
+283200110701            INITIALIZE lc_ADDRDTL_Record.
+283300110615            EXEC SQL
+283400110623              FETCH NEXT FROM ADDRDTL_Cur
+283500110615              INTO  :lc_ADDRDTL_Record
+283600110615            END-EXEC.
+283700110615
+283800110615            MOVE SQLSTATE                     TO lc_sqlStates.
+283900110615            IF   lncc_sqlSuccessful
+284000110615                 PERFORM ProcessUpdatePara
+284100110615            ELSE IF lncc_sqlEnd
+284200110623                 SET lncc_ADDRDTL_End         TO TRUE
+284300110615            ELSE
+284400110623                 SET lncc_Err_Fetch3          TO TRUE
+284500110615                 MOVE "FETCH ADDRDTL Cur"      TO lncc_FetchCursor
+284600110615                 MOVE lncc_ErrorFetchingCursor TO lc_sqlErrShortDESCR
+284700110615                 PERFORM SQLFailProcess
+284800110615            END-IF.
+284900110615
+285000110615       ProcessUpdatePara.
+285100110615           EXEC SQL
+285200110615             UPDATE MFAMRQRQP  RQP
+285300110615             SET   RQP.Ben_Addr_No   =  :lc_Final_AddrNo_dtl
+285400110615             WHERE RQP.Ben_Addr_No   =  :lc_Temp_AddrNo_dtl
+285500110615           END-EXEC.
+285600110615
+285700110615           EXEC SQL
+285800110615             UPDATE MFAMRQRQP  RQP
+285900110615             SET RQP.SUB_Addr_No     =  :lc_Final_AddrNo_dtl
+286000110615             WHERE RQP.SUB_Addr_No   =  :lc_Temp_AddrNo_dtl
+286100110615           END-EXEC.
+286200110615
+286300110615           MOVE SQLSTATE                   TO lc_sqlStates
+286400110615           IF  NOT lncc_sqlSuccessful
+286500110615               SET lncc_Err_U2             TO TRUE
+286600110615               MOVE "MFAMRQRQP"            TO lncc_UpdateFileName
+286700110615               MOVE lncc_ErrorUpdatingFile TO lc_sqlErrShortDESCR
+286800110615               PERFORM SQLFailProcess
+286900110615           END-IF.
+287000110615
+287100110615           EXEC SQL
+287200110615             UPDATE MFAMRQBRP  BRP
+287300110615             SET BRP.Ben_Addr_No      =  :lc_Final_AddrNo_dtl
+287400110615             WHERE  BRP.Ben_Addr_No   =  :lc_Temp_AddrNo_dtl
+287500110615           END-EXEC.
+287600110615
+287700110615           MOVE SQLSTATE                   TO lc_sqlStates
+287800110615           IF  NOT lncc_sqlSuccessful
+287900110615               SET lncc_Err_U3             TO TRUE
+288000110615               MOVE "MFAMRQBRP"            TO lncc_UpdateFileName
+288100110615               MOVE lncc_ErrorUpdatingFile TO lc_sqlErrShortDESCR
+288200110615               PERFORM SQLFailProcess
+288300110615           END-IF.
+288400110615
+288500110615           EXEC SQL
+288600110615             UPDATE MFAMRQXFP  XFP
+288700110615             SET XFP.Ben_Addr_No      =  :lc_Final_AddrNo_dtl
+288800110615             WHERE  XFP.Ben_Addr_No   =  :lc_Temp_AddrNo_dtl
+288900110615           END-EXEC.
+289000110615
+289100110615           EXEC SQL
+289200110615             UPDATE MFAMRQXFP  XFP
+289300110615             SET XFP.Sub_Addr_No      =  :lc_Final_AddrNo_dtl
+289400110615             WHERE  XFP.Sub_Addr_No   =  :lc_Temp_AddrNo_dtl
+289500110615           END-EXEC.
+289600110615
+289700110615           MOVE SQLSTATE                   TO lc_sqlStates
+289800110615           IF  NOT lncc_sqlSuccessful
+289900110615               SET lncc_Err_U4             TO TRUE
+290000110615               MOVE "MFAMRQXFP"            TO lncc_UpdateFileName
+290100110615               MOVE lncc_ErrorUpdatingFile TO lc_sqlErrShortDESCR
+290200110615               PERFORM SQLFailProcess
+290300110615           END-IF.
+290400110610
+290500110610       ProcessADDRSUMRec.
+290600110613           INITIALIZE lc_ADDRSUM_Record.
+290700110610           EXEC SQL
+290800110610             FETCH NEXT FROM ADDRSUM_Cur
+290900110613             INTO :lc_ADDRSUM_Record
+291000110610           END-EXEC.
+291100110610
+291200110610           MOVE SQLSTATE                     TO lc_sqlStates.
+291300110610           IF   lncc_sqlSuccessful
+291400110610                PERFORM PROCESS_ADDRSUM_Cur
+291500110610           ELSE IF lncc_sqlEnd
+291600110610                SET lncc_ADDRSUM_End         TO TRUE
+291700110610           ELSE
+291800110623                SET lncc_Err_Fetch2           TO TRUE
+291900110610                MOVE "FETCH ADDRSUM Cur"      TO lncc_FetchCursor
+292000110610                MOVE lncc_ErrorFetchingCursor TO lc_sqlErrShortDESCR
+292100110610                PERFORM SQLFailProcess
+292200110610           END-IF.
+292300110610
+292400110610       PROCESS_ADDRSUM_Cur.
+292500110613
+292600110613           MOVE   ZEROS                        TO Li_Validate-AddrNo.
+292700110613           MOVE   lc_Temp_AddrNo               TO WS-TAN.
+292800110613           MOVE   lc_AptNo                     TO Lc_Validate-AptNo.
+292900110613           MOVE   lc_CivicNo                   TO Lc_Validate-CivicNo.
+293000110613           MOVE   lc_Street                    TO Lc_Validate-Street.
+293100110613           MOVE   lc_Addr2                     TO Lc_Validate-Addr2.
+293200110613           MOVE   lc_Addr3                     TO Lc_Validate-Addr3.
+293300110613           MOVE   lc_City                      TO Lc_Validate-City.
+293400110613           MOVE   lc_Prov                      TO Lc_Validate-Prov.
+293500110613           MOVE   lc_Country                   TO Lc_Validate-Country.
+293600110613           MOVE   lc_Postal                    TO Lc_Validate-Postal.
+293700110610
+293800110613           PERFORM Create_Address.
+293900110610
+294000110610           EXEC SQL
+294100110610             UPDATE QTEMP/ADDRSUM
+294200110610             SET    Temp_AddrNo  = :Li_Validate-AddrNo
+294300110610             WHERE  Temp_AddrNo  = :WS-TAN
+294400110610           END-EXEC.
+294500110610
+294600110610           MOVE SQLSTATE                   TO lc_sqlStates.
+294700110610           IF  NOT lncc_sqlSuccessful
+294800110613               SET lncc_Err_U6             TO TRUE
+294900110610               MOVE "ADDRSUM "             TO lncc_UpdateFileName
+295000110610               MOVE lncc_ErrorUpdatingFile TO lc_sqlErrShortDESCR
+295100110610               PERFORM SQLFailProcess
+295200110610           END-IF.
+295300110610
+295400110610       Create_Address.
+295500110624
+295600110624           MOVE lncc_AddressNo         TO COMM-CONTROL-CODE
+295700110624           CALL "GETCTLNUM" Using COMM-CONTROL-CODE
+295800110624                                  COMM-NEXT-NUMBER
+295900110624                                  COMM-RETURN-CODE
+296000110624
+296100110624           If COMM-RETURN-CODE   = lc_Normal
+296200110624              Move COMM-NEXT-NUMBER    TO Li_Validate-AddrNo
+296300110624             Else
+296400110624                STRING lncc_GetAddNum           DELIMITED BY "  "
+296500110624                       " "                      DELIMITED BY SIZE
+296600110624                       COMM-RETURN-CODE         DELIMITED BY SIZE
+296700110624                INTO Ws-Sql-Err-Short-Descr
+296800110624                PERFORM SQLFailProcess
+296900110624           END-IF
+297000110624
+297100110929           IF Lc_Validate-Country = "USA"
+297200110929              EXEC SQL
+297300110929                SELECT  substr(Province_Code,2)
+297400110929                  INTO  :Lc_Validate-Prov
+297500110929                  FROM  MFAPRVDCP PRVDC
+297600110929                  WHERE PRVDC.PROVINCE_CODE_DESCR = :Lc_Validate-Addr3
+297700110929                  FETCH FIRST ROW ONLY
+297800110929              END-EXEC
+297900111103              MOVE SQLSTATE TO lc_sqlStates
+298000111103              IF NOT lncc_sqlSuccessful
+298100111103                 MOVE SPACES TO Lc_Validate-Prov
+298200111103              END-IF
+298300110929           END-IF.
+298400110610
+298500110610
+298600110610           EXEC SQL
+298700110610                INSERT INTO MFAADDP
+298800110610                       VALUES (:Li_Validate-AddrNo,
+298900110610                               SUBSTR(:Lc_Validate-CivicNo,1,6),
+299000110610                               SUBSTR(:Lc_Validate-Street,1,30),
+299100110610                               SUBSTR(:Lc_Validate-Street,31,6),
+299200110610                               SUBSTR(:Lc_Validate-Street,37,2),
+299300110610                               :Lc_Validate-City,
+299400110610                               :Lc_Validate-Postal,
+299500110610                               :Lc_Validate-Country,
+299600110610                               :Lc_Validate-Prov,
+299700110610                               " ",
+299800110610                               :Lc_Validate-AptNo,
+299900110610                               :Lc_Validate-Addr2,
+300000110610                               " ",
+300100110610                               " ",
+300200110704                               0,
+300300110704                               :Lncc_RSPTRNIQ,
+300400110704                               0,
+300500110704                               0,
+300600110610                               " ",
+300700110610                               " "
+300800110610                               )
+300900110610           END-EXEC.
+301000110610
+301100110610           MOVE SQLSTATE                     TO lc_sqlStates.
+301200110610           IF   NOT lncc_sqlSuccessful
+301300110610                SET lncc_Err_I9              TO TRUE
+301400110610                MOVE "MFAADDP   "            TO lncc_InsertFileName
+301500110610                MOVE lncc_ErrorInsertingFile TO lc_sqlErrShortDESCR
+301600110610                PERFORM SQLFailProcess
+301700110610           END-IF.
+301800120201       Set-Request-File-Date.
+301900120201           EXEC SQL
+302000120201             UPDATE MFAACBIRP a
+302100120201             SET MRQ_File_Date =
+302200120201             IFNULL(
+302300120201               (SELECT last_file
+302400120201                  FROM (SELECT account_no,
+302500120201                           year,
+302600120201                           beneficiary_seq_no,
+302700120201                           zoned(max(mrq_file_date),8,0) as last_file
+302800120201                    FROM  (SELECT account_no,
+302900120201                                  zoned(year,4,0) as year,
+303000120201                                  beneficiary_seq_no,
+303100120201                                  mrq_file_date
+303200120201                           FROM   MFAMRQRQP
+303300120201                           UNION  ALL
+303400120201                           SELECT account_no,
+303500120201                                 zoned(event_date / 10000,4,0) as year,
+303600120201                                 beneficiary_seq_no,
+303700120201                                 mrq_file_date
+303800120201                           FROM  MFAMRQTXP
+303900120201                           WHERE special_tax_reason in(22,23,24)
+304000120201                          ) AS raw
+304100120201                    GROUP BY    account_no,
+304200120201                                beneficiary_seq_no,
+304300120201                                year
+304400120201                ) AS grouped
+304500120201
+304600120201             WHERE a.account_no         = grouped.account_no
+304700120201             AND a.beneficiary_seq_no   = grouped.beneficiary_seq_no
+304800120201             AND a.year                 = grouped.year)
+304900120201             ,a.mrq_file_date)
+305000120201           END-EXEC.
+305100120202
+305200120202           MOVE SQLSTATE                   TO lc_sqlStates.
+305300120202           IF  NOT lncc_sqlSuccessful
+305400120202               SET lncc_Err_U7             TO TRUE
+305500120202               MOVE "MFAACBIRP"            TO lncc_UpdateFileName
+305600120202               MOVE lncc_ErrorUpdatingFile TO lc_sqlErrShortDESCR
+305700120202               PERFORM SQLFailProcess
+305800120202           END-IF.
+305900120201
+306000110601       LogError.
+306100110601           EXEC SQL
+306200110601             INSERT INTO SFMRQNTFND VALUES (
+306300110601                    :Lc_RecordIn,
+306400110603                    :Lc_LibraryName,
+306500140113                    :Lc_FileName,
+306600140113107500              :Li_Description
+306700110601                    )
+306800110601           END-EXEC.
+306900110610           MOVE SQLSTATE                    TO lc_sqlStates.
+307000110610           IF  NOT lncc_sqlSuccessful
+307100110610               SET lncc_Err_I1              TO TRUE
+307200110610               MOVE "SFMRQNTFND"            TO lncc_InsertFileName
+307300110610               MOVE lncc_ErrorInsertingFile TO lc_sqlErrShortDESCR
+307400110610               PERFORM SQLFailProcess
+307500110610           END-IF.
+307600110601
+307700110527        SQLFailProcess.
+307800110606           MOVE Ws-Err-Code                 TO lc_ErrCode.
+30790012092899609      MOVE lc-Err-Code1                TO lc_ErrCode1.
+308000110606           MOVE lc_sqlErrShortDESCR         TO lc_ErrDesc.
+308100110701           PERFORM Dsp-Error.
+308200110527
+308300110523        End-of-Program.
+308400110623           EXEC SQL
+308500110623             CLOSE MAIN_Cursor
+308600110623           END-EXEC.
+308700110623
+308800110623           EXEC SQL
+308900110623             CLOSE ADDRSUM_Cur
+309000110623           END-EXEC.
+309100110623
+309200110602           EXEC SQL
+309300110623             CLOSE ADDRDTL_Cur
+309400110602           END-EXEC.
+309500110602           GOBACK.
+309600110527
+309700110527      * ---------------------------------
+309800110527      * DSP-ERROR and FORCE-MSGW Routines
+309900110527      * ---------------------------------
+310000110602           COPY CPYSQLRTN.
+310100110523

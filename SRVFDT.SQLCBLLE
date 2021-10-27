@@ -1,0 +1,1080 @@
+000100980204       IDENTIFICATION DIVISION.
+000200110727       PROGRAM-ID.    SRVFDT.
+000300171005       AUTHOR.        RAJKUMAR A
+000400110727       INSTALLATION.  L&T INFOTECH FSTI INC.
+000500110727       DATE-WRITTEN.  JULY 2011.
+000600980204       DATE-COMPILED.
+000700111213      *****************************************************************
+000800111213      * Purpose  : Variable units daily transaction update            *
+000900111213      *            by account investment                              *
+001000111213      *                                                               *
+001100111213      * Called by: SRVFDAILY                                          *
+001200111213      *                                                               *
+001300111213      * Parms:     pc_Option           X(3)                           *
+001400111213      *              'ALL' - all accounts of the investment, input    *
+001500111213      *                      account no is not required.              *
+001600111213      *              'ONE' - One account of the investment, input     *
+001700111213      *                      account no is required.                  *
+001800111213      *                                                               *
+001900111213      *            pd_ProcessDate      S9(8)                          *
+002000111213      *              - current service fee process date, may not be   *
+002100111213      *                the same as the AS-AT-DATE of MFAPRCDTP.       *
+002200111213      *                                                               *
+002300111213      *            pc_InvestmentCode   X(5)                           *
+002400111213      *                                                               *
+002500111213      *            pi_AccountNo        S9(9)                          *
+002600111213      *              - set to zeros if pi_Option is 'ALL', set the    *
+002700111213      *                required account no. otherwise.                *
+002800111213      *                                                               *
+002900111213      *            pi_ReturnCode       X(3)                           *
+003000111213      *              " "   - Blank indicates no error, error occurred *
+003100111213      *                      otherwise.                               *
+003200111213      *              "01"  - Special authorization is required        *
+003300111213      *              "02"  - Invalid option                           *
+003400111213      *              "03"  - Process date is required                 *
+003500111213      *              "04"  - Account no. is required for              *
+003600111213      *                      COMM-OPTION 'ONE'.                       *
+003700111213      *              "05"  - Investment code is required              *
+003800111213      *              "06"  - Investment not found for var rate        *
+003900111213      *              "07"  - Error returned from FXSRVUAI for Get opt *
+004000111213      *              "08"  - Error returned from SRVFDR for daily     *
+004100111213      *                      roll-up                                  *
+004200111213      *              "09"  - Error returned from SRVFCN for daily     *
+004300111213      *                      transactions update                      *
+004400111213      *              "10"  - Error returned from SRVFCN for variable  *
+004500111213      *                      units re-calculation.                    *
+004600111213      *              "99"  - SQL error encounted.                     *
+004700111213      *                                                               *
+004800030417      ******************************************************************
+004900030417      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE              *
+005000110727      ******************************************************************
+005100110822      * RAJKUMAR A *JULY 2011     * PROGRAM CREATED FOR RFS64348       *
+005200130515      * Uma C      *2013/05/15    * RFS121657 - Recompile for MFATRNPUP*
+005201140613      * Vinsfy J   *2014/06/13    * RFS136634 - Recompile for MFAACCATP*
+005202181123      * Sachin Soman * 2018/11/23 * RFS180293 - Recompile for MFATRNPUP*
+005203181126      *                                         and MFATRNRUP
+005204200811      * Rajesh R   * 2020/08/11   * RFS185178 - Recompile for MFAFEESCLP
+005300110727      ******************************************************************
+005400980204       ENVIRONMENT DIVISION.
+005500980204       CONFIGURATION SECTION.
+005600980204       SOURCE-COMPUTER. IBM-AS400.
+005700980204       OBJECT-COMPUTER. IBM-AS400.
+005800110727       SPECIAL-NAMES.
+005900110825           LINKAGE TYPE IS PROCEDURE FOR "FXSRVUAI"
+006000110825           LINKAGE TYPE IS PROCEDURE FOR "SRVFDR"
+006100110825           LINKAGE TYPE IS PROCEDURE FOR "SRVFCN"
+006200110823                      DATA-AREA  IS lc_DataArea1
+006300110823                      LOCAL-DATA IS lc_Local.
+006400110727
+006500980204       INPUT-OUTPUT SECTION.
+006600000217       FILE-CONTROL.
+006700000217
+006800000217       DATA DIVISION.
+006900000217       FILE SECTION.
+007000030417      * ---------------------------------
+007100980204       WORKING-STORAGE SECTION.
+007200030417      * ---------------------------------
+007300030710          COPY CPYSQLFLD
+007400110727               REPLACING == "CURRENT_PROGRAM" == BY == "SRVFDT" ==.
+007500030414      *
+007600030417           EXEC SQL
+007700030417             INCLUDE SQLCA
+007800030417           END-EXEC.
+007900030417      *
+008000110822       01  C1_Fetch.
+008100110822          05 C1_FetchVar.
+008200110822             07 C1_AccountNo           PIC S9(9).
+008300110822             07 C1_InvestmentCode      PIC X(5).
+008400030417      * Error Codes, Uniquely Identify where the error happened
+008500111213       01 lc_ErrCode                       PIC X(02) VALUE SPACES.
+008600111213          88 lc_ErrOk                      VALUE SPACES.
+008700111213          88 lc_Err01                      VALUE "01".
+008800111213          88 lc_Err02                      VALUE "02".
+008900110727      *
+009000110822       01 ld_FormatDateIn              FORMAT DATE "@Y%m%d".
+009100110822       01 ld_FormatDateOut             FORMAT DATE "@Y%m%d".
+009200110822
+009300110822       01 lc_MiscFields.
+009400110822            05 lc_InvestmentCode           PIC X(5).
+009500110822            05 li_AccountNo                PIC S9(9).
+009600110822            05 li_Days                     PIC S9(5).
+009700110822            05 ld_processDate              PIC S9(9) COMP-3.
+009800111025            05 ld_EarlyDate                PIC S9(9) VALUE 19000101.
+009900110823            05 ld_EndDate                  PIC S9(9) COMP-3.
+010000110823            05 li_MinDays                  PIC S9(5) VALUE 92.
+010100111014            05 lc_StatsEvent               PIC X(01).
+010200110822            05 lc_LogProgramCalled         PIC X(10).
+010300111014            05 lc_ErrorCode                PIC X(03).
+010400111014            05 lc_WarningCode              PIC X(03).
+010500111014            05 lc_ExecType                 PIC X(01).
+010600110823            05 lc_ExecTypeDesc             PIC X(40).
+010700110823            05 lc_CallingProgram           PIC X(10)  VALUE "SRVFDT".
+010800110822
+010900110823            05 ld_SysDate                PIC S9(8).
+011000110823            05 li_SysTime                PIC S9(8).
+011100110823
+011200110823            05 li_Day1                   PIC Z9(7)9(1).
+011300110823            05 li_Day2                   PIC Z9(7)9(1).
+011400110823
+011500110823            05 li_TimeBegin.
+011600110823               07 li_TbHH               PIC 9(2).
+011700110823               07 li_TbMM               PIC 9(2).
+011800110823               07 li_TbSS               PIC 9(2).
+011900110823               07 li_TbTT               PIC 9(2).
+012000110823
+012100110823            05 li_TimeEnd.
+012200110823               07 li_TeHH               PIC 9(2).
+012300110823               07 li_TeMM               PIC 9(2).
+012400110823               07 li_TeSS               PIC 9(2).
+012500110823               07 li_TeTT               PIC 9(2).
+012600110823
+012700110823            05 li_TimeUsed.
+012800110823               07 li_TuHH               PIC 9(2).
+012900110823               07 FILLER                 PIC X(1) VALUE ":".
+013000110823               07 li_TuMM               PIC 9(2).
+013100110823               07 FILLER                 PIC X(1) VALUE ":".
+013200110823               07 li_TuSS               PIC 9(2).
+013300110823               07 FILLER                 PIC X(1) VALUE ":".
+013400110823               07 li_TuTT               PIC 9(2).
+013500110823
+013600110823
+013700110822
+013800110822       01 lc_Constants.
+013900110823           03 lncc_1                       PIC X(01) VALUE "1".
+014000110823           03 lncc_2                       PIC X(01) VALUE "2".
+014100110823           03 lncc_3                       PIC X(01) VALUE "3".
+014200110822           03 lncc_4                       PIC X(01) VALUE "4".
+014300110822           03 lncc_5                       PIC X(01) VALUE "5".
+014400110822           03 lncc_001                     PIC X(03) VALUE "001".
+014500110822           03 lncc_002                     PIC X(03) VALUE "002".
+014600110822           03 lncc_003                     PIC X(03) VALUE "003".
+014700110822           03 lncc_004                     PIC X(03) VALUE "004".
+014800110822           03 lncc_005                     PIC X(03) VALUE "005".
+014900110822           03 lncc_006                     PIC X(03) VALUE "006".
+015000110822           03 lncc_007                     PIC X(03) VALUE "007".
+015100110822           03 lncc_008                     PIC X(03) VALUE "008".
+015200110822           03 lncc_009                     PIC X(03) VALUE "009".
+015300110822           03 lncc_010                     PIC X(03) VALUE "010".
+015400110822           03 lncc_011                     PIC X(03) VALUE "011".
+015500110822           03 lncc_012                     PIC X(03) VALUE "012".
+015600110823           03 lncc_013                     PIC X(03) VALUE "013".
+015700110823           03 lncc_014                     PIC X(03) VALUE "014".
+015800110822           03 lncc_G                     PIC X(01) VALUE "G".
+015900110822           03 lncc_Y                     PIC X(01) VALUE "Y".
+016000110823           03 lncc_N                     PIC X(01) VALUE "N".
+016100110822           03 lncc_S                     PIC X(01) VALUE "S".
+016200110822           03 lncc_E                     PIC X(01) VALUE "E".
+016300110822           03 lncc_ALL                   PIC X(03) VALUE "ALL".
+016400110822           03 lncc_ONE                   PIC X(03) VALUE "ONE".
+016500110822           03 lncc_SRVFEE                PIC X(10) VALUE "SRVFEE".
+016600110822           03 lncc_SRVF                  PIC X(04) VALUE "SRVF".
+016700110822           03 lncc_BYSRV                 PIC X(05) VALUE "BYSRV".
+016800110727
+016900110822       01 lc_Flags.
+017000110822            03 lc_SrvfeeModFlag             PIC X(01).
+017100110822                88 lb_SrvfeeModYes           VALUE "Y".
+017200110822                88 lb_SrvfeeModNo            VALUE "N" " ".
+017300110822
+017400110823            03  lc_LogError                 PIC X(1).
+017500110822                88 lb_LogErrorOn              VALUE "Y".
+017600110822                88 lb_LogErrorOff             VALUE "N" " ".
+017700110822
+017800110823            03  lc_EndOfCursor              PIC X(1).
+017900110822                88 lb_EndOfCursorTrue         VALUE "Y".
+018000110822                88 lb_EndOfCursorFalse        VALUE "N" " ".
+018100110822
+018200111129            03  lb_ErrorCheck                 PIC X(1).
+018300111129                88 lb_ErrorOccured            VALUE "Y".
+018400111129                88 lb_NoErrorOccured          VALUE "N" " ".
+018500110823
+018600110823            03  lc_LogStats                 PIC X(1).
+018700110822                88 lb_LogStatsOn              VALUE "Y".
+018800110822                88 lb_LogStatsOff             VALUE "N" " ".
+018900110823
+019000110823            03  lc_DlyRollUpError            PIC X(1).
+019100110823                88 lc_DlyRollUpErrorOn        VALUE "Y".
+019200110823                88 lc_DlyRollUpErrorOff       VALUE "N" " ".
+019300110823
+019400110823            03  lc_DlyUnitUpdError           PIC X(1).
+019500110823                88 lc_DlyUnitUpdErrorOn       VALUE "Y".
+019600110823                88 lc_DlyUnitUpdErrorOff      VALUE "N" " ".
+019700110823
+019800110823            03  lc_UnitReCalcError           PIC X(1).
+019900110823                88 lc_UnitReCalcErrorOn       VALUE "Y".
+020000110823                88 lc_UnitReCalcErrorOff      VALUE "N" " ".
+020100110823
+020200111213      * SRVFDR area - roll-up process
+020300110823
+020400110823        01  lc_SdrBuffer.
+020500110823          05  lc_SdrOption                PIC X(3).
+020600110823          05  ld_SdrProcessDate           PIC S9(8).
+020700110823          05  lc_SdrInvestmentCode        PIC X(5).
+020800110823          05  li_SdrAccountNo             PIC S9(9).
+020900110823          05  lc_SdrReturnCode            PIC X(3).
+021000110823
+021100110823        01  lc_ScnBuffer.
+021200110823          05  lc_ScnOption                PIC X(3).
+021300110823          05  ld_ScnProcessDate           PIC S9(8).
+021400110823          05  ld_ScnStartDate             PIC S9(8).
+021500110823          05  ld_ScnEndDate               PIC S9(8).
+021600110823          05  ld_ScnFromDate              PIC S9(8).
+021700110823          05  ld_ScnToDate                PIC S9(8).
+021800110823          05  lc_ScnInvestmentCode        PIC X(5).
+021900110823          05  li_ScnAccountNo             PIC S9(9).
+022000110823          05  lc_ScnClearOption           PIC X(1).
+022100110823          05  lc_ScnReturnCode            PIC X(3).
+022200110822
+022300110822       01  lc_FvgGetBuffer.
+022400110822         05  li_FvgAccountNo             PIC S9(9).
+022500110822         05  lc_FvgInvestmentCode        PIC X(5).
+022600110822         05  lc_FvgOption                PIC X(1).
+022700110822         05  lc_FvgRecordExist           PIC X(1).
+022800110822             88 lb_FvgRecordExistYes     Value "Y".
+022900110822             88 lb_FvgRecordExistNo      Value "N" " ".
+023000110822         05  lc_FvgHeaderOpt             PIC X(1).
+023100110822         05  lc_FvgReturnCode            PIC X(2).
+023200110822         05  ld_FvgProcessDate           PIC S9(9).
+023300111014         05  li_FvgUnitsTotal            PIC S9(10)V9(3).
+023400110822         05  li_FvgCnt                    PIC S9(5).
+023500110822
+023600110822         05  ltb_FvgTbl.
+023700110822           07 lc_FvgArray                 OCCURS 50
+023800110822                                          INDEXED BY lx_fvg.
+023900110822              09 li_FvgLowerLimitDays     PIC S9(5).
+024000110822              09 li_FvgUnitsVar           PIC S9(10)V9(3).
+024100110822              09 lc_FvgDtlExist           PIC X(1).
+024200110822                 88 lb_FvgDtlExistYes     Value "Y".
+024300110822                 88 lb_FvgDtlExistNo      Value "N" " ".
+024400111129              09 lc_FvgDtlOpt            PIC  X(01).
+024500111129              09 ld_FvgEffectiveDate      PIC S9(9).
+024600110822              09 lc_FvgRateRule           PIC  X(1).
+024700110822              09 lc_FvgOrgInvCode         PIC  X(5).
+024800111130              09 lc_FvgRateRule2          PIC  X(1).
+024900110822
+025000111213       01  lc_SqlErrStatement            PIC  X(50) VALUE SPACES.
+025100111213           88 lb_Stmt01
+025200111213              VALUE "Err in OPEN CURSOR SRVFDTC2 ".
+025300111213           88 lb_Stmt02
+025400111213              VALUE "Err in FETCH NEXT  SRVFDTC2 ".
+025500111213
+025600111213       01  lc_SqllogVariables.
+025700111213           05 lc_RoutineName               PIC X(25).
+025800111213           05 lc_SqlErrData                PIC X(1780) VALUE " ".
+025900111213           05 lc_SqlStats                  PIC X(1966) VALUE " ".
+026000111213           05 lc_SqlErrReply               PIC X(01)   VALUE " ".
+026100111213
+026200110823      * Error and Statistics log record
+026300110823
+026400110823       01 lc_LogRec.
+026500110823          COPY DD-ALL-FORMATS OF MFASRVLOGP.
+026600110823
+026700110823
+026800110823      * Data area MFASDAPARM - SERVICE FEE DAILY ACCRUAL PARM
+026900110823
+027000110823       COPY CPYSDAPARM.
+027100110823
+027200110823      * Data area MFASRVCTL  - Service Fee Process Control
+027300110823
+027400110823       COPY CPYSRVCTL.
+027500110823
+027600110822
+027700111213       LINKAGE SECTION.
+027800110727
+027900111014          01  pc_Option                  PIC X(3).
+028000110822              88  pb_OptionAllAccount       VALUE "ALL".
+028100110822              88  pb_OptionOneAccount       VALUE "ONE".
+028200111014          01  pd_ProcessDate             PIC S9(8).
+028300111014          01  pc_InvestmentCode         PIC X(5).
+028400111014          01  pi_AccountNo              PIC S9(9).
+028500111014          01  pi_ReturnCode             PIC X(3).
+028600110727
+028700111014       PROCEDURE DIVISION USING pc_Option
+028800111014                                pd_ProcessDate
+028900111014                                pc_InvestmentCode
+029000111014                                pi_AccountNo
+029100111014                                pi_ReturnCode.
+029200110727
+029300110727      *-----------------
+029400110823       MAINLINE.
+029500110727      *-----------------
+029600110727             PERFORM Initial_logic.
+029700110822             IF pb_OptionOneAccount
+029800111014               MOVE pc_InvestmentCode   TO lc_InvestmentCode
+029900111014               MOVE pi_AccountNo        TO li_AccountNo
+030000110822               PERFORM Get_AcisvpInfo
+030100110822               IF lc_FvgReturnCode  = SPACES
+030200110823                 PERFORM Detail_Processing
+030300110727               END-IF
+030400110727             END-IF
+030500110822             IF pb_OptionAllAccount
+030600110822                 PERFORM Create_AccountInvCursor
+030700110822                 PERFORM Fetch_AccountInvCursor
+030800110822                 PERFORM Process_AccountInvCursor
+030900110822                                          UNTIL lb_EndOfCursorTrue
+031000110822                 PERFORM Close_AccountInvCursor
+031100110727             END-IF
+031200110822             PERFORM EndOfProgram.
+031300110823
+031400110727      *-----------------
+031500110727        Initial_logic.
+031600110727      *-----------------
+031700110727              ACCEPT WS-MFASRVCTL-DTAARA
+031800110823                FROM lc_DataArea1 FOR "MFASRVCTL".
+031900110727
+032000110822              IF WS-SV-ERROR-OPT-ALL    = lncc_Y OR
+032100110822                 WS-SV-ERROR-OPT-SRVVDT = lncc_Y
+032200110822                 MOVE lncc_Y    TO lc_LogError
+032300110727              ELSE
+032400110822                 MOVE lncc_N    TO lc_LogError
+032500110727              END-IF.
+032600110727
+032700110822              IF WS-SV-STATS-OPT-ALL    = lncc_Y OR
+032800110822                 WS-SV-STATS-OPT-SRVVDT = lncc_Y
+032900110822                 MOVE lncc_Y    TO lc_LogStats
+033000110822              ELSE
+033100110822                 MOVE lncc_N    TO lc_LogStats
+033200110727              END-IF.
+033300110822
+033400110822      *Check SRVFEE Module exists or not
+033500111121              INITIALIZE lc_SrvfeeModFlag
+033600111121                         pi_ReturnCode.
+033700110822
+033800110822              CALL "RTVMODAUTH" USING lncc_SRVFEE lc_SrvfeeModFlag.
+033900110822
+034000110822              IF lb_SrvfeeModNo
+034100111014                  MOVE lncc_001 TO pi_ReturnCode
+034200110822                  PERFORM EndOfProgram
+034300110727              END-IF.
+034400110822
+034500110727      * Edit input parameters
+034600110727
+034700111014           IF pc_Option NOT = lncc_ALL AND
+034800111121                              lncc_ONE
+034900111014              MOVE lncc_002   TO pi_ReturnCode
+035000110822           ELSE
+035100111014           IF pd_ProcessDate IS NOT NUMERIC OR
+035200111014              pd_ProcessDate = ZEROS
+035300111014              MOVE lncc_003   TO pi_ReturnCode
+035400110822           ELSE
+035500111121           IF pc_InvestmentCode = SPACES
+035600111121              MOVE lncc_004    TO pi_ReturnCode
+035700111121           ELSE
+035800110822           IF pb_OptionOneAccount
+035900111014              IF pi_AccountNo IS NOT NUMERIC OR
+036000111014                 pi_AccountNo = ZEROS
+036100111121                 MOVE lncc_005   TO pi_ReturnCode
+036200110727              END-IF
+036300110727           END-IF.
+036400110822
+036500111014           IF pi_ReturnCode   NOT= SPACES
+036600110822              PERFORM EndOfProgram
+036700110822           END-IF.
+036800110727           ACCEPT WS-MFASDAPARM-DTAARA
+036900110823                             FROM lc_DataArea1 FOR "MFASDAPARM".
+037000110727
+037100110727           IF WS-SP-PRV-PER-START-DATE IS NOT NUMERIC
+037200110727              MOVE ZEROS     TO WS-SP-PRV-PER-START-DATE
+037300110727           END-IF.
+037400110822
+037500111014           MOVE pd_ProcessDate TO ld_FormatDateIn.
+037600111014           MOVE pd_ProcessDate TO ld_processDate.
+037700110727
+037800110727           MOVE FUNCTION SUBTRACT-DURATION
+037900110822                (ld_FormatDateIn DAYS 1)
+038000110822                                 TO ld_FormatDateOut.
+038100110822           MOVE ld_FormatDateOut TO ld_EndDate.
+038200110727
+038300110727      *-----------------
+038400110822        Create_AccountInvCursor.
+038500110727      *-----------------
+038600110822
+038700110727           EXEC SQL
+038800111213             DECLARE SRVFDTC2 CURSOR FOR
+038900110822              SELECT  accivp.account_no,
+039000110822                      accivp.investment_code
+039100110822              FROM MFAFEESCLP feesclp
+039200110727              LEFT OUTER JOIN MFAINVSXP invsxp ON
+039300110822                   feesclp.investment_structure_code =
+039400110822                   invsxp.investment_structure_code
+039500110727
+039600110822              INNER  JOIN MFAACCIVP accivp ON
+039700110822                   invsxp.investment_code  = accivp.investment_code OR
+039800110822                   feesclp.investment_code = accivp.investment_code
+039900110727
+040000110727              INNER JOIN MFAACCNTP accntp  ON
+040100110822                   accntp.account_no = accivp.account_no
+040200110727
+040300110727              EXCEPTION JOIN MFAACCATP accatp  ON
+040400110822                   accatp.account_no = accntp.account_no  AND
+040500110822                   accatp.account_attribute_code = :lncc_BYSRV
+040600110727
+040700110727              EXCEPTION JOIN MFAAIVATP aivatp  ON
+040800110822                   aivatp.account_no = accivp.account_no  AND
+040900110822                   aivatp.investment_code = accivp.investment_code AND
+041000110823                   aivatp.account_inv_attribute_code = :lncc_BYSRV
+041100110727
+041200110727              EXCEPTION JOIN MFAFEESCHP feeschp ON
+041300110822                   feeschp.fee_schedule = feesclp.fee_schedule AND
+041400110822                   feeschp.rate_rule IN (:lncc_4, :lncc_5)
+041500110727
+041600110727              WHERE
+041700110822                   feesclp.fee_type_code = :lncc_SRVF
+041800110822              AND  feesclp.dealer_code = " "
+041900110822              AND  feesclp.dealer_rep_code = " "
+042000110822              AND  feesclp.account_no = 0
+042100110822              AND  accntp.dealer_code <> " "
+042200111014              AND  accivp.investment_code = :pc_InvestmentCode
+042300110727
+042400110727              ORDER BY Accivp.investment_code,
+042500110727                       Accivp.account_no
+042600110727             END-EXEC.
+042700110727
+042800110727             EXEC SQL
+042900111213                 OPEN SRVFDTC2
+043000110727             END-EXEC.
+043100110822
+043200110727              MOVE SQLSTATE TO lc_sqlStates
+043300110727              IF NOT lncc_sqlSuccessful
+043400111213                 SET  lc_Err01              TO TRUE
+043500111213                 SET  lb_Stmt01             TO TRUE
+043600111213                 PERFORM SQL_ErrorRoutine
+043700110727              END-IF.
+043800110823              SET lb_EndOfCursorFalse   TO TRUE.
+043900110822
+044000110822      *-------------------------
+044100110822        Fetch_AccountInvCursor.
+044200110822      *-------------------------
+044300110727
+044400110727            EXEC SQL
+044500111213              FETCH NEXT FROM SRVFDTC2
+044600110822               INTO :C1_FetchVar
+044700110727            END-EXEC.
+044800110822
+044900110727             MOVE SQLSTATE TO lc_sqlStates.
+045000110727             EVALUATE TRUE
+045100110727               WHEN lncc_sqlSuccessful
+045200110727                 CONTINUE
+045300110727               WHEN lncc_sqlEnd
+045400110727                 SET lb_EndOfCursorTrue TO TRUE
+045500110727               WHEN OTHER
+045600111213                 SET  lc_Err02              TO TRUE
+045700111213                 SET  lb_Stmt02             TO TRUE
+045800111213                 PERFORM SQL_ErrorRoutine
+045900110727             END-EVALUATE.
+046000110822
+046100110823      *---------------------------
+046200110822        Process_AccountInvCursor.
+046300110823      *---------------------------
+046400110822             MOVE C1_InvestmentCode  TO lc_InvestmentCode
+046500110822             MOVE C1_AccountNo       TO li_AccountNo
+046600110822             PERFORM Get_AcisvpInfo
+046700110822             IF lc_FvgReturnCode NOT = SPACES OR
+046800111014                ld_FvgProcessDate    = pd_ProcessDate
+046900110727                CONTINUE
+047000110727             ELSE
+047100110822                PERFORM Detail_Processing
+047200110727             END-IF
+047300110822             Perform Fetch_AccountInvCursor.
+047400110822
+047500110823      *---------------------
+047600110822        Detail_Processing.
+047700110823      *---------------------
+047800110727
+047900111121      * No action if process date is equal - variable unit is already
+048000111121      * up-to-date as of the current process date.
+048100111121
+048200111121           IF ld_FvgProcessDate = pd_ProcessDate
+048300111121              CONTINUE
+048400111121           ELSE
+048500110822           IF ld_FvgProcessDate NOT = ZEROS AND
+048600110822              ld_FvgProcessDate NOT = ld_EndDate
+048700110823              PERFORM Detail_Proc20
+048800111121           ELSE
+048900110727
+049000110727      * Conversion for variable units must be performed prior to
+049100110727      * this program. There will be a record created per account
+049200110727      * investment stamped with the process date if variable units
+049300110727      * exist, no record created otherwise.
+049400110727      *
+049500110727      * If the record exists and has zero process date with units or
+049600110727      * not, re-calculation is required. If record does not exist, it
+049700110727      * will continue on to perform daily transaction update process.
+049800110727
+049900111121           IF ld_FvgProcessDate  = ZEROS AND
+050000110823              lc_FvgRecordExist  = lncc_Y
+050100110823              PERFORM Detail_Proc40
+050200110727           ELSE
+050300110823              PERFORM Detail_Proc10
+050400110727           END-IF
+050500111121           END-IF
+050600110727           END-IF.
+050700111121      *------------------
+050800110823       Detail_Proc10.
+050900111121      *------------------
+051000110727
+051100110727      * Case 1: regular daily roll-up and transaction update
+051200110727      * ----------------------------------------------------
+051300110727      * Variable units represent units as of end of day yesterday
+051400110727      * if it exists. Including record exists with no unit or
+051500110727      * record does not exist at all (i.e. no variable units).
+051600110727      * - need to perform daily roll-up of aging units and then
+051700110727      * perform daily transaction update to bring variable units
+051800110727      * up-to-date as of the current process date.
+051900110727
+052000111014           MOVE lncc_1           TO lc_ExecType.
+052100111121           MOVE pd_ProcessDate   TO ld_processDate.
+052200110727
+052300110727
+052400110727      * If there's no variable units, disregard of record exists or
+052500110727      * not, no need to perform roll-up function. If roll-up function
+052600110727      * returned with days not found "09" error, try re-calculation.
+052700110727      * This is to ensure that if the schedule table got changed
+052800110727      * without proper conversion, re-calculation is the last resort
+052900110727      * to rectify the units.
+053000110727
+053100110727
+053200111014           IF li_FvgUnitsTotal NOT = ZEROS
+053300110823              PERFORM Process_DlyRollUpFunction
+053400110823              IF lc_DlyRollUpError = lncc_Y
+053500120508                 IF lc_SdrReturnCode = lncc_009
+053600110823                    PERFORM   Detail_Proc40
+053700110727                 END-IF
+053800110727              END-IF
+053900120514           END-IF.
+054000120514           IF lc_DlyRollUpError NOT= lncc_Y
+054100110727
+054200110727      * Daily transactions update must be performed after a
+054300110727      * successful roll-up function. If the daily update function
+054400110727      * returned with schedule change "014" error, try re-calculation.
+054500110727      * This is to ensure that if the schedule got changed without any
+054600110727      * proper conversion, self-correction is performed.
+054700110727
+054800110823             PERFORM Process_DlyUnitUpdFunction
+054900110823             IF lc_DlyUnitUpdError = lncc_Y
+055000110823                IF lc_ScnReturnCode = lncc_014
+055100110823                   PERFORM Detail_Proc40
+055200110823                END-IF
+055300110823             END-IF
+055400120514           END-IF.
+055500110727
+055600110727
+055700110823       Detail_Proc20.
+055800110727
+055900110823           MOVE ZEROS        TO li_Days.
+056000110727
+056100111014           IF ld_FvgProcessDate < pd_ProcessDate
+056200110823              MOVE ld_FvgProcessDate  TO ld_FormatDateIn
+056300111014              MOVE pd_ProcessDate TO ld_FormatDateOut
+056400110823              COMPUTE li_Days = FUNCTION FIND-DURATION
+056500110822                      (ld_FormatDateIn ld_FormatDateOut DAYS)
+056600110727           END-IF.
+056700110727
+056800111014           IF ld_FvgProcessDate > pd_ProcessDate         OR
+056900110822             (ld_FvgProcessDate < WS-SP-PRV-PER-START-DATE  AND
+057000110727              WS-SP-PRV-PER-START-DATE NOT = ZEROS)        OR
+057100110823              li_Days          > li_MinDays
+057200110823              PERFORM  Detail_Proc40
+057300110823           ELSE
+057400110727
+057500110727
+057600110727      * Case 2: catch-up process for roll-up and transaction update
+057700110727      * -----------------------------------------------------------
+057800110727      * Variable units is not up-to-date, it's more than one day
+057900110727      * missing. Therefore, it needs to catch up any variable units
+058000110727      * for the missing days. The daily roll-up of aging units
+058100110727      * and daily transaction update functions from the last process
+058200110727      * date on the MFAACIDUP record up to the current process date
+058300110727      * will be performed accordingly.
+058400110727
+058500110727      * This catch-up process may be more efficient than the
+058600110823      * re-calculation process as indicated in Detail_Proc40 if the number
+058700110727      * of days for catching-up is minimal.
+058800110727
+058900110727
+059000110823           MOVE lncc_2               TO lc_ExecType
+059100110823           MOVE ld_FvgProcessDate    TO ld_processDate
+059200110823
+059300111129           PERFORM Detail_CatchUpProcess
+059400110823           END-IF.
+059500111129      *------------------
+059600111129       Detail_CatchUpProcess.
+059700111129      *------------------
+059800110727
+059900111129           PERFORM UNTIL  ld_processDate >= pd_ProcessDate  OR
+060000111129                          lb_ErrorOccured
+060100120604             INITIALIZE lc_DlyRollUpError
+060200110823             MOVE ld_processDate     TO ld_FormatDateIn
+060300110823             MOVE FUNCTION ADD-DURATION (ld_FormatDateIn DAYS 1)
+060400110823                                     TO ld_FormatDateOut
+060500110823             MOVE ld_FormatDateOut   TO ld_processDate
+060600110823
+060700110727      * Roll-up of aging unit for the given process date.
+060800110727      * If roll-up function returned with days not found "09" error
+060900110727      * during the course of the catch-up process, try re-calculation.
+061000110727      * This is to ensure that if the schedule table got changed
+061100110727      * without proper conversion, re-calculation is the last resort
+061200110727      * to rectify the units.
+061300120604      * If there's no variable units, disregard of record exists or
+061400120604      * not, no need to perform roll-up function.
+061500110727
+061600120604            IF li_FvgUnitsTotal NOT = ZEROS
+061700111129             PERFORM Process_DlyRollUpFunction
+061800111129             IF lc_DlyRollUpErrorOn
+061900111129                IF lc_SdrReturnCode = lncc_009
+062000111129                   PERFORM  Detail_Proc40
+062100111129                END-IF
+062200111129                SET lb_ErrorOccured  TO TRUE
+062300120604             END-IF
+062400120604            END-IF
+062500110727
+062600111129      * Transactions update for the given process date must be
+062700111129      * performed after a successful roll-up function. If the daily
+062800110727      * update function returned with schedule change "014" error, try
+062900110727      * re-calculation. This is to ensure that if the schedule got
+063000110727      * changed without any proper conversion, self-correction is
+063100110727      * performed.
+063200110727
+063300120604             IF NOT lc_DlyRollUpErrorOn
+063400111129               PERFORM Process_DlyUnitUpdFunction
+063500111129               IF lc_DlyUnitUpdErrorOn
+063600111129                 IF lc_ScnReturnCode = lncc_014
+063700111129                    PERFORM Detail_Proc40
+063800111129                 END-IF
+063900111129                 SET lb_ErrorOccured  TO TRUE
+064000111129               END-IF
+064100111129             END-IF
+064200110823           END-PERFORM.
+064300111129      *-----------------
+064400110823       Detail_Proc40.
+064500111129      *-----------------
+064600110727
+064700110727      * Case 3: re-calculation process
+064800110727      * ------------------------------
+064900110727      * It could be triggered by:
+065000110727      * (a) The record exists and has zero process date,
+065100110727      * (b) The record has process date greater than the current
+065200110727      *     process date,
+065300110727      * (c) The record has process date older than the last service
+065400110727      *     fee period start date or more than the minimal days for
+065500110727      *     the catch-up process, or
+065600110727      * (d) The roll-up function SRVFDR returned days not found "09"
+065700110727      *     error from the first part of the daily transaction update
+065800110727      *     process or the catch-up process.
+065900110727      * (e) The update function SRVFCN returned schedule changed "014"
+066000110727      *     error from the second part of the daily transaction update
+066100110727      *     process or the catch-up process.
+066200110727      *
+066300110727      * - need to perform re-calculation of the variable units from
+066400110727      * the effective date up to the current process date due to
+066500110727      * the variable units can not be used at this point.
+066600110727      *
+066700110727      * This may take longer time to process.
+066800110727
+066900110727
+067000111014           MOVE lncc_3           TO lc_ExecType.
+067100111014           MOVE pd_ProcessDate   TO ld_processDate.
+067200110727
+067300110823           PERFORM Process_UnitReCalcFunc.
+067400110727
+067500110822
+067600110823      *---------------------------                                     *
+067700110823       Process_DlyRollUpFunction.
+067800110823      *---------------------------                                     *
+067900110727
+068000110727      * Variable units daily roll-up - advance eligible aging units
+068100110727      * at various day ranges by one day from a day before the given
+068200110727      * process date to the next higher day range as per current
+068300110727      * tiered trailer rate schedule table. Variable units is aged
+068400110727      * on a daily basis and may be eligible to roll-up from the
+068500110727      * current day range to the next higher day range.
+068600110727
+068700110727
+068800111201           MOVE "SRVFDR"          TO lc_LogProgramCalled.
+068900110823           MOVE SPACES            TO lc_DlyRollUpError.
+069000110823           MOVE lncc_ONE          TO lc_SdrOption.
+069100110823           MOVE ld_processDate    TO ld_SdrProcessDate.
+069200110823           MOVE lc_InvestmentCode TO lc_SdrInvestmentCode.
+069300110823           MOVE li_AccountNo      TO li_SdrAccountNo.
+069400110823           MOVE SPACES            TO lc_SdrReturnCode.
+069500110727
+069600110822           IF lb_LogStatsOn
+069700110822              MOVE lncc_S    TO lc_StatsEvent
+069800110822              PERFORM Log_StatsRoutine
+069900110727           END-IF.
+070000110727
+070100110823           CALL "SRVFDR" USING lc_SdrOption
+070200110823                               ld_SdrProcessDate
+070300110823                               lc_SdrInvestmentCode
+070400110823                               li_SdrAccountNo
+070500110823                               lc_SdrReturnCode.
+070600110727
+070700110822           IF lb_LogStatsOn
+070800110823              MOVE lncc_E    TO lc_StatsEvent
+070900110822              PERFORM Log_StatsRoutine
+071000110727           END-IF.
+071100110727
+071200110823           IF lc_SdrReturnCode NOT = SPACES
+071300110823              SET  lc_DlyRollUpErrorOn TO TRUE
+071400110823              MOVE lncc_008            TO lc_ErrorCode
+071500110727
+071600111014              IF pi_ReturnCode     = SPACES AND
+071700110823                 lc_SdrReturnCode  NOT = lncc_009
+071800111014                 MOVE lc_ErrorCode    TO pi_ReturnCode
+071900110727              END-IF
+072000110727
+072100111201              PERFORM Log_ErrorRoutine
+072200110727           END-IF.
+072300110727
+072400110823      *-----------------------------                                   *
+072500110823       Process_DlyUnitUpdFunction.
+072600110823      *-----------------------------                                   *
+072700110727
+072800110727      * Update variable units based on the transactions processed
+072900110727      * on this given process day only. The calculated units of the
+073000110727      * day will be applied to the units of the existing records.
+073100110727
+073200110822           IF lb_LogStatsOn OR lb_LogErrorOn
+073300110823              MOVE "SRVFCN"  TO lc_LogProgramCalled
+073400110727           END-IF.
+073500110727
+073600110823           MOVE SPACES       TO lc_DlyUnitUpdError.
+073700110727
+073800111014           MOVE lncc_ONE            TO lc_ScnOption.
+073900111014           MOVE ld_EarlyDate        TO ld_ScnStartDate.
+074000111014           MOVE ld_processDate      TO ld_ScnProcessDate
+074100111014                                       ld_ScnEndDate
+074200111014                                       ld_ScnFromDate
+074300111014                                       ld_ScnToDate.
+074400110823           MOVE lc_InvestmentCode   TO lc_ScnInvestmentCode.
+074500110823           MOVE li_AccountNo        TO li_ScnAccountNo.
+074600110823
+074700110823           MOVE lncc_N       TO lc_ScnClearOption.
+074800110823           MOVE SPACES       TO lc_ScnReturnCode.
+074900110727
+075000110822           IF lb_LogStatsOn
+075100110823              MOVE lncc_S    TO lc_StatsEvent
+075200110823              PERFORM Log_StatsRoutine
+075300110727           END-IF.
+075400110727
+075500110823           CALL "SRVFCN" USING lc_ScnOption
+075600110823                               ld_ScnProcessDate
+075700110823                               ld_ScnStartDate
+075800110823                               ld_ScnEndDate
+075900110823                               ld_ScnFromDate
+076000110823                               ld_ScnToDate
+076100110823                               lc_ScnInvestmentCode
+076200110823                               li_ScnAccountNo
+076300110823                               lc_ScnClearOption
+076400110823                               lc_ScnReturnCode.
+076500110727
+076600110822           IF lb_LogStatsOn
+076700110823              MOVE lncc_E    TO lc_StatsEvent
+076800110823              PERFORM Log_StatsRoutine
+076900110727           END-IF.
+077000110727
+077100110823           IF lc_ScnReturnCode NOT = SPACES
+077200110823              MOVE lncc_Y    TO lc_DlyUnitUpdError
+077300110822              MOVE "09"      TO lc_ErrorCode
+077400110727
+077500111014              IF pi_ReturnCode = SPACES AND
+077600110823                 lc_ScnReturnCode NOT = "014"
+077700111014                 MOVE lc_ErrorCode  TO pi_ReturnCode
+077800110727              END-IF
+077900110727
+078000111201              PERFORM Log_ErrorRoutine
+078100110727           END-IF.
+078200110727
+078300110823
+078400110823      *-------------------------                                       *
+078500110823       Process_UnitReCalcFunc.
+078600110823      *-------------------------                                       *
+078700110727
+078800110727      * Re-calculate variable units from the effective date to the
+078900110727      * current process date. The variable units in the record will
+079000110727      * be clear and/or reset to the calculated units by
+079100110727      * the re-calculation.
+079200110727
+079300111201           MOVE "SRVFCN"              TO lc_LogProgramCalled.
+079400111201           MOVE SPACES                TO lc_UnitReCalcError.
+079500110823           MOVE lncc_ONE              TO lc_ScnOption.
+079600111201           MOVE ld_EarlyDate          TO ld_ScnStartDate
+079700111201                                         ld_ScnFromDate.
+079800111201           MOVE ld_processDate        TO ld_ScnProcessDate
+079900111201                                         ld_ScnEndDate
+080000111201                                         ld_ScnToDate.
+080100110823           MOVE lc_InvestmentCode     TO lc_ScnInvestmentCode.
+080200110823           MOVE li_AccountNo          TO li_ScnAccountNo.
+080300110823           MOVE lncc_Y                TO lc_ScnClearOption.
+080400110823           MOVE SPACES                TO lc_ScnReturnCode.
+080500110727
+080600110822           IF lb_LogStatsOn
+080700110822              MOVE lncc_S    TO lc_StatsEvent
+080800110823              PERFORM Log_StatsRoutine
+080900110727           END-IF.
+081000110727
+081100110823           CALL "SRVFCN" USING lc_ScnOption
+081200110823                               ld_ScnProcessDate
+081300110823                               ld_ScnStartDate
+081400110823                               ld_ScnEndDate
+081500110823                               ld_ScnFromDate
+081600110823                               ld_ScnToDate
+081700110823                               lc_ScnInvestmentCode
+081800110823                               li_ScnAccountNo
+081900110823                               lc_ScnClearOption
+082000110823                               lc_ScnReturnCode.
+082100110727
+082200110822           IF lb_LogStatsOn
+082300110822              MOVE lncc_E    TO lc_StatsEvent
+082400110823              PERFORM Log_StatsRoutine
+082500110727           END-IF.
+082600110727
+082700110823           IF lc_ScnReturnCode NOT = SPACES
+082800110823              SET  lc_UnitReCalcErrorOn TO TRUE
+082900110823              MOVE lncc_010  TO lc_ErrorCode
+083000110727
+083100111014              IF pi_ReturnCode = SPACES
+083200111014                 MOVE lc_ErrorCode TO pi_ReturnCode
+083300110727              END-IF
+083400111201              PERFORM Log_ErrorRoutine
+083500110727           END-IF.
+083600110727
+083700110727      *-----------------
+083800110822        Get_AcisvpInfo.
+083900110727      *-----------------
+084000110727
+084100110822           INITIALIZE lc_FvgGetBuffer.
+084200110727
+084300111201           MOVE "FXSRVUAI"        TO lc_LogProgramCalled
+084400110822           MOVE SPACES            TO lc_FvgRecordExist
+084500110822                                     lc_FvgReturnCode
+084600110822           MOVE ZEROS             TO ld_FvgProcessDate
+084700111014                                     li_FvgUnitsTotal
+084800110822                                     li_FvgCnt.
+084900110822           MOVE li_AccountNo      TO li_FvgAccountNo.
+085000110822           MOVE lc_InvestmentCode TO lc_FvgInvestmentCode.
+085100110822           MOVE lncc_G            TO lc_FvgOption.
+085200110727
+085300110822           IF lb_LogStatsOn
+085400110822              MOVE lncc_S        TO lc_StatsEvent
+085500110822              PERFORM Log_StatsRoutine
+085600110727           END-IF.
+085700110727
+085800110822           CALL "FXSRVUAI" USING li_FvgAccountNo
+085900110822                                 lc_FvgInvestmentCode
+086000110822                                 lc_FvgOption
+086100110822                                 lc_FvgRecordExist
+086200110822                                 lc_FvgHeaderOpt
+086300110822                                 lc_FvgReturnCode
+086400110822                                 ld_FvgProcessDate
+086500111014                                 li_FvgUnitsTotal
+086600110822                                 li_FvgCnt
+086700110822                                 ltb_FvgTbl.
+086800110822           IF lb_LogStatsOn
+086900110822              MOVE lncc_E    TO lc_StatsEvent
+087000110823              PERFORM Log_StatsRoutine
+087100110727           END-IF.
+087200110727
+087300110822           IF lc_FvgReturnCode NOT = SPACES
+087400110822              MOVE lncc_007   TO lc_ErrorCode
+087500110727
+087600111014              IF pi_ReturnCode = SPACES
+087700111014                 MOVE lc_ErrorCode  TO pi_ReturnCode
+087800110727              END-IF
+087900111201              PERFORM Log_ErrorRoutine
+088000110727           END-IF.
+088100110822
+088200111201      *-------------------
+088300110822        Close_AccountInvCursor.
+088400111201      *-------------------
+088500110727           EXEC SQL
+088600111213             CLOSE SRVFDTC2
+088700110727           END-EXEC.
+088800110823
+088900110823      *-------------------
+089000110823       Log_ErrorRoutine.
+089100110823      *-------------------
+089200110823
+089300110823      * Log error information
+089400110823
+089500110823           INITIALIZE MFASRVLOGP OF lc_LogRec.
+089600110823
+089700110823           ACCEPT ld_SysDate FROM DATE YYYYMMDD.
+089800110823           ACCEPT li_SysTime FROM TIME.
+089900110823
+090000110823           MOVE ld_SysDate    TO LOG-DATE OF lc_LogRec.
+090100110823           MOVE li_SysTime    TO LOG-TIME OF lc_LogRec.
+090200110823           MOVE lc_CallingProgram
+090300110823                              TO PROGRAM-CODE OF lc_LogRec.
+090400110823
+090500110823           MOVE lncc_E        TO LOG-TYPE OF lc_LogRec.
+090600110823           MOVE ld_processDate
+090700110823                              TO PROCESS-DATE OF lc_LogRec.
+090800110823           MOVE lc_InvestmentCode
+090900110823                              TO INVESTMENT-CODE OF lc_LogRec.
+091000110823           MOVE li_AccountNo  TO ACCOUNT-NO OF lc_LogRec.
+091100110823           MOVE lc_ErrorCode  TO LOG-CODE OF lc_LogRec.
+091200110823
+091300110823
+091400110823           EVALUATE lc_ErrorCode
+091500110823             WHEN lncc_007
+091600110823               MOVE lc_LogProgramCalled
+091700110823                             TO PROGRAM-CALLED OF lc_LogRec
+091800110823               MOVE lc_FvgReturnCode
+091900110823                             TO PROGRAM-RETCDE OF lc_LogRec
+092000110823               MOVE "FXVARUAI get error                      "
+092100110823                             TO  ADDL-DTL      OF lc_LogRec
+092200110823
+092300110823             WHEN lncc_008
+092400110823               MOVE lc_LogProgramCalled
+092500110823                             TO PROGRAM-CALLED OF lc_LogRec
+092600110823               MOVE lc_SdrReturnCode
+092700110823                             TO PROGRAM-RETCDE OF lc_LogRec
+092800110823
+092900110823             WHEN lncc_009
+093000110823               MOVE lc_LogProgramCalled
+093100110823                             TO PROGRAM-CALLED OF lc_LogRec
+093200110823               MOVE lc_ScnReturnCode
+093300110823                             TO PROGRAM-RETCDE OF lc_LogRec
+093400110823
+093500110823             WHEN lncc_010
+093600110823               MOVE lc_LogProgramCalled
+093700110823                             TO PROGRAM-CALLED OF lc_LogRec
+093800110823               MOVE lc_ScnReturnCode
+093900110823                             TO PROGRAM-RETCDE OF lc_LogRec
+094000110823           END-EVALUATE.
+094100110823
+094200110823
+094300110823           MOVE "INSERT MFASRVLOGP - ERROR"
+094400110823                             TO lc_SqlerrStatement.
+094500110823
+094600110823           EXEC SQL
+094700110823             INSERT INTO MFASRVLOGP VALUES (:MFASRVLOGP)
+094800110823           END-EXEC.
+094900110823
+095000110823      *--------------------
+095100110823       Log_StatsRoutine.
+095200110823      *--------------------
+095300110823
+095400110823      * Log statistics information
+095500110823
+095600110823           INITIALIZE MFASRVLOGP OF lc_LogRec.
+095700110823
+095800110823           ACCEPT ld_SysDate FROM DATE YYYYMMDD.
+095900110823           ACCEPT li_SysTime FROM TIME.
+096000110823
+096100110823           MOVE ld_SysDate   TO LOG-DATE OF lc_LogRec.
+096200110823           MOVE li_SysTime   TO LOG-TIME OF lc_LogRec.
+096300110823           MOVE lc_CallingProgram
+096400110823                             TO PROGRAM-CODE OF lc_LogRec.
+096500110823
+096600110823           MOVE lncc_S       TO LOG-TYPE OF lc_LogRec.
+096700110823           MOVE ld_processDate
+096800110823                             TO PROCESS-DATE OF lc_LogRec.
+096900110823           MOVE lc_InvestmentCode
+097000110823                             TO INVESTMENT-CODE OF lc_LogRec.
+097100110823           MOVE li_AccountNo
+097200110823                             TO ACCOUNT-NO OF lc_LogRec.
+097300110823
+097400110823           MOVE lc_LogProgramCalled
+097500110823                             TO PROGRAM-CALLED OF lc_LogRec
+097600110823
+097700110823           MOVE SPACES       TO lc_ExecTypeDesc.
+097800110823           EVALUATE lc_ExecType
+097900110823             WHEN lncc_1
+098000110823               MOVE "DAILY" TO lc_ExecTypeDesc
+098100110823
+098200110823             WHEN lncc_2
+098300110823               MOVE ld_FvgProcessDate
+098400110823                             TO li_Day1
+098500111014               MOVE pd_ProcessDate
+098600110823                             TO li_Day2
+098700110823               STRING "CATCH-UP from"                DELIMITED BY SIZE
+098800110823                       li_Day1                       DELIMITED BY SIZE
+098900110823                      " to"                          DELIMITED BY SIZE
+099000110823                       li_Day2                       DELIMITED BY SIZE
+099100110823                 INTO  lc_ExecTypeDesc
+099200110823
+099300110823             WHEN lncc_3
+099400110823               MOVE ld_FvgProcessDate
+099500110823                             TO li_Day1
+099600110823               STRING "RE-CALC last process"         DELIMITED BY SIZE
+099700110823                       li_Day1                       DELIMITED BY SIZE
+099800110823                 INTO  lc_ExecTypeDesc
+099900110823           END-EVALUATE.
+100000110823
+100100110823           EVALUATE lc_StatsEvent
+100200110823             WHEN lncc_S
+100300110823               MOVE li_SysTime   TO li_TimeBegin
+100400110823               IF lc_ExecTypeDesc = SPACES
+100500110823                  MOVE "START"
+100600110823                             TO ADDL-DTL OF lc_LogRec
+100700110823               ELSE
+100800110823                  STRING "START "                   DELIMITED BY SIZE
+100900110823                         lc_ExecTypeDesc           DELIMITED BY "  "
+101000110823                    INTO ADDL-DTL OF lc_LogRec
+101100110823               END-IF
+101200110823
+101300110823             WHEN lncc_E
+101400110823               MOVE li_SysTime   TO li_TimeEnd
+101500110823
+101600110823               PERFORM Calc_UsedTime
+101700110823               STRING "END - ELAPSED "              DELIMITED BY SIZE
+101800110823                       li_TimeUsed                  DELIMITED BY SIZE
+101900110823                 INTO  ADDL-DTL OF lc_LogRec
+102000110823           END-EVALUATE.
+102100110823
+102200110823
+102300110823           MOVE "INSERT MFASRVLOGP - STATS"
+102400110823                             TO lc_SqlerrStatement.
+102500110823
+102600110823           EXEC SQL
+102700110823             INSERT INTO MFASRVLOGP VALUES (:MFASRVLOGP)
+102800110823           END-EXEC.
+102900110823
+103000110823      *****************************************************************
+103100110823       Calc_UsedTime.
+103200110823      *****************************************************************
+103300110823
+103400110823      * Calculate elapsed time used in HH:MM:SS:TT
+103500110823
+103600110823           IF li_TeTT >= li_TbTT
+103700110823              SUBTRACT li_TbTT FROM li_TeTT GIVING li_TuTT
+103800110823           ELSE
+103900110823              COMPUTE li_TuTT = li_TeTT + 100 - li_TbTT
+104000110823              SUBTRACT 1 FROM li_TeSS
+104100110823           END-IF.
+104200110823
+104300110823           IF li_TeSS >= li_TbSS
+104400110823              SUBTRACT li_TbSS FROM li_TeSS GIVING li_TuSS
+104500110823           ELSE
+104600110823              COMPUTE li_TuSS = li_TeSS + 60 - li_TbSS
+104700110823              SUBTRACT 1 FROM li_TeMM
+104800110823           END-IF.
+104900110823
+105000110823           IF li_TeMM >= li_TbMM
+105100110823              SUBTRACT li_TbMM FROM li_TeMM GIVING li_TuMM
+105200110823           ELSE
+105300110823              COMPUTE li_TuMM = li_TeMM + 60 - li_TbMM
+105400110823              SUBTRACT 1 FROM li_TeHH
+105500110823           END-IF.
+105600110823
+105700110823           IF li_TeHH >= li_TbHH
+105800110823              SUBTRACT li_TbHH FROM li_TeHH GIVING li_TuHH
+105900110823           ELSE
+106000110823              COMPUTE li_TuHH = li_TeHH + 24 - li_TbHH
+106100110823           END-IF.
+106200110823
+106300110727      *-----------------
+106400110822        EndOfProgram.
+106500110727      *-----------------
+106600110727             GOBACK.
+106700111213
+106800111213      *----------------
+106900111213       SQL_ErrorRoutine.
+107000111213      *----------------
+107100111213           DISPLAY "SRVFDT - ENDED WITH ERROR".
+107200111213           DISPLAY "PROCEDURE: "  lc_RoutineName.
+107300111213           DISPLAY "STATEMENT: "  lc_SqlErrStatement.
+107400111213           DISPLAY "SQLCODE = "   SQLCODE, " SQLSTATE = " SQLSTATE.
+107500111213           DISPLAY "lc_ErrCode: " lc_ErrCode
+107600111213           PERFORM EndOfProgram.

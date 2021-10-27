@@ -1,0 +1,996 @@
+000100120524       IDENTIFICATION DIVISION.
+000200120524       PROGRAM-ID.    FXGLACCNT.
+000300120524       AUTHOR.        Dharmendra Damke
+000400120524       INSTALLATION.  L&T Infotech ltd.
+000500120607       DATE-WRITTEN.  June 07, 2012.
+000600120524       DATE-COMPILED.
+000700120524      ******************************************************************
+000800120524      *    RFS-NUMBER :                                                *
+000900120524      *                                                                *
+001000120607      *    DESCRIPTION: This program will find correct GL accounts     *
+001100120607      *                 for transaction based on account selection     *
+001200120607      *                 priority given by business.                    *
+001300120607      *                                                                *
+001400120524      *    CALLED BY:   EQUGLPRE                                       *
+001500120524      *    PARAMETERS:                                                 *
+001600120524      *    Input        Gain or Loss                                   *
+001700120524      *                 Trans Type                                     *
+001800120524      *                 Fund Load                                      *
+001900120524      *                 Trans Origin                                   *
+002000120524      *                 Settled G or N                                 *
+002100120524      *                 Con Red Code                                   *
+002200120524      *                 Deduction Code                                 *
+002300120524      *                 Account Type                                   *
+002400120524      *                 Tax Province                                   *
+002500120524      *                 Payment Type                                   *
+002600120524      *                 Tran Status                                    *
+002700120524      *                 Prior Year                                     *
+002800120524      *                 Pass Type                                      *
+002900120524
+003000120524      *   Output        DR_Account                                     *
+003100120524      *                 CR_Account                                     *
+003200120524      *                 Return_Flag                                    *
+003300120524      *****************************************************************
+003400120524      *****************************************************************
+003500120524      *    C H A N G E   H I S T O R Y
+003600120524      *****************************************************************
+003700120524      ******************************************************************
+003800120524      * PROGRAMMER  *DATE OF CHANGE* DESCRIPTION OF CHANGE             *
+003900120524      ******************************************************************
+004000120607      *Dharmendra D   * 2012/06/07 * RFS107462 - New Program Created   *
+004100160106      * Michael Fan   * 2016/01/05 * RFS154437 - Bind the program      *
+004200160106      *               *            * FXGLACCT and reduce SQL use to    *
+004300160106      *               *            * improve performance.              *
+004400161222      * Muthukumar S  * 2016/12/20 * RFS165627 - Root RFS:161985       *
+004500161222      *               *            * Recompilation for MFAGLTRP changes*
+004600120605      ************************* *Last* *********************************
+004700120524
+004800120524       ENVIRONMENT DIVISION.
+004900120524       CONFIGURATION SECTION.
+005000120524       SOURCE-COMPUTER. IBM-AS400.
+005100120524       OBJECT-COMPUTER. IBM-AS400.
+005200120524
+005300120524       SPECIAL-NAMES.
+005400120524      /
+005500120524       INPUT-OUTPUT SECTION.
+005600120524       FILE-CONTROL.
+005700120524     **
+005800120524       DATA DIVISION.
+005900120524       FILE SECTION.
+006000120604      *
+006100120524       WORKING-STORAGE SECTION.
+006200120524
+006300120524           EXEC SQL
+006400120524             INCLUDE SQLCA
+006500120524           END-EXEC.
+006600120524
+006700120524           EXEC SQL
+006800120524             INCLUDE SQLDA
+006900120604           END-EXEC.
+007000120524
+007100120604       01  lc_Variables.
+007200120604         03  ln_CurYrDrAcc          PIC S9(06)  VALUE 0.
+007300120604         03  ln_CurYrCrAcc          PIC S9(06)  VALUE 0.
+007400120604         03  ln_PriYrDrAcc          PIC S9(06)  VALUE 0.
+007500120604         03  ln_PriYrCrAcc          PIC S9(06)  VALUE 0.
+007600120604         03  ln_Count               PIC S9(03)  VALUE 0.
+007700120524
+007800120604       01  lc_Constants.
+007900120604         03  lnc_FirstPass          PIC X(01)   VALUE "F".
+008000120604         03  lnc_SecondPass         PIC X(01)   VALUE "S".
+008100120604         03  lnc_ThirdPass          PIC X(01)   VALUE "T".
+008200120604         03  lnc_Yes                PIC X(01)   VALUE "Y".
+008300120604         03  lnc_No                 PIC X(01)   VALUE "N".
+008400120604         03  lnc_One                PIC S9(04)  VALUE 1.
+008500120604         03  lnc_InsertTemp1        PIC X(25)
+008600120604                                    VALUE "Insert in GLTEMP1 Fail  ".
+008700120604         03  lnc_ErrGainLoss        PIC X(25)
+008800120604                                    VALUE "Error in Gain/Loss ".
+008900120604         03  lnc_ErrDedCode         PIC X(25)
+009000120604                                    VALUE "Error in Ded Code  ".
+009100120604         03  lnc_ErrTransType       PIC X(25)
+009200120604                                    VALUE "Error in Trans Type".
+009300120604         03  lnc_ErrTransOrigin     PIC X(25)
+009400120604                                    VALUE "Error in Trans Origin".
+009500120604         03  lnc_ErrFundLoad        PIC X(25)
+009600120604                                    VALUE "Error in Fund Load   ".
+009700120604         03  lnc_ErrSettled         PIC X(25)
+009800120604                                    VALUE "Error in Settled G or N ".
+009900120604         03  lnc_ErrContRedem       PIC X(25)
+010000120604                                    VALUE "Error in Cont Redem Code".
+010100120604         03  lnc_ErrTransStatus     PIC X(25)
+010200120604                                    VALUE "Error in Trans Status   ".
+010300120604         03  lnc_ErrPaymentType     PIC X(25)
+010400120604                                    VALUE "Error in Payment Type   ".
+010500120604         03  lnc_ErrAccountType     PIC X(25)
+010600120604                                    VALUE "Error in Account Type   ".
+010700120604         03  lnc_ErrTaxProv         PIC X(25)
+010800120604                                    VALUE "Error in Tax Province   ".
+010900120604
+011000120604       01  lc_SqlLogFields.
+011100120604         03  lc_CallingProgram      PIC X(10)   VALUE "EQUAGLPRE".
+011200120604         03  lc_SqlErrStatement     PIC X(25)   VALUE " ".
+011300120604         03  lc_SqlErrData          PIC X(1780) VALUE " ".
+011400120604         03  lc_SqlStats            PIC X(1966) VALUE " ".
+011500120604         03  lc_SqlErrReply         PIC X(1)    VALUE " ".
+011600120524
+011700120604      *
+011800120524      * Parameters from calling program.
+011900120524       LINKAGE SECTION.
+012000120622      *COPY CPFXGLACT.
+012100120611
+012200120622       01  pc_GainLoss              PIC X(04).
+012300120622       01  pc_TransType             PIC X(03).
+012400120622       01  pc_FundLoad              PIC X(01).
+012500120622       01  pc_TransOrigin           PIC X(03).
+012600120622       01  pc_SettledGN             PIC X(01).
+012700120622       01  pc_ConRedCode            PIC X(06).
+012800120622       01  pc_DeducCode             PIC X(04).
+012900120622       01  pc_AccountType           PIC X(04).
+013000120622       01  pc_TaxProvince           PIC X(03).
+013100120622       01  pc_PaymentType           PIC X(01).
+013200120622       01  pc_TranStatus            PIC X(03).
+013300120622       01  pc_PriorYear             PIC X(01).
+013400120622       01  pc_Pass                  PIC X(01).
+013500120622       01  pn_DRAccount             PIC S9(06).
+013600120622       01  pn_CRAccount             PIC S9(06).
+013700120622       01  pc_ReturnFlag            PIC X(01).
+013800120604      *
+013900120611       PROCEDURE DIVISION USING  pc_GainLoss,
+014000120611                                 pc_TransType,
+014100120611                                 pc_FundLoad,
+014200120611                                 pc_TransOrigin,
+014300120611                                 pc_SettledGN,
+014400120611                                 pc_ConRedCode,
+014500120611                                 pc_DeducCode,
+014600120611                                 pc_AccountType,
+014700120611                                 pc_TaxProvince,
+014800120611                                 pc_PaymentType,
+014900120611                                 pc_TranStatus,
+015000120611                                 pc_PriorYear,
+015100120611                                 pc_Pass,
+015200120611                                 pn_DRAccount,
+015300120611                                 pn_CRAccount,
+015400120604                                 pc_ReturnFlag.
+015500120524
+015600120604      *
+015700120604      * MAINLINE
+015800120604      *
+015900120524       MAINLINE.
+016000120524           PERFORM Initial-Logic.
+016100120524           PERFORM Detail-Process.
+016200120524           PERFORM EndOfProgram.
+016300120524
+016400120524       Initial-Logic.
+016500120611           INITIALIZE lc_Variables
+016600120611                      pn_DRAccount
+016700120611                      pn_CRAccount
+016800120611                      pc_ReturnFlag.
+016900120611
+017000120524           EXEC SQL
+017100120604             WHENEVER SQLERROR CONTINUE
+017200120524           END-EXEC.
+017300120524
+017400120524      * Clear GLTEMP1
+017500120524           EXEC SQL
+017600120604            DELETE FROM GLTEMP1
+017700120524           END-EXEC.
+017800120524
+017900120524      * Clear GLTEMP2
+018000120524           EXEC SQL
+018100120604            DELETE FROM GLTEMP2
+018200120524           END-EXEC.
+018300120524
+018400160106154437*    MOVE "INSERT IN GLTEMP1" TO lc_SqlErrStatement.
+018500160106154437*    EXEC SQL
+018600160106154437*    INSERT INTO GLTEMP1
+018700160106154437*    SELECT * FROM  MFAGLTRP
+018800160106154437*    END-EXEC.
+018900120524
+019000120524           EXEC SQL
+019100120524             WHENEVER SQLERROR GOTO SQLLOG
+019200120524           END-EXEC.
+019300120524
+019400120604      *                                                                *
+019500120604      * Validate based on priority list and Pass Type                  *
+019600120604      *                                                                *
+019700120524       Detail-Process.
+019800120524
+019900120524           EVALUATE TRUE
+020000120604            WHEN pc_Pass = lnc_FirstPass
+020100120524               PERFORM First-Pass
+020200120604            WHEN pc_Pass = lnc_SecondPass
+020300120524               PERFORM Second-Pass
+020400120604            WHEN pc_Pass = lnc_ThirdPass
+020500120524               PERFORM Third-Pass
+020600120524            WHEN OTHER
+020700120524               PERFORM EndOfProgram
+020800120524           END-EVALUATE.
+020900120524
+021000120524       First-Pass.
+021100120524
+021200120604      *  Check 1st priority  - Gain Loss-Select only blanks rec        *
+021300120604           MOVE lnc_ErrGainLoss        TO lc_SqlErrStatement.
+021400120524           EXEC SQL
+021500120524           INSERT INTO GLTEMP2
+021600160106154437*    SELECT * FROM GLTEMP1 WHERE GAIN_OR_LOSS_CODE = " "
+021700160106154437     SELECT * FROM MFAGLTRP WHERE GAIN_OR_LOSS_CODE = " "
+021800160106154437                          AND DEDUCTION_CODE = " "
+021900160106154437                          AND TRANS_TYPE_CODE  = :pc_TransType
+022000120524           END-EXEC.
+022100120524
+022200120604      *  Check 2nd priority  - Deduction Code-Select only blanks rec   *
+022300160106154437*    MOVE lnc_ErrDedCode         TO lc_SqlErrStatement.
+022400160106154437*    EXEC SQL
+022500160106154437*    DELETE FROM GLTEMP1
+022600160106154437*    END-EXEC.
+022700120524
+022800160106154437*    EXEC SQL
+022900160106154437*    INSERT INTO GLTEMP1
+023000160106154437*    SELECT * FROM GLTEMP2 WHERE DEDUCTION_CODE    = " "
+023100160106154437*    END-EXEC.
+023200120524
+023300120604      *  Check 3rd priority  - Transaction Type                        *
+023400160106154437*    MOVE lnc_ErrTransType       TO lc_SqlErrStatement.
+023500160106154437*    EXEC SQL
+023600160106154437*    DELETE FROM GLTEMP2
+023700160106154437*    END-EXEC.
+023800120524
+023900160106154437*    EXEC SQL
+024000160106154437*    INSERT INTO GLTEMP2
+024100160106154437*    SELECT * FROM GLTEMP1 WHERE TRANS_TYPE_CODE  = :pc_TransType
+024200160106154437*    END-EXEC.
+024300120524
+024400120604      *  Check 4th priority  - Transaction Origin Code                 *
+024500120604           MOVE lnc_ErrTransOrigin     TO lc_SqlErrStatement.
+024600120524           INITIALIZE ln_Count
+024700120524           EXEC SQL
+024800120524           DELETE FROM GLTEMP1
+024900120524           END-EXEC.
+025000120524
+025100120524           EXEC SQL
+025200120524           SELECT COUNT(*) INTO :ln_Count
+025300120524           FROM GLTEMP2 WHERE TRANS_ORIGIN_CODE        =:pc_TransOrigin
+025400120524           END-EXEC.
+025500120524
+025600120604           IF ln_Count >= lnc_One
+025700120524            EXEC SQL
+025800120524            INSERT INTO GLTEMP1
+025900120524            SELECT * FROM GLTEMP2 WHERE TRANS_ORIGIN_CODE
+026000120524                                        =:pc_TransOrigin
+026100120524            END-EXEC
+026200120524           ELSE
+026300120524            EXEC SQL
+026400120524            INSERT INTO GLTEMP1
+026500120524            SELECT * FROM GLTEMP2 WHERE TRANS_ORIGIN_CODE         = " "
+026600120524            END-EXEC
+026700120524           END-IF.
+026800120524
+026900120604      *  Check 5th priority  - Fund Load                               *
+027000120604           MOVE lnc_ErrFundLoad        TO lc_SqlErrStatement.
+027100120524           INITIALIZE ln_Count
+027200120524           EXEC SQL
+027300120524           DELETE FROM GLTEMP2
+027400120524           END-EXEC.
+027500120524
+027600120524           EXEC SQL
+027700120524           SELECT COUNT(*) INto :ln_Count
+027800120524           FROM GLTEMP1 WHERE LOAD_STRUCTURE             = :pc_FundLoad
+027900120524           END-EXEC.
+028000120524
+028100120604           IF ln_Count >= lnc_One
+028200120524             EXEC SQL
+028300120524             INSERT INTO GLTEMP2
+028400120524             SELECT * FROM GLTEMP1 WHERE LOAD_STRUCTURE   =:pc_FundLoad
+028500120524             END-EXEC
+028600120524           ELSE
+028700120524             EXEC SQL
+028800120524             INSERT INTO GLTEMP2
+028900120524             SELECT * FROM GLTEMP1 WHERE LOAD_STRUCTURE    = " "
+029000120524             END-EXEC
+029100120524           END-IF.
+029200120524
+029300120604      *  Check 6th priority  - Settled Net Or Gross Flag               *
+029400120604           MOVE lnc_ErrSettled         TO lc_SqlErrStatement.
+029500120524           INITIALIZE ln_Count
+029600120524           EXEC SQL
+029700120524           DELETE FROM GLTEMP1
+029800120524           END-EXEC.
+029900120524
+030000120524           EXEC SQL
+030100120524           SELECT COUNT(*) INTO :ln_Count
+030200120524           FROM GLTEMP2 WHERE SETTLED_GROSS_OR_NET       =:pc_SettledGN
+030300120524           END-EXEC.
+030400120524
+030500120604           IF ln_Count >= lnc_One
+030600120524             EXEC SQL
+030700120524             INSERT INTO GLTEMP1
+030800120524             SELECT * FROM GLTEMP2 WHERE SETTLED_GROSS_OR_NET
+030900120524                                         = :pc_SettledGN
+031000120524             END-EXEC
+031100120524           ELSE
+031200120524             EXEC SQL
+031300120524             INSERT INTO GLTEMP1
+031400120524             SELECT * FROM GLTEMP2 WHERE SETTLED_GROSS_OR_NET     = " "
+031500120524             END-EXEC
+031600120524           END-IF.
+031700120524
+031800120604      *  Check 7th priority  - Contribution Redemption Code            *
+031900120604           MOVE lnc_ErrContRedem       TO lc_SqlErrStatement.
+032000120524           INITIALIZE ln_Count
+032100120524           EXEC SQL
+032200120524           DELETE FROM GLTEMP2
+032300120524           END-EXEC.
+032400120524
+032500120524           EXEC SQL
+032600120524           SELECT COUNT(*) INTO :ln_count
+032700120524           FROM GLTEMP1 WHERE CONTR_REDEM_CODE         = :pc_ConRedCode
+032800120524           END-EXEC.
+032900120524
+033000120604           IF ln_Count >= lnc_One
+033100120524             EXEC SQL
+033200120524             INSERT INTO GLTEMP2
+033300120524             SELECT * FROM GLTEMP1 WHERE CONTR_REDEM_CODE
+033400120524                                         =:pc_ConRedCode
+033500120524             END-EXEC
+033600120524           ELSE
+033700120524             EXEC SQL
+033800120524             INSERT INTO GLTEMP2
+033900120524             SELECT * FROM GLTEMP1 WHERE CONTR_REDEM_CODE        =  " "
+034000120524             END-EXEC
+034100120524           END-IF.
+034200120524
+034300120604      *  Check 8th priority  - Transaction Status Code -No Blanks      *
+034400120604           MOVE lnc_ErrTransStatus     TO lc_SqlErrStatement.
+034500120524           INITIALIZE ln_Count
+034600120524           EXEC SQL
+034700120524           DELETE FROM GLTEMP1
+034800120524           END-EXEC.
+034900120524
+035000120524           EXEC SQL
+035100120524           INSERT INTO GLTEMP1
+035200120524           SELECT * FROM GLTEMP2 WHERE TRANS_STATUS_CODE
+035300120524                                       = :pc_TranStatus
+035400120524           END-EXEC
+035500120524
+035600120604      *  Check 9th priority  - Payment Type Code                       *
+035700120604           MOVE lnc_ErrPaymentType     TO lc_SqlErrStatement.
+035800120524           INITIALIZE ln_Count
+035900120524           EXEC SQL
+036000120524           DELETE FROM GLTEMP2
+036100120524           END-EXEC.
+036200120524
+036300120524           EXEC SQL
+036400120524           SELECT COUNT(*) INTO :ln_Count
+036500120524           FROM GLTEMP1 WHERE PAYMENT_TYPE_CODE       = :pc_PaymentType
+036600120524           END-EXEC.
+036700120524
+036800120604           IF ln_Count >= lnc_One
+036900120524             EXEC SQL
+037000120524             INSERT INTO GLTEMP2
+037100120524             SELECT * FROM GLTEMP1 WHERE PAYMENT_TYPE_CODE
+037200120524                                         =:pc_PaymentType
+037300120524             END-EXEC
+037400120524           ELSE
+037500120524             EXEC SQL
+037600120524             INSERT INTO GLTEMP2
+037700120524             SELECT * FROM GLTEMP1 WHERE PAYMENT_TYPE_CODE        = " "
+037800120524             END-EXEC
+037900120524           END-IF.
+038000120524
+038100120704      *  Check 10th priority  - Tax Provice  Code                      *
+038200120704           MOVE lnc_ErrTaxProv         TO lc_SqlErrStatement.
+038300120704           INITIALIZE ln_Count
+038400120704           EXEC SQL
+038500120704           DELETE FROM GLTEMP1
+038600120704           END-EXEC.
+038700120704
+038800120704           EXEC SQL
+038900120704           SELECT COUNT(*) INTO :ln_Count
+039000120704           FROM GLTEMP2 WHERE PROVINCE_CODE           = :pc_TaxProvince
+039100120704           END-EXEC.
+039200120704
+039300120704           IF ln_Count >= lnc_One
+039400120704             EXEC SQL
+039500120704             INSERT INTO GLTEMP1
+039600120704             SELECT * FROM GLTEMP2 WHERE PROVINCE_CODE
+039700120704                                         =:pc_TaxProvince
+039800120704             END-EXEC
+039900120704           ELSE
+040000120704             EXEC SQL
+040100120704             INSERT INTO GLTEMP1
+040200120704             SELECT * FROM GLTEMP2 WHERE PROVINCE_CODE             =" "
+040300120704             END-EXEC
+040400120704           END-IF.
+040500120704
+040600120704      *  Check 11th priority  - Account Type Code                      *
+040700120604           MOVE lnc_ErrAccountType     TO lc_SqlErrStatement.
+040800120524           INITIALIZE ln_Count
+040900120524           EXEC SQL
+041000120704           DELETE FROM GLTEMP2
+041100120524           END-EXEC.
+041200120524
+041300120524           EXEC SQL
+041400120524           SELECT COUNT(*) INTO :ln_Count
+041500120704           FROM GLTEMP1 WHERE ACCOUNT_TYPE_CODE        =:pc_AccountType
+041600120524           END-EXEC.
+041700120524
+041800120604           IF ln_Count >= lnc_One
+041900120524             EXEC SQL
+042000120704             INSERT INTO GLTEMP2
+042100120704             SELECT * FROM GLTEMP1 WHERE ACCOUNT_TYPE_CODE
+042200120524                                         =:pc_AccountType
+042300120524             END-EXEC
+042400120524           ELSE
+042500120524             EXEC SQL
+042600120704             INSERT INTO GLTEMP2
+042700120704             SELECT * FROM GLTEMP1 WHERE ACCOUNT_TYPE_CODE         =" "
+042800120524             END-EXEC
+042900120524           END-IF.
+043000120524
+043100120604      *  If record found, get corresponding  GL Account detail         *
+043200120524           INITIALIZE ln_Count
+043300120524           EXEC SQL
+043400120524           SELECT COUNT(*) INTO :ln_Count
+043500120524           FROM GLTEMP2
+043600120524           END-EXEC.
+043700120529
+043800120604           IF ln_Count = lnc_One
+043900120604             MOVE  lnc_Yes TO pc_ReturnFlag
+044000120524             PERFORM Get-GL-Acount-Details
+044100120524           ELSE
+044200120604             MOVE  lnc_No  TO pc_ReturnFlag
+044300120524           END-IF.
+044400120524
+044500120524
+044600120524       Second-Pass.
+044700120524
+044800120604      *  Check 1st priority  - Gain Loss                               *
+044900120604           MOVE lnc_ErrGainLoss        TO lc_SqlErrStatement.
+045000120524           EXEC SQL
+045100120524           INSERT INTO GLTEMP2
+045200160106154437*    SELECT * FROM GLTEMP1 WHERE GAIN_OR_LOSS_CODE          = " "
+045300160106154437     SELECT * FROM MFAGLTRP WHERE GAIN_OR_LOSS_CODE          = " "
+045400160106154437                       AND DEDUCTION_CODE   = :pc_DeducCode
+045500160106154437                       AND TRANS_TYPE_CODE  = :pc_TransType
+045600120524           END-EXEC.
+045700120524
+045800120604      *  Check 2nd priority  - Deduction Code                          *
+045900120604      *  Check deduction code equal to that of current transaction     *
+046000160106154437*    MOVE lnc_ErrDedCode         TO lc_SqlErrStatement.
+046100160106154437*    EXEC SQL
+046200160106154437*    DELETE FROM GLTEMP1
+046300160106154437*    END-EXEC.
+046400120524
+046500160106154437*    EXEC SQL
+046600160106154437*    INSERT INTO GLTEMP1
+046700160106154437*    SELECT * FROM GLTEMP2 WHERE DEDUCTION_CODE   = :pc_DeducCode
+046800160106154437*    END-EXEC.
+046900120524
+047000120604      *  Check 3rd priority  - Transaction Type                        *
+047100160106154437*    MOVE lnc_ErrTransType       TO lc_SqlErrStatement.
+047200160106154437*    EXEC SQL
+047300160106154437*    DELETE FROM GLTEMP2
+047400160106154437*    END-EXEC.
+047500120524
+047600160106154437*    EXEC SQL
+047700160106154437*    INSERT INTO GLTEMP2
+047800160106154437*    SELECT * FROM GLTEMP1 WHERE TRANS_TYPE_CODE
+047900160106154437*                                = :pc_TransType
+048000160106154437*    END-EXEC.
+048100120524
+048200120604      *  Check 4th priority  - Transaction Origin Code                 *
+048300120604           MOVE lnc_ErrTransOrigin     TO lc_SqlErrStatement.
+048400120524           INITIALIZE ln_Count
+048500120524           EXEC SQL
+048600120524           DELETE FROM GLTEMP1
+048700120524           END-EXEC.
+048800120524
+048900120524           EXEC SQL
+049000120524           SELECT COUNT(*) INTO :ln_Count
+049100120524           FROM GLTEMP2 WHERE TRANS_ORIGIN_CODE        =:pc_TransOrigin
+049200120524           END-EXEC.
+049300120524
+049400120604           IF ln_Count >= lnc_One
+049500120524            EXEC SQL
+049600120524            INSERT INTO GLTEMP1
+049700120524            SELECT * FROM GLTEMP2 WHERE TRANS_ORIGIN_CODE
+049800120524                                        =:pc_TransOrigin
+049900120524            END-EXEC
+050000120524           ELSE
+050100120524            EXEC SQL
+050200120524            INSERT INTO GLTEMP1
+050300120524            SELECT * FROM GLTEMP2 WHERE TRANS_ORIGIN_CODE         = " "
+050400120524            END-EXEC
+050500120524           END-IF.
+050600120524
+050700120604      *  Check 5th priority  - Fund Load                               *
+050800120604           MOVE lnc_ErrFundLoad        TO lc_SqlErrStatement.
+050900120524           INITIALIZE ln_Count
+051000120524           EXEC SQL
+051100120524           DELETE FROM GLTEMP2
+051200120524           END-EXEC.
+051300120524
+051400120524           EXEC SQL
+051500120524           SELECT COUNT(*) INto :ln_Count
+051600120524           FROM GLTEMP1 WHERE LOAD_STRUCTURE             = :pc_FundLoad
+051700120524           END-EXEC.
+051800120524
+051900120604           IF ln_Count >= lnc_One
+052000120524             EXEC SQL
+052100120524             INSERT INTO GLTEMP2
+052200120524             SELECT * FROM GLTEMP1 WHERE LOAD_STRUCTURE   =:pc_FundLoad
+052300120524             END-EXEC
+052400120524           ELSE
+052500120524             EXEC SQL
+052600120524             INSERT INTO GLTEMP2
+052700120524             SELECT * FROM GLTEMP1 WHERE LOAD_STRUCTURE           = " "
+052800120524             END-EXEC
+052900120524           END-IF.
+053000120524
+053100120604      *  Check 6th priority  - Settled Net Or Gross Flag               *
+053200120604           MOVE lnc_ErrSettled         TO lc_SqlErrStatement.
+053300120524           INITIALIZE ln_Count
+053400120524           EXEC SQL
+053500120524           DELETE FROM GLTEMP1
+053600120524           END-EXEC.
+053700120524
+053800120524           EXEC SQL
+053900120524           SELECT COUNT(*) INTO :ln_Count
+054000120524           FROM GLTEMP2 WHERE SETTLED_GROSS_OR_NET       =:pc_SettledGN
+054100120524           END-EXEC.
+054200120524
+054300120604           IF ln_Count >= lnc_One
+054400120524             EXEC SQL
+054500120524             INSERT INTO GLTEMP1
+054600120524             SELECT * FROM GLTEMP2 WHERE SETTLED_GROSS_OR_NET
+054700120524                                         = :pc_SettledGN
+054800120524             END-EXEC
+054900120524           ELSE
+055000120524             EXEC SQL
+055100120524             INSERT INTO GLTEMP1
+055200120524             SELECT * FROM GLTEMP2 WHERE SETTLED_GROSS_OR_NET     = " "
+055300120524             END-EXEC
+055400120524           END-IF.
+055500120524
+055600120604      *  Check 7th priority  - Contribution Redemption Code            *
+055700120604           MOVE lnc_ErrContRedem       TO lc_SqlErrStatement.
+055800120524           INITIALIZE ln_Count
+055900120524           EXEC SQL
+056000120524           DELETE FROM GLTEMP2
+056100120524           END-EXEC.
+056200120524
+056300120524           EXEC SQL
+056400120524           SELECT COUNT(*) INTO :ln_count
+056500120524           FROM GLTEMP1 WHERE CONTR_REDEM_CODE         = :pc_ConRedCode
+056600120524           END-EXEC.
+056700120524
+056800120604           IF ln_Count >= lnc_One
+056900120524             EXEC SQL
+057000120524             INSERT INTO GLTEMP2
+057100120524             SELECT * FROM GLTEMP1 WHERE CONTR_REDEM_CODE
+057200120524                                         =:pc_ConRedCode
+057300120524             END-EXEC
+057400120524           ELSE
+057500120524             EXEC SQL
+057600120524             INSERT INTO GLTEMP2
+057700120524             SELECT * FROM GLTEMP1 WHERE CONTR_REDEM_CODE        =  " "
+057800120524             END-EXEC
+057900120524           END-IF.
+058000120524
+058100120604      *  Check 8th priority  - Transaction Status Code - No Blanks     *
+058200120604           MOVE lnc_ErrTransStatus     TO lc_SqlErrStatement.
+058300120524           INITIALIZE ln_Count
+058400120524           EXEC SQL
+058500120524           DELETE FROM GLTEMP1
+058600120524           END-EXEC.
+058700120524
+058800120524           EXEC SQL
+058900120524           INSERT INTO GLTEMP1
+059000120524           SELECT * FROM GLTEMP2 WHERE TRANS_STATUS_CODE
+059100120524                                       = :pc_TranStatus
+059200120524           END-EXEC
+059300120524
+059400120604      *  Check 9th priority  - Payment Type Code                       *
+059500120604           MOVE lnc_ErrPaymentType     TO lc_SqlErrStatement.
+059600120524           INITIALIZE ln_Count
+059700120524           EXEC SQL
+059800120524           DELETE FROM GLTEMP2
+059900120524           END-EXEC.
+060000120524
+060100120524           EXEC SQL
+060200120524           SELECT COUNT(*) INTO :ln_Count
+060300120524           FROM GLTEMP1 WHERE PAYMENT_TYPE_CODE       = :pc_PaymentType
+060400120524           END-EXEC.
+060500120524
+060600120604           IF ln_Count >= lnc_One
+060700120524             EXEC SQL
+060800120524             INSERT INTO GLTEMP2
+060900120524             SELECT * FROM GLTEMP1 WHERE PAYMENT_TYPE_CODE
+061000120524                                         =:pc_PaymentType
+061100120524             END-EXEC
+061200120524           ELSE
+061300120524             EXEC SQL
+061400120524             INSERT INTO GLTEMP2
+061500120524             SELECT * FROM GLTEMP1 WHERE PAYMENT_TYPE_CODE        = " "
+061600120524             END-EXEC
+061700120524           END-IF.
+061800120524
+061900120704      *  Check 10th priority  - Tax Provice  Code                      *
+062000120704           MOVE lnc_ErrTaxProv         TO lc_SqlErrStatement.
+062100120704           INITIALIZE ln_Count
+062200120704           EXEC SQL
+062300120704           DELETE FROM GLTEMP1
+062400120704           END-EXEC.
+062500120704
+062600120704           EXEC SQL
+062700120704           SELECT COUNT(*) INTO :ln_Count
+062800120704           FROM GLTEMP2 WHERE PROVINCE_CODE           = :pc_TaxProvince
+062900120704           END-EXEC.
+063000120704
+063100120704           IF ln_Count >= lnc_One
+063200120704             EXEC SQL
+063300120704             INSERT INTO GLTEMP1
+063400120704             SELECT * FROM GLTEMP2 WHERE PROVINCE_CODE
+063500120704                                         =:pc_TaxProvince
+063600120704             END-EXEC
+063700120704           ELSE
+063800120704             EXEC SQL
+063900120704             INSERT INTO GLTEMP1
+064000120704             SELECT * FROM GLTEMP2 WHERE PROVINCE_CODE             =" "
+064100120704             END-EXEC
+064200120704           END-IF.
+064300120704
+064400120704      *  Check 11th priority  - Account Type Code                      *
+064500120604           MOVE lnc_ErrAccountType     TO lc_SqlErrStatement.
+064600120524           INITIALIZE ln_Count
+064700120524           EXEC SQL
+064800120704           DELETE FROM GLTEMP2
+064900120524           END-EXEC.
+065000120524
+065100120524           EXEC SQL
+065200120524           SELECT COUNT(*) INTO :ln_Count
+065300120704           FROM GLTEMP1 WHERE ACCOUNT_TYPE_CODE        =:pc_AccountType
+065400120524           END-EXEC.
+065500120524
+065600120604           IF ln_Count >= lnc_One
+065700120524             EXEC SQL
+065800120704             INSERT INTO GLTEMP2
+065900120704             SELECT * FROM GLTEMP1 WHERE ACCOUNT_TYPE_CODE
+066000120524                                         =:pc_AccountType
+066100120524             END-EXEC
+066200120524           ELSE
+066300120524             EXEC SQL
+066400120704             INSERT INTO GLTEMP2
+066500120704             SELECT * FROM GLTEMP1 WHERE ACCOUNT_TYPE_CODE         =" "
+066600120524             END-EXEC
+066700120524           END-IF.
+066800120524
+066900120604      *  If record found, get corresponding  GL Account detail         *
+067000120524           INITIALIZE ln_Count
+067100120524           EXEC SQL
+067200120524           SELECT COUNT(*) INTO :ln_Count
+067300120524           FROM GLTEMP2
+067400120524           END-EXEC.
+067500120529
+067600120604           IF ln_Count  = lnc_One
+067700120604             MOVE  lnc_Yes   TO pc_ReturnFlag
+067800120524             PERFORM Get-GL-Acount-Details
+067900120524           ELSE
+068000120604             MOVE  lnc_No    TO pc_ReturnFlag
+068100120524           END-IF.
+068200120524
+068300120524       Third-Pass.
+068400120524
+068500120604      *  Check 1st priority  - Gain Loss                               *
+068600160106154437     MOVE lnc_ErrDedCode         TO lc_SqlErrStatement.
+068700160106154437     EXEC SQL
+068800160106154437     DELETE FROM GLTEMP1
+068900160106154437     END-EXEC.
+069000151216
+069100120604           MOVE lnc_ErrGainLoss        TO lc_SqlErrStatement.
+069200120524           EXEC SQL
+069300160106154437*    INSERT INTO GLTEMP2
+069400160106154437*    SELECT * FROM GLTEMP1 WHERE GAIN_OR_LOSS_CODE
+069500160106154437*                                = :pc_GainLoss        AND
+069600160106154437*                                GAIN_OR_LOSS_CODE  <> " "
+069700160106154437     INSERT INTO GLTEMP1
+069800160106154437     SELECT * FROM MFAGLTRP WHERE GAIN_OR_LOSS_CODE
+069900160106154437                                 = :pc_GainLoss        AND
+070000160106154437                                 GAIN_OR_LOSS_CODE  <> " "
+070100160106154437                     AND DEDUCTION_CODE           = " "
+070200120524           END-EXEC.
+070300120524
+070400120604      *  Check 2nd priority  - Deduction Code-Select only blanks rec   *
+070500160106154437*    MOVE lnc_ErrDedCode         TO lc_SqlErrStatement.
+070600160106154437*    EXEC SQL
+070700160106154437*    DELETE FROM GLTEMP1
+070800160106154437*    END-EXEC.
+070900120524
+071000160106154437*    EXEC SQL
+071100160106154437*    INSERT INTO GLTEMP1
+071200160106154437*    SELECT * FROM GLTEMP2 WHERE DEDUCTION_CODE           = " "
+071300160106154437*    END-EXEC.
+071400120524
+071500120604      *  Check 3rd priority  - Transaction Type                        *
+071600120604           MOVE lnc_ErrTransType       TO lc_SqlErrStatement.
+071700120524           INITIALIZE ln_Count
+071800120524           EXEC SQL
+071900120524           DELETE FROM GLTEMP2
+072000120524           END-EXEC.
+072100120524
+072200120524           EXEC SQL
+072300120524           SELECT COUNT(*) INTO :ln_Count
+072400120524           FROM GLTEMP1 WHERE TRANS_TYPE_CODE           = :pc_TransType
+072500120524           END-EXEC.
+072600120524
+072700120604           IF ln_Count >= lnc_One
+072800120524             EXEC SQL
+072900120524             INSERT INTO GLTEMP2
+073000120524             SELECT * FROM GLTEMP1 WHERE TRANS_TYPE_CODE
+073100120524                                         = :pc_TransType
+073200120524             END-EXEC
+073300120524           ELSE
+073400120524             EXEC SQL
+073500120524             INSERT INTO GLTEMP2
+073600120524             SELECT * FROM GLTEMP1 WHERE TRANS_TYPE_CODE          = " "
+073700120524             END-EXEC
+073800120524           END-IF.
+073900120524
+074000120604      *  Check 4th priority  - Transaction Origin Code                 *
+074100120604           MOVE lnc_ErrTransOrigin     TO lc_SqlErrStatement.
+074200120524           INITIALIZE ln_Count
+074300120524           EXEC SQL
+074400120524           DELETE FROM GLTEMP1
+074500120524           END-EXEC.
+074600120524
+074700120524           EXEC SQL
+074800120524           SELECT COUNT(*) INTO :ln_Count
+074900120524           FROM GLTEMP2 WHERE TRANS_ORIGIN_CODE        =:pc_TransOrigin
+075000120524           END-EXEC.
+075100120524
+075200120604           IF ln_Count >= lnc_One
+075300120524            EXEC SQL
+075400120524            INSERT INTO GLTEMP1
+075500120524            SELECT * FROM GLTEMP2 WHERE TRANS_ORIGIN_CODE
+075600120524                                        =:pc_TransOrigin
+075700120524            END-EXEC
+075800120524           ELSE
+075900120524            EXEC SQL
+076000120524            INSERT INTO GLTEMP1
+076100120524            SELECT * FROM GLTEMP2 WHERE TRANS_ORIGIN_CODE         = " "
+076200120524            END-EXEC
+076300120524           END-IF.
+076400120524
+076500120604      *  Check 5th priority  - Fund Load                               *
+076600120604           MOVE lnc_ErrFundLoad        TO lc_SqlErrStatement.
+076700120524           INITIALIZE ln_Count
+076800120524           EXEC SQL
+076900120524           DELETE FROM GLTEMP2
+077000120524           END-EXEC.
+077100120524
+077200120524           EXEC SQL
+077300120524           SELECT COUNT(*) INto :ln_Count
+077400120524           FROM GLTEMP1 WHERE LOAD_STRUCTURE             = :pc_FundLoad
+077500120524           END-EXEC.
+077600120524
+077700120604           IF ln_Count >= lnc_One
+077800120524             EXEC SQL
+077900120524             INSERT INTO GLTEMP2
+078000120524             SELECT * FROM GLTEMP1 WHERE LOAD_STRUCTURE   =:pc_FundLoad
+078100120524             END-EXEC
+078200120524           ELSE
+078300120524             EXEC SQL
+078400120524             INSERT INTO GLTEMP2
+078500120524             SELECT * FROM GLTEMP1 WHERE LOAD_STRUCTURE    = " "
+078600120524             END-EXEC
+078700120524           END-IF.
+078800120524
+078900120604      *  Check 6th priority  - Settled Net Or Gross Flag               *
+079000120604           MOVE lnc_ErrSettled         TO lc_SqlErrStatement.
+079100120524           INITIALIZE ln_Count
+079200120524           EXEC SQL
+079300120524           DELETE FROM GLTEMP1
+079400120524           END-EXEC.
+079500120524
+079600120524           EXEC SQL
+079700120524           SELECT COUNT(*) INTO :ln_Count
+079800120524           FROM GLTEMP2 WHERE SETTLED_GROSS_OR_NET       =:pc_SettledGN
+079900120524           END-EXEC.
+080000120524
+080100120604           IF ln_Count >= lnc_One
+080200120524             EXEC SQL
+080300120524             INSERT INTO GLTEMP1
+080400120524             SELECT * FROM GLTEMP2 WHERE SETTLED_GROSS_OR_NET
+080500120524                                         = :pc_SettledGN
+080600120524             END-EXEC
+080700120524           ELSE
+080800120524             EXEC SQL
+080900120524             INSERT INTO GLTEMP1
+081000120524             SELECT * FROM GLTEMP2 WHERE SETTLED_GROSS_OR_NET     = " "
+081100120524             END-EXEC
+081200120524           END-IF.
+081300120524
+081400120604      *  Check 7th priority  - Contribution Redemption Code            *
+081500120604           MOVE lnc_ErrContRedem       TO lc_SqlErrStatement.
+081600120524           INITIALIZE ln_Count
+081700120524           EXEC SQL
+081800120524           DELETE FROM GLTEMP2
+081900120524           END-EXEC.
+082000120524
+082100120524           EXEC SQL
+082200120524           SELECT COUNT(*) INTO :ln_count
+082300120524           FROM GLTEMP1 WHERE CONTR_REDEM_CODE         = :pc_ConRedCode
+082400120524           END-EXEC.
+082500120524
+082600120604           IF ln_Count >= lnc_One
+082700120524             EXEC SQL
+082800120524             INSERT INTO GLTEMP2
+082900120524             SELECT * FROM GLTEMP1 WHERE CONTR_REDEM_CODE
+083000120524                                         =:pc_ConRedCode
+083100120524             END-EXEC
+083200120524           ELSE
+083300120524             EXEC SQL
+083400120524             INSERT INTO GLTEMP2
+083500120524             SELECT * FROM GLTEMP1 WHERE CONTR_REDEM_CODE        = " "
+083600120524             END-EXEC
+083700120524           END-IF.
+083800120524
+083900120604      *  Check 8th priority  - Transaction Status Code                 *
+084000120604           MOVE lnc_ErrTransStatus     TO lc_SqlErrStatement.
+084100120524           INITIALIZE ln_Count
+084200120524           EXEC SQL
+084300120524           DELETE FROM GLTEMP1
+084400120524           END-EXEC.
+084500120524
+084600120524           EXEC SQL
+084700120524           SELECT COUNT(*) INTO :ln_Count
+084800120524           FROM GLTEMP2 WHERE TRANS_STATUS_CODE         =:pc_TranStatus
+084900120524           END-EXEC.
+085000120524
+085100120604           IF ln_Count >= lnc_One
+085200120524             EXEC SQL
+085300120524             INSERT INTO GLTEMP1
+085400120524             SELECT * FROM GLTEMP2 WHERE TRANS_STATUS_CODE
+085500120524                                         = :pc_TranStatus
+085600120524             END-EXEC
+085700120524           ELSE
+085800120524             EXEC SQL
+085900120524             INSERT INTO GLTEMP1
+086000120524             SELECT * FROM GLTEMP2 WHERE TRANS_STATUS_CODE        = " "
+086100120524             END-EXEC
+086200120524           END-IF.
+086300120524
+086400120604      *  Check 9th priority  - Payment Type Code                       *
+086500120604           MOVE lnc_ErrPaymentType     TO lc_SqlErrStatement.
+086600120524           INITIALIZE ln_Count
+086700120524           EXEC SQL
+086800120524           DELETE FROM GLTEMP2
+086900120524           END-EXEC.
+087000120524
+087100120524           EXEC SQL
+087200120524           SELECT COUNT(*) INTO :ln_Count
+087300120524           FROM GLTEMP1 WHERE PAYMENT_TYPE_CODE       = :pc_PaymentType
+087400120524           END-EXEC.
+087500120524
+087600120604           IF ln_Count >= lnc_One
+087700120524             EXEC SQL
+087800120524             INSERT INTO GLTEMP2
+087900120524             SELECT * FROM GLTEMP1 WHERE PAYMENT_TYPE_CODE
+088000120524                                         =:pc_PaymentType
+088100120524             END-EXEC
+088200120524           ELSE
+088300120524             EXEC SQL
+088400120524             INSERT INTO GLTEMP2
+088500120524             SELECT * FROM GLTEMP1 WHERE PAYMENT_TYPE_CODE        = " "
+088600120524             END-EXEC
+088700120524           END-IF.
+088800120524
+088900120704      *  Check 10th priority  - Tax Provice Code                       *
+089000120704           MOVE lnc_ErrTaxProv         TO lc_SqlErrStatement.
+089100120704           INITIALIZE ln_Count
+089200120704           EXEC SQL
+089300120704           DELETE FROM GLTEMP1
+089400120704           END-EXEC.
+089500120704
+089600120704           EXEC SQL
+089700120704           SELECT COUNT(*) INTO :ln_Count
+089800120704           FROM GLTEMP2 WHERE PROVINCE_CODE          = :pc_TaxProvince
+089900120704           END-EXEC.
+090000120704
+090100120704           IF ln_Count >= lnc_One
+090200120704             EXEC SQL
+090300120704             INSERT INTO GLTEMP1
+090400120704             SELECT * FROM GLTEMP2 WHERE PROVINCE_CODE
+090500120704                                         =:pc_TaxProvince
+090600120704             END-EXEC
+090700120704           ELSE
+090800120704             EXEC SQL
+090900120704             INSERT INTO GLTEMP1
+091000120704             SELECT * FROM GLTEMP2 WHERE PROVINCE_CODE            =" "
+091100120704             END-EXEC
+091200120704           END-IF.
+091300120704
+091400120704      *  Check 11th priority  - Account Type Code                      *
+091500120604           MOVE lnc_ErrAccountType     TO lc_SqlErrStatement.
+091600120524           INITIALIZE ln_Count
+091700120524           EXEC SQL
+091800120704           DELETE FROM GLTEMP2
+091900120524           END-EXEC.
+092000120524
+092100120524           EXEC SQL
+092200120524           SELECT COUNT(*) INTO :ln_Count
+092300120704           FROM GLTEMP1 WHERE ACCOUNT_TYPE_CODE        =:pc_AccountType
+092400120524           END-EXEC.
+092500120524
+092600120604           IF ln_Count >= lnc_One
+092700120524             EXEC SQL
+092800120704             INSERT INTO GLTEMP2
+092900120704             SELECT * FROM GLTEMP1 WHERE ACCOUNT_TYPE_CODE
+093000120524                                         =:pc_AccountType
+093100120524             END-EXEC
+093200120524           ELSE
+093300120524             EXEC SQL
+093400120704             INSERT INTO GLTEMP2
+093500120704             SELECT * FROM GLTEMP1 WHERE ACCOUNT_TYPE_CODE         =" "
+093600120524             END-EXEC
+093700120524           END-IF.
+093800120524
+093900120604      *  If record found, get corresponding  GL Account detail         *
+094000120524           INITIALIZE ln_Count
+094100120524           EXEC SQL
+094200120524           SELECT COUNT(*) INTO :ln_Count
+094300120524           FROM GLTEMP2
+094400120524           END-EXEC.
+094500120524
+094600120604           IF ln_Count = lnc_One
+094700120604             MOVE  lnc_Yes  TO pc_ReturnFlag
+094800120524             PERFORM Get-GL-Acount-Details
+094900120524           ELSE
+095000120604             MOVE  lnc_No   TO pc_ReturnFlag
+095100120524           END-IF.
+095200120524
+095300120604      *  Get GL Account Details **                                     *
+095400120524       Get-GL-Acount-Details.
+095500120524
+095600120604           MOVE "Err: Selecting GL Ac" TO lc_SqlErrStatement.
+095700120524           EXEC SQL
+095800120615           SELECT COALESCE(GL_CURR_DR_ACCOUNT_NO,  0),
+095900120615                  COALESCE(GL_CURR_CR_ACCOUNT_NO,  0),
+096000120615                  COALESCE(GL_PRIOR_DR_ACCOUNT_NO, 0),
+096100120615                  COALESCE(GL_PRIOR_CR_ACCOUNT_NO, 0)
+096200120525           INTO   :ln_CurYrDrAcc,:ln_CurYrCrAcc,
+096300120525                  :ln_PriYrDrAcc,:ln_PriYrCrAcc
+096400120524           FROM  GLTEMP2
+096500120524           END-EXEC.
+096600120524
+096700120604            IF pc_PriorYear = lnc_No
+096800120604               MOVE  ln_CurYrDrAcc TO pn_DRAccount
+096900120604               MOVE  ln_CurYrCrAcc TO pn_CRAccount
+097000120524            ELSE
+097100120604               MOVE  ln_PriYrDrAcc TO pn_DRAccount
+097200120604               MOVE  ln_PriYrCrAcc TO pn_CRAccount
+097300120524            END-IF.
+097400120524
+097500120524       EndOfProgram.
+097600120524           GOBACK.
+097700120524
+097800120524       SQLLOG.
+097900120604      *
+098000120604      * SQLLOG
+098100120604      *
+098200120604           CALL "SQLLOG"     USING lc_CallingProgram
+098300120604                                   lc_SqlErrStatement
+098400120524                                   SQLCODE
+098500120524                                   SQLERRD(1)
+098600120524                                   SQLERRD(2)
+098700120524                                   SQLERRD(3)
+098800120524                                   SQLERRD(4)
+098900120524                                   SQLERRD(5)
+099000120524                                   SQLERRD(6)
+099100120524                                   SQLSTATE
+099200120604                                   lc_SqlErrData
+099300120604                                   lc_SqlStats
+099400120604                                   lc_SqlErrReply.
+099500120524           CANCEL "SQLLOG".
+099600120524

@@ -1,0 +1,397 @@
+000001170313      * %ATTR OPTION(*XREF *GEN) CLOSQLCSR(*ENDMOD) DBGVIEW(*SOURCE)
+000101000000       IDENTIFICATION DIVISION.
+000201040610       PROGRAM-ID.    FXVARUAI.
+000301040319       AUTHOR.        Truong Le.
+000401031117       INSTALLATION.
+000501040610       DATE-WRITTEN.  June 10, 2004.
+000601000000       DATE-COMPILED.
+000701000000      ******************************************************************
+000801040610      * RFS-NUMBER    : RFS-19162.                                     *
+000901040610      * DESCRIPTION   : The Purpose of this program is to retrive or   *
+001001040610      *                 update the variable unit of Tiered Trailer Fee *
+001101040610      *                 per account investment based on the passing    *
+001201040610      *                 parameters.                                    *
+001301021127      *
+001401040622      * CALLED BY     : SRVCALC1; SRVVCN; SRVCNX                       *
+001501040610      * PARAMETERS    : IN-ACCOUNT-NO,
+001601040610      *                 IN-INVESTMENT-CODE,
+001701040618      *                 IN-OPTION, (G = Get Data ; P = Put Data)
+001801040624      *                 IO-RECORD-EXIST, (Y = Yes ; N = No)
+001901040625      *                 IO-HEADER-AC, (A = Add; C = Changes)
+002001040618      *                 OU-RETURN-CODE, (" " = No error;
+002101040618      *                                  01  = Account Required;
+002201040618      *                                  02  = Investment is blank;
+002301040618      *                                  03  = Option is blank;
+002401040625      *                                  04  = Invalid Header-AC;
+002501040625      *                                  05  = No Record to Get;
+002601040625      *                                  10  = Cannot Add to MFAACIDUP;
+002701040625      *                                  11  = Cannot Update MFAACIDUP;
+002801040715      *                                  20  = Cannot Add to MFAACIDVP;
+002901040715      *                                  21  = Cannot Update MFAACIDVP;
+003001040618      *                                  99  = SQL Error)
+003101040610      *                 IO-PROCESS-DATE,
+003201040610      *                 IO-UNIT-VARIABLE,
+003301040610      *                 IO-DAYS,
+003401040610      *                 IO-ARRAY-50.
+003501040611      * LINKED MODULES: None.                                          *
+003601010427      ******************************************************************
+003701000000      *    C H A N G E   H I S T O R Y                                 *
+003801000000      ******************************************************************
+003901000000      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE              *
+004001040715      * Daisy Ly   * 2004/06/28   * - Change the error handling
+004101070608      * Richard S  * 2007/06/08   * RFS 42554 - recompile
+004201070612      * Ade A      * 2007/06/02   * rfs 37142 - include distribution
+004301070612      *            *              * unit field when updating and
+004401070713      * Richard S  *  2007/07/13  * Rfs 43050 - recompile to change
+004501070713      *            *              * activation grp from *NEW to QILE
+004601080211      * Marek T    *  2008/02/11  * RFS 40800 - Create Module and
+004701080211      *            *              * change Program to No Source obj.
+004801140604      * Arthy K    | 2014/06/04   | RFS136335 - Fix for SQL 1004 error
+004901000000      ******************************************************************
+005001000000       ENVIRONMENT DIVISION.
+005101000000       CONFIGURATION SECTION.
+005201000000       SOURCE-COMPUTER. IBM-AS400.
+005301000000       OBJECT-COMPUTER. IBM-AS400.
+005401040610       SPECIAL-NAMES.
+005501040316
+005601000000       INPUT-OUTPUT SECTION.
+005701040611       FILE-CONTROL.
+005801041110           SELECT  ACCOUNT-INV-DLY-SRV
+005901041110                   ASSIGN TO DATABASE-MFAACIDUP
+006001041110                   ORGANIZATION IS INDEXED
+006101041110                   ACCESS IS DYNAMIC
+006201041110                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY.
+006301041110
+006401000000       DATA DIVISION.
+006501000000       FILE SECTION.
+006601041110       FD  ACCOUNT-INV-DLY-SRV
+006701041110           LABEL RECORDS ARE STANDARD.
+006801041110       01  ACCOUNT-INV-DLY-SRV-REC .COPY DD-ALL-FORMATS OF MFAACIDUP.
+006901040610
+007001000000       WORKING-STORAGE SECTION.
+007101040316
+007201040623       01 WS-CHK-PROCESS-DATE           PIC S9(9).
+007301040623       01 WS-LOWER-LIMIT-DAY            PIC S9(5).
+007401040623       01 WS-UNITS-VAR                  PIC S9(10)V9(3).
+007501040628       01 WS-DECLARE-SQL                PIC X VALUE "Y".
+007601070608       01 lnci_0                        PIC S9(10)V9(3) VALUE 0.
+00770107061237142  01 ln_DistUnits                  PIC S9(10)V9(3).
+007801040611
+007901040611      * SQL Error Handeling.
+008001040611          COPY CPYSQLFLD
+008101040618               REPLACING == "CURRENT_PROGRAM" == BY == "FXVARUAI" ==.
+008201040715
+008301040716       01 WS-SQLCODE                    PIC -Z(8).
+008401040629       01 WS-ERR-CODE                   PIC X(02) VALUE SPACES.
+008501040715          88 WS-ERR-OK                            VALUE SPACES.
+008601040715          88 WS-ERR-10                            VALUE "10".
+008701040715          88 WS-ERR-11                            VALUE "11".
+008801040715          88 WS-ERR-12                            VALUE "12".
+008901040715          88 WS-ERR-13                            VALUE "13".
+009001040715          88 WS-ERR-14                            VALUE "14".
+009101040715          88 WS-ERR-15                            VALUE "15".
+009201040611
+009301040611           EXEC SQL
+009401040611              INCLUDE SQLCA
+009501040611           END-EXEC.
+009601031117
+009701031117       LINKAGE SECTION.
+009801040610       01 COMM-ACCOUNT-NO               PIC S9(9).
+009901040610       01 COMM-INVESTMENT-CODE          PIC X(5).
+010001040610       01 COMM-OPTION                   PIC X.
+010101040625          88 GET-OPTION                 VALUE "G".
+010201040625          88 PUT-OPTION                 VALUE "P".
+010301040625          88 VALID-OPTIONS              VALUE "P" "G".
+010401040610       01 COMM-RECORD-EXIST             PIC X.
+010501040625       01 COMM-HEADER-AC                PIC X.
+010601040610       01 COMM-RETURN-CODE              PIC X(2).
+010701040610       01 COMM-PROCESS-DATE             PIC S9(9).
+010801040625       01 COMM-TOT-UNITS-VAR            PIC S9(10)V9(3).
+010901040624       01 COMM-TOT-DAYS                 PIC S9(5).
+011001040610       01 COMM-RETURN-ARRAY.
+011101040628         05 COMM-ARRAY-50    OCCURS 50 TIMES INDEXED BY CNTRIDX.
+011201040622           10 COMM-DAYS                 PIC S9(5).
+011301040625           10 COMM-UNITS-VAR            PIC S9(10)V9(3).
+011401040623           10 COMM-NY                   PIC X.
+011501040623           10 COMM-AC                   PIC X.
+01160107061237142      10 pn-DistUnits              PIC S9(10)V9(3).
+011701040211
+011801031117
+011901040610       PROCEDURE DIVISION  USING   COMM-ACCOUNT-NO,
+012001040610                                   COMM-INVESTMENT-CODE,
+012101040610                                   COMM-OPTION,
+012201040610                                   COMM-RECORD-EXIST,
+012301040625                                   COMM-HEADER-AC,
+012401040610                                   COMM-RETURN-CODE,
+012501040610                                   COMM-PROCESS-DATE,
+012601040625                                   COMM-TOT-UNITS-VAR,
+012701040610                                   COMM-TOT-DAYS,
+012801040610                                   COMM-RETURN-ARRAY.
+012901031117      *--------------------------------------------------------------*
+013001031117      * MAINLINE                                                     *
+013101031117      *--------------------------------------------------------------*
+013201031117       MAINLINE.
+013301040617           PERFORM INITIAL-LOGIC              THRU INIT-EXIT.
+013401040623
+013501040628           IF COMM-RETURN-CODE NOT = SPACES
+013601040628              GO TO ML-1200.
+013701040628
+013801040628           IF PUT-OPTION
+013901040628              GO TO ML-0200.
+014001040625
+014101040625       ML-0100.
+014201041110           PERFORM GET-VARIABLE-UNITS       THRU GVU-EXIT.
+014301040625           GO TO ML-1200.
+014401040625
+014501040625       ML-0200.
+014601041110           PERFORM UPDATE-VARIABLE-UNITS    THRU UVU-EXIT.
+014701040628
+014801040625       ML-1200.
+014901040628           PERFORM END-JOB                  THRU EOJ-EXIT.
+015001040625           GOBACK.
+015101040318
+015201040610
+015301040610      *--------------------------------------------------------------*
+015401040610      * Initial Logic.                                                  *
+015501040610      *--------------------------------------------------------------*
+015601040610       INITIAL-LOGIC.
+015701040628           EXEC SQL
+015801040628             WHENEVER SQLERROR CONTINUE
+015901040628           END-EXEC.
+016001040610
+016101040610      * Initialize Working Variable.
+016201040611           SET WS-ERR-OK                  TO TRUE.
+016301040623           INITIALIZE                        COMM-RETURN-CODE
+016401040623                                             COMM-RECORD-EXIST.
+016501040618      * Validate the passing parameters.
+016601040618           IF COMM-ACCOUNT-NO = 0
+016701040618             MOVE "01"              TO COMM-RETURN-CODE
+016801040625             GO TO INIT-EXIT
+016901040618           ELSE IF COMM-INVESTMENT-CODE = " "
+017001040618             MOVE "02"              TO COMM-RETURN-CODE
+017101040625             GO TO INIT-EXIT
+017201040625           ELSE IF NOT VALID-OPTIONS
+017301040618             MOVE "03"              TO COMM-RETURN-CODE
+017401040625             GO TO INIT-EXIT
+017501040628           END-IF
+017601040618
+017701040628           IF WS-DECLARE-SQL NOT = "Y"
+017801040628              GO TO INIT-EXIT.
+017901040625
+018001040628       INIT-DECLARE-SQL.
+018101041110           OPEN INPUT ACCOUNT-INV-DLY-SRV.
+018201040625
+018301040625           EXEC SQL
+018401040625             DECLARE ACIDVP CURSOR FOR
+018501040625               SELECT LOWER_LIMIT_DAYS, UNITS_VAR, "Y", " "
+01860107061237142                , Dist_Units_Var
+018701040625               FROM MFAACIDVP
+018801040625               WHERE ACCOUNT_NO =      :COMM-ACCOUNT-NO       AND
+018901040625                     INVESTMENT_CODE = :COMM-INVESTMENT-CODE
+019001040625               ORDER BY LOWER_LIMIT_DAYS
+019101040625           END-EXEC.
+019201040625
+019301040628           MOVE "N" TO WS-DECLARE-SQL.
+019401040715
+019501040610       INIT-EXIT.
+019601040625           EXIT.
+019701040610
+019801040318      *--------------------------------------------------------------*
+019901040611      * Retrieve Variable Unit Info and Load Them to Array           *
+020001040318      *--------------------------------------------------------------*
+020101041110       GET-VARIABLE-UNITS.
+020201040715
+020301041110           MOVE COMM-ACCOUNT-NO
+020401041110             TO ACCOUNT-NO OF ACCOUNT-INV-DLY-SRV.
+020501041110           MOVE COMM-INVESTMENT-CODE
+020601041114             TO INVESTMENT-CODE OF ACCOUNT-INV-DLY-SRV.
+020701041110           READ ACCOUNT-INV-DLY-SRV
+020801041110             INVALID KEY
+020901041110               MOVE "N" TO COMM-RECORD-EXIST
+021001041110               GO TO GVU-EXIT
+021101041110             NOT INVALID KEY
+021201041110               MOVE "Y" TO COMM-RECORD-EXIST
+021301041110               MOVE PROCESS-DATE OF ACCOUNT-INV-DLY-SRV
+021401070612      *          TO WS-CHK-PROCESS-DATE
+02150107061237142            TO WS-CHK-PROCESS-DATE,
+021601041110                    COMM-PROCESS-DATE
+021701041110           END-READ.
+021801041110
+021901040628
+022001041110       GVU-GET-DETAILS.
+022101040611           EXEC SQL
+022201040611             OPEN ACIDVP
+022301040611           END-EXEC.
+022401041110
+022501140604136335     MOVE SQLSTATE TO lc_sqlStates
+022601140604136335*    IF SQLSTATE NOT = WS-SQL-SUCCESSFUL
+022701140604136335     IF NOT lncc_sqlSuccessful
+022801040715             SET WS-ERR-11       TO TRUE
+022901040715             MOVE SQLSTATE       TO WS-SQLSTATE
+023001040716             MOVE SQLCODE        TO WS-SQLCODE
+023101040628             PERFORM DSP-ERROR
+023201040716             DISPLAY "Error in Open ACIDVP Cursor - "
+023301040716                     "SQLCODE:" WS-SQLCODE
+023401040715             MOVE "99"           TO COMM-RETURN-CODE
+023501041110             GO TO GVU-EXIT
+023601040628           END-IF.
+023701040628
+023801040611      * Initialize working variable and array.
+023901040611           INITIALIZE                     COMM-RETURN-ARRAY,
+024001040625                                          COMM-TOT-UNITS-VAR,
+024101040611                                          COMM-TOT-DAYS.
+024201041110
+024301040611           EXEC SQL
+024401040622             FETCH NEXT FROM ACIDVP FOR 50 ROWS INTO :COMM-ARRAY-50
+024501040611           END-EXEC.
+024601040611
+024701040625           COMPUTE COMM-TOT-DAYS = SQLERRD(3)
+024801040625
+024901040628           PERFORM VARYING CNTRIDX FROM 1 BY 1
+025001040628                   UNTIL CNTRIDX > COMM-TOT-DAYS
+025101040625             COMPUTE COMM-TOT-UNITS-VAR  = COMM-TOT-UNITS-VAR +
+025201040628                                           COMM-UNITS-VAR(CNTRIDX)
+025301040622           END-PERFORM.
+025401040611
+025501040628           EXEC SQL
+025601040628               CLOSE ACIDVP
+025701040628           END-EXEC.
+025801040628
+025901041110       GVU-EXIT.
+026001040628           EXIT.
+026101040318
+026201040318      *--------------------------------------------------------------*
+026301040611      * Update Variable Unit Information.                            *
+026401040318      *--------------------------------------------------------------*
+026501041110       UPDATE-VARIABLE-UNITS.
+026601040611
+026701040628           PERFORM VARYING CNTRIDX FROM 1 BY 1
+026801040628                   UNTIL CNTRIDX > COMM-TOT-DAYS
+026901040628              COMPUTE WS-LOWER-LIMIT-DAY = COMM-DAYS(CNTRIDX)
+027001040628              COMPUTE WS-UNITS-VAR       = COMM-UNITS-VAR(CNTRIDX)
+02710107061237142         COMPUTE ln_DistUnits       = pn-DistUnits(CNTRIDX)
+027201040623
+027301040623      * Add to the Account-Inv-Dly-Srv-Var.
+027401040628             IF COMM-AC(CNTRIDX) = "A" AND COMM-NY(CNTRIDX) NOT = "Y"
+027501040623               EXEC SQL
+027601040623                 INSERT INTO MFAACIDVP
+027701040623                   VALUES (:COMM-ACCOUNT-NO,
+027801040623                           :COMM-INVESTMENT-CODE,
+027901040623                           :WS-LOWER-LIMIT-DAY,
+028001070608r42554                     :WS-UNITS-VAR,
+028101070612      * 37412 begins
+028201070612r42554*                    :lnci_0)
+028301070612                           :ln_DistUnits)
+028401070612      * 37412 ends
+028501040623               END-EXEC
+028601140604136335     MOVE SQLSTATE TO lc_sqlStates
+028701140604136335*        IF SQLSTATE NOT = WS-SQL-SUCCESSFUL
+028801140604136335         IF NOT lncc_sqlSuccessful
+028901040715                 SET WS-ERR-12       TO TRUE
+029001040715                 MOVE SQLSTATE       TO WS-SQLSTATE
+029101040716                 MOVE SQLCODE        TO WS-SQLCODE
+029201040715                 PERFORM DSP-ERROR
+029301040716                 DISPLAY "Error in Insert into MFAACIDVP - "
+029401040716                         "SQLCODE:" WS-SQLCODE
+029501040715                 DISPLAY "ACCOUNT = "    COMM-ACCOUNT-NO
+029601040715                 DISPLAY "INVESTMENT = " COMM-INVESTMENT-CODE
+029701040715                 DISPLAY "LOWER DAYS = " WS-LOWER-LIMIT-DAY
+029801040715                 DISPLAY "UNITS      = " WS-UNITS-VAR
+02990107061237142            DISPLAY "DIST UNTIS = " ln_DistUnits
+030001040715                 MOVE "20"           TO COMM-RETURN-CODE
+030101041110                 GO TO UVU-EXIT
+030201040623               END-IF
+030301040715             END-IF
+030401040617
+030501040623      * Update to the Account-Inv-Dly-Srv-Var.
+030601040628             IF COMM-AC(CNTRIDX) = "C" AND COMM-NY(CNTRIDX) = "Y"
+030701040623               EXEC SQL
+030801040623                 UPDATE MFAACIDVP
+030901040623                   SET UNITS_VAR = :WS-UNITS-VAR
+03100107061237142                 ,DIST_UNITS_VAR  = :ln_DistUnits
+031101040623                 WHERE ACCOUNT_NO         = :COMM-ACCOUNT-NO       AND
+031201040623                       INVESTMENT_CODE    = :COMM-INVESTMENT-CODE  AND
+031301040623                       LOWER_LIMIT_DAYS   = :WS-LOWER-LIMIT-DAY
+031401040623               END-EXEC
+031501140604136335     MOVE SQLSTATE TO lc_sqlStates
+031601140604136335*        IF SQLSTATE NOT = WS-SQL-SUCCESSFUL
+031701140604136335         IF NOT lncc_sqlSuccessful
+031801040715                 SET WS-ERR-13       TO TRUE
+031901040715                 MOVE SQLSTATE       TO WS-SQLSTATE
+032001040716                 MOVE SQLCODE        TO WS-SQLCODE
+032101040716                 PERFORM DSP-ERROR
+032201040716                 DISPLAY "Error in Update MFAACIDVP - "
+032301040716                         "SQLCODE:" WS-SQLCODE
+032401040715                 DISPLAY "ACCOUNT = "    COMM-ACCOUNT-NO
+032501040715                 DISPLAY "INVESTMENT = " COMM-INVESTMENT-CODE
+032601040715                 DISPLAY "LOWER DAYS = " WS-LOWER-LIMIT-DAY
+032701040715                 DISPLAY "UNITS      = " WS-UNITS-VAR
+03280107061237142            DISPLAY "DIST UNTIS = " ln_DistUnits
+032901040715                 MOVE "21"            TO COMM-RETURN-CODE
+033001041110                 GO TO UVU-EXIT
+033101040628               END-IF
+033201040623             END-IF
+033301040623           END-PERFORM.
+033401040318
+033501040623      * Update Account-Inv-Dly-Srv.
+033601040624           IF COMM-HEADER-AC = "A"
+033701040623             EXEC SQL
+033801040623               INSERT INTO MFAACIDUP
+033901040623                 VALUES (:COMM-ACCOUNT-NO,
+034001040623                         :COMM-INVESTMENT-CODE,
+034101040623                         :COMM-PROCESS-DATE)
+034201040623             END-EXEC
+034301140604136335     MOVE SQLSTATE TO lc_sqlStates
+034401140604136335*      IF SQLSTATE NOT = WS-SQL-SUCCESSFUL
+034501140604136335       IF NOT lncc_sqlSuccessful
+034601040715               SET WS-ERR-14       TO TRUE
+034701040715               MOVE SQLSTATE       TO WS-SQLSTATE
+034801040716               MOVE SQLCODE        TO WS-SQLCODE
+034901040715               PERFORM DSP-ERROR
+035001040716               DISPLAY "Error in Insert MFAACIDUP - "
+035101040716                       "SQLCODE:" WS-SQLCODE
+035201040715               DISPLAY "ACCOUNT = "     COMM-ACCOUNT-NO
+035301040715               DISPLAY "INVESTMENT = "  COMM-INVESTMENT-CODE
+035401040715               DISPLAY "PROCESS DATE= " COMM-PROCESS-DATE
+035501040715               MOVE "10"             TO COMM-RETURN-CODE
+035601041110               GO TO UVU-EXIT
+035701040628             END-IF
+035801040628           END-IF.
+035901040628
+036001040628           IF COMM-HEADER-AC = "C"
+036101040623      * Update to the Account-Inv-Dly-Srv-Var.
+036201040623             EXEC SQL
+036301040623               UPDATE MFAACIDUP
+036401040623                 SET PROCESS_DATE = :COMM-PROCESS-DATE
+036501040623               WHERE ACCOUNT_NO         = :COMM-ACCOUNT-NO       AND
+036601040623                     INVESTMENT_CODE    = :COMM-INVESTMENT-CODE
+036701040623             END-EXEC
+036801140604136335       MOVE SQLSTATE TO lc_sqlStates
+036901140604136335*      IF SQLSTATE NOT = WS-SQL-SUCCESSFUL
+037001140604136335       IF NOT lncc_sqlSuccessful
+037101040715               SET WS-ERR-15       TO TRUE
+037201040715               MOVE SQLSTATE       TO WS-SQLSTATE
+037301040716               MOVE SQLCODE        TO WS-SQLCODE
+037401040715               PERFORM DSP-ERROR
+037501040716               DISPLAY "Error in Update MFAACIDUP - "
+037601040716                       "SQLCODE:" WS-SQLCODE
+037701040715               DISPLAY "ACCOUNT = "     COMM-ACCOUNT-NO
+037801040715               DISPLAY "INVESTMENT = "  COMM-INVESTMENT-CODE
+037901040715               DISPLAY "PROCESS DATE= " COMM-PROCESS-DATE
+038001040715               MOVE "11"             TO COMM-RETURN-CODE
+038101040628             END-IF
+038201040623           END-IF.
+038301040715
+038401041111       UVU-EXIT.
+038501040628           EXIT.
+038601040611
+038701040318      *--------------------------------------------------------------*
+038801040318      * End the Process.                                             *
+038901040318      *--------------------------------------------------------------*
+039001031215       END-JOB.
+039101040628       EOJ-EXIT.
+039201040628           EXIT.
+039301040123
+039401040123      * Display Error and Force Message Routine.
+039501040123          COPY "CPYSQLRTN".
+039601021126

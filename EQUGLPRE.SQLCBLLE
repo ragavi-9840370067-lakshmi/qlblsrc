@@ -1,0 +1,1253 @@
+000100120710       IDENTIFICATION DIVISION.
+000200120710       PROGRAM-ID.    EQUGLPRE.
+000300120710       AUTHOR.        Dharmendra Damke.
+000400120710       INSTALLATION.  L&T Infotech.
+000500120710       DATE-WRITTEN.  June 04, 2012.
+000600120710       DATE-COMPILED.
+000700120710      *****************************************************************
+000800120710      **   RFS-NUMBER :                                                *
+000900120710      **                                                               *
+001000120710      **   DESCRIPTION: Main pgm to generate Equitable GL Records      *
+001100120710      **                                                               *
+001200120710      **   CALLED BY:  JOBEQUGL                                        *
+001300120710      **                                                               *
+001400120710      **   PARAMETERS:  As-At-Date                                     *
+001500120710      *****************************************************************
+001600120710      *****************************************************************
+001700120710      *    C H A N G E   H I S T O R Y
+001800120710      *****************************************************************
+001900120710      ******************************************************************
+002000120710      * PROGRAMMER  *DATE OF CHANGE* DESCRIPTION OF CHANGE             *
+002100120710      ******************************************************************
+002200120710      *Dharmendra D   * 2012/06/04 * RFS107462 - New Program Created   *
+002300120911      *Dharmendra D   * 2012/09/11 * RFS113918 - Changed Constant to   *
+002400120911      *               *            * Blanks                            *
+002500150423      * Suresh G.     * 2015/04/23 * RFS145552 - Add 3 new fields to   *
+002600150423      *               *            * extract work file SFGLEXTP.       *
+002700151029      * Prashant Y    * 2015/10/26 * RFS149605 - Report CON & HST      *
+002800151029      *               *            * records in GL Extract for         *
+002900151029      *               *            * T+1 wire order trades             *
+003000160105      * Michael Fan   * 2016/01/05 * RFS154437 - Bind the program      *
+003100160105      *               *            * FXGLACCT together to improve      *
+003200160105      *               *            * performance.                      *
+003300161222      * Muthukumar S  * 2016/12/20 * RFS165627 - Root RFS:161985       *
+003400161222      *               *            * Recompilation for MFAGLTRP changes*
+003500120710      ******************************************************************
+003600120710
+003700120710       ENVIRONMENT DIVISION.
+003800120710       CONFIGURATION SECTION.
+003900120710       SOURCE-COMPUTER. IBM-AS400.
+004000120710       OBJECT-COMPUTER. IBM-AS400.
+004100120710       SPECIAL-NAMES.
+004200160105154437     LINKAGE TYPE IS PROCEDURE FOR "FXGLACCNT".
+004300120710
+004400120710       INPUT-OUTPUT SECTION.
+004500120710       FILE-CONTROL.
+004600120710
+004700120710       DATA DIVISION.
+004800120710
+004900120710       WORKING-STORAGE SECTION.
+005000120710      *
+005100120710           COPY Cpysqlfld
+005200120710               REPLACING == "CURRENT_PROGRAM" == BY == "EQUGLPRE" ==.
+005300120710      *
+005400120710           EXEC SQL
+005500120710             INCLUDE SQLCA
+005600120710           END-EXEC.
+005700120710      *
+005800120710      * Constant Variables used in program                             *
+005900120710       01  lc_Static.
+006000160105154437*  03  lnc_MaxFetchRec            PIC S9(03) VALUE 200.
+006100160105154437   03  lnc_MaxFetchRec            PIC S9(03) VALUE 500.
+006200120710         03  lnc_First                  PIC  X(01) VALUE "F".
+006300120710         03  lnc_Second                 PIC  X(01) VALUE "S".
+006400120710         03  lnc_Third                  PIC  X(01) VALUE "T".
+006500120710         03  lnc_Unitrax                PIC  X(03) VALUE "UTX".
+006600120710         03  lnc_N                      PIC  X(01) VALUE "N".
+006700120710         03  lnc_S                      PIC  X(01) VALUE "S".
+006800120710         03  lnc_U                      PIC  X(01) VALUE "U".
+006900120710         03  lnc_Yes                    PIC  X(01) VALUE "Y".
+007000120710         03  lnc_No                     PIC  X(01) VALUE "N".
+007100120710         03  lnc_Buy                    PIC  X(03) VALUE "BUY".
+007200120710         03  lnc_Sell                   PIC  X(03) VALUE "SEL".
+007300120710         03  lnc_WireOrder              PIC  X(03) VALUE "WOR".
+007400120710         03  lnc_History                PIC  X(03) VALUE "HST".
+007500120710         03  lnc_Contracted             PIC  X(03) VALUE "CON".
+007600120710         03  lnc_Loan                   PIC  X(04) VALUE "LOAN".
+007700120710         03  lnc_SegFund                PIC  X(03) VALUE "SEG".
+007800120710         03  lnc_NegativeSign           PIC  X(01) VALUE "-".
+007900120710         03  lnc_Equit                  PIC  X(05) VALUE "EQUIT".
+008000120710         03  lnc_BackDatedDept          PIC  X(06) VALUE "HH1271".
+008100120710         03  lnc_00                     PIC  X(18)
+008200120911113918*                                 VALUE "000000000000000.00".
+008300120911113918                                  VALUE "                  ".
+008400120710
+008500120710      * Working variables for loading vaules from work table.          *
+008600120710       01  lc_WorkFields.
+008700120710         03  lc_SaveRecord.
+008800120710           05  li_PlaceDate             PIC S9(09) VALUE 0.
+008900120710           05  li_TransNo               PIC S9(09) VALUE 0.
+009000120710           05  li_BatchDate             PIC S9(08) VALUE 0.
+009100120710           05  lc_BatchType             PIC X(06)  VALUE " ".
+009200120710           05  li_ProcessDate           PIC S9(09) VALUE 0.
+009300120710           05  li_TradeDate             PIC S9(09) VALUE 0.
+009400120710           05  lc_TransType             PIC X(03)  VALUE " ".
+009500120710           05  lc_TransOrigin           PIC X(03)  VALUE " ".
+009600120710           05  li_AccountNo             PIC S9(09) VALUE 0.
+009700120710           05  lc_AltAccountNo          PIC X(12)  VALUE " ".
+009800120710           05  lc_AccountType           PIC X(05)  VALUE " ".
+009900120710           05  lc_TaxProvince           PIC X(03)  VALUE " ".
+010000120710           05  lc_Investment            PIC X(05)  VALUE " ".
+010100120710           05  lc_InvGroup              PIC X(05)  VALUE " ".
+010200120710           05  lc_IndustryFundCode      PIC X(05)  VALUE " ".
+010300120710           05  lc_FundLoad              PIC X(01)  VALUE " ".
+010400120710           05  lc_Currency              PIC X(03)  VALUE " ".
+010500120710           05  lc_SettledGorN           PIC X(01)  VALUE " ".
+010600120710           05  ln_GrossAmt              PIC S9(13)V9(02) VALUE 0.
+010700120710           05  ln_NetAmt                PIC S9(13)V9(02) VALUE 0.
+010800120710           05  ln_SettlementAmt         PIC S9(13)V9(02) VALUE 0.
+010900120710           05  lc_ContrRedem            PIC X(06)  VALUE " ".
+011000120710           05  lc_TransStatus           PIC X(03)  VALUE " ".
+011100120710           05  lc_PaymentType           PIC X(01)  VALUE " ".
+011200120710           05  lc_EnteredBy             PIC X(10)  VALUE " ".
+011300120710           05  ln_GainLossValue         PIC S9(13)V9(02) VALUE 0.
+011400120710           05  lc_GorL                  PIC X(04)  VALUE " ".
+011500120710           05  lc_PriorYear             PIC X(01)  VALUE " ".
+011600151029149605     05  lc_SettlementSch         PIC X(04).
+011700120710
+011800120710         03  lb_EndOfCursorFlag         PIC 1.
+011900120710           88  lb_EndOfCursorTrue                  VALUE B"1".
+012000120710           88  lb_EndOfCursorFalse                 VALUE B"0".
+012100120710         03  li_Counter                 PIC S9(03) VALUE 0.
+012200120710         03  li_NoOfRowsFetched         PIC S9(03) VALUE 0.
+012300120710
+012400120710         03  lb_NextPass                PIC 1.
+012500120710           88  lb_NextPassYes                      VALUE B"1".
+012600120710           88  lb_NextPassNo                       VALUE B"0".
+012700120710
+012800120710         03  lb_DedEndOfCursorFlag      PIC 1.
+012900120710           88  lb_DedEndOfCursorTrue               VALUE B"1".
+013000120710           88  lb_DedEndOfCursorFalse              VALUE B"0".
+013100120710         03  li_DedCodeCount            PIC S9(03) VALUE 0.
+013200120710         03  li_NoOfRowsFetchedDED      PIC S9(03) VALUE 0.
+013300151026
+013400151026149605   03  lc_T1Flag                  PIC  X(01) VALUE SPACE.
+013500160105154437
+013600160105 ||      03  lb_GLMEndOfCursorFlag      PIC 1.
+013700160105 ||        88  lb_GLMEndOfCursorTrue               VALUE B"1".
+013800160105 ||        88  lb_GLMEndOfCursorFalse              VALUE B"0".
+013900160105 ||      03  li_GLMasterCount           PIC S9(04) VALUE 0.
+014000160105154437   03  li_NoOfRowsFetchedGLM      PIC S9(04) VALUE 0.
+014100120710
+014200120710      * Variable fields used in all different passes.                  *
+014300120710       01  lc_VariableFields.
+014400120710         03  lc_DedCode                 PIC X9(04) VALUE " ".
+014500120710         03  ln_Charge                  PIC S9(13)V9(2) VALUE 0.
+014600120710         03  li_DrAccount               PIC S9(06) VALUE 0.
+014700120710         03  li_CrAccount               PIC S9(06) VALUE 0.
+014800120710         03  li_GlAccount               PIC S9(06) VALUE 0.
+014900120710         03  lc_DeptId                  PIC X(06)  VALUE " ".
+015000120710         03  lc_GlType                  PIC X(05)  VALUE " ".
+015100120710         03  lc_PassType                PIC X(01)  VALUE " ".
+015200120710         03  lc_ReturnFlag              PIC X(01)  VALUE " ".
+015300120710
+015400120710      * Exception fields used to load SFGLEXCP exception file.         *
+015500120710       01  lc_ExceptionFields.
+015600120710         03  lc_ExceptionRecord.
+015700120710           05  lc_TransTypeEx           PIC X(03)  VALUE " ".
+015800120710           05  lc_TransOriginEx         PIC X(03)  VALUE " ".
+015900120710           05  lc_FundLoadEx            PIC X(01)  VALUE " ".
+016000120710           05  lc_SettledGorNEx         PIC X(01)  VALUE " ".
+016100120710           05  lc_ContrRedemEx          PIC X(06)  VALUE " ".
+016200120710           05  lc_TransStatusEx         PIC X(03)  VALUE " ".
+016300120710           05  lc_DedectionCodeEx       PIC X(04)  VALUE " ".
+016400120710           05  lc_PaymentTypeEx         PIC X(01)  VALUE " ".
+016500120710           05  lc_AccountTypeEx         PIC X(05)  VALUE " ".
+016600120710           05  lc_TaxProvinceEx         PIC X(02)  VALUE " ".
+016700120710           05  li_PlaceDateEx           PIC S9(08) VALUE 0.
+016800120710           05  li_TransNoEx             PIC S9(09) VALUE 0.
+016900120710           05  li_TradeDateEx           PIC S9(08) VALUE 0.
+017000120710           05  li_AccountNoEx           PIC S9(09) VALUE 0.
+017100120710           05  lc_InvestmentEx          PIC X(05)  VALUE " ".
+017200120710           05  lc_IndustryFundCodeEx    PIC X(05)  VALUE " ".
+017300120710           05  ln_GrossAmtEx            PIC S9(13)V9(02) VALUE 0.
+017400120710           05  ln_NetAmtEx              PIC S9(13)V9(02) VALUE 0.
+017500120710           05  ln_ChargeEx              PIC S9(13)V9(02) VALUE 0.
+017600120710           05  lc_PassTypeEx            PIC X(01)  VALUE " ".
+017700160105154437* Start
+017800160105  ||   01  lc_ExceptionArray.
+017900160105  ||     03  lc_ExceptionRec OCCURS 500 TIMES.
+018000160105  ||       05  lc_TransTypeEx1          PIC X(03)  VALUE " ".
+018100160105  ||       05  lc_TransOriginEx1        PIC X(03)  VALUE " ".
+018200160105  ||       05  lc_FundLoadEx1           PIC X(01)  VALUE " ".
+018300160105  ||       05  lc_SettledGorNEx1        PIC X(01)  VALUE " ".
+018400160105  ||       05  lc_ContrRedemEx1         PIC X(06)  VALUE " ".
+018500160105  ||       05  lc_TransStatusEx1        PIC X(03)  VALUE " ".
+018600160105  ||       05  lc_DedectionCodeEx1      PIC X(04)  VALUE " ".
+018700160105  ||       05  lc_PaymentTypeEx1        PIC X(01)  VALUE " ".
+018800160105  ||       05  lc_AccountTypeEx1        PIC X(05)  VALUE " ".
+018900160105  ||       05  lc_TaxProvinceEx1        PIC X(02)  VALUE " ".
+019000160105  ||       05  li_PlaceDateEx1          PIC S9(08) VALUE 0.
+019100160105  ||       05  li_TransNoEx1            PIC S9(09) VALUE 0.
+019200160105  ||       05  li_TradeDateEx1          PIC S9(08) VALUE 0.
+019300160105  ||       05  li_AccountNoEx1          PIC S9(09) VALUE 0.
+019400160105  ||       05  lc_InvestmentEx1         PIC X(05)  VALUE " ".
+019500160105  ||       05  lc_IndustryFundCodeEx1   PIC X(05)  VALUE " ".
+019600160105  ||       05  ln_GrossAmtEx1           PIC S9(13)V9(02) VALUE 0.
+019700160105  ||       05  ln_NetAmtEx1             PIC S9(13)V9(02) VALUE 0.
+019800160105  ||       05  ln_ChargeEx1             PIC S9(13)V9(02) VALUE 0.
+019900160105  ||       05  lc_PassTypeEx1           PIC X(01)  VALUE " ".
+020000160105  ||   01  EXCR                       PIC S9(4) VALUE 0.
+020100160105  ||   01  EXCRMAX                    PIC S9(4) VALUE 500.
+020200160105154437* End
+020300120710
+020400120710      * GL extract fields used to load SFGLEXTP extract file.          *
+020500120710       01  lc_Extract_Variables.
+020600120710         03  li_JournalDateProcDate     PIC S9(08) VALUE 0.
+020700120710         03  lc_TransCurrencyCode       PIC X(03)  VALUE " ".
+020800120710         03  lc_JournalSource           PIC X(03)  VALUE "UTX".
+020900120710         03  lc_ReversalCode            PIC X(01)  VALUE "N".
+021000120710         03  lc_BusinessUnitGlType      PIC X(05)  VALUE " ".
+021100120710         03  li_GlAccountEt             PIC S9(06) VALUE 0.
+021200120710         03  lc_DepartmentId            PIC X(06)  VALUE " ".
+021300120710         03  lc_ExtractFiller           PIC X(04)  VALUE " ".
+021400120710         03  lc_Location                PIC X(02)  VALUE " ".
+021500120710         03  lc_Product                 PIC X(06)  VALUE " ".
+021600120710         03  lc_BlockOfBusiness         PIC X(01)  VALUE "U".
+021700120710         03  lc_StatisticsCodeBlanks    PIC X(03)  VALUE " ".
+021800120710         03  lc_TransAmtSign            PIC X(01)  VALUE " ".
+021900120710         03  ln_TransAmtValue           PIC S9(13)V9(02) VALUE 0.
+022000120710         03  ln_DrAmount                PIC S9(13)V9(02) VALUE 0.
+022100120710         03  ln_CrAmount                PIC S9(13)V9(02) VALUE 0.
+022200120710         03  lc_StatisticsAmountDflt    PIC X(18)  VALUE " ".
+022300120710         03  lc_JourLineRef             PIC X(10)  VALUE " ".
+022400120710         03  li_JourLnDescPlDt          PIC S9(08) VALUE 0.
+022500120710         03  li_JourLnDescTrNo          PIC S9(09) VALUE 0.
+022600120710         03  lc_JourLnDescEntBy         PIC X(10)  VALUE " ".
+022700120710         03  lc_SubTransActCodTRNTYP    PIC X(04)  VALUE " ".
+022800120710         03  lc_SubUseridBatchType      PIC X(08)  VALUE " ".
+022900120710         03  lc_SubCurrLocation         PIC X(02)  VALUE " ".
+023000120710         03  li_SubEntryProcDate        PIC S9(08) VALUE 0.
+023100120710         03  li_SubPolicyNoAccNo        PIC S9(09) VALUE 0.
+023200120710         03  lc_SubPolicyNoBlanks       PIC X(01)  VALUE " ".
+023300120710         03  lc_SubPlanCodeBlanks       PIC X(05)  VALUE " ".
+023400120710         03  lc_SubAgentNoBlanks        PIC X(06)  VALUE " ".
+023500120710         03  lc_SubVoucherIdBlanks      PIC X(07)  VALUE " ".
+023600150430145552   03  lc_TransStatusCd           PIC X(03)  VALUE " ".
+023700150430145552   03  lc_IndustryFundCd          PIC X(05)  VALUE " ".
+023800150430145552   03  lc_InvGrpCd                PIC X(05)  VALUE " ".
+023900160105154437* Start
+024000160105       01  lc_ExtractArray.
+024100160105         03  lc_ExtractRec OCCURS 500 TIMES.
+024200160105           05  li_JournalDateProcDate1    PIC S9(08) VALUE 0.
+024300160105           05  lc_TransCurrencyCode1      PIC X(03)  VALUE " ".
+024400160105           05  lc_JournalSource1          PIC X(03)  VALUE "UTX".
+024500160105           05  lc_ReversalCode1           PIC X(01)  VALUE "N".
+024600160105           05  lc_BusinessUnitGlType1     PIC X(05)  VALUE " ".
+024700160105           05  li_GlAccountEt1            PIC S9(06) VALUE 0.
+024800160105           05  lc_DepartmentId1           PIC X(06)  VALUE " ".
+024900160105           05  lc_ExtractFiller1          PIC X(04)  VALUE " ".
+025000160105           05  lc_Location1               PIC X(02)  VALUE " ".
+025100160105           05  lc_Product1                PIC X(06)  VALUE " ".
+025200160105           05  lc_BlockOfBusiness1        PIC X(01)  VALUE "U".
+025300160105           05  lc_StatisticsCodeBlanks1   PIC X(03)  VALUE " ".
+025400160105           05  lc_TransAmtSign1           PIC X(01)  VALUE " ".
+025500160105           05  ln_TransAmtValue1          PIC S9(13)V9(02) VALUE 0.
+025600160105           05  ln_DrAmount1               PIC S9(13)V9(02) VALUE 0.
+025700160105           05  ln_CrAmount1               PIC S9(13)V9(02) VALUE 0.
+025800160105           05  lc_StatisticsAmountDflt1   PIC X(18)  VALUE " ".
+025900160105           05  lc_JourLineRef1            PIC X(10)  VALUE " ".
+026000160105           05  li_JourLnDescPlDt1         PIC S9(08) VALUE 0.
+026100160105           05  li_JourLnDescTrNo1         PIC S9(09) VALUE 0.
+026200160105           05  lc_JourLnDescEntBy1        PIC X(10)  VALUE " ".
+026300160105           05  lc_SubTransActCodTRNTYP1   PIC X(04)  VALUE " ".
+026400160105           05  lc_SubUseridBatchType1     PIC X(08)  VALUE " ".
+026500160105           05  lc_SubCurrLocation1        PIC X(02)  VALUE " ".
+026600160105           05  li_SubEntryProcDate1       PIC S9(08) VALUE 0.
+026700160105           05  li_SubPolicyNoAccNo1       PIC S9(09) VALUE 0.
+026800160105           05  lc_SubPolicyNoBlanks1      PIC X(01)  VALUE " ".
+026900160105           05  lc_SubPlanCodeBlanks1      PIC X(05)  VALUE " ".
+027000160105           05  lc_SubAgentNoBlanks1       PIC X(06)  VALUE " ".
+027100160105           05  lc_SubVoucherIdBlanks1     PIC X(07)  VALUE " ".
+027200160105           05  lc_TransStatusCd1          PIC X(03)  VALUE " ".
+027300160105           05  lc_IndustryFundCd1         PIC X(05)  VALUE " ".
+027400160105           05  lc_InvGrpCd1               PIC X(05)  VALUE " ".
+027500160105       01  EXTR                       PIC S9(4) VALUE 0.
+027600160105       01  EXTRMAX                    PIC S9(4) VALUE 500.
+027700160105154437* End
+027800120710
+027900120710       01  lc_Exception.
+028000120710         03  lncc_ErrorOpeningCursor    PIC X(80)
+028100120710             VALUE "Error while Opening Cursor".
+028200120710         03  lncc_ErrorFetchingCursor   PIC X(80)
+028300120710             VALUE "Error while Fetching Cursor".
+028400120710         03  lncc_ErrorFetchingCursorDED PIC X(80)
+028500120710             VALUE "Error while Fetching Deduction Cursor".
+028600120710         03  lncc_ErrorInsertSFGLEXTP    PIC X(80)
+028700120710             VALUE "Error while Inserting into SFGLEXTP".
+028800120710         03  lncc_ErrorInsertSFGLEXCP    PIC X(80)
+028900120710             VALUE "Error while Inserting into SFGLEXCP".
+029000151029149605   03  lncc_ErrorInsertSFGLSSQP    PIC X(80)
+029100151029149605       VALUE "Error while Inserting into SFGLSSQP".
+029200160105154437   03  lncc_ErrorFetchingCursorGLM PIC X(80)
+029300160105154437       VALUE "Error while Fetching GL Master Cursor".
+029400120710
+029500120710      * Error Codes, Uniquely Identify where the error happened
+029600120710       01  Ws-Err-Code                  PIC X(02)  VALUE SPACES.
+029700120710         88  lncc_Err-Ok                           VALUE SPACES.
+029800120710         88  lncc_Err11                            VALUE "11".
+029900120710         88  lncc_Err12                            VALUE "12".
+030000120710         88  lncc_Err13                            VALUE "13".
+030100120710         88  lncc_Err14                            VALUE "14".
+030200120710         88  lncc_Err15                            VALUE "15".
+030300151029149605   88  lncc_Err16                            VALUE "16".
+030400160105154437   88  lncc_Err17                            VALUE "17".
+030500160105154437   88  lncc_Err18                            VALUE "18".
+030600120710      *
+030700120710       01  Tables.
+030800120710      * Table to hold dedection code of current Transaction.
+030900120710         03  ltb_TransDeducCode.
+031000120710           05  ltb_FetchDedCode         OCCURS 100 TIMES.
+031100120710             07  ltb_TdPlaceDate        PIC S9(09) VALUE 0.
+031200120710             07  ltb_TdTransNo          PIC S9(09) VALUE 0.
+031300120710             07  ltb_TdDedCode          PIC X(04)  VALUE " ".
+031400120710             07  ltb_TdCharge           PIC S9(13)V9(2)
+031500120710                                                   VALUE 0.
+031600120710      * Table to hold transaction data from main cursor.
+031700120710         03  ltb_FetchDepTable.
+031800160105154437*    05  ltb_FetchDep             OCCURS 200 TIMES.
+031900160105154437     05  ltb_FetchDep             OCCURS 500 TIMES.
+032000120710             07  ltb_PlaceDate          PIC S9(09).
+032100120710             07  ltb_TransNo            PIC S9(09).
+032200120710             07  ltb_BatchDate          PIC S9(08).
+032300120710             07  ltb_BatchType          PIC X(06).
+032400120710             07  ltb_ProcessDate        PIC S9(09).
+032500120710             07  ltb_TradeDate          PIC S9(09).
+032600120710             07  ltb_TransType          PIC X(03).
+032700120710             07  ltb_TransOrigin        PIC X(03).
+032800120710             07  ltb_AccountNo          PIC S9(09).
+032900120710             07  ltb_AltAccountNo       PIC X(12).
+033000120710             07  ltb_AccountType        PIC X(05).
+033100120710             07  ltb_TaxProvince        PIC X(03).
+033200120710             07  ltb_Investment         PIC X(05).
+033300120710             07  ltb_InvGroup           PIC X(05).
+033400120710             07  ltb_IndustryFundCode   PIC X(05).
+033500120710             07  ltb_FundLoad           PIC X(01).
+033600120710             07  ltb_Currency           PIC X(03).
+033700120710             07  ltb_SettledGorN        PIC X(01).
+033800120710             07  ltb_GrossAmt           PIC S9(13)V9(02).
+033900120710             07  ltb_NetAmt             PIC S9(13)V9(02).
+034000120710             07  ltb_SettlementAmt      PIC S9(13)V9(02).
+034100120710             07  ltb_ContrRedem         PIC X(06).
+034200120710             07  ltb_TransStatus        PIC X(03).
+034300120710             07  ltb_PaymentType        PIC X(01).
+034400120710             07  ltb_EnteredBy          PIC X(10).
+034500120710             07  ltb_GainLossValue      PIC S9(13)V9(02).
+034600120710             07  ltb_GorL               PIC X(04).
+034700120710             07  ltb_PriorYear          PIC X(01).
+034800151026149605       07  ltb_SettlementSch      PIC X(04).
+034900120710
+035000120710      * Table to receive null indicators for above table
+035100120710         03  ltb_IndicatorsTable.
+035200160105154437*    05  ltb_Indicators           OCCURS 200 TIMES.
+035300160105154437     05  ltb_Indicators           OCCURS 500 TIMES.
+035400120710             07  ltb_Indicator          PIC S9(04) BINARY
+035500120710                                           OCCURS  08 TIMES.
+035600160105154437* Start
+035700160105 ||   * Table for MFAGLMSP
+035800160105 ||    01 GL_Table.
+035900160105 ||      03  ltb_GLMaster.
+036000160105 ||        05  ltb_GLMasterRec       OCCURS 500 TIMES INDEXED BY Idx.
+036100160105 ||          07  ltb_CurrAcct        PIC S9(06).
+036200160105 ||          07  ltb_PrevAcct        PIC S9(06).
+036300160105 ||          07  ltb_AcctDesc        PIC  X(30).
+036400160105 ||          07  ltb_AcctType        PIC  X(05).
+036500160105 ||          07  ltb_DepId           PIC  X(06).
+036600160105 ||    01 li_Idx                     PIC S9(05) VALUE 0.
+036700160105 ||    01 li_CurrAcct                PIC S9(06) VALUE 0.
+036800160105 ||    01 li_PrevAcct                PIC S9(06) VALUE 0.
+036900160105 ||    01 lc_AcctDesc                PIC  X(30) VALUE " ".
+037000160105 ||    01 lc_AcctType                PIC  X(05) VALUE " ".
+037100160105154437 01 lc_DepId                   PIC  X(06) VALUE " ".
+037200120710
+037300120710       LINKAGE SECTION.
+037400120710       01  pnAsAtDate                   PIC S9(08).
+037500120710
+037600120710       PROCEDURE DIVISION USING pnAsAtDate.
+037700120710
+037800120710      *
+037900120710       MAINLINE.
+038000120710      *
+038100120710           EXEC SQL
+038200120710             WHENEVER SQLERROR CONTINUE
+038300120710           END-EXEC.
+038400120710
+038500120710           PERFORM InitialLogic.
+038600120710           PERFORM CreateTransCursor.
+038700120710           PERFORM ProcessTransCursor.
+038800120710           PERFORM EndOfProgram.
+038900120710
+039000120710      *
+039100120710       InitialLogic.
+039200120710      *
+039300120710      * Initialize all variables.
+039400120710           INITIALIZE lc_WorkFields
+039500120710                      lc_VariableFields
+039600120710                      lc_Extract_Variables.
+039700120710
+039800151027      * RFS149605 - STARTS
+039900151026
+040000151027           EXEC SQL
+040100151027           INSERT INTO SFGLEXTP
+040200151027           (SELECT * FROM SFGLSSQP)
+040300151029           END-EXEC
+040400151027
+040500151026           MOVE SQLSTATE TO lc_sqlStates.
+040600151026
+040700151026           IF lncc_sqlEnd
+040800151026              CONTINUE
+040900151026           ELSE
+041000151029           EXEC SQL
+041100151026              DELETE FROM SFGLSSQP
+041200151029           END-EXEC
+041300151026           END-IF.
+041400151026
+041500151027      * RFS149605 - ENDS
+041600160105154437
+041700160105154437     PERFORM POPULATE-GL-MASTER THRU PGM-EXIT.
+041800120710      *                                                                 Seq#
+041900120710       CreateTransCursor.
+042000120710      *                                                                 Seq#
+042100120710           SET lb_EndOfCursorFalse TO TRUE.
+042200120710           EXEC SQL
+042300120710             DECLARE TransCursor CURSOR FOR
+042400120710             SELECT
+042500120710                    COALESCE(TRNP.PLACEMENT_DATE, 0),
+042600120710                    COALESCE(TRNP.TRANS_NO, 0),
+042700120710                    COALESCE(TRNP.BATCH_DATE, 0),
+042800120710                    COALESCE(BCHTYP.BATCH_TYPE_CODE, " "),
+042900120710                    COALESCE(TRNP.PROCESS_DATE, 0),
+043000120710                    COALESCE(TRNP.TRADE_DATE, 0),
+043100120710                    COALESCE(TRNP.TRANS_TYPE_CODE, " "),
+043200120710                    COALESCE(TRNP.TRANS_ORIGIN_CODE, " "),
+043300120710                    COALESCE(TRNP.ACCOUNT_NO, 0),
+043400120710                    COALESCE(ACCXRF.ACCNORIG, " "),
+043500120710                    COALESCE(ACCNTP.ACCOUNT_TYPE_CODE, " "),
+043600120710                    CASE
+043700120710                       WHEN IVRP.COUNTRY_CODE = "CAN"
+043800120710                            THEN COALESCE(IVRP.PROVINCE_CODE, " ")
+043900120710                            ELSE "XX "
+044000120710                       END,
+044100120710                    COALESCE(TRNP.INVESTMENT_CODE, " "),
+044200120710                    COALESCE(INVP.INVESTMENT_GROUP_CODE, " "),
+044300120710                    COALESCE(INVP.INDUSTRY_FUND_CODE, " "),
+044400120710                    COALESCE(INVP.LOAD_STRUCTURE, " "),
+044500120710                    COALESCE(INVP.CURRENCY, " "),
+044600120710                    COALESCE(TRNP.SETTLED_GROSS_OR_NET, " "),
+044700120710                    COALESCE(TRNP.GROSS_AMT, 0),
+044800120710                    COALESCE(TRNP.NET_AMT, 0),
+044900120710                    COALESCE(TRNP.SETTLEMENT_AMT, 0),
+045000120710                    COALESCE(TRNP.CONTR_REDEM_CODE, " "),
+045100120710                    COALESCE(TRNP.TRANS_STATUS_CODE, " "),
+045200120710                    COALESCE(TRNP.PAYMENT_TYPE_CODE, " "),
+045300120710                    COALESCE(TRNP.ENTERED_BY, " "),
+045400120710                    ROUND(COALESCE(GNLS.GNLOSS_VALUE, 0),2),
+045500120710                    CASE
+045600120710                        WHEN COALESCE(GNLS.GORL, " ") = "G"
+045700120710                        THEN "GAIN"
+045800120710                        WHEN COALESCE(GNLS.GORL, " ") = "L"
+045900120710                        THEN "LOSS"
+046000120710                        ELSE " "
+046100120710                    END,
+046200120710      * Prior Year Flag
+046300120710                CASE
+046400120710                 WHEN (COALESCE(Substr(TRNP.TRADE_DATE,1,4), 0)   <>
+046500120710                       COALESCE(Substr(TRNP.PROCESS_DATE,1,4), 0))
+046600120710                       THEN "Y"
+046700120710                       ELSE "N"
+046800120710                 END
+046900151026149605          ,COALESCE(INVSCYP.SETTLEMENT_SCHEDULE, " ")
+047000120710
+047100120710      * Transaction File
+047200120710             FROM MFATRNP TRNP
+047300120710      * Account Detail
+047400120710             LEFT OUTER JOIN MFAACCNTP ACCNTP ON
+047500120710                  TRNP.Account_No = ACCNTP.Account_No
+047600120710
+047700120710      * Investor Detail
+047800120710             LEFT OUTER JOIN MFAIVRP IVRP ON
+047900120710                  ACCNTP.INVESTOR_NO = IVRP.INVESTOR_NO
+048000120710
+048100120710      * Investment Load Structure
+048200120710             LEFT OUTER JOIN MFAINVP INVP ON
+048300120710                  TRNP.INVESTMENT_CODE = INVP.INVESTMENT_CODE
+048400120710
+048500120710      * Batch Type
+048600120710             LEFT OUTER JOIN MFABCHHDP BCHTYP ON
+048700120710                  TRNP.BATCH_DATE = BCHTYP.BATCH_DATE  AND
+048800120710                  TRNP.BATCH_CODE = BCHTYP.BATCH_CODE
+048900120710
+049000120710      * Alternate Account Number
+049100120710             LEFT OUTER JOIN CNVACTXREF ACCXRF ON
+049200120710                  TRNP.ACCOUNT_NO  = ACCXRF.ACCOUNT_NO
+049300120710
+049400120710      * Gain Loss Flag
+049500120710             LEFT OUTER JOIN GNLOSS  GNLS   ON
+049600120710                  TRNP.PLACEMENT_DATE = GNLS.PLACEMENT_DATE  AND
+049700120710                  TRNP.TRANS_NO   = GNLS.TRANS_NO           AND
+049800120710                  TRNP.ACCOUNT_NO = GNLS.ACCOUNT_NO
+049900151026149605* Settlement Schedule
+050000151026149605            LEFT OUTER JOIN MFAINVSCYP INVSCYP ON
+050100151026149605            TRNP.INVESTMENT_CODE = INVSCYP.INVESTMENT_CODE
+050200120710
+050300120710             WHERE  TRNP.PROCESS_DATE     = :pnAsAtDate
+050400120710             OPTIMIZE FOR ALL ROWS
+050500120710           END-EXEC.
+050600120710
+050700120710           EXEC SQL
+050800120710             OPEN TransCursor
+050900120710           END-EXEC.
+051000120710
+051100120710           MOVE SQLSTATE TO lc_sqlStates.
+051200120710           IF NOT lncc_sqlSuccessful
+051300120710              SET lb_EndOfCursorTrue  TO TRUE
+051400120710              SET lncc_Err11 TO TRUE
+051500120710              MOVE lncc_ErrorOpeningCursor TO lc_sqlErrShortDESCR
+051600120710              PERFORM SQLFailProcess
+051700120710           END-IF.
+051800120710
+051900120710           PERFORM ProcessTransCursor TEST BEFORE
+052000120710             UNTIL lb_EndOfCursorTrue.
+052100120710
+052200120710      *                                                                 Seq#
+052300120710       ProcessTransCursor.
+052400120710      *                                                                 Seq#
+052500120710           INITIALIZE ltb_FetchDepTable.
+052600120710           EXEC SQL
+052700120710             FETCH NEXT FROM TransCursor
+052800120710               FOR :lnc_MaxFetchRec ROWS
+052900120710              INTO :ltb_FetchDep
+053000120710                   :ltb_Indicators
+053100120710           END-EXEC.
+053200120710
+053300120710           MOVE SQLSTATE TO lc_sqlStates.
+053400120710           EVALUATE TRUE
+053500120710               WHEN lncc_sqlSuccessful
+053600120710                    COMPUTE li_NoOfRowsFetched = SQLERRD(3)
+053700120710               WHEN lncc_sqlEnd
+053800120710                    SET lb_EndOfCursorTrue TO TRUE
+053900120710                    COMPUTE li_NoOfRowsFetched = SQLERRD(3)
+054000120710               WHEN OTHER
+054100120710                    SET lncc_Err12  TO TRUE
+054200120710                    MOVE lncc_ErrorFetchingCursor
+054300120710                      TO lc_sqlErrShortDESCR
+054400120710                    PERFORM SQLFailProcess
+054500120710           END-EVALUATE.
+054600120710
+054700120710           COMPUTE li_Counter = 1.
+054800120710           PERFORM ProcessEachTrans TEST BEFORE
+054900120710             UNTIL li_Counter > li_NoOfRowsFetched.
+055000120710
+055100120710      *                                                                 Seq#
+055200120710       ProcessEachTrans.
+055300120710      *                                                                 Seq#
+055400120710           INITIALIZE lc_SaveRecord
+055500120710                      lc_Extract_Variables.
+055600120710           SET  lb_NextPassYes    TO TRUE.
+055700120710
+055800120710           MOVE ltb_FetchDep(li_Counter) TO lc_SaveRecord.
+055900120710
+056000120710           PERFORM ProcCurrTableTrans.
+056100120710
+056200120710           COMPUTE li_Counter = li_Counter + 1.
+056300120710
+056400120710      *                                                                 Seq#
+056500120710       ProcCurrTableTrans.
+056600120710      *                                                                 Seq#
+056700120710      * Make all the passes here and write to GL extract in each pass   Seq#
+056800120710      * First Pass is to determine DR & CR settlement amount            Seq#
+056900120710
+057000120710           PERFORM First-Pass.
+057100120710
+057200120710      * Before finding GL accounts, check transactions deduction codes. Seq#
+057300120710      * Get GL accounts and write to extract only when deduction code   Seq#
+057400120710      * is more than one.                                               Seq#
+057500120710
+057600120710           IF lb_NextPassYes
+057700120710              PERFORM Second-Pass
+057800120710           END-IF.
+057900120710
+058000120710      * Make thrid pass only for transactions with gain calculated      Seq#
+058100120710
+058200120710           IF lb_NextPassYes  AND
+058300120710              lc_GorL NOT = SPACES
+058400120710                  PERFORM Third-Pass
+058500120710           END-IF.
+058600120710
+058700120710      *                                                                 Seq#
+058800120710       First-Pass.
+058900120710      *                                                                 Seq#
+059000120710      * Call FXGLACC with all the required parameters for First Pass.   Seq#
+059100120710           INITIALIZE lc_VariableFields.
+059200120710           MOVE lnc_First  TO lc_PassType.
+059300120710
+059400151026      *RFS149605 - STARTS
+059500151026           IF lc_SettlementSch = 'SET1'
+059600151026              MOVE lnc_Yes TO lc_T1Flag
+059700151026           ELSE
+059800151026              MOVE lnc_No TO lc_T1Flag
+059900151026           END-IF.
+060000151026      *RFS149605 - ENDS
+060100151026
+060200120710           CALL "FXGLACCNT" USING    lc_GorL,
+060300120710                                     lc_TransType,
+060400120710                                     lc_FundLoad,
+060500120710                                     lc_TransOrigin,
+060600120710                                     lc_SettledGorN,
+060700120710                                     lc_ContrRedem,
+060800120710                                     lc_DedCode,
+060900120710                                     lc_AccountType,
+061000120710                                     lc_TaxProvince,
+061100120710                                     lc_PaymentType,
+061200120710                                     lc_TransStatus,
+061300120710                                     lc_PriorYear,
+061400120710                                     lnc_First,
+061500120710                                     li_DrAccount,
+061600120710                                     li_CrAccount,
+061700120710                                     lc_ReturnFlag.
+061800120710
+061900120710           IF lc_ReturnFlag   = lnc_Yes
+062000120710              PERFORM Build-GL-Debit-Rec
+062100120710              PERFORM Build-GL-Credit-Rec
+062200120710           ELSE
+062300120710              PERFORM Write-Exception-Rec
+062400120710           END-IF.
+062500120710
+062600120710           PERFORM Validate-Wire-Orders.
+062700120710
+062800120710      *                                                                 Seq#
+062900120710       Validate-Wire-Orders.
+063000120710      *                                                                 Seq#
+063100120710      * Stop all WOR/(BUY/SEL)/HST records from 2nd & 3rd Pass.         Seq#
+063200120710           SET  lb_NextPassYes     TO TRUE
+063300120710
+063400120710           IF lc_TransOrigin    = lnc_WireOrder          AND
+063500120710              (lc_TransType     = lnc_Buy OR lnc_Sell )  AND
+063600120710              lc_TransStatus    = lnc_History
+063700151027149605        IF lc_T1Flag = lnc_No
+063800151027                 SET  lb_NextPassNo   TO TRUE
+063900151027149605        ELSE
+064000151027149605           SET  lb_NextPassYes  TO TRUE
+064100151027149605           MOVE lnc_Contracted    TO  lc_TransStatus
+064200151027149605           PERFORM First-Pass
+064300151027149605        END-IF
+064400120710           END-IF.
+064500120710
+064600120710      * For backdated wire oders which went on history same day,        Seq#
+064700120710      * Stop WOR/(BUY/SEL)/HST record from 2nd & 3rd pass.And create a  Seq#
+064800120710      * dummy contracted record & pass it through all passes.           Seq#
+064900120710
+065000120710           IF lc_TransOrigin    = lnc_WireOrder          AND
+065100120710              (lc_TransType     = lnc_Buy OR lnc_Sell )  AND
+065200120710              lc_TransStatus    = lnc_History            AND
+065300120710              li_PlaceDate      = li_ProcessDate         AND
+065400120710              li_TradeDate  NOT = li_ProcessDate
+065500151027149605        AND lc_T1Flag = lnc_No
+065600120710
+065700120710                MOVE lnc_Contracted    TO  lc_TransStatus
+065800120710                SET  lb_NextPassYes  TO TRUE
+065900120710                PERFORM First-Pass
+066000120710           END-IF.
+066100120710
+066200120710      *                                                                 Seq#
+066300120710       Second-Pass.
+066400120710      *                                                                 Seq#
+066500120710      * Get deduction codes first. For each deduction code, get corrsp- Seq#
+066600120710      * onding GL acounts and write it to extract file.                 Seq#
+066700120710           PERFORM  Get-Deduction-Codes.
+066800120710           INITIALIZE li_DedCodeCount.
+066900120710
+067000120710           IF li_NoOfRowsFetchedDED  NOT = 0
+067100120710              PERFORM Get-GL-Account-Spass UNTIL
+067200120710                      li_DedCodeCount = li_NoOfRowsFetchedDED
+067300120710           END-IF.
+067400120710
+067500120710      *                                                                 Seq#
+067600120710       Get-Deduction-Codes.
+067700120710      *                                                                 Seq#
+067800120710      * Get all deduction code for current trasaction & load table      Seq#
+067900120710
+068000120710           SET lb_DedEndOfCursorFalse TO TRUE.
+068100120710           EXEC SQL
+068200120710             DECLARE DedCodeCur CURSOR FOR
+068300120710             SELECT
+068400120710                    COALESCE(DEDCOD.PLACEMENT_DATE, 0),
+068500120710                    COALESCE(DEDCOD.TRANS_NO, 0),
+068600120710                    COALESCE(DEDCOD.Deduction_Code, " "),
+068700120710                    COALESCE(DEDCOD.CHARGE, 0)
+068800120710
+068900120710      * Transaction Charges file                                        Seq#
+069000120710             FROM MFATRNCHP DEDCOD
+069100120710
+069200120710             WHERE  DEDCOD.PLACEMENT_DATE   = :li_PlaceDate     AND
+069300120710                    DEDCOD.TRANS_NO         = :li_TransNo
+069400120710             OPTIMIZE FOR ALL ROWS
+069500120710           END-EXEC.
+069600120710
+069700120710           EXEC SQL
+069800120710             OPEN DedCodeCur
+069900120710           END-EXEC.
+070000120710
+070100120710           MOVE SQLSTATE TO lc_sqlStates.
+070200120710           IF NOT lncc_sqlSuccessful
+070300120710              SET lb_DedEndOfCursorTrue  TO TRUE
+070400120710              SET lncc_Err11 TO TRUE
+070500120710              MOVE lncc_ErrorOpeningCursor TO lc_sqlErrShortDESCR
+070600120710              PERFORM SQLFailProcess
+070700120710           END-IF.
+070800120710
+070900120710           PERFORM ProcessDedCodeCur TEST BEFORE
+071000120710             UNTIL lb_DedEndOfCursorTrue.
+071100120710
+071200120710           EXEC SQL
+071300120710             CLOSE DedCodeCur
+071400120710           END-EXEC.
+071500120710
+071600120710      *                                                                 Seq#
+071700120710       ProcessDedCodeCur.
+071800120710      *                                                                 Seq#
+071900120710           INITIALIZE ltb_TransDeducCode
+072000120710                      li_NoOfRowsFetchedDED.
+072100120710           EXEC SQL
+072200120710             FETCH NEXT FROM DedCodeCur
+072300120710               FOR 100 ROWS
+072400120710              INTO :ltb_FetchDedCode
+072500120710           END-EXEC.
+072600120710
+072700120710           MOVE SQLSTATE TO lc_sqlStates.
+072800120710           EVALUATE TRUE
+072900120710               WHEN lncc_sqlEnd OR lncc_sqlSuccessful
+073000120710                    SET lb_DedEndOfCursorTrue TO TRUE
+073100120710                    COMPUTE li_NoOfRowsFetchedDED = SQLERRD(3)
+073200120710               WHEN OTHER
+073300120710                    SET lncc_Err13  TO TRUE
+073400120710                    MOVE lncc_ErrorFetchingCursorDed
+073500120710                      TO lc_sqlErrShortDESCR
+073600120710                    PERFORM SQLFailProcess
+073700120710           END-EVALUATE.
+073800120710
+073900120710      *                                                                 Seq#
+074000120710       Get-GL-Account-Spass.
+074100120710      *                                                                 Seq#
+074200120710      * Call FXGLACC with all the required parameters for Second Pass.  Seq#
+074300120710           INITIALIZE lc_VariableFields.
+074400120710           COMPUTE  li_DedCodeCount = li_DedCodeCount + 1
+074500120710           MOVE  ltb_TdDedCode(li_DedCodeCount) TO lc_DedCode.
+074600120710           MOVE  ltb_TdCharge(li_DedCodeCount)  TO ln_Charge.
+074700120710           MOVE  lnc_Second                     TO lc_PassType
+074800120710
+074900120710           CALL "FXGLACCNT" USING    lc_GorL,
+075000120710                                     lc_TransType,
+075100120710                                     lc_FundLoad,
+075200120710                                     lc_TransOrigin,
+075300120710                                     lc_SettledGorN,
+075400120710                                     lc_ContrRedem,
+075500120710                                     lc_DedCode,
+075600120710                                     lc_AccountType,
+075700120710                                     lc_TaxProvince,
+075800120710                                     lc_PaymentType,
+075900120710                                     lc_TransStatus,
+076000120710                                     lc_PriorYear,
+076100120710                                     lnc_Second,
+076200120710                                     li_DrAccount,
+076300120710                                     li_CrAccount,
+076400120710                                     lc_ReturnFlag.
+076500120710
+076600120710           IF lc_ReturnFlag   = lnc_Yes
+076700120710              PERFORM Build-GL-Debit-Rec
+076800120710              PERFORM Build-GL-Credit-Rec
+076900120710           ELSE
+077000120710              PERFORM Write-Exception-Rec
+077100120710           END-IF.
+077200120710
+077300120710      *                                                                 Seq#
+077400120710       Third-Pass.
+077500120710      *                                                                 Seq#
+077600120710      * Call FXGLACC with all the required parameters for Third Pass.   Seq#
+077700120710           INITIALIZE lc_VariableFields.
+077800120710           MOVE lnc_Third  TO  lc_PassType
+077900120710
+078000120710           CALL "FXGLACCNT" USING    lc_GorL,
+078100120710                                     lc_TransType,
+078200120710                                     lc_FundLoad,
+078300120710                                     lc_TransOrigin,
+078400120710                                     lc_SettledGorN,
+078500120710                                     lc_ContrRedem,
+078600120710                                     lc_DedCode,
+078700120710                                     lc_AccountType,
+078800120710                                     lc_TaxProvince,
+078900120710                                     lc_PaymentType,
+079000120710                                     lc_TransStatus,
+079100120710                                     lc_PriorYear,
+079200120710                                     lnc_Third,
+079300120710                                     li_DrAccount,
+079400120710                                     li_CrAccount,
+079500120710                                     lc_ReturnFlag.
+079600120710
+079700120710           IF lc_ReturnFlag   = lnc_Yes
+079800120710              PERFORM Build-GL-Debit-Rec
+079900120710              PERFORM Build-GL-Credit-Rec
+080000120710           ELSE
+080100120710              PERFORM Write-Exception-Rec
+080200120710           END-IF.
+080300120710
+080400120710      *                                                                 Seq#
+080500120710       Build-GL-Debit-Rec.
+080600120710      *                                                                 Seq#
+080700120710      * Routine to build debit record for current transaction/Pass.     Seq#
+080800120710           INITIALIZE lc_Extract_Variables
+080900120710                      li_GlAccount
+081000120710                      lc_GlType
+081100120710                      lc_DeptId.
+081200120710
+081300120710           MOVE li_DrAccount        TO li_GlAccount
+081400120710
+081500120710           PERFORM Get-GL-Details
+081600120710
+081700120710           MOVE lc_Currency         TO lc_TransCurrencyCode
+081800120710           MOVE li_ProcessDate      TO li_JournalDateProcDate
+081900120710           MOVE lnc_Unitrax         TO lc_JournalSource
+082000120710           MOVE SPACES              TO lc_ExtractFiller
+082100120710           MOVE li_DrAccount        TO li_GlAccountEt
+082200120710           MOVE lnc_N               TO lc_ReversalCode
+082300120710           MOVE lnc_U               TO lc_BlockOfBusiness
+082400120710           MOVE lnc_00              TO lc_StatisticsAmountDflt
+082500120710           MOVE lc_TaxProvince      TO lc_Location
+082600120710           MOVE li_PlaceDate        TO li_JourLnDescPlDt
+082700120710           MOVE li_TransNo          TO li_JourLnDescTrNo
+082800120710           MOVE lc_TransType        TO lc_SubTransActCodTRNTYP
+082900120710           MOVE lc_BatchType        TO lc_SubUseridBatchType
+083000120710           MOVE lc_TaxProvince      TO lc_SubCurrLocation
+083100120710           MOVE li_ProcessDate      TO li_SubEntryProcDate
+083200120710           MOVE li_AccountNo        TO li_SubPolicyNoAccNo
+083300120710           MOVE lc_DeptId           TO lc_DepartmentId
+083400150430145552     MOVE lc_TransStatus      TO lc_TransStatusCd
+083500150430145552     MOVE lc_IndustryFundCode TO lc_IndustryFundCd
+083600150430145552     MOVE lc_InvGroup         TO lc_InvGrpCd
+083700120710
+083800120710      * Move Correct Amount for passtype                                Seq#
+083900120710           EVALUATE TRUE
+084000120710              WHEN lc_PassType        =  lnc_First
+084100120710                MOVE ln_SettlementAmt TO ln_TransAmtValue
+084200120710                MOVE ln_SettlementAmt TO ln_DrAmount
+084300120710                MOVE ZEROS            TO ln_CrAmount
+084400120710
+084500120710              WHEN lc_PassType        =  lnc_Second
+084600120710                MOVE ln_Charge        TO ln_TransAmtValue
+084700120710                MOVE ln_Charge        TO ln_DrAmount
+084800120710                MOVE ZEROS            TO ln_CrAmount
+084900120710
+085000120710              WHEN lc_PassType        =  lnc_Third
+085100120710                MOVE ln_GainLossValue TO ln_TransAmtValue
+085200120710                MOVE ln_GainLossValue TO ln_DrAmount
+085300120710                MOVE ZEROS            TO ln_CrAmount
+085400120710
+085500120710              WHEN OTHER
+085600120710                MOVE ZEROS            TO ln_TransAmtValue
+085700120710                                         ln_DrAmount
+085800120710                                         ln_CrAmount
+085900120710           END-EVALUATE.
+086000120710
+086100120710      * Check Entered By user                                           Seq#
+086200120710           IF lc_TransOrigin     = lnc_WireOrder   AND
+086300120710              lc_TransStatus     = lnc_History
+086400120710              MOVE li_BatchDate     TO lc_JourLnDescEntBy
+086500120710           ELSE
+086600120710              MOVE lc_EnteredBy     TO lc_JourLnDescEntBy
+086700120710           END-IF.
+086800120710
+086900120710      * Check Business Unit based on GL Type                            Seq#
+087000120710           IF lc_GlType = lnc_SegFund
+087100120710              MOVE lc_InvGroup      TO lc_BusinessUnitGlType
+087200120710           ELSE
+087300120710              MOVE lnc_Equit        TO lc_BusinessUnitGlType
+087400120710           END-IF.
+087500120710
+087600120710      * Check lc_Product info                                              Seq#
+087700120710           IF lc_DeptId = lnc_BackDatedDept
+087800120710              MOVE SPACES           TO lc_Product
+087900120710           ELSE
+088000120710              MOVE lnc_S            TO lc_Product
+088100120710           END-IF.
+088200120710
+088300120710      * Check Batch type and GL type for alternate account.             Seq#
+088400120710           IF lc_BatchType   = lnc_Loan  AND
+088500120710              lc_GlType      = lnc_Equit
+088600120710              MOVE lc_AltAccountNo  TO lc_JourLineRef
+088700120710           ELSE
+088800120710              MOVE SPACES           TO lc_JourLineRef
+088900120710           END-IF.
+089000120710
+089100151027149605     IF ((lc_TransType = lnc_Buy OR lnc_Sell) AND
+089200151027149605         lc_TransStatus = lnc_History AND
+089300151027149605         lc_TransOrigin = lnc_WireOrder AND
+089400151027149605         lc_T1Flag = lnc_Yes)
+089500151027149605        PERFORM Write-GL-T1-Rec
+089600151027149605     ELSE
+089700151027149605*    PERFORM Write-GL-Rec.
+089800151027149605     PERFORM Write-GL-Rec
+089900151027149605     END-IF.
+090000120710
+090100120710      *                                                                 Seq#
+090200120710       Build-GL-Credit-Rec.
+090300120710      *                                                                 Seq#
+090400120710      * Routine to build Credit record for current transaction/Pass.    Seq#
+090500120710           INITIALIZE lc_Extract_Variables
+090600120710                      li_GlAccount
+090700120710                      lc_GlType
+090800120710                      lc_DeptId.
+090900120710           MOVE li_CrAccount        TO li_GlAccount
+091000120710
+091100120710           PERFORM Get-GL-Details
+091200120710
+091300120710           MOVE lc_Currency         TO lc_TransCurrencyCode
+091400120710           MOVE li_ProcessDate      TO li_JournalDateProcDate
+091500120710           MOVE lnc_Unitrax         TO lc_JournalSource
+091600120710           MOVE SPACES              TO lc_ExtractFiller
+091700120710           MOVE li_CrAccount        TO li_GlAccountEt
+091800120710           MOVE lnc_N               TO lc_ReversalCode
+091900120710           MOVE lnc_U               TO lc_BlockOfBusiness
+092000120710           MOVE lnc_NegativeSign    TO lc_TransAmtSign
+092100120710           MOVE lnc_00              TO lc_StatisticsAmountDflt
+092200120710           MOVE lc_TaxProvince      TO lc_Location
+092300120710           MOVE li_PlaceDate        TO li_JourLnDescPlDt
+092400120710           MOVE li_TransNo          TO li_JourLnDescTrNo
+092500120710           MOVE lc_TransType        TO lc_SubTransActCodTRNTYP
+092600120710           MOVE lc_BatchType        TO lc_SubUseridBatchType
+092700120710           MOVE lc_TaxProvince      TO lc_SubCurrLocation
+092800120710           MOVE li_ProcessDate      TO li_SubEntryProcDate
+092900120710           MOVE li_AccountNo        TO li_SubPolicyNoAccNo
+093000120710           MOVE lc_DeptId           TO lc_DepartmentId
+093100150430145552     MOVE lc_TransStatus      TO lc_TransStatusCd
+093200150430145552     MOVE lc_IndustryFundCode TO lc_IndustryFundCd
+093300150430145552     MOVE lc_InvGroup         TO lc_InvGrpCd
+093400120710
+093500120710      * Move Correct Amount for passtype                                Seq#
+093600120710           EVALUATE TRUE
+093700120710              WHEN lc_PassType        =  lnc_First
+093800120710                MOVE ln_SettlementAmt TO ln_TransAmtValue
+093900120710                MOVE ln_SettlementAmt TO ln_CrAmount
+094000120710                MOVE ZEROS            TO ln_DrAmount
+094100120710
+094200120710              WHEN lc_PassType        =  lnc_Second
+094300120710                MOVE ln_Charge        TO ln_TransAmtValue
+094400120710                MOVE ln_Charge        TO ln_CrAmount
+094500120710                MOVE ZEROS            TO ln_DrAmount
+094600120710
+094700120710              WHEN lc_PassType        =  lnc_Third
+094800120710                MOVE ln_GainLossValue TO ln_TransAmtValue
+094900120710                MOVE ln_GainLossValue TO ln_CrAmount
+095000120710                MOVE ZEROS            TO ln_DrAmount
+095100120710
+095200120710              WHEN OTHER
+095300120710                MOVE ZEROS            TO ln_TransAmtValue
+095400120710                                         ln_CrAmount
+095500120710                                         ln_DrAmount
+095600120710           END-EVALUATE.
+095700120710
+095800120710      * Check Entered By user                                           Seq#
+095900120710           IF lc_TransOrigin      = lnc_WireOrder  AND
+096000120710              lc_TransStatus      = lnc_History
+096100120710              MOVE li_BatchDate     TO lc_JourLnDescEntBy
+096200120710           ELSE
+096300120710              MOVE lc_EnteredBy     TO lc_JourLnDescEntBy
+096400120710           END-IF.
+096500120710
+096600120710      * Check business unit from GL type                                Seq#
+096700120710           IF lc_GlType = lnc_SegFund
+096800120710              MOVE lc_InvGroup      TO lc_BusinessUnitGlType
+096900120710           ELSE
+097000120710              MOVE lnc_Equit        TO lc_BusinessUnitGlType
+097100120710           END-IF.
+097200120710
+097300120710      * Check lc_Product                                                   Seq#
+097400120710           IF lc_DeptId = lnc_BackDatedDept
+097500120710              MOVE SPACES           TO lc_Product
+097600120710           ELSE
+097700120710              MOVE lnc_S            TO lc_Product
+097800120710           END-IF.
+097900120710
+098000120710      * Check Batch type and GL type for alternate account              Seq#
+098100120710           IF lc_BatchType  = lnc_Loan    AND
+098200120710              lc_GlType     = lnc_Equit
+098300120710              MOVE lc_AltAccountNo  TO lc_JourLineRef
+098400120710           ELSE
+098500120710              MOVE SPACES           TO lc_JourLineRef
+098600120710           END-IF.
+098700120710
+098800151027149605     IF ((lc_TransType = lnc_Buy OR lnc_Sell) AND
+098900151027149605         lc_TransStatus = lnc_History AND
+099000151027149605         lc_TransOrigin = lnc_WireOrder AND
+099100151027149605         lc_T1Flag = lnc_Yes)
+099200151027149605        PERFORM Write-GL-T1-Rec
+099300151027149605     ELSE
+099400151027149605*    PERFORM Write-GL-Rec.
+099500151027149605     PERFORM Write-GL-Rec
+099600151027149605     END-IF.
+099700120710
+099800151027      * RFS149605 - STARTS
+099900151027      *
+100000151027       Write-GL-T1-Rec.
+100100151027      * Write extract variables to extract file.
+100200151027
+100300151027            EXEC SQL
+100400151027            INSERT INTO SFGLSSQP
+100500151027            VALUES
+100600151027            (:lc_Extract_Variables)
+100700151027            END-EXEC.
+100800151027
+100900151027            MOVE SQLSTATE TO lc_sqlStates.
+101000151027            IF NOT lncc_sqlSuccessful
+101100151027               SET lncc_Err16 TO TRUE
+101200151029               MOVE lncc_ErrorInsertSFGLSSQP    TO lc_sqlErrShortDESCR
+101300151027               PERFORM SQLFailProcess
+101400151027            END-IF.
+101500151027      * RFS149605 - ENDS
+101600151027
+101700120710      *
+101800120710       Get-GL-Details.
+101900120710      *
+102000120710      * Get GL type & Dept type for current GL account                  Seq#
+102100120710
+102200120710           IF lc_PriorYear = lnc_No
+102300160105154437*      EXEC SQL
+102400160105154437*        SELECT COALESCE(GL_ACCOUNT_TYPE, " "),
+102500160105154437*               COALESCE(DEPARTMENT_ID,   " ")
+102600160105154437*        INTO   :lc_GlType, :lc_DeptId
+102700160105154437*        FROM MFAGLMSP
+102800160105154437*        WHERE  GL_CURR_ACCOUNT_NO = :li_GlAccount
+102900160105154437*      END-EXEC
+103000160105154437       SET Idx TO 1
+103100160105154437       SEARCH ltb_GLMasterRec VARYING Idx
+103200160105154437       AT END
+103300160105154437          MOVE " " TO lc_GlType lc_DeptId
+103400160105154437       WHEN ltb_CurrAcct(Idx) = li_GlAccount
+103500160105154437            MOVE ltb_AcctType(Idx)  TO lc_GlType
+103600160105154437            MOVE ltb_DepId(Idx)     TO lc_DeptId
+103700160105154437       END-SEARCH
+103800120710           ELSE
+103900160105154437*      EXEC SQL
+104000160105154437*        SELECT COALESCE(GL_ACCOUNT_TYPE, " "),
+104100160105154437*               COALESCE(DEPARTMENT_ID,   " ")
+104200160105154437*        INTO   :lc_GlType, :lc_DeptId
+104300160105154437*        FROM MFAGLMSP
+104400160105154437*        WHERE  GL_PRIOR_ACCOUNT_NO = :li_GlAccount
+104500160105154437*      END-EXEC
+104600160105154437       SET Idx TO 1
+104700160105154437       SEARCH ltb_GLMasterRec VARYING Idx
+104800160105154437       AT END
+104900160105154437          MOVE " " TO lc_GlType lc_DeptId
+105000160105154437       WHEN ltb_PrevAcct(Idx) = li_GlAccount
+105100160105154437            MOVE ltb_AcctType(Idx)  TO lc_GlType
+105200160105154437            MOVE ltb_DepId(Idx)     TO lc_DeptId
+105300160105154437       END-SEARCH
+105400120710           END-IF.
+105500120710      *
+105600120710       WRITE-GL-Rec.
+105700120710      *
+105800120710      * Write extract variables to extract file.                        Seq#
+105900160105154437     IF EXTR < EXTRMAX
+106000160105154437       ADD 1 TO EXTR
+106100160105154437       MOVE lc_Extract_Variables TO lc_ExtractRec(EXTR)
+106200160105154437     END-IF.
+106300120710
+106400160105154437     IF EXTR = EXTRMAX
+106500120710           EXEC SQL
+106600120710           INSERT INTO SFGLEXTP
+106700160105154437     :EXTR ROWS
+106800120710           VALUES
+106900160105154437*    (:lc_Extract_Variables)
+107000160105154437*    END-EXEC.
+107100160105154437     (:lc_ExtractRec)
+107200160105154437     END-EXEC
+107300120710
+107400160105154437*    MOVE SQLSTATE TO lc_sqlStates.
+107500160105154437     MOVE SQLSTATE TO lc_sqlStates
+107600120710           IF NOT lncc_sqlSuccessful
+107700120710              SET lncc_Err14 TO TRUE
+107800120710              MOVE lncc_ErrorInsertSFGLEXCP    TO lc_sqlErrShortDESCR
+107900120710              PERFORM SQLFailProcess
+108000160105154437      ELSE
+108100160105154437        INITIALIZE lc_ExtractArray
+108200160105154437        MOVE  0  TO EXTR
+108300160105154437*    END-IF.
+108400160105154437     END-IF
+108500160105154437     END-IF.
+108600120710
+108700120710      *
+108800120710       Write-Exception-Rec.
+108900120710      *
+109000120710      * Prepare and write into exception file.                          Seq#
+109100120710           INITIALIZE lc_ExceptionRecord.
+109200120710           MOVE lc_TransType        TO lc_TransTypeEx
+109300120710           MOVE lc_TransOrigin      TO lc_TransOriginEx
+109400120710           MOVE lc_FundLoad         TO lc_FundLoadEx
+109500120710           MOVE lc_SettledGorN      TO lc_SettledGorNEx
+109600120710           MOVE lc_ContrRedem       TO lc_ContrRedemEx
+109700120710           MOVE lc_TransStatus      TO lc_TransStatusEx
+109800120710           MOVE lc_DedCode          TO lc_DedectionCodeEx
+109900120710           MOVE lc_PaymentType      TO lc_PaymentTypeEx
+110000120710           MOVE lc_AccountType      TO lc_AccountTypeEx
+110100120710           MOVE lc_TaxProvince      TO lc_TaxProvinceEx
+110200120710           MOVE li_PlaceDate        TO li_PlaceDateEx
+110300120710           MOVE li_TransNo          TO li_TransNoEx
+110400120710           MOVE li_TradeDate        TO li_TradeDateEx
+110500120710           MOVE li_AccountNo        TO li_AccountNoEx
+110600120710           MOVE lc_Investment       TO lc_InvestmentEx
+110700120710           MOVE lc_IndustryFundCode TO lc_IndustryFundCodeEx
+110800120710           MOVE ln_GrossAmt         TO ln_GrossAmtEx
+110900120710           MOVE ln_NetAmt           TO ln_NetAmtEx
+111000120710           MOVE ln_Charge           TO ln_ChargeEx
+111100120710           MOVE lc_PassType         TO lc_PassTypeEx
+111200160105154437*
+111300160105154437     IF EXCR < EXCRMAX
+111400160105154437       ADD 1 TO EXCR
+111500160105154437       MOVE lc_ExceptionRecord   TO lc_ExceptionRec(EXCR)
+111600160105154437     END-IF.
+111700120710
+111800160105154437     IF EXCR = EXCRMAX
+111900120710           EXEC SQL
+112000120710           INSERT INTO SFGLEXCP
+112100160105154437     :EXCR ROWS
+112200120710           VALUES
+112300160105154437*    (:lc_ExceptionRecord)
+112400160105154437*    END-EXEC.
+112500160105154437     (:lc_ExceptionRec)
+112600160105154437     END-EXEC
+112700120710
+112800160105154437*    MOVE SQLSTATE TO lc_sqlStates.
+112900160105154437     MOVE SQLSTATE TO lc_sqlStates
+113000120710           IF NOT lncc_sqlSuccessful
+113100120710              SET lncc_Err15 TO TRUE
+113200120710              MOVE lncc_ErrorInsertSFGLEXTP    TO lc_sqlErrShortDESCR
+113300120710              PERFORM SQLFailProcess
+113400160105154437      ELSE
+113500160105154437        INITIALIZE lc_ExceptionArray
+113600160105154437        MOVE  0  TO EXCR
+113700160105154437*    END-IF.
+113800160105154437     END-IF
+113900160105154437     END-IF.
+114000160105154437*
+114100160105 ||    POPULATE-GL-MASTER.
+114200160105 ||        SET lb_GLMEndOfCursorFalse TO TRUE.
+114300160105 ||        EXEC SQL
+114400160105 ||          DECLARE GLMasterCur CURSOR FOR
+114500160105 ||          SELECT
+114600160105 ||                 GL_CURR_ACCOUNT_NO,
+114700160105 ||                 GL_PRIOR_ACCOUNT_NO,
+114800160105 ||                 GL_ACCOUNT_DESC,
+114900160105 ||                 GL_ACCOUNT_TYPE,
+115000160105 ||                 DEPARTMENT_ID
+115100160105 ||
+115200160105 ||          FROM MFAGLMSP
+115300160105 ||        END-EXEC.
+115400160105 ||
+115500160105 ||        EXEC SQL
+115600160105 ||          OPEN GLMasterCur
+115700160105 ||        END-EXEC.
+115800160105 ||
+115900160105 ||        MOVE SQLSTATE TO lc_sqlStates.
+116000160105 ||        IF NOT lncc_sqlSuccessful
+116100160105 ||           SET lb_GLMEndOfCursorTrue  TO TRUE
+116200160105 ||           SET lncc_Err17 TO TRUE
+116300160105 ||           MOVE lncc_ErrorOpeningCursor TO lc_sqlErrShortDESCR
+116400160105 ||           PERFORM SQLFailProcess
+116500160105 ||        END-IF.
+116600160105 ||
+116700160105 ||        PERFORM ProcessGLMasterCur TEST BEFORE
+116800160105 ||          UNTIL lb_GLMEndOfCursorTrue.
+116900160105 ||
+117000160105 ||        EXEC SQL
+117100160105 ||          CLOSE GLMasterCur
+117200160105 ||        END-EXEC.
+117300160105 ||    PGM-EXIT.
+117400160105 ||        EXIT.
+117500160105 ||   *                                                                 Seq#
+117600160105 ||    ProcessGLMasterCur.
+117700160105 ||   *                                                                 Seq#
+117800160105 ||        INITIALIZE ltb_GLMaster
+117900160105 ||                   li_NoOfRowsFetchedGLM.
+118000160105 ||        EXEC SQL
+118100160105 ||          FETCH NEXT FROM GLMasterCur
+118200160105 ||            FOR 500 ROWS
+118300160105 ||           INTO :ltb_GLMasterRec
+118400160105 ||        END-EXEC.
+118500160105 ||
+118600160105 ||        MOVE SQLSTATE TO lc_sqlStates.
+118700160105 ||        EVALUATE TRUE
+118800160105 ||            WHEN lncc_sqlEnd OR lncc_sqlSuccessful
+118900160105 ||                 SET lb_GLMEndOfCursorTrue TO TRUE
+119000160105 ||                 COMPUTE li_NoOfRowsFetchedGLM = SQLERRD(3)
+119100160105 ||            WHEN OTHER
+119200160105 ||                 SET lncc_Err18  TO TRUE
+119300160105 ||                 MOVE lncc_ErrorFetchingCursorGLM
+119400160105 ||                   TO lc_sqlErrShortDESCR
+119500160105 ||                 PERFORM SQLFailProcess
+119600160105 ||        END-EVALUATE.
+119700160105154437
+119800120710
+119900120710      *
+120000120710       SQLFailProcess.
+120100120710      *
+120200120710           PERFORM Dsp-Error.
+120300120710           GOBACK.
+120400120710
+120500120710      *
+120600120710       EndOfProgram.
+120700120710      *
+120800160105154437* Begin
+120900160105  ||       IF EXCR > 0
+121000160105  ||         EXEC SQL
+121100160105  ||           INSERT INTO SFGLEXCP
+121200160105  ||           :EXCR ROWS
+121300160105  ||           VALUES
+121400160105  ||           (:lc_ExceptionRec)
+121500160105  ||         END-EXEC
+121600160105  ||
+121700160105  ||         MOVE SQLSTATE TO lc_sqlStates
+121800160105  ||         IF NOT lncc_sqlSuccessful
+121900160105  ||            SET lncc_Err15 TO TRUE
+122000160105  ||            MOVE lncc_ErrorInsertSFGLEXTP    TO lc_sqlErrShortDESCR
+122100160105  ||            PERFORM SQLFailProcess
+122200160105  ||          ELSE
+122300160105  ||            INITIALIZE lc_ExceptionArray
+122400160105  ||            MOVE  0  TO EXCR
+122500160105  ||         END-IF
+122600160105  ||       END-IF
+122700160105  ||
+122800160105  ||       IF EXTR > 0
+122900160105  ||         EXEC SQL
+123000160105  ||           INSERT INTO SFGLEXTP
+123100160105  ||           :EXTR ROWS
+123200160105  ||           VALUES
+123300160105  ||           (:lc_ExtractRec)
+123400160105  ||         END-EXEC
+123500160105  ||
+123600160105  ||         MOVE SQLSTATE TO lc_sqlStates
+123700160105  ||         IF NOT lncc_sqlSuccessful
+123800160105  ||            SET lncc_Err14 TO TRUE
+123900160105  ||            MOVE lncc_ErrorInsertSFGLEXCP    TO lc_sqlErrShortDESCR
+124000160105  ||            PERFORM SQLFailProcess
+124100160105  ||          ELSE
+124200160105  ||            INITIALIZE lc_ExtractArray
+124300160105  ||            MOVE  0  TO EXTR
+124400160105  ||         END-IF
+124500160105  ||       END-IF
+124600160105154437*
+124700120710           GOBACK.
+124800120710
+124900120710      *
+125000120710      * DSP-ERROR and FORCE-MSGW Routines
+125100120710      *
+125200120710           COPY CPYSQLRTN.
+125300120710      *

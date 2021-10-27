@@ -1,0 +1,1512 @@
+000100171120      * %ATTR TGTRLS(*CURRENT) DBGVIEW(*SOURCE) CLOSQLCSR(*ENDACTGRP)
+000200130302       IDENTIFICATION DIVISION.
+000300130305       PROGRAM-ID.    GICORDRV.
+000400130302       AUTHOR.        Manohar J.
+000500130205       INSTALLATION.  L&T Financial Services Technology Inc.
+000600130302       DATE-WRITTEN.  February 2013.
+000700170602       DATE-COMPILED.
+000800130212      *=================================================================*
+000900130212      * Description    : This program will determine redemption         *
+001000170913      *                  certificates base on pass parameter like       *
+001100130301      *                  account#, redemption amt, redemption ordr      *
+001200130301      *                  and create temp table WRKGICORDR               *
+001300130301      *                                                                 *
+001400130302      * RFS Number     : RFS-113784                                     *
+001500210420      *                                                                 *
+001600130212      * Called By      : TRNREDE  (Transaction Redemption Screen)       *
+001700210420      *                  TRNSEBE  (Direct Order Switch Screen)          *
+001800130302      *                  ACCLIFIV (Account LIF Investment Distribution) *
+001900130302      *                  ACCRIFIV (Account RRIF Investment Distribution)*
+002000130302      *                  ACCAWD   (AWD Screen)                          *
+002100130212      *                                                                 *
+002200130321      * Parameters     : pn_AccountNo       (Input)                     *
+002300130321      *                  pn_TransNo         (Input)                     *
+002400130321      *                  pn_PlacementDate   (Input)                     *
+002500130321      *                  pc_InvestmentCode  (Input)                     *
+002600170602      *                  pn_RedemptionAmt   (Input)                     *
+002700130321      *                  pc_GrossOrNet      (Input)                     *
+002800130321      *                  pn_RedemptionOrder (Input)                     *
+002900130321      *                  pn_InstructionNo   (Input)                     *
+003000130321      *                  pn_InstructionDate (Input)                     *
+003100130321      *                  pc_CallAction      (Input)                     *
+003200140627137988*                  pc_ContrRedemCode  (Input)                     *
+003300130321      *                  pc_CertArray       (Input)                     *
+003400130501      *                  pc_SplitOption     (Input)                     *
+003500130305      *                  pc_processCode     (Output)                    *
+003600130212      *                                                                 *
+003700130301      *                                                                 *
+003800130301      * Linkage Module : GICRDORDR - SP                                 *
+003900130212      *                                                                 *
+004000130214      * Called Objects : RTVSPECMOD                                     *
+004100130212      *                                                                 *
+004200130212      *                                                                 *
+004300130212      *=================================================================*
+004400130212      *******************************************************************
+004500130212      *    C H A N G E   H I S T O R Y                                  *
+004600130212      *******************************************************************
+004700130212      *******************************************************************
+004800130212      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE               *
+004900130212      *******************************************************************
+005000130305      * Manohar J. * 2013/03/02   * RFS 113784 - Initial Version.       *
+005100130529      * Manohar J. * 2013/04/29   * RFS 113784.1 - additional changes   *
+005200130529      * Manohar J. * 2013/05/29   * RFS 113784.2 - added validations for*
+005300130529      *            *              * NET Amt to reject trade at begining *
+005400130712      * R Miguel   * 2013/07/12   * RFS 124541 - Fix the QC defect 32392*
+005500131106      * Naga       * 2013/10/07   * RFS 128793 - CDIC Assignemnt Require*
+005600131007      *            *              * -ments for GIC and DII              *
+005700131129      * Suresh G.  * 2013/11/20   * RFS 129444 - Fix the QC defect 34709*
+005800131129      *            *              * and 34710, pass Industry-fund-code  *
+005900131129      *            *              * parameter for SACDSCCLC.            *
+006000140123      * NAGA       * 2014/01/03   * RFS-131816 QC Defect -35265
+006100140630      * Michael Fan* 2014/06/30   * RFS 137988 - Add parameter to accept*
+006200140630      *            *              * redemption code entered.  Add logic *
+006300140630      *            *              * to check the redemption code passed *
+006400140630      *            *              * in whether exist on the redmption   *
+006500140630      *            *              * code table based on account type for*
+006600140630      *            *              * NET redemption.  If redemption code *
+006700140630      *            *              * not found, try to found a default   *
+006800140630      *            *              * redemption code and use it on       *
+006900140630      *            *              * the redemption calculator for NET   *
+007000140630      *            *              * redemption.                         *
+007100140912      * Waldi R.   * 2014/09/12   * RFS 129786 - when maturity date is t*
+007200140912      *            *              * set to non-bus day and SWO is for   *
+007300140912      *            *              * trade date after the maturity, the  *
+007400140912      *            *              * record is not selected. Include all *
+007500140912      *            *              * active certs where trade date is >= *
+007600140912      *            *              * issue date.                         *
+007700141014      *Banupriya V * 2014/10/14   * RFS141507 - Recompile for MFATRNCPP
+007800150219      * Michael Fan* 2015/02/19   * RFS 138770 - Change to call         *
+007900150219      *            *              * SACDSCCLC in GIC mode that will     *
+008000150219      *            *              * automatically split GIC into        *
+008100150219      *            *              * multiple transactions within the    *
+008200150219      *            *              * calculator SACDSCCLC.               *
+008300150616      * Michael Fan* 2015/06/16   * RFS 138770 - Return back an error   *
+008400150616      *            *              * to GICRDORDR for any error received *
+008500150616      *            *              * from SACDSCCLC.                     *
+008600160331      * Jeyarajan V* 2016/03/31   * RFS 156687 - After binding both     *
+008700160331      *            *              * GICRDORDR & GICORDRV to avoid the   *
+008800160331      *            *              * wrong rejection by SACDSCCLC.       *
+008900160721      * Michael Fan* 2016/07/21   * RFS 158909 - For Gross redemption   *
+009000160721      *            *              * with dollar amount OR all share     *
+009100160721      *            *              * redemption with only ONE certificate*
+009200160721      *            *              * Do not need to call redemption      *
+009300160721      *            *              * calculator SACDSCCLC. This is try   *
+009400160721      *            *              * to improve performance on GIC order *
+009500170510      *            *              * of redemption process (GICRDORDR).  *
+009600170510      * Geethanjali* 2017/03/28   * RFS165024 - Order of selected GIC   *
+009700170510      *            *              * certificates on a redemption not    *
+009800170510      *            *              * correct.                            *
+009900200302      * Chaya SP   * 2020/01/18   *RFS185066 - Recompile for MFAGICDP   *
+010000210420      * Kamal T    * 2021/04/20   * RFS1110898 - Restrict G46 rejection *
+010100210420      *            *              * for redemptions other than all unit *
+010101210728      *            *              * redemptions.                        *
+010200210728      * Niranjan   * 2021/07/09   * RFS1116650 - Add new mode "R"       *
+010201210722      * Mayilsamy D* 2021/07/22   * RFS1118005 - Modified program to    *
+010202210722      *            *              * use new function code flag          *
+010300130212      *******************************************************************
+010400980204       ENVIRONMENT DIVISION.
+010500980204       CONFIGURATION SECTION.
+010600980204       SOURCE-COMPUTER. IBM-AS400.
+010700980204       OBJECT-COMPUTER. IBM-AS400.
+010800130305       SPECIAL-NAMES.   DATA-AREA IS WS-DTAARA-MFAPRCDTP.
+010900030417      *
+011000980204       INPUT-OUTPUT SECTION.
+011100000217       FILE-CONTROL.
+011200130302
+011300130302           SELECT GIC-CERTIFICATE-DETAILS
+011400130302                  ASSIGN       TO DATABASE-MFAGICDP
+011500130302                  ORGANIZATION IS INDEXED
+011600130302                  ACCESS       IS RANDOM
+011700130302                  RECORD KEY   IS EXTERNALLY-DESCRIBED-KEY
+011800130302                  FILE STATUS  IS WS-FILE-STATUS.
+011900000217
+012000000217       DATA DIVISION.
+012100000217       FILE SECTION.
+012200130302       FD  GIC-CERTIFICATE-DETAILS
+012300130302           LABEL RECORDS ARE STANDARD.
+012400130302
+012500130302       01  GIC-CERTIFICATE-DETAILS-REC. COPY DD-ALL-FORMATS
+012600130302                                             OF MFAGICDP.
+012700030417      * ---------------------------------
+012800980204       WORKING-STORAGE SECTION.
+012900030417      * ---------------------------------
+013000130206      * Copybooks.
+013100130529           COPY CPCDSCCLC.
+013200130206           COPY CPYSQLFLD
+013300130308               REPLACING == "CURRENT_PROGRAM" == BY == "GICORDRV" ==.
+013400030414      *
+013500030417           EXEC SQL
+013600030417             INCLUDE SQLCA
+013700030417           END-EXEC.
+013800030417      *
+013900030417      * Error Codes, Uniquely Identify where the error happened
+014000130321       01  WS-ERR-CODE                PIC  X(02)  VALUE SPACES.
+014100130321         88  lncc_Err-Ok                          VALUE SPACES.
+014200130321         88  lncc_Err-01                          VALUE "10".
+014300130321         88  lncc_Err-02                          VALUE "11".
+014400130321         88  lncc_Err-03                          VALUE "12".
+014500130321         88  lncc_Err-04                          VALUE "13".
+014600130321         88  lncc_Err-05                          VALUE "14".
+014700130305
+014800130305       01  lncc_ErrorSelectingFile.
+014900130321         03  Filler                   PIC X(22)   VALUE
+015000130321                                     "Error while Selecting ".
+015100130321         03  lncc_SelectFileName      PIC X(10)   VALUE SPACES.
+015200130321       01 Lc_CertAssignment           PIC X(01)   VALUE SPACES.
+015300130321          88  Lc_CertAssignmentYes                VALUE "Y".
+015400130321          88  Lc_CertAssignmentNo                 VALUE "N".
+015500130206
+015600130221       01  lp-GIC-SystemParm.
+015700130321         03  Filler                   PIC  X(03).
+015800130321         03  lp-RedemptionOrder       PIC  X(01).
+015900130321         03  Filler                   PIC  X(86).
+016000130302
+016100130321       01  WS-FILE-STATUS             PIC X(02)   VALUE SPACES.
+016200130321           88 END-OF-FILE                         VALUE "10".
+016300130221
+016400130429      *RFS113784.1 start
+016500130429
+016600130501       01  lc_BalanceCheck              PIC X(1).
+016700130501           88 lc_BalanceCheckYes        VALUE "Y".
+016800130501           88 Lc_BalanceCheckNo         VALUE "N".
+016900130430
+017000130429
+017100130220       01  lc_ProcessDateDA.
+017200130321         03  lc_ProcessDate           PIC  X(08).
+017300130321         03  ld_ProcessDate REDEFINES
+017400130321             lc_ProcessDate           PIC S9(08).
+017500130305
+017600130213       01  lc_SpecialModuleCode.
+017700130321         03  lc_ModuleID              PIC X(1000) VALUE "GIC".
+017800130308         03  lc_GICFlag               PIC X(01)   VALUE "N".
+017900130213
+018000130213       01  lc_Constants.
+018100130213         03  lnc_A                    PIC X(01)   VALUE "A".
+018200130220         03  lnc_MaxFetchRec          PIC S9(03)  VALUE 100.
+018300130306         03  lnc_One                  PIC S9(01)  VALUE 1.
+018400130306         03  lnc_ZERO                 PIC S9(01)  VALUE 0.
+018500130401         03  lnc_999                  PIC  X(03)  VALUE "999".
+018600130401         03  lnc_99                   PIC S9(02)  VALUE 99.
+018700130306         03  lnc_Six                  PIC S9(01)  VALUE 6.
+018800130220         03  lnc_Y                    PIC  X(01)  VALUE "Y".
+018900130429         03  lnc_N                    PIC  X(01)  VALUE "N".
+019000130306         03  lnc_V                    PIC  X(01)  VALUE "V".
+019100160721158909   03  lnc_W                    PIC  X(01)  VALUE "W".
+019200160721158909   03  lnc_X                    PIC  X(01)  VALUE "X".
+019201210728      *RFS1116650 Starts
+019202210728         03  lnc_R                    PIC  X(01)  VALUE "R".
+019203210728      *RFS1116650 Ends
+019300130306         03  lnc_G44                  PIC  X(03)  VALUE "G44".
+019400130306         03  lnc_G45                  PIC  X(03)  VALUE "G45".
+019500130712      * RFS 124541 - begin QC defect 32392 fix
+019600130712         03  lnc_G46                  PIC  X(03)  VALUE "G46".
+019700130712      * RFS 124541 - end
+019800130321         03  lnc_S13                  PIC  X(03)  VALUE "S13".
+019900130429         03  lnc_G23                  PIC  X(03)  VALUE "G23".
+020000130306         03  lC_CURRENT_PROGRAM       PIC  X(10)  VALUE "GICORDRV".
+020100130529         03  lnc_rowDelim             PIC  X(01)  VALUE ";".
+020200130306
+020300130430       01  Lc_Variables.
+020400130430         03  li_AssignBalance           PIC S9(13)V9(2) COMP-3.
+020500130430         03  li_AccountBalance          PIC S9(13)V9(2) COMP-3.
+020600130430         03  li_Count                   PIC S9(10)      COMP-3.
+020700130430         03  li_FreeDollars             PIC S9(13)V9(2) COMP-3.
+020800130430         03  li_FreeUnits               PIC S9(13)V9(2) COMP-3.
+020900130501         03  Lc_AccountLevelFree        PIC X(01).
+021000130501         03  Lc_FundLevelFree           PIC X(01).
+021100130501         03  Lc_TransactionLevelFree    PIC X(01).
+021200130501         03  lc_SPMODAUTH               PIC X(10).
+021300130529      *RFS 113784.2 -start
+021400130603         03  LC_FETCHCERTNO             PIC X(11).
+021500130603         03  LC_FETCHINVCODE            PIC X(05).
+021600130716         03  li_AccGrsAmt               PIC S9(13)V9(2) COMP-3.
+021700130529         03  li_AccNetAmt               PIC S9(13)V9(2) COMP-3.
+021800150219138770*  03  lc-GrossAmt                PIC  X(14).
+021900150219138770   03  lc-GrossAmt                PIC  X(16).
+022000130529         03  lc-UnitAmt                 PIC  X(14).
+022100150219138770*  03  lc-NetAmt                  PIC  X(14).
+022200150219138770   03  lc-NetAmt                  PIC  X(16).
+022300130529         03  lc_InvDataString           PIC  X(1000).
+022400131129129444   03  lc_IndustryFundCode        PIC  X(05).
+022500140627137988   03  lc_AccountTypeCode         PIC  X(05).
+022600140627137988   03  li_RecCnt                  PIC S9(03).
+022700140627137988   03  lc_ContrRedemCode          PIC  X(06).
+022800210420      * RFS1110898 - Begin
+022900210420         03  li_RedemCount              PIC S9(04) VALUE 0.
+023000210420      * RFS1110898 - End
+023200130529
+023300130529       01  lc_Flags.
+023400130529         03  lc_FetchIndicator          PIC X(01).
+023500130529           88  lb_StartOfFetch                          VALUE "Y".
+023600130529           88  lb_EndOfFetch                            VALUE "N".
+023700130529           88  lb_StartOfFetch-PND                      VALUE "Y".
+023800130529           88  lb_EndOfFetch-PND                        VALUE "N".
+023900130529
+024000130430
+024100130529       01  ln-Counters.
+024200130529         03 ln_currNumInvs         PIC S9(03) COMP-3 VALUE 0.
+024300130529         03 ln_cnt                 PIC S9(03) COMP-3 VALUE 0.
+024400130529         03 ln_Tally               PIC  9(4).
+024500130529         03 ln_InvStringCnt        PIC  9(4).
+024600130529         03 ln_TotalCnt            PIC  9(4).
+024700130529         03 lnc_Zeros              PIC S9(3) VALUE ZEROES.
+024800130529
+024900130529
+025000130529      * Investment parameter for SACDSCCLC.
+025100130529       01 lc_invData.
+025200130529         03 ltbc_invDataArr            PIC X(9000).
+025300130305
+025400130529      *RFS 113784.2 -End
+025500130529
+025600130321       01  lc_ParmRec.
+025700130321         03  ln_AccountNo             PIC S9(09)       COMP-3.
+025800130321         03  ln_TransNo               PIC S9(09)       COMP-3.
+025900130321         03  ln_PlacementDate         PIC S9(09)       COMP-3.
+026000130321         03  lc_InvestmentCode        PIC  X(05).
+026100130321         03  ln_RedemptionAmt         PIC S9(13)V9(2)  COMP-3.
+026200130321         03  lc_GrossOrNet            PIC  X(01).
+026300130321         03  ln_RedemptionOrder       PIC S9(01)       COMP-3.
+026400130321         03  lc_CallAction            PIC  X(01).
+026500130321         03  ln_InstructionNo         PIC S9(09)       COMP-3.
+026600130321         03  ln_InstructionDate       PIC S9(09)       COMP-3.
+026700130321         03  lc_CertArray             PIC  X(1188).
+026800130501113784   03  lc_SplitOption           PIC  X(01).
+026900130501              88 Lc_PLACED-AS-ALL             VALUE "A".
+027000130501              88 Lc_PLACED-AS-UNIT-AMOUNT     VALUE "U".
+027100130501              88 Lc_PLACED-AS-DOLLAR-AMOUNT   VALUE "$".
+027200130501              88 Lc_PLACED-AS-FREE-UNITS      VALUE "F".
+027300130501              88 Lc_PLACED-AS-MATURED-UNITS   VALUE "M".
+027400130501              88 Lc_PLACED-AS-TOTAL-M-F-UNITS VALUE "T".
+027500130321         03  lc_ProcessCode           PIC  X(03).
+027600130321
+027700130529       01  li_TradeDate               PIC S9(08).
+027800130321       01  ln_TradeDate               PIC S9(09).
+027900130430       01  ln_TradeDate-x redefines  ln_TradeDate.
+028000130501           03 ln_Year                 PIC S9(05).
+028100130430           03 ln_Mth                  PIC S9(02).
+028200130430           03 ln_DD                   PIC S9(02).
+028300130321       01  li_IDX                     PIC S9(03)  VALUE 000.
+028400130321       01  li_cert_ID                 PIC S9(10).
+028500170510165024*01  li_cert_Priority           PIC S9(01).
+028600170510165024 01  li_cert_Priority           PIC S9(02).
+028700150219138770 01  li_RedemptionAmt           PIC S9(13)V9(2).
+028800150219138770 01  lc_Redemption-Amount.
+028900150219138770   03  lc_Redemption-Amount1    PIC X(13).
+029000150219138770   03  lc_Decimal               PIC X VALUE ".".
+029100150219138770   03  lc_Redemption-Amount2    PIC XX.
+029200150219138770 01  lc_SplitOption1            PIC X.
+029300160721158909 01  li_OneCertBalAmt           PIC S9(13)V9(2).
+029400160721158909 01  lc_bypassOneCert           PIC X VALUE " ".
+029500130302
+029600131106128793 01  lc_Entireaccount           PIC X(1).
+029700130302       01  lc_CertDetails.
+029800130501         03  lc_certTable             OCCURS 99  TIMES.
+029900130319             05  lc_cert_ID           PIC X(10) .
+030000130319             05  lc_cert_Priority     PIC X(02) .
+030100130430
+030101210722      *RFS1118005 - Starts
+030103210722       01 lc_InvestmentCodeACINDSC       PIC X(5)  VALUE SPACES.
+030104210722       01 lc_FunctionCode                PIC X(10) VALUE "ACINDSC".
+030105210722       01 lc_InvestmentStructure         PIC X(10) VALUE SPACES.
+030106210722       01 lc_ACINDSCDeclareINRSTRF       PIC X(1)  VALUE "Y".
+030111210722       01 lc_ACINDSCFlag                 PIC X(01) VALUE SPACES.
+030112210722         88 lnc_ACINDSCYes                         VALUE "Y".
+030113210722         88 lnc_ACINDSCNo                          VALUE "N".
+030114210722      *RFS1118005 - Ends
+030115210722
+030200130213      * ---------------------------------
+030300130213       LINKAGE SECTION.
+030400130213      * ---------------------------------
+030500130321      *    COPY CPGICRDORD.
+030600130321       01  pn_AccountNo               PIC S9(09)       COMP-3.
+030700130321       01  pn_TransNo                 PIC S9(09)       COMP-3.
+030800130321       01  pn_PlacementDate           PIC S9(09)       COMP-3.
+030900130321       01  pc_InvestmentCode          PIC  X(05).
+031000130321       01  pn_RedemptionAmt           PIC S9(13)V9(2)  COMP-3.
+031100130321       01  pc_GrossOrNet              PIC  X(01).
+031200130321       01  pn_RedemptionOrder         PIC S9(01)       COMP-3.
+031300130321       01  pc_CallAction              PIC  X(01).
+031400130321       01  pn_InstructionNo           PIC S9(09)       COMP-3.
+031500130321       01  pn_InstructionDate         PIC S9(09)       COMP-3.
+031600140627137988 01  pc_ContrRedemCode          PIC  X(06).
+031700130321       01  pc_Certarray               PIC  X(1188).
+031800130501       01  pc_SplitOption             PIC  X(01).
+031900130321       01  pc_ProcessCode             PIC  X(03).
+032000130213
+032100030417      * =================================
+032200130321       PROCEDURE DIVISION USING  pn_AccountNo
+032300130321                                 pn_TransNo
+032400130321                                 pn_PlacementDate
+032500130321                                 pc_InvestmentCode
+032600130321                                 pn_RedemptionAmt
+032700130321                                 pc_GrossOrNet
+032800130321                                 pn_RedemptionOrder
+032900130321                                 pc_CallAction
+033000130321                                 pn_InstructionNo
+033100130321                                 pn_InstructionDate
+033200140627137988                           pc_ContrRedemCode
+033300130321                                 pc_CertArray
+033400130501                                 pc_SplitOption
+033500130501                                 pc_ProcessCode.
+033600030417      * =================================
+033700130301       MAINLINE.
+033800130301
+033900130301           EXEC SQL
+034000130301             WHENEVER SQLERROR   CONTINUE
+034100130301           END-EXEC.
+034200130301
+034300160721158909* Begin
+034400160721158909*  Order of redemption with one certificate check does not
+034500160721158909*  apply to mode W or X since those mode need to call SACDSCCLC
+034600160721158909*  to get the NET amount for withholding tax calculation.
+034700160721  ||       MOVE " " TO lc_bypassOneCert.
+034800160721  ||       IF pc_CallAction = lnc_X OR
+034900160721  ||          pc_CallAction = lnc_W
+034901210728      *RFS1116650 Starts
+034902210728           OR pc_CallAction = lnc_R
+034903210728      *RFS1116650 Ends
+035000160721  ||            MOVE "Y" TO lc_bypassOneCert
+035100160721  ||            MOVE lnc_V TO pc_CallAction
+035200160721  ||       END-IF.
+035300160721158909* End
+035400130305           IF  pc_CallAction NOT = lnc_V
+035500130401               MOVE lnc_999  TO pc_ProcessCode
+035600130305            ELSE
+035700130318               PERFORM INITIAL-LOGIC
+035800130318               PERFORM DETAIL-PROCESSING
+035900130305           END-IF.
+036000130306
+036100130305           PERFORM END-JOB.
+036200130301
+036300130301      ******************************************************************
+036400130301      *  INITIAL LOGIC                                                 *
+036500130301      ******************************************************************
+036600130301       INITIAL-LOGIC.
+036700130501           INITIALIZE Lc_Variables
+036800130501
+036900130501                      .
+037000130501
+037100130501           SET lc_BalanceCheckYes TO TRUE.
+037200130301           ACCEPT lc_ProcessDateDA FROM WS-DTAARA-MFAPRCDTP
+037300130301                                   FOR "MFAPRCDTP".
+037400130429
+037500130430      *----------------------------------------*
+037600130430      * SPECIAL MODULES checks for free Dollar *
+037700130430      *----------------------------------------*
+037800130430
+037900130501           MOVE "N"        TO Lc_FundLevelFree
+038000130501           MOVE "FRDODSC"  TO Lc_SPMODAUTH
+038100130501           CALL "RTVMODAUTH" USING Lc_SPMODAUTH
+038200130501                                   Lc_FundLevelFree.
+038300171120           CANCEL "RTVMODAUTH".
+038400130501
+038500130501           MOVE "N"        TO Lc_AccountLevelFree
+038600130501           MOVE "ACLVFRD"  TO Lc_SPMODAUTH
+038700130501           CALL "RTVMODAUTH" USING Lc_SPMODAUTH
+038800130501                                   Lc_AccountLevelFree.
+038900171120           CANCEL "RTVMODAUTH".
+039000130501
+039100130301           EXEC SQL
+039200130308             DROP TABLE QTEMP/WRKGICERT
+039300130301           END-EXEC.
+039400130301
+039500130301           EXEC SQL
+039600130308            CREATE TABLE QTEMP/WRKGICERT
+039700130301            (
+039800130302            CERTIFICATE_ID_NO     NUMERIC (10,0) NOT NULL WITH DEFAULT,
+039900130302            ACCOUNT_NO            NUMERIC (09,0) NOT NULL WITH DEFAULT,
+040000130302            CERTIFICATE_NO        CHAR    (11)   NOT NULL WITH DEFAULT,
+040100130302            INVESTMENT_CODE       CHAR    (05)   NOT NULL WITH DEFAULT,
+040200130302            ACCOUNT_TYPE_CODE     CHAR    (05)   NOT NULL WITH DEFAULT,
+040300130302            MATURITY_DATE         DECIMAL (09,0) NOT NULL WITH DEFAULT,
+040400130302            ISSUE_DATE            DECIMAL (09,0) NOT NULL WITH DEFAULT,
+040500130302            CUR_CERTIFICATE_BAL   DECIMAL (13,2) NOT NULL WITH DEFAULT,
+040600130302            INT_RATE              DECIMAL (13,2) NOT NULL WITH DEFAULT,
+040700130302            CERT_ASSIGNMENT       CHAR    (01)   NOT NULL WITH DEFAULT,
+040800130302            CERT_PRIORITY         DECIMAL (02,0) NOT NULL WITH DEFAULT,
+040900130308            CERT_ACCURED_INT      DECIMAL (13,2) NOT NULL WITH DEFAULT,
+041000130308            CERT_PENALTY_AMT      DECIMAL (13,2) NOT NULL WITH DEFAULT,
+041100130302            CERT_REPLACEMENT_AMT  DECIMAL (13,2) NOT NULL WITH DEFAULT,
+041200130302            CERT_DSC_AMT          DECIMAL (13,2) NOT NULL WITH DEFAULT,
+041300130428            CERT_TAX_AMT          DECIMAL (13,2) NOT NULL WITH DEFAULT,
+041400131007            FREE_AMT              DECIMAL (13,2) NOT NULL WITH DEFAULT,
+041500131106128793      CERT_CDIC_ASSIG       DECIMAL (13,2) NOT NULL WITH DEFAULT,
+041600131106128793      CERT_NONCDIC_ASSIG    DECIMAL (13,2) NOT NULL WITH DEFAULT
+041700130301             )
+041800130301           END-EXEC.
+041900130301
+042000130301           EXEC SQL
+042100130308                DROP TABLE QTEMP/WRKGICORDR
+042200130301           END-EXEC
+042300130301
+042400130301           EXEC SQL
+042500130308            CREATE TABLE QTEMP/WRKGICORDR  AS
+042600130308            ( SELECT * FROM QTEMP/WRKGICERT ) WITH NO DATA
+042700130301           END-EXEC.
+042800160721158909* Begin - Create table for one GIC redemption
+042900160721           EXEC SQL
+043000160721                DROP TABLE QTEMP/WRKONEGIC
+043100160721           END-EXEC
+043200160721
+043300160721           EXEC SQL
+043400160721            CREATE TABLE QTEMP/WRKONEGIC   AS
+043500160721            ( SELECT * FROM QTEMP/WRKGICERT ) WITH NO DATA
+043600160721           END-EXEC.
+043700160721158909* End
+043800130302
+043900130302           OPEN INPUT  GIC-CERTIFICATE-DETAILS.
+044000130302
+044100130301      ******************************************************************
+044200130301      *  DETAIL-PROCESSING                                             *
+044300130301      ******************************************************************
+044400130301       DETAIL-PROCESSING.
+044500130318           MOVE pn_PlacementDate    TO ln_TradeDate
+044600130302           MOVE pn_AccountNo        TO ln_AccountNo
+044700130302           MOVE pc_InvestmentCode   TO lc_InvestmentCode
+044800130302           MOVE pn_RedemptionOrder  TO ln_RedemptionOrder
+044900130306           MOVE pn_RedemptionAmt    TO ln_RedemptionAmt
+045000130306           MOVE pc_certarray        TO lc_certarray
+045100130306           MOVE pc_callaction       TO lc_CallAction
+045200130321           MOVE pc_GrossOrNet       TO lc_GrossOrNet
+045300130321           MOVE pn_InstructionDate  TO ln_InstructionDate
+045400130321           MOVE pn_InstructionNo    TO ln_InstructionNo
+045500130321           MOVE pn_TransNo          TO ln_TransNo
+045600130429           MOVE pc_SplitOption      TO lc_SplitOption
+045700130305           SET  lc_CertAssignmentNo TO TRUE
+045800210722      *RFS1118005 - Ends
+045801210722           SET  lnc_ACINDSCNo       TO TRUE
+045802210722           PERFORM VERIFY-FUNCTION-CODE THRU  VFC-EXIT
+045803210722      *RFS1118005 - Ends
+045804210722
+045900130308           IF  ln_RedemptionOrder NOT = lnc_six
+046000130305               PERFORM CREATE-WORKFILE
+046100130302            ELSE
+046200130302               INITIALIZE  lc_CertDetails
+046300130302               MOVE 1  TO  li_IDX
+046400130306               MOVE pc_Certarray TO lc_CertDetails
+046500130302
+046600130401           PERFORM LOAD-CERT-DETAILS UNTIL li_idx = lnc_99
+046700130319                   OR lc_CERT_ID(li_IDX) = SPACES
+046800130302           END-IF.
+046900130301
+047000130429      *113784.1- Start
+047100130429           PERFORM CHECKRECORD.
+047200130429           IF  li_Count > lnc_Zero
+047300130429               PERFORM CHECK-SPLITOPTION
+047400130429               PERFORM UPDATE-CERT-ASSIGNMENT
+047500130429               PERFORM SORT-WORKFILE
+047600130429               PERFORM VALIDATE-WORKFILE
+047700130429            ELSE
+047800130429               MOVE lnc_G23 TO pc_ProcessCode
+047900130429           END-IF.
+048000130429      *113784.1 - End
+048100130301      * ---------------------------------
+048200130305       CREATE-WORKFILE.
+048300130301      * ---------------------------------
+048400130301
+048500130301           EXEC SQL
+048600130308             INSERT INTO QTEMP/WRKGICERT
+048700130302             SELECT COALESCE(GICDP.CERTIFICATE_ID_NO, 0),
+048800130302                    COALESCE(GICDP.ACCOUNT_NO, 0),
+048900130302                    COALESCE(GICDP.CERTIFICATE_NO, " "),
+049000130302                    COALESCE(GICDP.INVESTMENT_CODE, " "),
+049100130302                    COALESCE(ACCNTP.ACCOUNT_TYPE_CODE, " "),
+049200130302                    COALESCE(GICDP.MATURITY_DATE, 0),
+049300130302                    COALESCE(GICDP.ISSUE_DATE, 0),
+049400130302                    COALESCE(GICDP.CURRENT_CERTIFICATE_BALANCE, 0),
+049500130302                    COALESCE(GICDP.INT_RATE, 0),
+049600130302                    " ",
+049700130302                    0,
+049800130308                    0,
+049900130302                    0,
+050000130302                    0,
+050100130302                    0,
+050200130428                    0,
+050300131106128793              0,
+050400131106128793              0,
+050500130428                    0
+050600130301
+050700130301             FROM   MFAGICDP  GICDP
+050800130301
+050900130301             INNER JOIN MFAACCNTP ACCNTP
+051000130301             ON    ACCNTP.ACCOUNT_NO      = GICDP.ACCOUNT_NO
+051100130301
+051200130301             INNER JOIN MFAIVRP  IVR
+051300130301             ON    ACCNTP.INVESTOR_NO     = IVR.INVESTOR_NO
+051400130301
+051500130301             INNER JOIN MFAIVRTYP IVRTY
+051600130301             ON    IVR.INVESTOR_TYPE_CODE = IVRTY.INVESTOR_TYPE_CODE
+051700130301
+051800130301             WHERE  GICDP.ACCOUNT_NO       = :ln_AccountNo
+051900130302             AND    GICDP.INVESTMENT_CODE  = :lc_InvestmentCode
+052000130302             AND    GICDP.CERT_STATUS_CODE = :lnc_A
+052100130319             AND    GICDP.ISSUE_DATE      <= :ln_TradeDate
+052200140912129786*      AND    GICDP.MATURITY_DATE   >= :ln_TradeDate
+052300130301
+052400130301           END-EXEC.
+052500130302
+052600130305           MOVE SQLSTATE TO lc_sqlStates.
+052700130305           IF NOT lncc_sqlSuccessful
+052800130401              MOVE lnc_999      TO pc_ProcessCode
+052900130305              MOVE SQLSTATE     TO WS-SQLSTATE
+053000130305              MOVE SQLCODE      TO WS-DSP-SQLCODE
+053100130305              MOVE "MFAGICDP "              TO lncc_SelectFileName
+053200130305              MOVE lncc_ErrorSelectingFile  TO Ws-Sql-Err-Short-Descr
+053300130305              PERFORM DISPLAYERROR
+053400130305           END-IF.
+053500130305
+053600130302      ************************
+053700130302       LOAD-CERT-DETAILS.
+053800130302      ************************
+053900130319           IF lc_CERT_ID(li_IDX) NOT = SPACES
+054000130319              MOVE lc_CERT_ID (li_IDX)        TO li_CERT_ID
+054100130319              MOVE lc_CERT_Priority (li_IDX)  TO li_CERT_Priority
+054200130302
+054300130302           EXEC SQL
+054400130308             INSERT INTO QTEMP/WRKGICERT
+054500130302             SELECT   GICDP.CERTIFICATE_ID_NO,
+054600130302                      GICDP.ACCOUNT_NO,
+054700130302                      GICDP.CERTIFICATE_NO,
+054800130302                      GICDP.INVESTMENT_CODE,
+054900130302                      ACCNTP.ACCOUNT_TYPE_CODE,
+055000130302                      GICDP.MATURITY_DATE,
+055100130302                      GICDP.ISSUE_DATE,
+055200130302                      GICDP.CURRENT_CERTIFICATE_BALANCE,
+055300130302                      GICDP.INT_RATE,
+055400130302                     " ",
+055500130302                     :li_CERT_Priority,
+055600130302                     0,
+055700130308                     0,
+055800130302                     0,
+055900130302                     0,
+056000130428                     0,
+056100131106128793               0,
+056200131106128793               0,
+056300130428                     0
+056400130302
+056500130302           FROM  MFAGICDP GICDP
+056600130302
+056700130302             INNER JOIN MFAACCNTP ACCNTP
+056800130302             ON    ACCNTP.ACCOUNT_NO      = GICDP.ACCOUNT_NO
+056900130302
+057000130302             INNER JOIN MFAIVRP  IVR
+057100130302             ON    ACCNTP.INVESTOR_NO     = IVR.INVESTOR_NO
+057200130302
+057300130302             INNER JOIN MFAIVRTYP IVRTY
+057400130302             ON    IVR.INVESTOR_TYPE_CODE = IVRTY.INVESTOR_TYPE_CODE
+057500130302
+057600130305           WHERE   GICDP.ACCOUNT_NO        = :ln_AccountNo
+057700130305             AND   GICDP.CERTIFICATE_ID_NO = :li_CERT_ID
+057800130305             AND   GICDP.INVESTMENT_CODE   = :lc_InvestmentCode
+057900130305             AND   GICDP.CERT_STATUS_CODE  = :lnc_A
+058000130302
+058100130302           END-EXEC
+058200130305
+058300130401           MOVE SQLSTATE TO lc_sqlStates
+058400130401           IF NOT lncc_sqlSuccessful
+058500130401              MOVE SQLSTATE     TO WS-SQLSTATE
+058600130401              MOVE SQLCODE      TO WS-DSP-SQLCODE
+058700130401              MOVE "MFAGICDP "              TO lncc_SelectFileName
+058800130401              MOVE lncc_ErrorSelectingFile  TO Ws-Sql-Err-Short-Descr
+058900130401              PERFORM DISPLAYERROR
+059000130401           END-IF
+059100130302           END-IF.
+059200130305
+059300130302           ADD  1   TO li_IDX.
+059400130305
+059500130429      *113784.1 - Start
+059600130429      ************************
+059700130429       CHECKRECORD.
+059800130429           EXEC SQL
+059900130429                SELECT COUNT(1) INTO  :li_Count
+060000130429                FROM   QTEMP/WRKGICERT
+060100130429           END-EXEC.
+060200130429      *113784.1 - End
+060300130429
+060400130429      ************************
+060500130429       CHECK-SPLITOPTION.
+060600130301      ************************
+060700130429
+060800130429           IF (lc_PLACED-AS-FREE-UNITS       OR
+060900130429               lc_PLACED-AS-MATURED-UNITS    OR
+061000130429               lc_PLACED-AS-TOTAL-M-F-UNITS)
+061100130501            IF lc_AccountLevelFree = lnc_Y
+061200130430               PERFORM  GET-ACCOUNT-FREE-DOLLARS
+061300130430             ELSE
+061400130501             IF lc_FundLevelFree   = lnc_Y
+061401210722      *RFS1118005 - Starts
+061402210722             OR  lnc_ACINDSCYes
+061403210722      *RFS1118005 - Ends
+061500130430                PERFORM  GET-FUND-LEVEL-FREE-DOLLARS
+061600130430              ELSE
+061700130430               PERFORM  GET-TRANS-LEVEL-FREE-DOLLARS
+061800130430             END-IF
+061900130430            END-IF
+062000130429           END-IF.
+062100130429
+062200130501           IF li_FreeDollars > lnc_Zero
+062300130501           EXEC SQL
+062400130501
+062500130501           UPDATE QTEMP/WRKGICERT  WRK
+062600130501
+062700130501           SET    WRK.FREE_AMT = :li_FreeDollars
+062800130501           WHERE  WRK.ACCOUNT_NO  = :ln_AccountNo
+062900130501           AND    WRK.INVESTMENT_CODE  = :lc_InvestmentCode
+063000130501
+063100130501           AND EXISTS
+063200130501
+063300130501           (SELECT *
+063400130501            FROM   QTEMP/WRKGICERT  WRK1
+063500130501            WHERE  WRK.ACCOUNT_NO  = :ln_AccountNo
+063600130501            AND    WRK.INVESTMENT_CODE  = :lc_InvestmentCode
+063700130501            FETCH FIRST ROW ONLY)
+063800130501           END-EXEC.
+063900130501
+064000130429           IF lc_PLACED-AS-ALL
+064100130501              SET lc_BalanceCheckNo TO TRUE
+064200130429           END-IF.
+064300130429
+064400130430      *************************
+064500130430       GET-FUND-LEVEL-FREE-DOLLARS.
+064600130430      *************************
+064700130430           EXEC SQL
+064800130430           SELECT SUM(A.FREE_DOLLARS)
+064900130430             INTO :li_FreeDollars
+065000130430
+065100130430             FROM  MFATRCSDP A
+065200130430            INNER  JOIN MFATRNP B ON
+065300130430                   A.PLACEMENT_DATE  = B.PLACEMENT_DATE
+065400130430              AND  A.TRANS_NO = B.TRANS_NO
+065500130430              AND  A.INVESTMENT_CODE = B.INVESTMENT_CODE
+065600130430            INNER JOIN  MFAGICDP C ON
+065700130430                   B.ACCOUNT_NO = C.ACCOUNT_NO
+065800130430              AND  B.INVESTMENT_CODE  = C.INVESTMENT_CODE
+065900130430
+066000130430             WHERE C.ACCOUNT_NO = :ln_AccountNo
+066100130430              AND  C.INVESTMENT_CODE = :lc_InvestmentCode
+066200130430
+066300130430           END-EXEC.
+066400130430
+066500130430           MOVE SQLSTATE TO lc_sqlStates.
+066600130430           IF NOT lncc_sqlSuccessful
+066700130430              MOVE SQLSTATE     TO WS-SQLSTATE
+066800130430              MOVE SQLCODE      TO WS-DSP-SQLCODE
+066900130430              MOVE "MFATRCSDP "              TO lncc_SelectFileName
+067000130430              MOVE lncc_ErrorSelectingFile  TO Ws-Sql-Err-Short-Descr
+067100130430              PERFORM DISPLAYERROR
+067200130430           END-IF.
+067300130430
+067400130430      ****************************
+067500130430       GET-ACCOUNT-FREE-DOLLARS.
+067600130430      ****************************
+067700130430           EXEC SQL
+067800130430           SELECT SUM(A.FREE_DOLLARS)
+067900130430             INTO :li_FreeDollars
+068000130430
+068100130430             FROM  MFAALVFAP A
+068200130430             INNER JOIN  MFAGICDP B ON
+068300130430                   A.ACCOUNT_NO = B.ACCOUNT_NO
+068400130430
+068500130430             WHERE A.ACCOUNT_NO = :ln_AccountNo
+068600130430              AND  B.INVESTMENT_CODE = :lc_InvestmentCode
+068700130529              AND  A.YEAR  = :Ln_Year
+068800130430           END-EXEC.
+068900130430
+069000130430           MOVE SQLSTATE TO lc_sqlStates.
+069100130430           IF NOT lncc_sqlSuccessful
+069200130430              MOVE SQLSTATE     TO WS-SQLSTATE
+069300130430              MOVE SQLCODE      TO WS-DSP-SQLCODE
+069400130430              MOVE "MFAALVFAP "              TO lncc_SelectFileName
+069500130430              MOVE lncc_ErrorSelectingFile  TO Ws-Sql-Err-Short-Descr
+069600130430              PERFORM DISPLAYERROR
+069700130430           END-IF.
+069800130430
+069900130430      ****************************
+070000130430       GET-TRANS-LEVEL-FREE-DOLLARS.
+070100130430      ****************************
+070200130430           EXEC SQL
+070300130430           SELECT SUM(A.CURR_UNITS_FREE)
+070400130430             INTO :li_FreeDollars
+070500130430
+070600130430             FROM  MFATRNCPP A
+070700130501             INNER JOIN MFATRNP B ON
+070800130501                   A.PLACEMENT_DATE  = B.PLACEMENT_DATE
+070900130501              AND  A.TRANS_NO = B.TRANS_NO
+071000130501              AND  A.INVESTMENT_CODE = B.INVESTMENT_CODE
+071100130501             INNER JOIN  MFAGICDP C ON
+071200130501                   A.ACCOUNT_NO = C.ACCOUNT_NO
+071300130501              AND  A.INVESTMENT_CODE = C.INVESTMENT_CODE
+071400130430
+071500130430             WHERE A.ACCOUNT_NO = :ln_AccountNo
+071600130430              AND  A.INVESTMENT_CODE = :lc_InvestmentCode
+071700130430              AND  A.CDSC_STATUS = :lnc_A
+071800130430              AND  A.PLACEMENT_DATE <= :ln_TradeDate
+071900130430           END-EXEC.
+072000130430
+072100130430           MOVE SQLSTATE TO lc_sqlStates.
+072200130430           IF NOT lncc_sqlSuccessful
+072300130430              MOVE SQLSTATE     TO WS-SQLSTATE
+072400130430              MOVE SQLCODE      TO WS-DSP-SQLCODE
+072500130430              MOVE "MFATRNCPP "              TO lncc_SelectFileName
+072600130430              MOVE lncc_ErrorSelectingFile  TO Ws-Sql-Err-Short-Descr
+072700130430              PERFORM DISPLAYERROR
+072800130430            ELSE
+072900130430            COMPUTE li_FreeDollars = li_FreeUNITS * 1
+073000130430           END-IF.
+073100130430
+073200130429      ************************
+073300130301       UPDATE-CERT-ASSIGNMENT.
+073400130301      ************************
+073500131009
+073600131106      *RFS128793 - START
+073700131009           INITIALIZE lc_Entireaccount.
+073800131009
+073900131009           EXEC SQL
+074000131009           SELECT ENTIRE_ACCOUNT
+074100131009                  INTO
+074200131009                  :lc_Entireaccount
+074300131009           FROM   MFAACCASP
+074400131009           WHERE
+074500131009           ENTIRE_ACCOUNT = "Y" AND
+074600131009           ASSIGNMENT_STATUS <> "C" AND
+074700131009           ACCOUNT_NO     = :ln_AccountNo
+074800131009           END-EXEC
+074900131009
+075000131009           MOVE SQLSTATE TO lc_sqlStates
+075100131009
+075200131009           IF  lncc_sqlSuccessful
+075300131009               SET lc_CertAssignmentYes TO TRUE
+075400131009           END-IF.
+075500131009           IF lc_CertAssignmentNo
+075600130301           EXEC SQL
+075700130301
+075800130308           UPDATE QTEMP/WRKGICERT  WRK
+075900130301
+076000130308           SET    WRK.CERT_ASSIGNMENT = "Y"
+076100130305
+076200130301           WHERE  WRK.ACCOUNT_NO  = :ln_AccountNo
+076300130301           AND    WRK.INVESTMENT_CODE  = :lc_InvestmentCode
+076400130301           AND EXISTS
+076500130301
+076600130301           (SELECT *
+076700130301            FROM   MFAGICDP G
+076800130301            INNER JOIN MFAGIAAP GIAAP
+076900130301            ON     G.CERTIFICATE_ID_NO = GIAAP.CERTIFICATE_ID_NO
+077000130301            AND    G.ACCOUNT_NO        = GIAAP.ACCOUNT_NO
+077100130301            AND    G.INVESTMENT_CODE   = GIAAP.INVESTMENT_CODE
+077200131106      *RFS128793 - Start
+077300131008            INNER JOIN MFAACCASP CCASP
+077400131008            ON    CCASP.ACCOUNT_NO = GIAAP.ACCOUNT_NO
+077500131008            AND   CCASP.ASSIGN_SEQ_NO = GIAAP.ASSIGN_SEQ_NO
+077600131008            AND   CCASP.INVESTMENT_CODE   = GIAAP.INVESTMENT_CODE
+077700131120      *     AND   CCASP.CERTIFICATE_NO    = WRK.CERTIFICATE_NO
+077800131106      *RFS128793 - End
+077900130301            WHERE  G.ACCOUNT_NO        = WRK.ACCOUNT_NO
+078000130301            AND    G.INVESTMENT_CODE   = WRK.INVESTMENT_CODE
+078100130308            AND    G.CERTIFICATE_ID_NO = WRK.CERTIFICATE_ID_NO
+078200130308            AND    GIAAP.UNIT_AMT      > :lnc_zero
+078300131106128793      AND    CCASP.ASSIGNMENT_STATUS <> "C"
+078400131106128793      AND    CCASP.ENTIRE_ACCOUNT    <> "Y"
+078500130301            )
+078600131009           END-EXEC
+078700130301
+078800130305           MOVE SQLSTATE TO lc_sqlStates
+078900130305           IF  lncc_sqlSuccessful
+079000130305               SET lc_CertAssignmentYes TO TRUE
+079100131009           END-IF
+079200131009           END-IF.
+079300131106      *RFS128793 - START
+079400131009
+079500131009           IF  lc_Entireaccount NOT EQUAL "Y" AND
+079600131009               lc_CertAssignmentYes
+079700131009
+079800131009           EXEC SQL
+079900131009           UPDATE QTEMP/WRKGICERT  WRK
+080000131009           SET WRK.CERT_CDIC_ASSIG =
+080100140123131816     ( SELECT COALESCE (SUM(GIAAP.UNIT_AMT),0)
+080200131009            FROM MFAGIAAP GIAAP
+080300131009            INNER JOIN MFAACCASP CCASP
+080400131009            ON    CCASP.ACCOUNT_NO = GIAAP.ACCOUNT_NO
+080500131009            AND   CCASP.ASSIGN_SEQ_NO = GIAAP.ASSIGN_SEQ_NO
+080600131009            AND   CCASP.INVESTMENT_CODE   = GIAAP.INVESTMENT_CODE
+080700131120      *     AND   CCASP.CERTIFICATE_NO    = WRK.CERTIFICATE_NO
+080800131009            WHERE  CCASP.ACCOUNT_NO = WRK.ACCOUNT_NO
+080900131009            AND    CCASP.INVESTMENT_CODE   = WRK.INVESTMENT_CODE
+081000131120            AND    GIAAP.CERTIFICATE_ID_NO = WRK.CERTIFICATE_ID_NO
+081100131009            AND    GIAAP.UNIT_AMT      > :lnc_zero
+081200131009            AND    CCASP.ASSIGNMENT_STATUS <> "C"
+081300131009            AND    CCASP.ENTIRE_ACCOUNT    <> "Y"
+081400131009            AND    CCASP.ASSIGNMENT_TYPE =  "W"
+081500131009            ),
+081600131009            WRK.CERT_NONCDIC_ASSIG  =
+081700140123131816     ( SELECT COALESCE (SUM(GIAAP.UNIT_AMT), 0)
+081800131009            FROM MFAGIAAP GIAAP
+081900131009            INNER JOIN MFAACCASP CCASP
+082000131009            ON    CCASP.ACCOUNT_NO = GIAAP.ACCOUNT_NO
+082100131009            AND   CCASP.ASSIGN_SEQ_NO = GIAAP.ASSIGN_SEQ_NO
+082200131009            AND   CCASP.INVESTMENT_CODE   = GIAAP.INVESTMENT_CODE
+082300131120      *     AND   CCASP.CERTIFICATE_NO    = WRK.CERTIFICATE_NO
+082400131009            WHERE  CCASP.ACCOUNT_NO = WRK.ACCOUNT_NO
+082500131009            AND    CCASP.INVESTMENT_CODE   = WRK.INVESTMENT_CODE
+082600131120            AND    GIAAP.CERTIFICATE_ID_NO = WRK.CERTIFICATE_ID_NO
+082700131009            AND    GIAAP.UNIT_AMT      > :lnc_zero
+082800131009            AND    CCASP.ASSIGNMENT_STATUS <> "C"
+082900131009            AND    CCASP.ENTIRE_ACCOUNT    <> "Y"
+083000131009            AND    CCASP.ASSIGNMENT_TYPE <> "W"
+083100131009            )
+083200131009           WHERE  WRK.ACCOUNT_NO  = :ln_AccountNo
+083300131009           AND    WRK.INVESTMENT_CODE  = :lc_InvestmentCode
+083400131009           AND    WRK.CERT_ASSIGNMENT = "Y"
+083500131009           END-EXEC
+083600131009
+083700131009           MOVE SQLSTATE TO lc_sqlStates
+083800131009           IF  lncc_sqlSuccessful
+083900131009               SET lc_CertAssignmentYes TO TRUE
+084000131009           END-IF
+084100131009           END-IF.
+084200131106      *RFS128793 - END
+084300130305      ******************************************************************
+084400130308      * work file would be sorted base on redemption order
+084500130305       SORT-WORKFILE.
+084600130305      ******************************************************************
+084700130301
+084800130301           EXEC SQL
+084900130308             INSERT INTO QTEMP/WRKGICORDR
+085000130301
+085100130308             SELECT * FROM  QTEMP/WRKGICERT W
+085200130301             ORDER BY
+085300130301             CASE
+085400130301             WHEN  :ln_RedemptionOrder = 1
+085500130302             THEN  (RANK() OVER (ORDER BY W.INT_RATE ,
+085600130302                                          W.MATURITY_DATE,
+085700130302                                          W.CERTIFICATE_NO))
+085800130302             WHEN  :ln_RedemptionOrder = 2
+085900130302             THEN  (RANK() OVER (ORDER BY W.INT_RATE DESC,
+086000130302                                          W.MATURITY_DATE,
+086100130302                                          W.CERTIFICATE_NO))
+086200130302             WHEN  :ln_RedemptionOrder = 3
+086300130308             THEN  (RANK() OVER (ORDER BY W.MATURITY_DATE,
+086400130302                                          W.INT_RATE,
+086500130302                                          W.CERTIFICATE_NO))
+086600130302             WHEN  :ln_RedemptionOrder = 4
+086700130302             THEN  (RANK() OVER (ORDER BY W.MATURITY_DATE DESC ,
+086800130302                                          W.INT_RATE,
+086900130302                                          W.CERTIFICATE_NO))
+087000130302             WHEN  :ln_RedemptionOrder = 5
+087100130308             THEN  (RANK() OVER (ORDER BY W.ISSUE_DATE,
+087200130302                                          W.INT_RATE,
+087300130302                                          W.CERTIFICATE_NO))
+087400130302             WHEN  :ln_RedemptionOrder = 6
+087500130302             THEN  (RANK() OVER (ORDER BY W.CERT_PRIORITY  ))
+087600130302             END
+087700130301
+087800130301           END-EXEC.
+087900130301
+088000130401           MOVE SQLSTATE TO lc_sqlStates.
+088100130401           IF NOT lncc_sqlSuccessful
+088200130401              MOVE SQLSTATE     TO WS-SQLSTATE
+088300130401              MOVE SQLCODE      TO WS-DSP-SQLCODE
+088400130401              MOVE "WRKGICORDR"              TO lncc_SelectFileName
+088500130401              MOVE lncc_ErrorSelectingFile  TO Ws-Sql-Err-Short-Descr
+088600130401              PERFORM DISPLAYERROR
+088700130401           END-IF.
+088800130305      ******************************************************************
+088900130308      * set return paramter value base on records on workfile
+089000130305      ************************
+089100130305       VALIDATE-WORKFILE.
+089200130305      ************************
+089300130305      *    SET  warning message when work file has cert assignment
+089400130305           IF  lc_CertAssignmentYes
+089500130321               MOVE lnc_S13    TO pc_ProcessCode
+089600130305           END-IF.
+089700131010
+089800131120              EXEC SQL
+089900131120                   SELECT SUM(CUR_CERTIFICATE_BAL)
+090000131120                   INTO   :li_AccountBalance
+090100131120                   FROM   WRKGICORDR
+090200131120                   WHERE
+090300131120                          ACCOUNT_NO         = :ln_AccountNo
+090400131120              END-EXEC
+090500131120
+090600131106      *RFS128793 - START
+090700131010           IF  lc_CertAssignmentYes
+090800131010
+090900131010           EXEC SQL
+091000131010           UPDATE QTEMP/WRKGICORDR
+091100131010                  SET CUR_CERTIFICATE_BAL =
+091200140123131816            COALESCE ((CUR_CERTIFICATE_BAL -
+091300140103                      MAX (CERT_CDIC_ASSIG, CERT_NONCDIC_ASSIG)),0)
+091400131010                  WHERE
+091500131010                         ACCOUNT_NO         = :ln_AccountNo
+091600131010                   AND   CERT_ASSIGNMENT    = :lnc_Y
+091700131010           END-EXEC
+091800131010           END-IF.
+091900131106      *RFS128793 - END
+092000131010
+092100130305           IF   lc_CertAssignmentYes
+092200130305              EXEC SQL
+092300131217129444*            SELECT SUM(CUR_CERTIFICATE_BAL)
+092400140123131816             SELECT COALESCE (MAX (SUM(CERT_CDIC_ASSIG)
+092500140103                             ,SUM(CERT_NONCDIC_ASSIG)),0)
+092600130308                   INTO   :li_AssignBalance
+092700130308                   FROM   WRKGICORDR
+092800130305                   WHERE
+092900130305                          ACCOUNT_NO         = :ln_AccountNo
+093000130305                   AND    CERT_ASSIGNMENT    = :lnc_Y
+093100130305              END-EXEC
+093200130305           END-IF.
+093300160721158909*
+093400160721158909* Begin
+093500160721158909* If it is Gross Redemption with $ split option, check if the
+093600160721158909*  first certificate balance is >= to request redemption amount.
+093700160721158909* Or, if it is All share redemption on one certificate only.
+093800160721158909* If either one of the case, do not need to go to call SACDSCCLC.
+093900160721158909* This is try to improve process time on GIC order of redemption.
+094000160721  ||       Initialize li_OneCertBalAmt.
+094100160721  ||       IF lc_bypassOneCert NOT = "Y"
+094200160721  ||         IF  (lc_GrossOrNet  = "G" and lc_SplitOption = "$")
+094300160721  ||            or (lc_SplitOption = "A" and li_Count = 1)
+094400160721  ||            EXEC SQL
+094500160721  ||              INSERT INTO QTEMP/WRKONEGIC
+094600160721  ||              SELECT * FROM QTEMP/WRKGICORDR
+094700160721  ||              FETCH FIRST ROW ONLY
+094800160721  ||            END-EXEC
+094900160721  ||
+095000160721  ||            EXEC SQL
+095100160721  ||              SELECT CUR_CERTIFICATE_BAL
+095200160721  ||                INTO :li_OneCertBalAmt
+095300160721  ||                FROM QTEMP/WRKONEGIC
+095400160721  ||            END-EXEC
+095500160721  ||
+095600160721  ||            If li_OneCertBalAmt > 0 and
+095700160721  ||              (li_OneCertBalAmt >= pn_RedemptionAmt)
+095800160721  ||               Continue
+095900160721  ||             Else
+096000160721  ||               Move 0 to li_OneCertBalAmt
+096100160721  ||            END-IF
+096200160722  ||
+096300160722  ||            If li_OneCertBalAmt = 0
+096400160722  ||              EXEC SQL
+096500160722  ||                DELETE FROM QTEMP/WRKONEGIC
+096600160722  ||              END-EXEC
+096700160722  ||            END-IF
+096800160721  ||         END-IF
+096900160721  ||       END-IF.
+097000160721158909* End
+097100130501
+097200130501           IF (lc_PLACED-AS-FREE-UNITS       OR
+097300130501               lc_PLACED-AS-MATURED-UNITS    OR
+097400130501               lc_PLACED-AS-TOTAL-M-F-UNITS)
+097500130501            IF  li_FreeDollars = lnc_zero
+097600130501                MOVE "D1"   TO pc_ProcessCode
+097700130501                SET lc_BalanceCheckNo  TO TRUE
+097800130501             ELSE
+097900130501              IF pn_RedemptionAmt = lnc_Zero
+098000130501                 MOVE li_FreeDollars TO pn_RedemptionAmt
+098100130501                 SET lc_BalanceCheckYes TO TRUE
+098200130501               ELSE
+098300130501                IF pn_RedemptionAmt > li_FreeDollars
+098400130501                   MOVE lnc_G45 TO pc_ProcessCode
+098500130501                   SET lc_BalanceCheckNo  TO TRUE
+098600130501                END-IF
+098700130501              END-IF
+098800130501            END-IF
+098900130501           END-IF
+099000130501
+099100130501           IF lc_BalanceCheckYes
+099200130429            IF li_AssignBalance > lnc_zero    AND
+099300130429               (li_AccountBalance - li_AssignBalance) <
+099400130429               pn_RedemptionAmt
+099500130523               MOVE lnc_G44    TO pc_ProcessCode
+099600130429             ELSE
+099700130429              IF li_AccountBalance < pn_RedemptionAmt
+099800130523                 MOVE lnc_G45  TO pc_ProcessCode
+099900130429              END-IF
+100000130429            END-IF
+100100130429           End-IF.
+100200130716
+100300130716      *RFS 113784.2 starts - set validation on NET-AMT when
+100400130716
+100500160721158909*           IF  lc_GrossOrNet  = "N"
+100600160721158909*138770        OR lc_GrossOrNet = "G"
+100700160721158909     IF li_OneCertBalAmt = 0 and
+100800160721158909       (lc_GrossOrNet = "N" or lc_GrossOrNet = "G")
+100900130716               MOVE   ln_TradeDate  TO li_TradeDate
+101000131129      * RFS 129444 - Start QC 34709 and 34710 fix
+101100131129      *        MOVE   lc_InvestmentCode TO lc_Fetchinvcode
+101200131129               PERFORM  GET-INDUSTRY-FUND-CODE
+101300131129               IF lc_IndustryFundCode = lc_InvestmentCode
+101400131129                  MOVE lc_InvestmentCode   TO lc_Fetchinvcode
+101500131129               ELSE
+101600131129                  MOVE lc_IndustryFundCode TO lc_Fetchinvcode
+101700131129               END-IF
+101800131129      * RFS 129444 - End
+101900130716               PERFORM  CALCULATE-NET-BALANCE
+102000150219138770*        IF li_AccNetAmt > 0  AND
+102100150219138770*           li_AccountBalance >= pn_RedemptionAmt AND
+102200150219138770*           li_AccNetAmt < pn_RedemptionAmt
+102300150219138770         IF lc_SplitOption NOT = "A" AND
+102400150219138770           (li_AccGrsAmt = 0 OR
+102500150219138770            li_AccGrsAmt > li_AccountBalance)
+102600130716      * RFS 124541 - begin QC 32392 fix
+102700130716      * Change the return code from G45 to G46.
+102800210420      * RFS1110898 - Begin
+102900210420      ** This logic is to ensure the amount returned from TRNPST is
+103000210420      ** including interest amount because TRNPST turn the $ amount
+103100210420      ** transaction to full redemption.
+103200210420                  PERFORM CHECK-TYPE-OF-REDEMPTION
+103300210420                  IF li_RedemCount > lnc_ZERO
+103400210420      * RFS1110898 - End
+103500130716                  MOVE lnc_G46  TO pc_ProcessCode
+103600130716      * RFS 124541 - end   QC 32392 fix
+103700130716                  SET lc_BalanceCheckNo TO TRUE
+103800210420      * RFS1110898 - Begin
+103900210420                  END-IF
+104000210420      * RFS1110898 - End
+104100130716               END-IF
+104200130716           END-IF.
+104300130716      *RFS 113784.2 end
+104400130716      *    SET process code base on redeption-amount validation
+104500130529
+104600130603      * RFS113784.2 start ----  to calculate net balance
+104700130603       CALCULATE-NET-BALANCE.
+104800130603           MOVE 1  TO ln_totalcnt.
+104900150219138770     MOVE ln_RedemptionAmt TO li_RedemptionAmt.
+105000150219138770     MOVE li_RedemptionAmt(1:13) TO lc_Redemption-Amount1.
+105100150219138770     MOVE li_RedemptionAmt(14:2) TO lc_Redemption-Amount2.
+105200150219138770     MOVE "."                      TO lc_Decimal.
+105300150219138770     MOVE "0.00"  TO lc-GrossAmt.
+105400150219138770     MOVE "0.00"  TO lc-NetAmt.
+105500150219138770     MOVE "0.00"  TO lc-UnitAmt.
+105600150219138770
+105700150219138770     MOVE lc_SplitOption TO lc_SplitOption1
+105800150219138770     IF lc_SplitOption = "$"
+105900150219138770        MOVE "C" TO lc_SplitOption1
+106000150219138770     END-IF
+106100150219138770
+106200150219138770     IF lc_GrossOrNet = "G"
+106300150219138770        MOVE lc_Redemption-Amount TO lc-GrossAmt
+106400150219138770     END-IF.
+106500150219138770
+106600150219138770     IF lc_GrossOrNet = "N"
+106700150219138770        MOVE lc_Redemption-Amount TO lc-NetAmt
+106800150219138770     END-IF.
+106900150219
+107000130603           EXEC SQL
+107100130603                DECLARE CURCRT1 CURSOR FOR
+107200130603                SELECT  WRKCRT.CERTIFICATE_NO
+107300130603                FROM    QTEMP/WRKGICORDR WRKCRT
+107400130603
+107500130603                WHERE   WRKCRT.ACCOUNT_NO      = :ln_AccountNo
+107600131106128793*         AND     WRKCRT.CERT_ASSIGNMENT <>:lnc_Y
+107700130603           END-EXEC.
+107800130603
+107900130603           EXEC SQL
+108000130603             OPEN CURCRT1
+108100130603           END-EXEC.
+108200130603
+108300130603           MOVE SQLSTATE              TO  lc_sqlStates.
+108400130603           IF NOT  lncc_sqlSuccessful
+108500130603              MOVE SQLSTATE     TO WS-SQLSTATE
+108600130603              MOVE SQLCODE      TO WS-DSP-SQLCODE
+108700130603              MOVE "WRKGICORDR"              TO lncc_SelectFileName
+108800130603              MOVE lncc_ErrorSelectingFile  TO Ws-Sql-Err-Short-Descr
+108900130603              PERFORM DISPLAYERROR
+109000130603           END-IF.
+109100130603
+109200130603           SET lb_StartOfFetch            TO    TRUE.
+109300160330156687     INITIALIZE ltbc_invDataArr.
+109400130603           PERFORM Fetch-InvCert-Records UNTIL lb_EndOfFetch.
+109500130603           PERFORM Call-SACDSCCLC.
+109600130603
+109700130603           EXEC SQL
+109800130603                CLOSE CURCRT1
+109900130603           END-EXEC.
+110000130603
+110100130603      * ---------------------------------
+110200130603       Fetch-InvCert-Records.
+110300130603      * ---------------------------------
+110400130603           INITIALIZE lc_FetchCertNo.
+110500130603
+110600130603           EXEC SQL
+110700130603                FETCH NEXT
+110800130603                FROM  CURCRT1
+110900130603                INTO  :lc_FetchCertNo
+111000130603           END-EXEC.
+111100130603
+111200130603           IF SQLCODE = 100
+111300130603              SET lb_EndOfFetch TO TRUE
+111400130603           ELSE
+111500130603              IF SQLSTATE NOT = lc_sqlStates
+111600130603                 MOVE SQLSTATE     TO WS-SQLSTATE
+111700130603                 MOVE SQLCODE      TO WS-DSP-SQLCODE
+111800130603                 MOVE "WRK-CURSOR" TO lncc_SelectFileName
+111900130603                 MOVE lncc_ErrorSelectingFile TO Ws-Sql-Err-Short-Descr
+112000130603                 PERFORM DISPLAYERROR
+112100130603              ELSE
+112200130603                 PERFORM String-Inv-Details
+112300130603              END-IF
+112400130603           END-IF.
+112500130603
+112600130603      **********
+112700130603       String-Inv-Details.
+112800130603      **********
+112900130603           STRING LC_FETCHINVCODE
+113000150219138770*           DELIMITED BY SIZE           ','
+113100150219138770*           li_TradeDate                ','
+113200150219138770*           'A'                         ','
+113300150219138770*           'N'                         ','
+113400150219138770*           lc-GrossAmt                 ','
+113500150219138770*           lc-UnitAmt                  ','
+113600150219138770*           lc-NetAmt                   ','
+113700150219138770*           lc_FetchCertNo              ';'
+113800150219138770            DELIMITED BY SIZE           ","
+113900150219138770            li_TradeDate                ","
+114000150219138770            lc_SplitOption1             ","
+114100150219138770            "N"                         ","
+114200150219138770            lc-UnitAmt                  ","
+114300150219138770            lc-GrossAmt                 ","
+114400150219138770            lc-NetAmt                   ","
+114500150219138770            lc_FetchCertNo              ";"
+114600130603                  DELIMITED BY SIZE
+114700130603                  INTO  lc_InvDataString
+114800130603           END-STRING.
+114900130603
+115000130603           MOVE ZEROES TO ln_Tally, ln_InvStringCnt.
+115100130603           INSPECT lc_InvDataString TALLYING ln_Tally
+115200130603                            FOR CHARACTERS BEFORE INITIAL lnc_RowDelim.
+115300130603           COMPUTE ln_InvStringCnt = ln_Tally + 1.
+115400130603           MOVE lc_InvDataString (1 : ln_InvStringCnt)
+115500130603                   to ltbc_invDataArr (ln_TotalCnt : ln_InvStringCnt).
+115600130603           COMPUTE ln_TotalCnt = ln_TotalCnt + ln_InvStringCnt.
+115700130603
+115800130603      *****************
+115900130603       Call-SACDSCCLC.
+116000130603      *****************
+116100130603           INITIALIZE  pc_RequestUserId,
+116200130603                       pc_LanguageCode,
+116300130603                       pc_RowThreshold,
+116400130603                       pc_IvrAcctNo,
+116500130603                       pc_ContRdmptnCode,
+116600130603                       pc_DispDscSched,
+116700130603                       pc_Currency,
+116800130603                       pc_WaiveDsc,
+116900130603                       pc_WaiveErf,
+117000130603                       pc_SplitTaxOption,
+117100130603                       pc_ReplaceAddTax,
+117200130603                       pc_FedTax,
+117300130603                       pc_ProvTax,
+117400130603                       pc_AcctGrossAmt,
+117500130603                       pc_AcctNetAmt,
+117600130603                       pc_AWDRedemptionFlag,
+117700130603                       pc_acctlevelReq,
+117800130603                       ptbc_invDataArr,
+117900130603                       pc_rowCount,
+118000130603                       pc_MessageCode,
+118100130603                       pc_MessageDesc.
+118200140627
+118300140627137988* Call routine to determine if contra redemption code passed in can
+118400140627137988* be use with the 'SEL' for the account type.  If not, use 'REGSEL'.
+118500140627137988* If 'REGSEL' cannot use with the 'SEL', use the default setup on
+118600140627137988* the account type setup for 'SEL'.  If no default, use the first
+118700140627137988* redemption code find on 'SEL' for the account type.
+118800140707137988     Move pc_ContrRedemCode TO pc_ContRdmptnCode.
+118900150610138770*137988     Perform GetRedemCode.
+119000130603
+119100130603           MOVE ln_AccountNo       TO pc_IvrAcctNo.
+119200140627137988*    MOVE 'REGSEL'           TO pc_ContRdmptnCode.
+119300130603           MOVE '001000'           TO pc_RowThreshold
+119400130603           MOVE 'E'                TO pc_LanguageCode.
+119500130603
+119600130603           CALL "SACDSCCLC" USING  pc_RequestUserId,
+119700130603                                   pc_LanguageCode,
+119800130603                                   pc_RowThreshold,
+119900130603                                   pc_IvrAcctNo,
+120000130603                                   pc_ContRdmptnCode,
+120100130603                                   pc_DispDscSched,
+120200130603                                   pc_Currency,
+120300130603                                   pc_WaiveDsc,
+120400130603                                   pc_WaiveErf,
+120500130603                                   pc_SplitTaxOption,
+120600130603                                   pc_ReplaceAddTax,
+120700130603                                   pc_FedTax,
+120800130603                                   pc_ProvTax,
+120900130603                                   pc_AcctGrossAmt,
+121000130603                                   pc_AcctNetAmt,
+121100130603                                   pc_AWDRedemptionFlag,
+121200130603                                   pc_acctlevelReq,
+121300130603                                   ltbc_invDataArr,
+121400130603                                   pc_rowCount,
+121500130603                                   pc_MessageCode,
+121600130603                                   pc_MessageDesc.
+121700171120            CANCEL "SACDSCCLC".
+121800130603
+121900130603      *    MOVE lc_rowCount         TO pc_rowCount
+122000130603      *    MOVE lc_MsgCode          TO pc_MessageCode
+122100130603      *    MOVE lc_MsgDesc          TO pc_MessageDesc.
+122200130603
+122300130711      *** R Miguel defect fix for QC 32392  ***
+122400130603           INITIALIZE li_AccNetAmt.
+122500130716           INITIALIZE li_AccGrsAmt.
+122600130603           IF pc_messageCode = "DSC00000"
+122700130603              EXEC SQL
+122800130716                SELECT SUM(COALESCE(Total_Gross_Amt, 0)),
+122900130716                       SUM(COALESCE(Total_Net_Amt, 0))
+123000130716                       INTO :li_AccGrsAmt,
+123100130716                            :li_AccNetAmt
+123200130603                FROM ACCSUM
+123300130711                WHERE IVR_ACC_NO = :ln_AccountNo
+123400130603              END-EXEC
+123500150616138770      ELSE
+123600150616138770        MOVE lnc_999      TO pc_ProcessCode
+123700130603           END-IF.
+123800130711      *** R Miguel defect fix for QC 32392  ***
+123900130603
+124000130603      * 113784.2 end
+124100131129      * RFS 129444 - Start QC 34709 and 34710 fix
+124200131129      * ---------------------------------
+124300131129       GET-INDUSTRY-FUND-CODE.
+124400131129      * ---------------------------------
+124500131129           INITIALIZE lc_IndustryFundCode.
+124600131129
+124700131129           EXEC SQL
+124800131129             SELECT INVP.INDUSTRY_FUND_CODE
+124900131129             INTO   :lc_IndustryFundCode
+125000131129             FROM   MFAINVP INVP
+125100131129
+125200131129             INNER JOIN MFAPRTCDP PRTCDP ON
+125300131129             INVP.PRODUCT_TYPE_CODE = PRTCDP.PRODUCT_TYPE_CODE
+125400131129
+125500131129             WHERE INVP.INVESTMENT_CODE = :lc_InvestmentCode
+125600131129           END-EXEC.
+125700131129
+125800131129           MOVE SQLSTATE                   TO lc_sqlStates.
+125900131129           IF NOT  lncc_sqlSuccessful
+126000131129              MOVE SQLSTATE                TO WS-SQLSTATE
+126100131129              MOVE SQLCODE                 TO WS-DSP-SQLCODE
+126200131129              MOVE "MFAINVP"               TO lncc_SelectFileName
+126300131129              MOVE lncc_ErrorSelectingFile TO Ws-Sql-Err-Short-Descr
+126400131129              PERFORM DISPLAYERROR
+126500131129           END-IF.
+126600131129
+126700131129      * RFS 129444 - End
+126800140627
+126900140627      * RFS 137988 - Begin
+127000140627      * To determine if contra redemption code passed in can be use
+127100140627      * with the 'SEL' for the account type.  If not, use 'REGSEL'.
+127200140627      * If 'REGSEL' cannot use with the 'SEL', use the default setup on
+127300140627      * the account type setup for 'SEL'.  If no default, use the first
+127400140627      * redemption code find on 'SEL' for the account type.
+127500140627      * ---------------------------------
+127600140627       GetRedemCode.
+127700140627      * ---------------------------------
+127800140627      * Check pass in redemption code existing on table MFAACCTXP for the
+127900140627      * account type on 'SEL' transaction.
+128000140627           INITIALIZE li_RecCnt
+128100140707                      lc_AccountTypeCode
+128200140627                      lc_ContrRedemCode.
+128300140707
+128400140707      * Get account type code.
+128500140707           EXEC SQL
+128600140707             SELECT ACCOUNT_TYPE_CODE
+128700140707             INTO   :lc_AccountTypeCode
+128800140707             FROM   MFAACCNTP ACCNTP
+128900140707
+129000140707             WHERE ACCNTP.ACCOUNT_NO = :ln_AccountNo
+129100140707           END-EXEC.
+129200140627
+129300140627      * Check pass in redemption code.
+129400140627           EXEC SQL
+129500140627             SELECT count(*)
+129600140627             INTO   :li_RecCnt
+129700140627             FROM   MFAACCTXP ACCTXP
+129800140627
+129900140627             WHERE ACCTXP.ACCOUNT_TYPE_CODE = :lc_AccountTypeCode
+130000140627               AND ACCTXP.CONTR_REDEM_CODE  = :pc_ContrRedemCode
+130100140627               AND ACCTXP.TRANS_TYPE_CODE   = "SEL"
+130200140627               AND ACCTXP.INVESTMENT_CODE   = :lc_InvestmentCode
+130300140627           END-EXEC.
+130400140627
+130500140627           IF li_RecCnt = 0
+130600140627             EXEC SQL
+130700140627               SELECT count(*)
+130800140627               INTO   :li_RecCnt
+130900140627               FROM   MFAACCTXP ACCTXP
+131000140627
+131100140627               WHERE ACCTXP.ACCOUNT_TYPE_CODE = :lc_AccountTypeCode
+131200140627                 AND ACCTXP.CONTR_REDEM_CODE  = :pc_ContrRedemCode
+131300140627                 AND ACCTXP.TRANS_TYPE_CODE   = "SEL"
+131400140627             END-EXEC
+131500140627           END-IF.
+131600140627
+131700140627      * Check redemption code = 'REGSEL'
+131800140627           IF li_RecCnt = 0
+131900140627             EXEC SQL
+132000140627               SELECT count(*)
+132100140627               INTO   :li_RecCnt
+132200140627               FROM   MFAACCTXP ACCTXP
+132300140627
+132400140627               WHERE ACCTXP.ACCOUNT_TYPE_CODE = :lc_AccountTypeCode
+132500140627                 AND ACCTXP.CONTR_REDEM_CODE  = "REGSEL"
+132600140627                 AND ACCTXP.TRANS_TYPE_CODE   = "SEL"
+132700140627                 AND ACCTXP.INVESTMENT_CODE   = :lc_InvestmentCode
+132800140627             END-EXEC
+132900140627             IF li_RecCnt > 0
+133000140627                MOVE "REGSEL"  TO lc_ContrRedemCode
+133100140627             END-IF
+133200140627           END-IF.
+133300140627
+133400140627           IF li_RecCnt = 0
+133500140627             EXEC SQL
+133600140627               SELECT count(*)
+133700140627               INTO   :li_RecCnt
+133800140627               FROM   MFAACCTXP ACCTXP
+133900140627
+134000140627               WHERE ACCTXP.ACCOUNT_TYPE_CODE = :lc_AccountTypeCode
+134100140627                 AND ACCTXP.CONTR_REDEM_CODE  = "REGSEL"
+134200140627                 AND ACCTXP.TRANS_TYPE_CODE   = "SEL"
+134300140627             END-EXEC
+134400140627             IF li_RecCnt > 0
+134500140627                MOVE "REGSEL"  TO lc_ContrRedemCode
+134600140627             END-IF
+134700140627           END-IF.
+134800140627
+134900140627      * Check default redemption code
+135000140627           IF li_RecCnt = 0 and lc_ContrRedemCode = " "
+135100140627             EXEC SQL
+135200140627               SELECT CONTR_REDEM_CODE
+135300140627               INTO   :lc_ContrRedemCode
+135400140627               FROM   MFAACCTXP ACCTXP
+135500140627
+135600140627               WHERE ACCTXP.ACCOUNT_TYPE_CODE = :lc_AccountTypeCode
+135700140627                 AND ACCTXP.DEFAULT_TXN_CODE  = "Y"
+135800140627                 AND ACCTXP.TRANS_TYPE_CODE   = "SEL"
+135900140627                 AND ACCTXP.INVESTMENT_CODE   = :lc_InvestmentCode
+136000140627               FETCH FIRST ROW ONLY
+136100140627             END-EXEC
+136200140627
+136300140627             MOVE SQLSTATE  TO  lc_sqlStates
+136400140627             IF lncc_sqlSuccessful
+136500140627                Add 1 to li_RecCnt
+136600140627             END-IF
+136700140627           END-IF.
+136800140627
+136900140627           IF li_RecCnt = 0 and lc_ContrRedemCode = " "
+137000140627             EXEC SQL
+137100140627               SELECT CONTR_REDEM_CODE
+137200140627               INTO   :lc_ContrRedemCode
+137300140627               FROM   MFAACCTXP ACCTXP
+137400140627
+137500140627               WHERE ACCTXP.ACCOUNT_TYPE_CODE = :lc_AccountTypeCode
+137600140627                 AND ACCTXP.DEFAULT_TXN_CODE  = "Y"
+137700140627                 AND ACCTXP.TRANS_TYPE_CODE   = "SEL"
+137800140627               FETCH FIRST ROW ONLY
+137900140627             END-EXEC
+138000140627
+138100140627             MOVE SQLSTATE  TO  lc_sqlStates
+138200140627             IF lncc_sqlSuccessful
+138300140627                Add 1 to li_RecCnt
+138400140627             END-IF
+138500140627           END-IF.
+138600140627
+138700140627      * Get the first redemption code on SEL
+138800140627           IF li_RecCnt = 0 and lc_ContrRedemCode = " "
+138900140627             EXEC SQL
+139000140627               SELECT CONTR_REDEM_CODE
+139100140627               INTO   :lc_ContrRedemCode
+139200140627               FROM   MFAACCTXP ACCTXP
+139300140627
+139400140627               WHERE ACCTXP.ACCOUNT_TYPE_CODE = :lc_AccountTypeCode
+139500140627                 AND ACCTXP.TRANS_TYPE_CODE   = "SEL"
+139600140627               FETCH FIRST ROW ONLY
+139700140627             END-EXEC
+139800140627
+139900140627             MOVE SQLSTATE  TO  lc_sqlStates
+140000140627             IF lncc_sqlSuccessful
+140100140627                Add 1 to li_RecCnt
+140200140627             END-IF
+140300140627           END-IF.
+140400140627
+140500140627           IF lc_ContrRedemCode NOT = " " and li_RecCnt > 0
+140600140627             MOVE lc_ContrRedemCode TO pc_ContRdmptnCode
+140700140627           END-IF.
+140800140627
+140900140627      * RFS 137988 - End
+141000210420      * RFS1110898 - Begin
+141100210420      * ---------------------------------
+141200210420       CHECK-TYPE-OF-REDEMPTION.
+141300210420      * ---------------------------------
+141400210420
+141500210420           INITIALIZE li_RedemCount
+141600210420
+141700210420           EXEC SQL
+141800210420             SELECT COUNT(1)
+141900210420               INTO :li_RedemCount
+142000210420             FROM QTEMP/WRKGICORDR WRKCRT
+142100210420             INNER JOIN QTEMP/INVSUM INVSUM ON
+142200210420              WRKCRT.CERTIFICATE_ID_NO = INVSUM.CERTIFICATE_ID_NO AND
+142300210420              WRKCRT.INVESTMENT_CODE   = INVSUM.INVESTMENT_CODE
+142400210420             WHERE WRKCRT.ACCOUNT_NO = :ln_AccountNo AND
+142500210420                   INVSUM.SPLIT_OPTION_CODE <> :lnc_A
+142600210420           END-EXEC.
+142700210420
+142800210420           MOVE SQLSTATE TO  lc_sqlStates.
+142900210420           EVALUATE TRUE
+143000210420            WHEN lncc_sqlSuccessful
+143100210420              CONTINUE
+143200210420            WHEN lncc_sqlEnd
+143300210420              INITIALIZE li_RedemCount
+143400210420            WHEN OTHER
+143500210420              MOVE SQLSTATE     TO WS-SQLSTATE
+143600210420              MOVE SQLCODE      TO WS-DSP-SQLCODE
+143700210420              MOVE "INVSUM"     TO lncc_SelectFileName
+143800210420              MOVE lncc_ErrorSelectingFile  TO Ws-Sql-Err-Short-Descr
+143900210420              PERFORM DISPLAYERROR
+144000210420           END-EVALUATE.
+144100210420
+144200210420      * RFS1110898 - End
+144300130305
+144301210722      *RFS1118005 - Starts
+144302210722      * ---------------------------------
+144303210722       VERIFY-FUNCTION-CODE SECTION.
+144304210722      * ---------------------------------
+144305210722           INITIALIZE lc_InvestmentStructure.
+144306210722           MOVE lc_InvestmentCode TO  lc_InvestmentCodeACINDSC
+144308210722
+144309210722           CALL "FXINRSTRF" USING
+144310210722                lc_InvestmentCodeACINDSC
+144311210722                lc_FunctionCode
+144312210722                lc_InvestmentStructure
+144313210722                lc_ACINDSCDeclareINRSTRF.
+144314210722
+144315210722           IF lc_InvestmentStructure NOT = SPACES
+144316210722              SET lnc_ACINDSCYes TO TRUE
+144317210722           END-IF.
+144318210722
+144319210722       VFC-EXIT.
+144320210722           EXIT.
+144321210722      *RFS1118005 - Ends
+144322210722
+144400130305      ******************************************************************
+144500130305      *  DisplayError                                                  *
+144600130305      ******************************************************************
+144700130305       DisplayError.
+144800130305           DISPLAY
+144900130305              " *** Error in " lc_CURRENT_PROGRAM
+145000130305              " SQLSTATE = "   WS-SQLSTATE
+145100130305              " SQLCODE = "    WS-DSP-SQLCODE
+145200130305           DISPLAY " *** " Ws-Sql-Err-Short-Descr.
+145300130305
+145400130301      ******************************************************************
+145500130301      *  END OF JOB                                                    *
+145600130301      ******************************************************************
+145700130301       END-JOB.
+145800130302           CLOSE GIC-CERTIFICATE-DETAILS.
+145900130301
+146000130301           GOBACK.
+146100130301
+146200030421      * ---------------------------------
+146300030421      * DSP-ERROR and FORCE-MSGW Routines
+146400030421      * ---------------------------------
+146500030710          COPY CPYSQLRTN.
+146600030421      *

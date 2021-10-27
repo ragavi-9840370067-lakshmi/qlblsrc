@@ -1,0 +1,1064 @@
+000100110719       IDENTIFICATION DIVISION.
+000200110930       PROGRAM-ID.    SRVFDAILY.
+000300110720       AUTHOR.        RajKumar A.
+000400110930       INSTALLATION.  L&T Financial Services Technology Inc.
+000500111116       DATE-WRITTEN.  20 July 2011.
+000600110719       DATE-COMPILED.
+000700110719      *****************************************************************
+000800110719      **   DESCRIPTION: This program has been adapted from SRVDAILY   *
+000900110719      **                It will be used by GrandFather clients        *
+001000110719      **   CALLED BY  : JOBTSRVFEE                                    *
+001100110719      **   PARAMETERS : Comm-Date (QBegin&QEnd)                       *
+001200110719      **                MthEnd-Flag                                   *
+001300110719      **                QtrEnd-Flag                                   *
+001400110719      **                Q7-Flag                                       *
+001500110719      **                DlyAccrual-Flag                               *
+001600110719      **                Comm-Freq                                     *
+001700120530      **                Comm-PerEnd                                   *
+001800110719      *****************************************************************
+001900110719      *                  C H A N G E   H I S T O R Y
+002000110719      *****************************************************************
+002100110719      *****************************************************************
+002200110719      * PROGRAMMER   *DATE OF CHANGE* DESCRIPTION OF CHANGE           *
+002300110719      *****************************************************************
+002400110721      * Raj Kumar A  * 2011/07/20 * Created this program for RFS64348 *
+002401140613      * Vinsfy J     * 2014/06/13 * Recompile for MFAACCATP           *
+002402200811      * Rajesh R     * 2020/08/11 * RFS185178 - Recompile for         *
+002403200811      *              *            * MFAFEESCLP                        *
+002500110719      *******************************************************************
+002600110719       ENVIRONMENT DIVISION.
+002700110719       CONFIGURATION SECTION.
+002800110719       SOURCE-COMPUTER. IBM-AS400.
+002900110719       OBJECT-COMPUTER. IBM-AS400.
+003000110719       SPECIAL-NAMES.
+003100110719           LOCAL-DATA IS WS-LOCAL.
+003200110719      /
+003300110719       INPUT-OUTPUT SECTION.
+003400110719       FILE-CONTROL.
+003500110719
+003600110719           SELECT  ACCOUNT
+003700110719                   ASSIGN TO DATABASE-MFAACCNTLA
+003800110719                   ORGANIZATION IS INDEXED
+003900110719                   ACCESS IS DYNAMIC
+004000110719                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+004100110928                   WITH DUPLICATES
+004200110928                   FILE STATUS IS lc_FileStatus.
+004300110719
+004400110719           SELECT  BUSINESS-DAY-FILE
+004500110719                   ASSIGN TO DATABASE-MFABUSDAP
+004600110719                   ORGANIZATION IS INDEXED
+004700110719                   ACCESS IS DYNAMIC
+004800110928                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+004900110928                   FILE STATUS IS lc_FileStatus.
+005000110719
+005100110719           SELECT  INVESTMENT-UNIT-PRICE
+005200110719                   ASSIGN TO DATABASE-MFAINVUPLB
+005300110719                   ORGANIZATION IS INDEXED
+005400110719                   ACCESS IS DYNAMIC
+005500110719                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+005600110928                   WITH DUPLICATES
+005700110928                   FILE STATUS IS lc_FileStatus.
+005800110719
+005900110719           SELECT  EXCHANGE-RATE-HISTORY
+006000110719                   ASSIGN TO DATABASE-MFAEXRHMP
+006100110719                   ORGANIZATION IS INDEXED
+006200110719                   ACCESS IS DYNAMIC
+006300110928                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+006400110928                   FILE STATUS IS lc_FileStatus.
+006500110719
+006600110719           SELECT  PROGRAM-EXCHANGE-RATE
+006700110719                   ASSIGN TO DATABASE-MFAPRGERP
+006800110719                   ORGANIZATION IS INDEXED
+006900110719                   ACCESS IS DYNAMIC
+007000110928                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+007100110928                   FILE STATUS IS lc_FileStatus.
+007200110719
+007300110719           SELECT  INVESTMENT
+007400110719                   ASSIGN TO DATABASE-MFAINVP
+007500110719                   ORGANIZATION IS INDEXED
+007600110719                   ACCESS IS DYNAMIC
+007700110928                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+007800110928                   FILE STATUS IS lc_FileStatus.
+007900110719
+008000110719           SELECT  TRAILER-PAYMENT
+008100120518                   ASSIGN TO DATABASE-MFAATRAPP
+008200110719                   ORGANIZATION IS INDEXED
+008300110719                   ACCESS IS DYNAMIC
+008400110719                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+008500110719                   WITH DUPLICATES
+008600110928                   FILE STATUS IS lc_FileStatus.
+008700110719
+008800110719           SELECT  DEALER-COMMISSIONS
+008900110719                   ASSIGN TO DATABASE-MFADEACMP
+009000110719                   ORGANIZATION IS INDEXED
+009100110719                   ACCESS IS RANDOM
+009200110719                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+009300110928                   FILE STATUS IS lc_FileStatus.
+009400110719
+009500110719       DATA DIVISION.
+009600110719       FILE SECTION.
+009700110719       FD  ACCOUNT
+009800110719           LABEL RECORDS ARE STANDARD.
+009900110719       01  ACC-REC.               COPY DD-ALL-FORMATS OF MFAACCNTLA.
+010000111116
+010100110719       FD  BUSINESS-DAY-FILE
+010200110719           LABEL RECORDS ARE STANDARD.
+010300110824       01  BUD-REC.               COPY DD-ALL-FORMATS OF MFABUSDAP.
+010400111116
+010500110719       FD  INVESTMENT-UNIT-PRICE
+010600110719           LABEL RECORDS ARE STANDARD.
+010700110719       01  IUP-REC.               COPY DD-ALL-FORMATS OF MFAINVUPLB.
+010800111116
+010900110719       FD  EXCHANGE-RATE-HISTORY
+011000110719           LABEL RECORDS ARE STANDARD.
+011100110719       01  EXCHANGE-RATE-HISTORY-REC.
+011200110719                                  COPY DD-ALL-FORMATS OF MFAEXRHMP.
+011300111116
+011400110719       FD  PROGRAM-EXCHANGE-RATE
+011500110719           LABEL RECORDS ARE STANDARD.
+011600110719       01  PROGRAM-EXCHANGE-RATE-REC.
+011700111116                                  COPY DD-ALL-FORMATS OF MFAPRGERP.
+011800111116
+011900110719       FD  INVESTMENT
+012000110719           LABEL RECORDS ARE STANDARD.
+012100111116       01  IVS-REC.               COPY DD-ALL-FORMATS OF MFAINVP.
+012200111116
+012300110719       FD  TRAILER-PAYMENT
+012400110719           LABEL RECORDS ARE STANDARD.
+012500111116       01  TRAILER-PAYMENT-REC.   COPY DD-ALL-FORMATS OF MFAATRAPLB.
+012600111116
+012700110719       FD  DEALER-COMMISSIONS
+012800110719           LABEL RECORDS ARE STANDARD.
+012900110719       01  DEALER-COMMISSIONS-REC. COPY DD-ALL-FORMATS OF MFADEACMP.
+013000110719      /
+013100110719
+013200110719       WORKING-STORAGE SECTION.
+013300110719
+013400110928       01  lc_FileStatus                     PIC X(02).
+013500110928
+013600110823       01  lc_Constants.
+013700110928           03 lncc_SRVFEE                    PIC  X(10) VALUE "SRVFEE".
+013800111116           03 lncc_BYSRV                     PIC  X(05) VALUE "BYSRV".
+013900110928           03 lncc_SRVF                      PIC  X(04) VALUE "SRVF".
+014000110823           03 lncc_Y                         PIC  X(01) VALUE "Y".
+014100110825           03 lncc_N                         PIC  X(01) VALUE "N".
+014200110823           03 lncc_H                         PIC  X(01) VALUE "H".
+014300110823           03 lncc_V                         PIC  X(01) VALUE "V".
+014400111116           03 lncc_1                         PIC  9(01) VALUE  1.
+014500110825           03 lncc_2                         PIC  X(01) VALUE "2".
+014600110825           03 lncc_3                         PIC  X(01) VALUE "3".
+014700110825           03 lncc_4                         PIC  X(01) VALUE "4".
+014800110825           03 lncc_5                         PIC  X(01) VALUE "5".
+014900110825           03 lncc_12                        PIC  X(02) VALUE "12".
+015000110825           03 lncc_001                       PIC  X(03) VALUE "001".
+015100110825           03 lncc_CAD                       PIC  X(03) VALUE "CAD".
+015200110825           03 lncc_ONE                       PIC  X(03) VALUE "ONE".
+015300110825           03 lncc_MO                        PIC  X(02) VALUE "MO".
+015400110825           03 lncc_QT                        PIC  X(02) VALUE "QT".
+015500110825           03 lncc_Q7                        PIC  X(02) VALUE "Q7".
+015600110825           03 lncc_Frq                       PIC  X(03) VALUE "Frq".
+015700111116           03 lncc_ErrFetchingCursor         PIC  X(80)
+015800110825               VALUE "Error while fetching cursor".
+015900111116           03 lncc_ErrOpeningCursor          PIC  X(80)
+016000110825               VALUE "Error while Opening cursor ".
+016100111116           03 lncc_ErrWhileInserting         PIC  X(80)
+016200120518               VALUE "Error while Inserting      ".
+016300120518           03 lncc_ErrWhileSelecting         PIC  X(80)
+016400120518               VALUE "Error while Selecting      ".
+016500111201
+016600111201       01  lc_ErrCode                    PIC X(02)  VALUE SPACES.
+016700111201           88 lb_ErrOK                   VALUE SPACES.
+016800111201           88 lb_Err01                   VALUE "01".
+016900111201           88 lb_Err02                   VALUE "02".
+017000111201      *    88 lb_Err03                   VALUE "03".
+017100111201      *    88 lb_Err04                   VALUE "04".
+017200111201
+017300110823       01  lc_MiscFields.
+017400111121           03 ln_OpeningBalance          PIC 9(09)V9(3) VALUE 0 COMP-3.
+017500111121           03 ln_OpeningBalance_G        PIC 9(09)V9(3) VALUE 0 COMP-3.
+017600111121           03 ln_CarryForward            PIC 9(09)V9(3) VALUE 0 COMP-3.
+017700111121           03 ln_CarryForward_G          PIC 9(09)V9(3) VALUE 0 COMP-3.
+017800111121           03 ln_RunningBalance_G        PIC 9(09)V9(3) VALUE 0 COMP-3.
+017900111201           03 li_Time.
+018000111201              05  li_Hh                      PIC  9(02).
+018100111201              05  li_Mm                      PIC  9(02).
+018200111201              05  li_Ss                      PIC  9(02).
+018300111201              05  li_Tt                      PIC  9(02).
+018400111121           03 lc_DlrCode                     PIC  X(04) VALUE SPACES.
+018500111121           03 li_LastPrice                   PIC  9(04)V9(4).
+018600111121           03 ln_LastExchangeRate            PIC  9(02)V9(7).
+018700111121           03 lc_SameBalance                 PIC  X(01) VALUE "N".
+018800111121           03 lc_ExchangeRateType            PIC  X(01) VALUE " ".
+018900111121           03 lc_SplitServFeeSW              PIC  X(01) VALUE "N".
+019000111122           03 lc_InvCode                     PIC  X(05) VALUE SPACES.
+019100111122           03 lc_DlrInv_RateType             PIC  X(01) VALUE SPACES.
+019200111121           03 li_AccountNoSv                 PIC S9(09) VALUE 0.
+019300111121           03 lc_InvestCodeSv                PIC  X(05) VALUE SPACES.
+019400111122           03 lc_Schedule                    PIC  X(04) VALUE SPACES.
+019500111121           03 lc_TrailerRateType             PIC  X(01) VALUE SPACES.
+019600120404           03 ln_ExchangeRate                PIC  S9(02)V9(07) COMP-3.
+019700110823
+019800111201       01  lc_Flags.
+019900111121           03 lc_ProcessDealer               PIC  X(01).
+020000111121              88  lb_ProcessDealerYes        VALUE "Y".
+020100111121              88  lb_ProcessDealerNo         VALUE "N" " ".
+020200111003
+020300111121           03 lc_SrvfeeModFlag               PIC  X(01).
+020400111121              88 lb_SrvfeeModYes             VALUE "Y".
+020500111121              88 lb_SrvfeeModNo              VALUE "N" " ".
+020600111121
+020700111121           03 lc_BusdayArrayEnd              PIC  X(01).
+020800111121              88 lb_BusdayArrayEndYes        VALUE "Y".
+020900111121              88 lb_BusdayArrayEndNo         VALUE "N" " ".
+021000111121
+021100111121           03 lb_EndOfCursorFlag             PIC 1.
+021200111121              88  lb_EndOfCursorTrue         VALUE B"1".
+021300111121              88  lb_EndOfCursorFalse        VALUE B"0".
+021400111121
+021500111121           03 lc_LoopthruPrice               PIC  X(01).
+021600111121              88 lb_BeginSearch              VALUE "Y".
+021700111121              88 lb_EndofSearch              VALUE "N" " ".
+021800110825
+021900111121           03 lc_BusDay                      PIC  X(01).
+022000111121              88 lb_BusDayFound              VALUE "Y".
+022100111121              88 lb_BusDayNotFound           VALUE "N" " ".
+022200111121
+022300111121           03 lc_Invest                      PIC  X(01).
+022400111121              88 lb_InvestValKey             VALUE "Y".
+022500111121              88 lb_InvestInValKey           VALUE "N" " ".
+022600111121
+022700111121           03 lc_ProgExchRate                PIC  X(01).
+022800111121              88 lb_ProgExchRatevalKey       VALUE "Y".
+022900111121              88 lb_ProgExchRateInvalKey     VALUE "N" " ".
+023000111121
+023100111121           03 lc_EOFInvUnitPrice             PIC  X(01).
+023200111121              88 lb_EOFInvUnitPriceYes       VALUE "Y".
+023300111121              88 lb_EOFInvUnitPriceNo        VALUE "N" " ".
+023400111121
+023500111121           03 lc_ExchRateHis                 PIC  X(01).
+023600111121              88 lb_ExchRateHisValKey        VALUE "Y".
+023700111121              88 lb_ExchRateHisInValKey      VALUE "N" " ".
+023800111121
+023900111121           03 lc_EOFExchRateHist             PIC  X(01).
+024000111121              88 lb_EOFExchRateHistYes       VALUE "Y".
+024100111121              88 lb_EOFExchRateHistNo        VALUE "N" " ".
+024200111121
+024300111121           03 lc_DealerComm                  PIC  X(01).
+024400111121              88 lb_DealerCommValKey         VALUE "Y".
+024500111121              88 lb_DealerCommInValKey       VALUE "N" " ".
+024600111121
+024700111121           03 lc_TrailerPaymt                PIC  X(01).
+024800111121              88 lb_TrailerPaymtValKey       VALUE "Y".
+024900111121              88 lb_TrailerPaymtInValKey     VALUE "N" " ".
+025000111121
+025100111121           03 lc_EOFTrailerPymt              PIC  X(01).
+025200111121              88 lb_EOFTrailerPymtYes        VALUE "Y".
+025300111121              88 lb_EOFTrailerPymtNo         VALUE "N" " ".
+025400110719
+025500110823        01 lc_AccountInvArray.
+025600111121              07 li_AccountNo                PIC S9(09).
+025700111121              07 lc_InvestmentCode           PIC  X(05).
+025800111121              07 lc_DealerCode               PIC  X(04).
+025900111121              07 lc_DealerRepCode            PIC  X(06).
+026000111121              07 lc_FeeSchedule              PIC  X(05).
+026100111121              07 lc_SrvFreqCode              PIC  X(02).
+026200111121
+026300111121        01 lc_PrvAccountInvArray.
+026400111121              07 li_PrvAccountNo             PIC S9(09).
+026500111121              07 lc_PrvInvestmentCode        PIC  X(05).
+026600111121              07 lc_PrvDealerCode            PIC  X(04).
+026700111121              07 lc_PrvDealerRepCode         PIC  X(06).
+026800111121              07 lc_PrvScheduleCode          PIC  X(05).
+026900111121              07 lc_PrvSrvFreqCode           PIC  X(02).
+027000110726
+027100110823        01 lc_BusinessDayArray.
+027200111201           03 lc_BusinessDayEntry            OCCURS 100 TIMES
+027300111201                                  ASCENDING  KEY IS li_BusDate
+027400111201                                             INDEXED BY lx_Bud.
+027500111201              05 li_BusDate                  PIC  9(08).
+027600111201              05 ln_BusExchangeRate          PIC  9(02)V9(07) COMP-3.
+027700111201              05 ln_BusPrice                 PIC  9(04)V9999  COMP-3.
+027800111201              05 lc_BusDayEnd                PIC  X(01).
+027900110719
+028000120518        01 li_DlrStrDate                     PIC S9(08).
+028100111201        01 li_DlrStrDateN       REDEFINES li_DlrStrDate.
+028200120518           03 li_DlrStrYYYYMM                PIC S9(06).
+028300111201           03 li_DlrStrYYYYMMN  REDEFINES li_DlrStrYYYYMM.
+028400120518              05 li_DlrStrYYYY               PIC S9(04).
+028500120518              05 li_DlrStrMM                 PIC S9(02).
+028600120518           03 li_DlrStrDD                    PIC S9(02).
+028700111003
+028800120518        01 li_DlrEndDate                     PIC S9(08).
+028900111201        01 li_DlrEndDateN       REDEFINES li_DlrEndDate.
+029000120518           03 li_DlrEndYYYYMM                PIC S9(06).
+029100111201           03 li_DlrEndYYYYMMN  REDEFINES li_DlrEndYYYYMM.
+029200120518              05 li_DlrEndYYYY               PIC S9(04).
+029300120518              05 li_DlrEndMM                 PIC S9(02).
+029400120518           03 li_DlrEndDD                    PIC S9(02).
+029500120530
+029600120530        01 li_SrvPerEnd                      PIC S9(08).
+029700120530           03 li_SrvPerEndYYYY               PIC S9(04).
+029800120530           03 li_SrvPerEndMM                 PIC S9(02).
+029900120530           03 li_SrvPerEndDD                 PIC S9(02).
+030000111003
+030100120518        01 li_CompareDate                    PIC S9(08).
+030200111201        01 li_CompareDateN      REDEFINES li_CompareDate.
+030300120518           05 li_CompareYYYYMM               PIC S9(06).
+030400111201           05 li_CompareYYYYMMN REDEFINES li_CompareYYYYMM.
+030500120518              07 li_CompareYYYY              PIC S9(04).
+030600120518              07 li_CompareMM                PIC S9(02).
+030700111121           05 li_CompareDD                   PIC  9(02).
+030800111003
+030900111121        01 li_MonthStrDate                   PIC  9(08).
+031000111201        01 li_MonthStrDateN     REDEFINES li_MonthStrDate.
+031100111121           03 li_MonthStrDateYYYY            PIC  9(04).
+031200111121           03 li_MonthStrDateMM              PIC  9(02).
+031300111121           03 li_MonthStrDateDD              PIC  9(02).
+031400111003
+031500111121        01 li_QuarterStrDate                 PIC  9(08).
+031600111201        01 li_QuarterStrDateN   REDEFINES li_QuarterStrDate.
+031700111121           03 li_QuarterStrDateYYYY          PIC  9(04).
+031800111121           03 li_QuarterStrDateMM            PIC  9(02).
+031900111121           03 li_QuarterStrDateDD            PIC  9(02).
+032000111003
+032100111121        01 li_QuarterStrDate7                PIC  9(08).
+032200111201        01 li_QuarterStrDate7N   REDEFINES li_QuarterStrDate7.
+032300111121           03 li_QuarterStrDate7YYYY         PIC  9(04).
+032400111121           03 li_QuarterStrDate7MM           PIC  9(02).
+032500111121           03 li_QuarterStrDate7DD           PIC  9(02).
+032600111003
+032700111121        01 li_LastMonthEnd                   PIC  9(08).
+032800111201        01 li_LastMonthEndN      REDEFINES li_LastMonthEnd.
+032900111121           03 li_LastMonthEndYYYY            PIC  9(04).
+033000111121           03 li_LastMonthEndMM              PIC  9(02).
+033100111121           03 li_LastMonthEndDD              PIC  9(02).
+033200111003
+033300111121        01 li_LastQuarterEnd                 PIC  9(08).
+033400111201        01 li_LastQuarterEndN    REDEFINES li_LastQuarterEnd.
+033500111121           03 li_LastQuarterEndYYYY          PIC  9(04).
+033600111121           03 li_LastQuarterEndMM            PIC  9(02).
+033700111121           03 li_LastQuarterEndDD            PIC  9(02).
+033800111003
+033900111121        01 li_LastQuarterEnd7                PIC  9(08).
+034000111201        01 li_LastQuarterEnd7N   REDEFINES li_LastQuarterEnd7.
+034100111201           03 li_LastQuarterEnd7YYYY         PIC  9(04).
+034200111201           03 li_LastQuarterEnd7MM           PIC  9(02).
+034300111201           03 li_LastQuarterEnd7DD           PIC  9(02).
+034400111003
+034500111201        01 li_BeginDatePass                  PIC  9(08).
+034600111201        01 li_BeginDatePassN     REDEFINES li_BeginDatePass.
+034700111201           03 li_BeginDatePassYYYYMM         PIC  9(06).
+034800111201           03 li_BeginDatePassDD             PIC  9(02).
+034900111003
+035000111201        01 li_EndDatePass                    PIC  9(08).
+035100111201        01 li_EndDatePassN       REDEFINES li_EndDatePass.
+035200111201           03 li_EndDatePassYYYYMM           PIC  9(06).
+035300111201           03 li_EndDatePassDD               PIC  9(02).
+035400111003
+035500110930        01 lc_VariableUnitFields.
+035600111201           03 ln_Price                       PIC S9(04)V9999 COMP-3.
+035700110930           03 lc_SrvfdtParm.
+035800111201              05 lc_SfdtOption               PIC  X(03).
+035900111201              05 ld_SfdtProcessDate          PIC S9(08).
+036000111201              05 lc_SfdtInvestCode           PIC  X(05).
+036100111201              05 li_SfdtAccountNo            PIC S9(09).
+036200111201              05 lc_SfdtReturnCode           PIC  X(03).
+036300110719
+036400111201      *-----------------------                                         **
+036500110719      **  SQL variables
+036600111201      *-----------------------
+036700110930       01  lc_ProgramName                  PIC X(10) VALUE "SRVFDAILY".
+036800110719
+036900110719       01  lc_SQLLog_Variables.
+037000111201           03 lc_RoutineName               PIC  X(25).
+037100111201           03 lc_SQLErrData                PIC  X(1780) VALUE SPACES.
+037200111201           03 lc_SQLStats                  PIC  X(1966) VALUE SPACES.
+037300111201           03 lc_SQLErrReply               PIC  X(01)   VALUE " ".
+037400111201
+037500111201       01  lc_SQLErrStatement              PIC  X(50)   VALUE SPACES.
+037600111201           88 lb_Stmt01
+037700111201              VALUE "Err OPEN  CURSOR lcu_ACCINVCUR".
+037800111201           88 lb_stmt02
+037900111201              VALUE "Err FETCH CURSOR lcu_ACCINVCUR".
+038000111201
+038100111201           Copy CPYSQLFLD
+038200110930               REPLACING == "CURRENT_PROGRAM" == BY == "SRVFDAILY" ==.
+038300110719           EXEC SQL
+038400110719               INCLUDE SQLCA
+038500110719           END-EXEC.
+038600110719
+038700111201      *COPY THE PROCESS-DATE
+038800110726           COPY PRCDTWS.
+038900111201      *------------------------
+039000110719       LINKAGE SECTION.
+039100111201      *------------------------
+039200111201        01 pi_Date                          PIC  9(16).
+039300111003        01 pi_DateN               REDEFINES pi_Date.
+039400111201           03 pi_QBegin                     PIC  9(08).
+039500111003           03 pi_QBeginN          REDEFINES pi_QBegin.
+039600111201              05 pi_QBeginYYYYMM            PIC  9(06).
+039700111003              05 pi_QBeginYYYYMMN REDEFINES pi_QBeginYYYYMM.
+039800111201                 07 pi_QBeginYYYY           PIC  9(04).
+039900111201                 07 pi_QBeginMM             PIC  9(02).
+040000111201              05 pi_QBeginDD                PIC  9(02).
+040100111201           03 pi_QEnd                       PIC  9(08).
+040200111003           03 pi_QEndN            REDEFINES pi_QEnd.
+040300111201              05 pi_QEndYYYYMM              PIC  9(06).
+040400111003              05 pi_QEndYYYYMMN   REDEFINES pi_QEndYYYYMM.
+040500111201                 07 pi_QEndYYYY             PIC  9(04).
+040600111201                 07 pi_QEndMM               PIC  9(02).
+040700111201              05 pi_QEndDD                  PIC  9(02).
+040800111201        01 pi_MthEnd                        PIC  X(01).
+040900111201        01 pi_QtrEnd                        PIC  X(01).
+041000111201        01 pi_Q7                            PIC  X(01).
+041100111201        01 pi_DlyAccrual                    PIC  X(01).
+041200111201        01 pi_Frq                           PIC  X(02).
+041300120531        01 pi_PerEnd                        PIC  9(08).
+041400110930
+041500110719      *****************
+041600110930       PROCEDURE DIVISION USING pi_Date,
+041700110930                                pi_MthEnd,
+041800110930                                pi_QtrEnd,
+041900110930                                pi_Q7,
+042000110930                                pi_DlyAccrual,
+042100120531                                pi_Frq,
+042200120531                                pi_PerEnd.
+042300110719
+042400110719      *--------*
+042500110719       MAINLINE.
+042600110719      *--------*
+042700110823
+042800110720           PERFORM  Initial_Logic.
+042900110823           PERFORM  Create_AccountInvCursor.
+043000110823           PERFORM  Fetch_AccountInvCursor.
+043100110823           PERFORM  Process_AccountInvCursor
+043200110725                                       UNTIL lb_EndOfCursorTrue.
+043300110823           PERFORM  Close_AccountInvCursor.
+043400110823           PERFORM  EndOfProgram.
+043500110823
+043600111201      *---------------------------
+043700110721       Initial_Logic.
+043800111201      *---------------------------
+043900110726
+044000111124            ACCEPT li_Time FROM TIME.
+044100111201            DISPLAY "START SRVFDAILY : " li_Hh ":" li_Mm ":" li_Ss
+044200111201      *************
+044300111201      * OPEN FILES
+044400111201      *************
+044500110928            OPEN    INPUT       INVESTMENT
+044600110928            IF lc_FileStatus NOT = ZEROES
+044700110928              DISPLAY "ERR OPEN INVESTMENT           " lc_FileStatus
+044800110928            END-IF.
+044900110928
+045000110928            OPEN    INPUT      INVESTMENT-UNIT-PRICE
+045100110928            IF lc_FileStatus NOT = ZEROES
+045200110928              DISPLAY "ERR OPEN INVESTMENT-UNIT-PRICE" lc_FileStatus
+045300110928            END-IF.
+045400110928
+045500110928            OPEN    INPUT      EXCHANGE-RATE-HISTORY
+045600110928            IF lc_FileStatus NOT = ZEROES
+045700110928              DISPLAY "ERR OPEN EXCHANGE-RATE-HISTORY" lc_FileStatus
+045800110928            END-IF.
+045900110928
+046000110928            OPEN    INPUT      BUSINESS-DAY-FILE
+046100110928            IF lc_FileStatus NOT = ZEROES
+046200110928              DISPLAY "ERR OPEN BUSINESS-DAY-FILE    " lc_FileStatus
+046300110928            END-IF.
+046400110928
+046500110928            OPEN    INPUT      ACCOUNT
+046600110928            IF lc_FileStatus NOT = ZEROES
+046700110928              DISPLAY "ERR OPEN ACCOUNT              " lc_FileStatus
+046800110928            END-IF.
+046900110928
+047000110928            OPEN    INPUT      PROGRAM-EXCHANGE-RATE
+047100110928            IF lc_FileStatus NOT = ZEROES
+047200110928              DISPLAY "ERR OPEN PROGRAM-EXCHANGE-RATE" lc_FileStatus
+047300110928            END-IF.
+047400110928
+047500110928            OPEN    INPUT      DEALER-COMMISSIONS
+047600110928            IF lc_FileStatus NOT = ZEROES
+047700110928              DISPLAY "ERR OPEN DEALER-COMMISSIONS   " lc_FileStatus
+047800110928            END-IF.
+047900110928
+048000110928            OPEN    INPUT      TRAILER-PAYMENT
+048100110928            IF lc_FileStatus NOT = ZEROES
+048200110928              DISPLAY "ERR OPEN TRAILER-PAYMENT      " lc_FileStatus
+048300110928            END-IF.
+048400110928
+048500110823      *    Check SRVFEE Module exist or not
+048600110823
+048700110823           INITIALIZE lc_SrvfeeModFlag.
+048800110823
+048900110823           CALL "RTVMODAUTH" USING lncc_SRVFEE lc_SrvfeeModFlag.
+049000110823           IF lb_SrvfeeModNo
+049100110823              PERFORM EndOfProgram
+049200110823           END-IF.
+049300110823
+049400110930           MOVE pi_QBegin            TO  li_DlrStrDate
+049500110930                                         li_BeginDatePass.
+049600110930           MOVE pi_QEnd              TO  li_DlrEndDate
+049700110930                                         li_EndDatePass.
+049800120530           MOVE pi_PerEnd            TO  li_SrvPerEnd.
+049900110726
+050000110726      ** Determine Exchange-Rate to be used for processing
+050100110726
+050200110726           MOVE "SRVCALC1"     TO PROGRAM-CODE
+050300110726                               OF PROGRAM-EXCHANGE-RATE.
+050400110726           MOVE "DEFAULT"      TO PROGRAM-ACTION
+050500110726                               OF PROGRAM-EXCHANGE-RATE.
+050600110726
+050700110726           READ PROGRAM-EXCHANGE-RATE
+050800110726           INVALID KEY
+050900110825             PERFORM EndOfProgram
+051000110726           END-READ.
+051100110726
+051200110726           MOVE EXCHANGE-RATE-TYPE OF PROGRAM-EXCHANGE-RATE
+051300110824                               TO lc_ExchangeRateType.
+051400110726      ** End Exchange-Rate
+051500110721
+051600110823            INITIALIZE lc_PrvAccountInvArray.
+051700110823            PERFORM    Load_BusinessDayArray.
+051800110824
+051900110824            MOVE LOW-VALUES   TO DEALER-CODE OF ACCOUNT
+052000110824                                 DEALER-REP-CODE OF ACCOUNT.
+052100110823
+052200111201      *-----------------------
+052300110823       Create_AccountInvCursor.
+052400111201      *-----------------------
+052500110823
+052600111201           MOVE "Create_AccountInvCursor " TO lc_RoutineName
+052700110721           EXEC SQL
+052800111201            DECLARE lcu_ACCINVCUR   CURSOR  FOR
+052900110823            SELECT  accivp.account_no,
+053000110823                    accivp.investment_code,
+053100110823                    accntp.dealer_code,
+053200110823                    accntp.dealer_rep_code,
+053300110823                    feesclp.fee_schedule,
+053400110823                    deacmp.srv_frequency_code
+053500110823            FROM    MFAFEESCLP feesclp
+053600110823            LEFT  OUTER JOIN MFAINVSXP invsxp ON
+053700110823                    feesclp.investment_structure_code =
+053800110823                    invsxp.investment_structure_code
+053900110721
+054000110823            INNER JOIN MFAACCIVP accivp ON
+054100110823                    invsxp.investment_code  = accivp.investment_code OR
+054200110823                    feesclp.investment_code = accivp.investment_code
+054300110721
+054400110823            INNER JOIN MFAACCNTP accntp  ON
+054500110823                    accntp.account_no = accivp.account_no
+054600110721
+054700110823            INNER JOIN MFADEACMP deacmp   ON
+054800110823                    deacmp.dealer_code = accntp.dealer_code  AND
+054900110823                    deacmp.currency = :lncc_CAD
+055000110721
+055100110823           EXCEPTION JOIN MFAACCATP accatp ON
+055200110823                    accatp.account_no = accntp.account_no    AND
+055300110823                    accatp.account_attribute_code = :lncc_BYSRV
+055400110721
+055500110823           EXCEPTION JOIN MFAAIVATP aivatp  ON
+055600110823                    aivatp.account_no = accivp.account_no           AND
+055700110823                    aivatp.investment_code = accivp.investment_code AND
+055800110825                    aivatp.account_inv_attribute_code = :lncc_BYSRV
+055900110721
+056000110823           EXCEPTION JOIN MFAFEESCHP feeschp ON
+056100110823                    feeschp.fee_schedule = feesclp.fee_schedule     AND
+056200110823                    feeschp.rate_rule IN (:lncc_4, :lncc_5)
+056300110721
+056400110721           WHERE
+056500110928                    feesclp.fee_type_code       = :lncc_SRVF
+056600110823              AND   feesclp.dealer_code         = " "
+056700110823              AND   feesclp.dealer_rep_code     = " "
+056800110823              AND   feesclp.account_no          = 0
+056900110823              AND   accntp.dealer_code         <> " "
+057000110823           ORDER BY accivp.investment_code,
+057100110823                    accntp.dealer_code,
+057200110823                    accntp.dealer_rep_code
+057300110721           END-EXEC.
+057400110721
+057500110721           EXEC SQL
+057600111201               OPEN lcu_ACCINVCUR
+057700110721           END-EXEC.
+057800110823
+057900110721           MOVE SQLSTATE TO lc_sqlStates
+058000110721           IF NOT lncc_sqlSuccessful
+058100111201              SET  lb_Err01              TO TRUE
+058200111201              SET  lb_Stmt01             TO TRUE
+058300111201              PERFORM SQL_ErrorRoutine
+058400110721           END-IF.
+058500110721
+058600111201      *-----------------------
+058700110823       Fetch_AccountInvCursor.
+058800111201      *-----------------------
+058900111201           MOVE "Fetch_AccountInvCursor  " TO lc_RoutineName
+059000110930           INITIALIZE lc_AccountInvArray.
+059100110721            EXEC SQL
+059200111201              FETCH NEXT FROM lcu_ACCINVCUR
+059300110823               INTO :lc_AccountInvArray
+059400110721            END-EXEC.
+059500110823
+059600110721             MOVE SQLSTATE TO lc_sqlStates.
+059700110721             EVALUATE TRUE
+059800110721               WHEN lncc_sqlSuccessful
+059900110721                 CONTINUE
+060000110721               WHEN lncc_sqlEnd
+060100110721                 SET lb_EndOfCursorTrue TO TRUE
+060200110721               WHEN OTHER
+060300111201                 SET lb_Err02           TO TRUE
+060400111201                 SET lb_Stmt02          TO TRUE
+060500111201                 PERFORM SQL_ErrorRoutine
+060600110726             END-EVALUATE.
+060700110823
+060800111201      *----------------------
+060900110823       Process_AccountInvCursor.
+061000111201      *----------------------
+061100110823
+061200111201           MOVE "Process_AccountInvCursor" TO lc_RoutineName
+061300110823           IF lc_DealerCode  NOT= lc_PrvDealerCode
+061400110825             PERFORM Check_IfBypassDealer
+061500110721           END-IF.
+061600110825           IF lb_ProcessDealerYes
+061700110825             IF lc_InvestmentCode NOT= lc_PrvInvestmentCode
+061800110823               Perform Load_Prices VARYING lx_Bud  FROM 1 BY 1 UNTIL
+061900110928                              lc_BusDayEnd(lx_Bud) = lncc_Y
+062000110825               MOVE lc_InvestmentCode TO  lc_PrvInvestmentCode
+062100110721             END-IF
+062200111123             SET lx_Bud TO 1
+062300111123             SEARCH lc_BusinessDayEntry VARYING lx_Bud
+062400110930              AT END
+062500110930                 SET  lb_BusDayNotFound TO TRUE
+062600110930              WHEN li_BusDate(lx_Bud) = li_DlrStrDate
+062700110930                 SET  lb_BusDayFound    TO TRUE
+062800110824             END-SEARCH
+062900110824              IF lb_BusDayFound
+063000110930                INITIALIZE lc_BusdayArrayEnd
+063100110930                PERFORM  UNTIL lb_BusdayArrayEndYes
+063200110824                 MOVE lncc_ONE                  TO lc_SfdtOption
+063300110824                 MOVE li_BusDate(lx_Bud)        TO ld_SfdtProcessDate
+063400110824                 MOVE lc_InvestmentCode         TO lc_SfdtInvestCode
+063500110825                 MOVE li_AccountNo              TO li_SfdtAccountNo
+063600110824                 MOVE " "                       TO lc_SfdtReturnCode
+063700110824                 CALL "SRVFDT"   USING  lc_SfdtOption,
+063800110824                                        ld_SfdtProcessDate,
+063900110824                                        lc_SfdtInvestCode,
+064000110824                                        li_SfdtAccountNo,
+064100110930                                        lc_SfdtReturnCode
+064200110824
+064300110930                  IF lc_SfdtReturnCode NOT = SPACES
+064400110824                    DISPLAY "PROBLEM CALC VARIABLE UNIT"
+064500110824                    DISPLAY "ACCOUNT NO = " li_SfdtAccountNo
+064600110824                    DISPLAY "INVESTMENT = " lc_SfdtInvestCode
+064700110824                    DISPLAY "DATE CAL = "   ld_SfdtProcessDate
+064800110824                  ELSE
+064900110824                    MOVE li_BusDate(lx_Bud)       TO ld_SfdtProcessDate
+065000110824                    MOVE lc_InvestmentCode        TO lc_SfdtInvestCode
+065100110824                    MOVE ln_BusPrice(lx_Bud)      TO ln_Price
+065200120404                    MOVE ln_BusExchangeRate(lx_Bud)
+065300120404                                                  TO ln_ExchangeRate
+065400110824                    PERFORM Insert_MFAACIDPP
+065500110824                  END-IF
+065600110930                  SET lx_Bud UP BY 1
+065700110930                  IF lc_BusDayEnd(lx_Bud) =     lncc_Y
+065800110930                    SET lb_BusdayArrayEndYes TO True
+065900110930                  END-IF
+066000110930                END-PERFORM
+066100110930              END-IF
+066200110824           END-IF
+066300110929           MOVE    lc_AccountInvArray TO lc_PrvAccountInvArray.
+066400110929           Perform Fetch_AccountInvCursor.
+066500110824
+066600111201      *----------------------
+066700110721       Insert_MFAACIDPP.
+066800111201      *----------------------
+066900120404             MOVE "INSERT MFAACIDPP"   TO lc_SQLErrStatement
+067000110721             EXEC SQL
+067100110726              INSERT INTO MFAACIDPP
+067200110825              SELECT :lc_DealerCode,
+067300110825                     :lc_DealerRepCode,
+067400110824                     acidup.investment_code,
+067500110824                     acisvp.orig_investment_code,
+067600110824                     acidup.account_no,
+067700110824                     acisvp.effective_date,
+067800110824                     acisvp.lower_limit_days,
+067900110824                     acidup.process_date,
+068000110824                     acisvp.rate_rule,
+068100110825                     :lc_FeeSchedule,
+068200120404                     0,
+068300120404                     :ln_Price,
+068400120404                     :ln_ExchangeRate,
+068500120404                     ACISVP.UNITS,
+068600120404                     (DECIMAL(acisvp.units * :ln_Price,15,6))/
+068700120404                                             :ln_ExchangeRate,
+068800120404                     DECIMAL(acisvp.units * :ln_Price,15,6),
+068900110825                     0,
+069000120404                     "N",
+069100110825                     " "
+069200120423                FROM MFAACIDUP acidup
+069300120421               INNER JOIN MFAACISVP acisvp ON
+069400120421                     acisvp.account_no      = acidup.account_no
+069500120421                 AND acisvp.investment_code = acidup.investment_code
+069600110824               WHERE acidup.account_no      = :li_SfdtAccountNo
+069700110824                 AND acidup.investment_code = :lc_SfdtInvestCode
+069800110824                 AND acidup.process_date    = :ld_SfdtProcessDate
+069900110825                 AND acisvp.units           > 0
+070000110721           END-EXEC.
+070100110719
+070200110719
+070300111004           MOVE SQLSTATE TO lc_sqlStates
+070400111004           EVALUATE TRUE
+070500111128             WHEN lncc_sqlSuccessful OR  lncc_sqlEnd
+070600111004               CONTINUE
+070700111004             WHEN OTHER
+070800111004               DISPLAY "Insert_MFAACIDPP SQLCODE : " SQLCODE
+070900111004               MOVE lncc_ErrWhileInserting  TO lc_sqlErrShortDESCR
+071000111004      *        PERFORM SQL_Fail_Process
+071100111004           END-EVALUATE.
+071200111004
+071300110719
+071400110719
+071500110719      ** Load Business-Day Array
+071600111201      *-----------------------
+071700110823       Load_BusinessDayArray.
+071800111201      *-----------------------
+071900110823           INITIALIZE lc_BusinessDayArray.
+072000110719
+072100110823           SET lx_Bud          TO 1.
+072200110719
+072300110725           MOVE li_DlrStrDate  TO BUSINESS-DAY OF BUD-REC.
+072400110719
+072500110721           START BUSINESS-DAY-FILE
+072600110721           KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+072700110721           INVALID KEY
+072800111125           MOVE lncc_Y       TO lc_BusDayEnd(lx_Bud)
+072900111125           END-START.
+073000111125
+073100110823           PERFORM Read_BusDayFile UNTIL
+073200111125                                   lc_BusDayEnd(lx_Bud) = lncc_Y.
+073300111201      *-----------------------
+073400110823       Read_BusDayFile.
+073500111201      *-----------------------
+073600110726           READ BUSINESS-DAY-FILE NEXT RECORD
+073700110726           AT END
+073800110928           MOVE lncc_Y       TO lc_BusDayEnd(lx_Bud)
+073900110928           END-READ.
+074000110928
+074100110928           IF  (lc_BusDayEnd(lx_Bud) NOT = lncc_Y)   AND
+074200110930               (BUSINESS-DAY OF BUD-REC  <= li_DlrEndDate )
+074300110823               MOVE BUSINESS-DAY OF BUD-REC TO li_BusDate(lx_Bud)
+074400110928               MOVE lncc_N       TO lc_BusDayEnd(lx_Bud)
+074500110823               SET lx_Bud UP BY 1
+074600110726           ELSE
+074700110930               INITIALIZE           li_BusDate(lx_Bud)
+074800110928               MOVE lncc_Y       TO lc_BusDayEnd(lx_Bud)
+074900110726           END-IF.
+075000110726
+075100111201      *-----------------------
+075200110726       Load_Prices.
+075300111201      *-----------------------
+075400110719
+075500110824           MOVE lc_InvestmentCode OF lc_AccountInvArray  TO
+075600111004                         INVESTMENT-CODE   OF INVESTMENT.
+075700111004           SET  lb_InvestvalKey   TO TRUE.
+075800120421
+075900110825           READ INVESTMENT
+076000110825           INVALID KEY
+076100110825             SET lb_InvestInValKey TO TRUE
+076200110726           END-READ
+076300110824
+076400111004      *    Get Unit Price.
+076500110825           IF lb_InvestvalKey
+076600110825             MOVE INVESTMENT-CODE OF INVESTMENT
+076700110825                                  TO INVESTMENT-CODE
+076800110825                                  OF INVESTMENT-UNIT-PRICE
+076900110825
+077000110824             MOVE li_BusDate(lx_Bud) TO TRADE-DATE
+077100110824                                     OF INVESTMENT-UNIT-PRICE
+077200110824
+077300110824             READ INVESTMENT-UNIT-PRICE
+077400110824              INVALID KEY
+077500110824               PERFORM Get_LastUnitPrice
+077600110825               MOVE li_LastPrice   TO UNIT-PRICE
+077700110824                                    OF INVESTMENT-UNIT-PRICE
+077800110824             END-READ
+077900110824
+078000110824
+078100110824             MOVE UNIT-PRICE OF INVESTMENT-UNIT-PRICE
+078200110824                             TO ln_BusPrice(lx_Bud)
+078300110824
+078400110824             IF CURRENCY-DDS OF INVESTMENT = lncc_CAD
+078500110824               MOVE 1.0          TO ln_BusExchangeRate(lx_Bud)
+078600110824             ELSE
+078700110824               PERFORM  Get_ExchangeRateNonCAD
+078800110824             END-IF
+078900110824           END-IF.
+079000110719
+079100110719      ** Get exchange rate for non-Canadian currency.
+079200110824       Get_ExchangeRateNonCAD.
+079300110824
+079400110824           MOVE CURRENCY-DDS   OF INVESTMENT
+079500110719                               TO CURRENCY-DDS
+079600110719                               OF EXCHANGE-RATE-HISTORY.
+079700110719
+079800110823           MOVE li_BusDate(lx_Bud)
+079900110719                               TO TRADE-DATE
+080000110719                               OF EXCHANGE-RATE-HISTORY.
+080100110719
+080200110824           MOVE lc_ExchangeRateType
+080300110719                               TO EXCHANGE-RATE-TYPE
+080400110719                               OF EXCHANGE-RATE-HISTORY.
+080500110719
+080600110719           READ EXCHANGE-RATE-HISTORY
+080700110719           INVALID KEY
+080800110824           PERFORM Get_LastExchangeRate
+080900120424           IF ln_LastExchangeRate NOT NUMERIC
+081000120424              MOVE 0 TO ln_LastExchangeRate
+081100120424           END-IF
+081200110719           MOVE ln_LastExchangeRate
+081300110719                               TO EXCHANGE-RATE
+081400110824                               OF EXCHANGE-RATE-HISTORY
+081500110824           END-READ.
+081600110719
+081700110719           MOVE EXCHANGE-RATE OF EXCHANGE-RATE-HISTORY
+081800110823                               TO ln_BusExchangeRate(lx_Bud).
+081900110719
+082000111201      *-----------------------
+082100110824       Get_LastUnitPrice.
+082200111201      *-----------------------
+082300110719
+082400110726
+082500110825           IF lx_Bud   >    1
+082600110825             MOVE ln_BusPrice(lx_Bud - 1 ) TO li_LastPrice
+082700110824           ELSE
+082800110719      ** For the calendar days where the trading is not allowed and
+082900110719      ** the price was found for the last day where the trading was
+083000110719      ** allowed, the price is carried forward.
+083100110719
+083200110824             MOVE INVESTMENT-CODE    OF INVESTMENT
+083300110824                                     TO INVESTMENT-CODE
+083400110824                                     OF INVESTMENT-UNIT-PRICE
+083500110824
+083600110824             MOVE li_BusDate(lx_Bud) TO TRADE-DATE
+083700110824                                     OF INVESTMENT-UNIT-PRICE
+083800110824
+083900110824             START INVESTMENT-UNIT-PRICE
+084000110824             KEY IS GREATER  THAN EXTERNALLY-DESCRIBED-KEY
+084100110824             INVALID KEY
+084200110824
+084300110824               READ INVESTMENT-UNIT-PRICE LAST RECORD
+084400110825                AT END MOVE 0  TO li_LastPrice
+084500110824                SET lb_EOFInvUnitPriceYes  TO TRUE
+084600110824               END-READ
+084700110824
+084800110824             NOT INVALID KEY
+084900110824
+085000110824               READ INVESTMENT-UNIT-PRICE PRIOR RECORD
+085100110824                AT END
+085200110825                 MOVE 0     TO li_LastPrice
+085300110824                 SET lb_EOFInvUnitPriceYes  TO TRUE
+085400110824               END-READ
+085500110824             END-START
+085600110824
+085700110824             IF lb_EOFInvUnitPriceNo
+085800110825              IF  INVESTMENT-CODE   OF INVESTMENT-UNIT-PRICE NOT=
+085900110825                  INVESTMENT-CODE   OF INVESTMENT
+086000110825                 MOVE 0            TO li_LastPrice
+086100110824              ELSE
+086200110825                 MOVE UNIT-PRICE OF IUP-REC TO li_LastPrice
+086300110824              END-IF
+086400110824             END-IF
+086500110824           END-IF.
+086600110719
+086700110824      *-----------------------
+086800110824       Get_LastExchangeRate.
+086900110824      *-----------------------
+087000110719
+087100110825           IF lx_Bud    >   1
+087200110825             MOVE ln_BusExchangeRate(lx_Bud - 1 )
+087300110719                             TO ln_LastExchangeRate
+087400110824           ELSE
+087500110719
+087600110824            MOVE CURRENCY-DDS OF INVESTMENT
+087700110824                                TO CURRENCY-DDS
+087800110824                                OF EXCHANGE-RATE-HISTORY
+087900110824
+088000110824            MOVE li_BusDate(lx_Bud)
+088100110824                                TO TRADE-DATE
+088200110824                                OF EXCHANGE-RATE-HISTORY
+088300110824
+088400110824            MOVE lc_ExchangeRateType
+088500110824                                TO EXCHANGE-RATE-TYPE
+088600110824                                OF EXCHANGE-RATE-HISTORY
+088700110824
+088800110824            START EXCHANGE-RATE-HISTORY
+088900110824            KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+089000110824            INVALID KEY
+089100110824             MOVE 0            TO ln_LastExchangeRate
+089200110825             SET  lb_ExchRateHisInValKey  TO TRUE
+089300110824            END-START
+089400110824
+089500110825            IF lb_ExchRateHisValKey
+089600110824             READ EXCHANGE-RATE-HISTORY PRIOR RECORD
+089700110824             AT END
+089800110824              MOVE 0            TO ln_LastExchangeRate
+089900110824              SET lb_EOFExchRateHistYes  TO TRUE
+090000110824             END-READ
+090100110824
+090200110824             IF lb_EOFExchRateHistNo
+090300110824
+090400110824               IF CURRENCY-DDS OF EXCHANGE-RATE-HISTORY
+090500110824                       NOT=    CURRENCY-DDS OF INVESTMENT
+090600110824                  MOVE 0            TO ln_LastExchangeRate
+090700110824               ELSE IF EXCHANGE-RATE-TYPE  OF EXCHANGE-RATE-HISTORY
+090800110824                       NOT=    lc_ExchangeRateType
+090900110824                  MOVE 0            TO ln_LastExchangeRate
+091000110824               ELSE
+091100110824                  MOVE EXCHANGE-RATE OF EXCHANGE-RATE-HISTORY
+091200110930                                     TO ln_LastExchangeRate
+091300110824               END-IF
+091400110824               END-IF
+091500110824             END-IF
+091600110824            END-IF
+091700110824           END-IF.
+091800110719
+091900110719      *----------------------
+092000110823       Check_IfBypassDealer.
+092100110719      *----------------------
+092200110719
+092300110930           INITIALIZE MFADEACMP OF DEALER-COMMISSIONS-REC
+092400110930           MOVE lc_DealerCode        TO DEALER-CODE OF
+092500110930                                        DEALER-COMMISSIONS
+092600110930           MOVE lncc_CAD             TO CURRENCY-DDS OF
+092700110930                                        DEALER-COMMISSIONS
+092800110930           MOVE li_BeginDatePass     TO li_DlrStrDate,
+092900110930                                        li_CompareDate.
+093000110930           MOVE li_EndDatePass       TO li_DlrEndDate.
+093100110930           INITIALIZE                   lc_ProcessDealer.
+093200110930           SET lb_DealerCommValKey   TO TRUE.
+093300110929
+093400110719           READ DEALER-COMMISSIONS
+093500110726           INVALID KEY
+093600110825            SET lb_ProcessDealerNo     TO  TRUE
+093700110825            SET lb_DealerCommInValKey  TO  TRUE
+093800110824           END-READ
+093900110824
+094000110825           IF lb_DealerCommValKey
+094100110719      ** Daily Accrual is allowed for MO, QT, Q7 depending on FRQ
+094200110930            IF pi_DlyAccrual = lncc_Y
+094300110930             IF ((pi_Frq = lncc_MO     ) AND
+094400110824                (SRV-FREQUENCY-CODE OF DEALER-COMMISSIONS = lncc_MO OR
+094500110824                                                            lncc_QT))
+094600110725                              OR
+094700110930                ((pi_Frq = lncc_QT OR lncc_Q7) AND
+094800110930                  SRV-FREQUENCY-CODE OF DEALER-COMMISSIONS = pi_Frq)
+094900110930                  MOVE lncc_Y          TO lc_ProcessDealer
+095000110824                  INITIALIZE MFAATRAPP OF TRAILER-PAYMENT-REC
+095100120605      *   No need to check for the ATRAPP record for
+095200120605      *   daily accrual since report mode can be run
+095300120605      *   any no of times in a period but still service fee
+095400120605      *   have to be accrued through JOBDAILY
+095500120605      *            PERFORM Get_BeginEndDate
+095600110719             END-IF
+095700110930            ELSE
+095800110930              IF  (pi_MthEnd  =  lncc_Y AND
+095900110930                  SRV-FREQUENCY-CODE OF DEALER-COMMISSIONS = lncc_MO )
+096000110725                                  OR
+096100110930                  (pi_QtrEnd  =  lncc_Y AND
+096200110930                   SRV-FREQUENCY-CODE OF DEALER-COMMISSIONS = lncc_QT )
+096300110725                                  OR
+096400110930                  (pi_Q7      =  lncc_Y AND
+096500110930                   SRV-FREQUENCY-CODE OF DEALER-COMMISSIONS = lncc_Q7 )
+096600110930                    MOVE lncc_Y            TO  lc_ProcessDealer
+096700110930                    INITIALIZE MFAATRAPP OF TRAILER-PAYMENT-REC
+096800120508                    PERFORM Get_BeginEndDate
+096900110930              END-IF
+097000110930            END-IF
+097100110930           END-IF.
+097200110930
+097300111201      *-----------------------
+097400110823       Get_BeginEndDate.
+097500111201      *-----------------------
+097600110719      ** The ending period is used to verify if the dealer has
+097700110719      ** been processed for the date range and as a starting point
+097800110719      ** for the dealer transactions to be read in get current.
+097900110719
+098000110930           INITIALIZE    lc_EofTrailerPymt.
+098100110719
+098200120518           EXEC SQL
+098300120518             SELECT ATRAPP.YEAR      ,
+098400120518                    ATRAPP.MONTH
+098500120518               INTO :li_CompareYYYY  ,
+098600120518                    :li_CompareMM
+098700120518               FROM MFAATRAPP   ATRAPP
+098800120518              WHERE DEALER_CODE = :lc_DealerCode
+098900120530                AND ATRAPP.YEAR  >= :li_SrvPerEndYYYY
+099000120530                AND ATRAPP.MONTH >= :li_SrvPerEndMM
+099100120531              FETCH FIRST ROW ONLY
+099200120518           END-EXEC.
+099300120518
+099400120518           MOVE SQLSTATE TO lc_sqlStates
+099500120518           EVALUATE TRUE
+099600120518             WHEN lncc_sqlSuccessful OR  lncc_sqlEnd
+099700120518               CONTINUE
+099800120518             WHEN OTHER
+099900120518               DISPLAY "Select_MFAATRAPP SQLCODE : " SQLCODE
+100000120518               MOVE lncc_ErrWhileSelecting TO lc_sqlErrShortDESCR
+100100120518           END-EVALUATE.
+100200120518
+100300120518           IF lncc_sqlSuccessful AND (pi_Q7    = lncc_N )
+100400120518              MOVE lncc_1         TO  li_CompareDD
+100500110719
+100600120518              IF  li_CompareMM < lncc_12
+100700120518                 COMPUTE li_CompareMM    = li_CompareMM    + lncc_1
+100800120518              ELSE
+100900120518                 COMPUTE li_CompareYYYY  = li_CompareYYYY  + lncc_1
+101000120518                 MOVE 1           TO  li_CompareMM
+101100120518              END-IF
+101200120518           END-IF
+101300120518           IF  li_CompareYYYYMM <  li_DlrStrYYYYMM
+101400120518               MOVE li_DlrStrDate  TO li_CompareDate
+101500120518           END-IF
+101600120518
+101700120518           IF  li_CompareYYYYMM >  li_DlrEndYYYYMM
+101800120518               MOVE lncc_N         TO  lc_ProcessDealer
+101900120518           END-IF
+102000120518
+102100120518           IF (pi_DlyAccrual NOT = lncc_Y) OR
+102200120518              (pi_DlyAccrual     = lncc_Y  AND
+102300120518               li_CompareDate    > li_DlrStrDate)
+102400120518               MOVE li_CompareDate TO li_DlrStrDate
+102500120518           END-IF.
+102600110726
+102700111201      *----------------------
+102800110825       Close_AccountInvCursor.
+102900111201      *----------------------
+103000110825
+103100110825            EXEC SQL
+103200111201              CLOSE lcu_ACCINVCUR
+103300110825            END-EXEC.
+103400110825
+103500111201      *----------------------
+103600110823       EndOfProgram.
+103700111201      *----------------------
+103800110824
+103900110726           CLOSE       ACCOUNT
+104000110726                       DEALER-COMMISSIONS
+104100110726                       TRAILER-PAYMENT
+104200110929                       INVESTMENT
+104300110824                       INVESTMENT-UNIT-PRICE
+104400110824                       EXCHANGE-RATE-HISTORY
+104500110824                       BUSINESS-DAY-FILE
+104600110824                       PROGRAM-EXCHANGE-RATE.
+104700111124
+104800111124            ACCEPT li_Time FROM TIME.
+104900111130            DISPLAY "END SRVFDAILY : " li_Time.
+105000111124
+105100110719           GOBACK.
+105200111201      *----------------------
+105300111201       SQL_ErrorRoutine.
+105400111201      *----------------------
+105500111201           DISPLAY "SRVFDAILY - ENDED WITH ERROR".
+105600111201           DISPLAY "PROCEDURE: "  lc_RoutineName.
+105700111201           DISPLAY "STATEMENT: "  lc_SqlErrStatement.
+105800111201           DISPLAY "SQLCODE = "   SQLCODE, " SQLSTATE = " SQLSTATE.
+105900111201           DISPLAY "lc_ErrCode: " lc_ErrCode
+106000111201           PERFORM EndOfProgram.
+106100110719

@@ -1,0 +1,403 @@
+000100101206       IDENTIFICATION DIVISION.
+000200101206       PROGRAM-ID.     PRGIVRSLT.
+000300101206       INSTALLATION.   CITI.
+000400101206       AUTHOR.         CITI.
+000500101206       DATE-WRITTEN.   December 2010.
+000600101206       DATE-COMPILED.
+000700101206      ******************************************************************
+000800101206      *    RFS-NUMBER : 84468                                          *
+000900101206      *                                                                *
+001000101206      *    DESCRIPTION: This program selects Investor Records for the  *
+001100101206      *                 purge process.                                 *
+001200110125      *                 Selected Investor Records in PURIVRP file,     *
+001300101206      *                 will be used by subsequent purge processes.    *
+001400101206      *                                                                *
+001500101206      *   CALLED BY: JOBPURGE                                          *
+001600101206      *                                                                *
+001700101206      *   Note: Use option 15 to complie module and then use CRTPGM    *
+001800101206      *         to create the program.                                 *
+001900101206      *                                                                *
+002000101206      ******************************************************************
+002100101206      *    C H A N G E   H I S T O R Y                                 *
+002200101206      ******************************************************************
+002300101206      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE              *
+002400101206      ******************************************************************
+002500120522      * Benjamin V.* 2010/12/06 * RFS 84468 - New program to create    *
+002600120522      *            *            * PURIVRP file. (Investor Purge File)  *
+002700120606      * Benjamin V.* 2012/05/22 * RFS 101245 - Correct issue on insert *
+002800120522      *            *            * to EXCIVRP                           *
+002900101206      ******************************************************************
+003000101206      /
+003100101206       ENVIRONMENT DIVISION.
+003200101206       CONFIGURATION SECTION.
+003300101206       SOURCE-COMPUTER. IBM-AS400.
+003400101206       OBJECT-COMPUTER. IBM-AS400.
+003500101206       SPECIAL-NAMES.
+003600101206              DATA-AREA IS WS-DATA-AREA.
+003700101206      /
+003800101206       INPUT-OUTPUT SECTION.
+003900101206      *****************************************************************
+004000101206      *    I N P U T   /   O U T P U T   S E C T I O N                *
+004100101206      *****************************************************************
+004200101206       FILE-CONTROL.
+004300101206      /
+004400101206       DATA DIVISION.
+004500101206      *****************************************************************
+004600101206      *    D A T A   D I V I S I O N                                  *
+004700101206      *****************************************************************
+004800101206
+004900101206       FILE SECTION.
+005000101206      *****************************************************************
+005100101206      *    F I L E   S E C T I O N                                    *
+005200101206      *****************************************************************
+005300101206       WORKING-STORAGE SECTION.
+005400101206      ******************************************************************
+005500101206      *    W O R K I N G   S T O R A G E   S E C T I O N               *
+005600101206      ******************************************************************
+005700101206        01 WS-WORK-FIELDS.
+005800110217           02 WS-PURGE-LIB          PIC X(10).
+005900110217           02 WS-SQL-STMT           PIC X(1000).
+006000101206           02 WS-ACCOUNT-STATUS     PIC X(1).
+006100101206           02 WS-CUTOFF-DATE-GROUP.
+006200101206              03 WS-YEAR-MONTH          PIC 9(6).
+006300101206              03 WS-DAY                 PIC 9(2).
+006400101206           02 WS-CUTOFF-DATE            PIC S9(8).
+006500101206
+006600101206           02 WS-ACCIV-KEY.
+006700101206              03  WS-ACCOUNT-NO         PIC S9(9) COMP-3.
+006800101206              03  WS-INVESTMENT-CODE    PIC X(5).
+006900101206
+007000101206           02 WS-PH-KEY.
+007100101206              03  PH-ACCOUNT-NO         PIC S9(9) COMP-3.
+007200101206              03  PH-INVESTMENT-CODE    PIC X(5).
+007300101206              03  PH-COUNTER            PIC S9(5).
+007400101206
+007500101206           02 WS-AA-VARIABLES.
+007600101206              05 WS-MFAPRCDTP.
+007700101206                 07 WS-PDATE             PIC 9(8).
+007800101206                 07 FILLER               PIC X(161).
+007900101206              05 WS-PROCESS-DATE         PIC S9(9).
+008000101206
+008100101206       01 CL-COMMANDS.
+008200110107          02 CMD-SIZE         PIC 9(10)V9(5) COMP-3 VALUE 25.
+008300110214          02 CLRPFM-TMPIVRP   PIC X(25) VALUE "CLRPFM TMPIVRP".
+008400110214          02 CLRPFM-TMPIVRNTP PIC X(25) VALUE "CLRPFM TMPIVRNTP".
+008500110107          02 CLRPFM-ACCIVRPA  PIC X(25) VALUE "CLRPFM ACCIVRPA".
+008600110121          02 CLRPFM-PURIVRP   PIC X(25) VALUE "CLRPFM PURIVRP".
+008700101206
+008800101206      *SQLLOG Variables.
+008900110121        01 WS-CALLING-PROGRAM       PIC X(10)     VALUE "PRGIVRSLT ".
+009000101206        01 WS-SQLERR-STATEMENT      PIC X(25)     VALUE " ".
+009100101206        01 WS-SQLERR-DATA           PIC X(1780)   VALUE " ".
+009200101206        01 WS-SQL-STATS             PIC X(1966)   VALUE " ".
+009300101206        01 WS-SQLERR-REPLY          PIC X(1)      VALUE " ".
+009400101206        01 WS-SQLLOG                PIC X(1)      VALUE "Y".
+009500101206        01 WS-STRSQL                PIC X(1000)   VALUE SPACES.
+009600101206
+009700101206           EXEC SQL
+009800101206             INCLUDE SQLCA
+009900101206           END-EXEC.
+010000101206
+010100101206           EXEC SQL
+010200101206             INCLUDE SQLDA
+010300101206           END-EXEC.
+010400101206
+010500101206       LINKAGE SECTION.
+010600101206       01  COMM-MFAPURPARM.
+010700101206      ***************************************
+010800101206      *    P U R G E   D A T A   A R E A    *
+010900101206      ***************************************
+011000110202           03 COMM-CUTOFF-DATE                PIC X(6).
+011100110202           03 COMM-PURGE-MODE                 PIC X(1).
+011200110202           03 COMM-ACTIVE-ACCOUNTS            PIC X(1).
+011300110202           03 COMM-ACTIVE-INVESTMENT          PIC X(1).
+011400110202           03 COMM-PURGE-TYPE                 PIC X(1).
+011500110202           03 COMM-SWITCH-TRANSFER            PIC X(1).
+011600110202           03 COMM-MIN-NUM-OF-TRANS           PIC X(2).
+011700110202           03 COMM-ACCOUNT-OWNER-TYPE         PIC X(1).
+011800110202           03 COMM-ACCT-INVESTOR-CUTOFF-DATE  PIC X(6).
+011900110202           03 COMM-PURGE-QUEUE                PIC X(10).
+012000110202           03 COMM-REPORT-PURGE-QUEUE         PIC X(10).
+012100110202       01 COMM-RETURN-CODE                    PIC X(2).
+012200101206
+012300110120       PROCEDURE DIVISION USING COMM-MFAPURPARM,
+012400101206                                COMM-RETURN-CODE.
+012500101206      *********************************************
+012600101206      *    P R O C E D U R E   D I V I S I O N    *
+012700101206      *********************************************
+012800101206
+012900101206       MAINLINE.
+013000101206      **************************
+013100101206      *    M A I N L I N E     *
+013200101206      **************************
+013300101206           PERFORM INITIAL-LOGIC THRU IL-EXIT.
+013400101206           PERFORM DETAIL-PROCESSING THRU DPR-EXIT.
+013500101206           PERFORM END-JOB THRU EOJ-EXIT.
+013600101206
+013700101206       DETAIL-PROCESSING.
+013800101206      *************************
+013900101206      *   DETAIL PROCESSING   *
+014000101206      *************************
+014100101206
+014200101206           EXEC SQL
+014300101206             WHENEVER SQLERROR GOTO SQLLOG
+014400101206           END-EXEC.
+014500101206
+014600110107      **** Do clear temp file TMPIVRP only once   *
+014700101209
+014800101209           CALL "QCMDEXC" USING CLRPFM-TMPIVRP CMD-SIZE.
+014900101209
+015000101206      **** Create Purge Investor from PURACCNTP.
+015100101209
+015200101206           DISPLAY WS-CALLING-PROGRAM
+015300110214           " - CREATE-PURIVRP".
+015400110214           PERFORM CREATE-PURIVRP THRU CPFI-EXIT.
+015500101206
+015600101209      **** Remove PURIVRP rec with active PAC (MFAIVRPPP;PAP).
+015700101206
+015800101206           DISPLAY WS-CALLING-PROGRAM " - REMOVE-PAC               ".
+015900101206           PERFORM REMOVE-PAC THRU RPA-EXIT.
+016000101206
+016100110125      **** Remove PURIVRP rec with active Acct(MFAACCNTP).
+016200110125
+016300110125           DISPLAY WS-CALLING-PROGRAM " - REMOVE-ACCT              ".
+016400110125           PERFORM REMOVE-ACCT THRU ACT-EXIT.
+016500110214
+016600110217      * Investor purge.
+016700110217           PERFORM DELETE-PURIVRP  THRU DIVRP-EXIT.
+016800110217
+016900110217      **** Copy EXCIVRP file to purge library
+017000110217             PERFORM CREATE-EXCIVRP.
+017100110214
+017200101206       DPR-EXIT.
+017300101206           EXIT.
+017400101216      /
+017500101206       INITIAL-LOGIC.
+017600101206      *********************
+017700101206      *   INITIAL LOGIC   *
+017800101206      *********************
+017900101206
+018000101206           DISPLAY WS-CALLING-PROGRAM " - Start ".
+018100101206           INITIALIZE WS-WORK-FIELDS.
+018200101206           ACCEPT WS-MFAPRCDTP FROM WS-DATA-AREA FOR "MFAPRCDTP".
+018300110217           ACCEPT WS-PURGE-LIB FROM WS-DATA-AREA FOR "MFAPURGE".
+018400101206           MOVE WS-PDATE TO WS-PROCESS-DATE.
+018500101206
+018600101206           MOVE COMM-ACTIVE-ACCOUNTS TO WS-ACCOUNT-STATUS.
+018700101206           IF WS-ACCOUNT-STATUS NOT = "Y"
+018800101206               MOVE "C" TO WS-ACCOUNT-STATUS.
+018900101206
+019000110126           MOVE "COMM-ACCT-INVESTOR-CUTOFF-DATE" TO WS-SQLERR-STATEMENT.
+019100110126           IF COMM-ACCT-INVESTOR-CUTOFF-DATE IS NOT NUMERIC
+019200101206               GO TO SQLLOG
+019300101206           END-IF.
+019400101206
+019500110126           MOVE COMM-ACCT-INVESTOR-CUTOFF-DATE TO WS-YEAR-MONTH.
+019600101206           MOVE 32 TO WS-DAY.
+019700101206           MOVE WS-CUTOFF-DATE-GROUP TO WS-CUTOFF-DATE.
+019800110217
+019900110217       IL-INDEXES.
+020000101206           EXEC SQL
+020100101206             WHENEVER SQLERROR CONTINUE
+020200101206           END-EXEC.
+020300110107
+020400101206           EXEC SQL
+020500110217           CREATE TABLE QTEMP/TMPIVRP   (
+020600101206            INVESTOR_NO FOR COLUMN F0000 NUMERIC (9 ))
+020700101206           END-EXEC.
+020800101206
+020900101206           EXEC SQL
+021000110217           CREATE INDEX QTEMP/TMPIVRP1 ON TMPIVRP (INVESTOR_NO
+021100101206           ASC)
+021200101206           END-EXEC.
+021300101206
+021400101206       IL-EXIT.
+021500101206           EXIT.
+021600101206      /
+021700110214       CREATE-PURIVRP.
+021800101206      ****---------------------------------------****
+021900101206      ****  Create Purge Investor from PURIVRP.  ****
+022000101206      ****---------------------------------------****
+022100101206      ***************************************************
+022200101206      * ALIAS        FILENAME                 OPENNAME  *
+022300101206      ***************************************************
+022400101206      * PURACCNTP    PURGE-ACCOUNT            PURACCNTP *
+022500101206      * ACCNTP       ACCOUNT                  MFAACCNTP *
+022600101206      * IVRP         INVESTOR                 MFAIVRP   *
+022700101206      ***************************************************
+022800101206
+022900101206           MOVE SPACE TO WS-SQLERR-STATEMENT.
+023000110121           CALL "QCMDEXC" USING CLRPFM-PURIVRP CMD-SIZE.
+023100101206
+023200101206           PERFORM DSP-SQLERR-STATEMENT.
+023300101206
+023400101206
+023500110214           EXEC SQL
+023600110214             INSERT INTO PURIVRP
+023700110214               SELECT A.*
+023800110214                FROM MFAIVRP A
+023900110214             WHERE
+024000110214                 A.CREATION_DATE < :WS-CUTOFF-DATE
+024100110214           END-EXEC.
+024200110214
+024300101206       CPFI-EXIT.
+024400101206           EXIT.
+024500101210      /
+024600101206       REMOVE-PAC.
+024700101206      *-------------------------------------------*
+024800101206      * Exclude Purge Investors with PAC attached *
+024900101206      *-------------------------------------------*
+025000101206      **************************************************
+025100101206      * ALIAS        FILENAME                 OPENNAME *
+025200101206      **************************************************
+025300101206      * PIVRP        PURGE-INVESTOR           PURIVRP
+025400101206      * IVRPA        INVESTOR-PAC             MFAIVRPAP
+025500101206      * IVRPP        INVESTOR-PAC-PURCHASE    MFAIVRPPP
+025600101206      **************************************************
+025700101206           MOVE SPACES TO WS-SQLERR-STATEMENT.
+025800101206           MOVE "INSERT TMPIVRP PAC     " TO WS-SQLERR-STATEMENT.
+025900101206           PERFORM DSP-SQLERR-STATEMENT.
+026000101206
+026100101206           EXEC SQL
+026200101206
+026300110217           INSERT INTO QTEMP/TMPIVRP
+026400101206            SELECT DISTINCT PIVRP.INVESTOR_NO
+026500101206             FROM PURIVRP  PIVRP
+026600101206
+026700110127            INNER JOIN MFAIVRPAP IVRPA ON
+026800101206                IVRPA.INVESTOR_NO = PIVRP.INVESTOR_NO
+026900101206
+027000110127            INNER JOIN MFAIVRPPP IVRPP ON
+027100101206                IVRPP.INVESTOR_NO = PIVRP.INVESTOR_NO AND
+027200101206                IVRPP.PAC_SEQ_NO = IVRPA.PAC_SEQ_NO
+027300101206
+027400101206            WHERE
+027500101206                IVRPA.PAC_STATUS IN ("AC", "HD")
+027600101206           END-EXEC.
+027700101206
+027800101206       RPA-EXIT.
+027900101206           EXIT.
+028000101206      /
+028100110214       REMOVE-ACCT.
+028200110214      *-------------------------------------------------------------*
+028300110214      * Exclude Purge Investors if not all Account are to be Purged *
+028400110214      *-------------------------------------------------------------*
+028500110214      **************************************************
+028600110214      * ALIAS        FILENAME                 OPENNAME *
+028700110214      **************************************************
+028800110214      * PIVRP        PURGE-INVESTOR           PURIVRP
+028900110214      * PACCNTP      PURGE-ACCOUNT            PURACCNTP
+029000110214      * ACCNTP       ACCOUNT                  MFAACCNTP
+029100110214      **************************************************
+029200110214           MOVE SPACES TO WS-SQLERR-STATEMENT.
+029300110214           MOVE "INSERT TMPIVRP ACCOUNT " TO WS-SQLERR-STATEMENT.
+029400110214           PERFORM DSP-SQLERR-STATEMENT.
+029500110214
+029600110214           EXEC SQL
+029700110214
+029800110217           INSERT INTO QTEMP/TMPIVRP
+029900110214            SELECT DISTINCT PIVRP.INVESTOR_NO
+030000110214             FROM PURIVRP  PIVRP
+030100110214
+030200110214            INNER JOIN MFAACCNTP ACCNTP ON
+030300110214                PIVRP.INVESTOR_NO = ACCNTP.INVESTOR_NO
+030400110214
+030500110214            WHERE NOT EXISTS
+030600110214               (SELECT * FROM PURACCNTP PACCNTP
+030700110214                WHERE PACCNTP.INVESTOR_NO = ACCNTP.INVESTOR_NO AND
+030800110214                PACCNTP.ACCOUNT_NO  = ACCNTP.ACCOUNT_NO)
+030900110214           END-EXEC.
+031000110214
+031100110214       ACT-EXIT.
+031200110214           EXIT.
+031300110214
+031400110217       DELETE-PURIVRP.
+031500110217      *-----------------------------------*
+031600110217      * Delete record from Purge Investor *
+031700110217      *-----------------------------------*
+031800110217
+031900110217           MOVE SPACE TO WS-SQLERR-STATEMENT.
+032000110217           MOVE "DELETE PURIVRP        " TO WS-SQLERR-STATEMENT.
+032100110217           PERFORM DSP-SQLERR-STATEMENT.
+032200110217
+032300110217           EXEC SQL
+032400110217           DELETE FROM PURIVRP IVRP
+032500110217
+032600110217           WHERE EXISTS
+032700110217             (SELECT * FROM QTEMP/TMPIVRP A
+032800110217              WHERE A.INVESTOR_NO = IVRP.INVESTOR_NO)
+032900110217           END-EXEC.
+033000110217
+033100110217       DIVRP-EXIT.
+033200110217            EXIT.
+033300110217      /
+033400110217       CREATE-EXCIVRP.
+033500110217      *--------------------------------------*
+033600110217      * Copy TMPIVRP file to Purge library *
+033700110217      *--------------------------------------*
+033800110217
+033900110217           MOVE SPACE TO WS-SQLERR-STATEMENT.
+034000110217           MOVE "INSERT INTO EXCACT " TO WS-SQLERR-STATEMENT.
+034100110217           PERFORM DSP-SQLERR-STATEMENT.
+034200110217
+034300110217           INITIALIZE WS-SQL-STMT.
+034400110217
+034500110217           STRING "INSERT INTO "          DELIMITED BY SIZE
+034600120522                   WS-PURGE-LIB            DELIMITED BY SPACE
+034700120522      * rfs101245 - begin
+034800120522                  "/EXCIVRP "             DELIMITED BY SIZE
+034900120522      *           "/EXCIVRP"              DELIMITED BY SIZE
+035000120522      * rfs101245
+035100120522                  "SELECT INVESTOR_NO "   DELIMITED BY SIZE
+035200110217                  "FROM QTEMP/TMPIVRP " DELIMITED BY SIZE
+035300110217             INTO WS-SQL-STMT
+035400110217           END-STRING.
+035500110217
+035600110217           PERFORM EXECUTE-SQL.
+035700110217      /
+035800110217      * ---------------------------------
+035900110217       EXECUTE-SQL.
+036000110217      * ---------------------------------
+036100110217           EXEC SQL
+036200110217             EXECUTE IMMEDIATE :WS-SQL-STMT
+036300110217           END-EXEC.
+036400110217      /
+036500101206       END-JOB.
+036600101206      *****************************
+036700101206      *    E N D   O F   J O B    *
+036800101206      *****************************
+036900110217           GOBACK.
+037000101206
+037100101206       EOJ-EXIT.
+037200101206           EXIT.
+037300101206      /
+037400101206      **********
+037500101206      * SQLLOG *
+037600101206      **********
+037700101206       DSP-SQLERR-STATEMENT.
+037800101206           CONTINUE.
+037900101206
+038000101206       SQLLOG.
+038100101206
+038200101206           IF WS-SQLLOG = "Y"
+038300101206              CALL "SQLLOG"     USING WS-CALLING-PROGRAM
+038400101206                                      WS-SQLERR-STATEMENT
+038500101206                                      SQLCODE
+038600101206                                      SQLERRD(1)
+038700101206                                      SQLERRD(2)
+038800101206                                      SQLERRD(3)
+038900101206                                      SQLERRD(4)
+039000101206                                      SQLERRD(5)
+039100101206                                      SQLERRD(6)
+039200101206                                      SQLSTATE
+039300101206                                      WS-SQLERR-DATA
+039400101206                                      WS-SQL-STATS
+039500101206                                      WS-SQLERR-REPLY
+039600101206              CANCEL "SQLLOG"
+039700101206           END-IF.
+039800101206
+039900101206           MOVE "99" TO COMM-RETURN-CODE.
+040000101206           DISPLAY WS-CALLING-PROGRAM " - End   ".
+040100101206           STOP RUN.
+040200101206       SQLLOG-EXIT.
+040300101206           EXIT.

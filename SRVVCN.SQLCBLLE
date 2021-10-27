@@ -1,0 +1,2804 @@
+000001170313      * %ATTR OPTION(*XREF *GEN) CLOSQLCSR(*ENDMOD) DBGVIEW(*SOURCE)
+000102000000       IDENTIFICATION DIVISION.
+000202000000       PROGRAM-ID.     SRVVCN.
+000302171005       INSTALLATION.   UNISEN INC.
+000402000000       AUTHOR.         DAISY LY.
+000502000000       DATE-WRITTEN.   JUNE 2004.
+000602000000       DATE-COMPILED.
+000702000000      ******************************************************************
+000802000000      * RFS#       * 19162                                              *
+000902000000      * PURPOSE    * This program will calculate the variable units     *
+001002000000      *            * for a given investment up to the current process   *
+001102000000      *            * date
+001202000000      * PARAMETERS * COMM-OPTION = ALL (all account)                    *
+001302000000      *            *               ONE (one account)
+001402000000      *            * COMM-PROCESS-DATE = at-at-date
+001502000000      *            * COMM-START-DATE   = service fee start date
+001602000000      *            * COMM-END-DATE     = service fee end date
+001702000000      *            * COMM-FROM-DATE    = transaction from date
+001802000000      *            * COMM-TO-DATE      = transaction to date
+001902000000      *            * COMM-ACCOUNT-NO   = account-no (optional)
+002002000000      *            * COMM-INVESTMENT   = investment-code
+002102000000      *            * COMM-TRL-VAR-SCHED = variable trailer schedule cd
+002202000000      *            * COMM-CLEAR-FILE   = Y or N
+002302000000      *            * COMM-RETURN-CODE
+002402040714      *            *  001 = Invalid option
+002502040714      *            *  002 = Invalid process date
+002602040714      *            *  003 = Invalid start date
+002702040714      *            *  004 = Invalid end date
+002802040714      *            *  005 = End date is less than the start date
+002902040714      *            *  006 = Invalid from date
+003002040714      *            *  007 = Invalid to date
+003102040714      *            *  008 = To date is less than the from date
+003202040714      *            *  009 = Invalid account number
+003302040714      *            *  010 = Investment not attach to a schedule
+003402040714      *            *  011 = Schedule not setup
+003502040714      *            *  012 = Problem calling FXVARUAI with option GET
+003602040714      *            *  013 = Problem calling FXVARUAI with option PUT
+003702040722      *            *  014 = Schedule was chg after the conversion
+003802000000      *******************************************************************
+003902000000      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE
+004002000000      *******************************************************************
+004102000000      *            * yyyy/mm/dd   *
+004202041104      * DAISY LY   * 2004/07/18   * RFS 16201 - CREATE THE PROGRAM
+004302040817      *                           * - select into
+004402041025      * Truong L.  * 2004/10/19   * RFS 24407 - Recomplile due to file
+004502041025      *            *              *  MFATRSCVP expand.
+004602041104      * DAISY LY   * 2004/11/04   * RFS 19162 - remove select into
+004702041203      * Daisy Ly   * 2004/12/03   * RFS19162 - handle SWI/TRI with
+004802041203      *            *              * commission chrg that create
+004902041203      *            *              * MFATRNRDP records
+005002070613      * Richard S  * 2007/06/08   * RFS 42554 - Recompile only
+005102070608      * Kahkashan P* 2007/01/02   * RFS 37142 - select trans to be used
+005202070608      *            *              * in the variable calculation for a
+005302070608      *            *              * given investment up to current
+005402070608      *            *              * process date and reset the variable
+005502070608      *            *              * units in the MFAACIDUP & MFAACIDVP
+005602070608      * Ade A      *  2007/05/25  * Fixed defect 37142.12
+005702070608      *            *              * Dist units not adjusting when it
+005802070608      *            *              * moves tot he next tier
+005902070608      * Ade A      *  2007/06/01  * Fixed defect 37142.13,14,15,16
+006002070608      *            *              * Dist units not adjusting when it
+006102070608      *            *              * moves tot he next tier
+006202070608      * Ade A      *  2007/06/07  * Fixed defect 37142.17
+006302070608      *            *              * Old dist Units not moving to the
+006402070608      *            *              * highest tier in absence of an
+006502070608      *            *              * older BUY
+006602070608      * Ade A      *  2007/06/07  * Fixed defect 37142.18
+006702070608      *            *              * SEL not reducing the units
+006802070810      * Richard S  *  2007/07/13  * Rfs 43050 - recompile to change
+006902070713      *            *              * activation grp from *NEW to QILE
+007002070810      * Ade  A     *  2007/08/10  * Rfs 43561 - Performance Enhancement
+007102070823      * Ade  A     *  2007/08/10  * Rfs 43561.3 legacy issue found
+007202070823      *            *              * distr units does not move back up
+007302070823      *            *              * the tier whne the initial purchase
+007402070823      *            *              * they were initially attached to is
+007502070823      *            *              * is reversed or used up
+007602070926      * Shu Yin    *  2007/09/20  * RFs 44223 Defect
+007702070928      * Ade A      *              *
+007802070927      * Ade A      *  2007/09/22  * RFs 44223 Defect.1
+007902080205      * Lev O      * 2008/02/05   * RFS47712 - Recompile for MFATRNCPP
+008002080211      * Marek T    *  2008/02/11  * RFS 40800 - Create Module and
+008102080211      *            *              * change Program to No Source obj.
+008202081219      * Daniel M   * 2008/12/19   * RFS59781 - Recompile for MFATRNCPP
+008302090312      * Meynard B  * 2009/03/12   * RFS64527 - Convert Investment array
+008402090312      *            *              * to variable size array up to 30000.
+008502090312      *            *              * Fetch array remains at 800.
+008602090505      * Meynard B  * 2009/05/05   * RFS50475 - Tiered Service Fee for
+008702090505      *            *              * E Dealers.
+008802090924      * Meynard B  * 2009/07/22   * RFS71776 - Replace TRNCUR2 cursor with
+008902090924      *            *              * native code.
+009002090925      * Lev O      * 2009/09/25   * RFS73523 - reverse 71776 because   ith
+009102090924      *            *              *   it cause the program to skip     ith
+009202090924      *            *              *   account if it happen to be last  ith
+009302090924      *            *              *   one in Trans file. Archived      ith
+009402090924      *            *              *   versioin was used to reverse the ith
+009502090924      *            *              *   changes.                         ith
+009602090925      *            * 2009/09/25   * - Added Richard's RFS:             ith
+009702090925      * Richard G  * 2009/08/13   * RFS72304 - Convert Investment array
+009802091221      * Abdi Hassan  * 2009/12/18 *RFS67590 - Recompile for MFAIVNVTVP
+009902091221      *              *            * table expansion
+010002100204      * Abdi H.    * 2009/12/08 * RFS67590 - Add logic for End-Date
+010102100204      *            *            * of MFAINVTVP to either or not
+010202120625      * Lev O      * 2012/06/25   * RFS111348 - recompile for MFATRNPUPith
+010302120625      *            *              *  & MFATRNRUP change.               ith
+010402120716      * Pawel A.   * 2012/07/03 * RFS108942 - Include changes for RFS
+010502120716      *            *            *  91091
+010602121113      * Nasra F.   * 2012/11/12 * RFS116342 - De-select CPL transactions.
+010702130515      * Uma C      * 2013/05/15 * RFS121657 - Recompile for MFATRNPUP.
+010802140529      * Sangeetha V* 2014/05/29 * RFS 136335 - Fix for SQL 1004 Error.
+010902141014      * Banupriya V* 2014/10/14 * RFS141507 - Recompile for MFATRNCPP
+010903181123      * Sachin Soman * 2018/11/23 * RFS180293 - Recompile for MFATRNPUP*
+010904181126      *                                         and MFATRNRUP
+010908200723      * Mayilsamy D  * 2020/07/13 * RFS185175 -Modified to exclude the
+010909200716      *              *            * trailer fee instruction records
+010910200716      *              *            * which are linked with opening
+010911200716      *              *            * unit balance month end trailer fee
+010912200716      *              *            * calculation.
+011002000000      ******************************************************************
+011102000000      /
+011202000000       ENVIRONMENT DIVISION.
+011302000000       CONFIGURATION SECTION.
+011402000000       SOURCE-COMPUTER. IBM-AS400.
+011502000000       OBJECT-COMPUTER. IBM-AS400.
+011602000000       SPECIAL-NAMES.
+011702080211      *RFS40800 - Start
+011802080211           LINKAGE TYPE IS PROCEDURE FOR "FXVARUAI"
+011902080211      *RFS40800 - End
+012002000000                      DATA-AREA  IS WS-DATA-AREA-1.
+012102000000      /
+012202000000       INPUT-OUTPUT SECTION.
+012302000000       FILE-CONTROL.
+012402041104           SELECT  TRANS-TARGET
+012502041123                   ASSIGN TO DATABASE-MFATRNTGLB
+012602041104                   ORGANIZATION IS INDEXED
+012702041104                   ACCESS IS DYNAMIC
+012802041104                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+012902041123                   WITH DUPLICATES
+013002041104                   FILE STATUS IS WS-FILE-STATUS.
+013102041104
+013202041104           SELECT  TRANS-TARGET-2
+013302041105                   ASSIGN TO DATABASE-MFATRNTGLC
+013402041104                   ORGANIZATION IS INDEXED
+013502041104                   ACCESS IS DYNAMIC
+013602041104                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+013702041123                   WITH DUPLICATES
+013802041104                   FILE STATUS IS WS-FILE-STATUS.
+013902070810
+014002070810      * Rfs 43561 Begins
+014102070810           SELECT  TRANS-CDSC-PURCHASE
+014202070810                   ASSIGN TO DATABASE-MFATRNCPLA
+014302070810                   ORGANIZATION IS INDEXED
+014402070810                   ACCESS IS DYNAMIC
+014502070810                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+014602070810                   DUPLICATES
+014702070810                   FILE STATUS IS WS-FILE-STATUS.
+014802070810      * Rfs 43561 Ends
+014902070810
+015002090505      *RFS50475 Add - Begin
+015102090505           SELECT  TRANS-PURCHASE-UNITS
+015202090505                   ASSIGN TO DATABASE-MFATRNPUL1
+015302090505                   ORGANIZATION IS INDEXED
+015402090505                   ACCESS IS DYNAMIC
+015502090505                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+015602090505                   DUPLICATES
+015702090505                   FILE STATUS IS WS-FILE-STATUS.
+015802090505      *RFS50475 Add - End
+015902070810
+016002000000       DATA DIVISION.
+016102000000       FILE SECTION.
+016202041104       FD  TRANS-TARGET
+016302041104           LABEL RECORDS ARE STANDARD.
+016402041105       01  TRANS-TARGET-REC.      COPY DD-ALL-FORMATS OF MFATRNTGLB.
+016502000000
+016602041104       FD  TRANS-TARGET-2
+016702041104           LABEL RECORDS ARE STANDARD.
+016802041105       01  TRANS-TARGET-REC-2.    COPY DD-ALL-FORMATS OF MFATRNTGLC.
+016902000000      /
+017002070810      * Rfs43561 Begins
+017102070810       FD  TRANS-CDSC-PURCHASE
+017202070810           LABEL RECORDS ARE STANDARD.
+017302070810       01  TRANS-CDSC-PURCHASE-REC.
+017402070810                           COPY DD-ALL-FORMATS OF MFATRNCPLA.
+017502070810      *Rfs 43561 ends
+017602070810
+017702090505      *RFS50475 Add - Begin
+017802090505       FD  TRANS-PURCHASE-UNITS
+017902090505           LABEL RECORDS ARE STANDARD.
+018002090505       01  TRANS-PURCHASE-UNITS-REC.
+018102090505                           COPY DDR-ALL-FORMATS OF MFATRNPUL1.
+018202090505      *RFS50475 Add - End
+018302090505
+018402000000       WORKING-STORAGE SECTION.
+018502000000      ******************************************************************
+018602000000       01  CURR-CONTROLS.
+018702000000           05 CURR-LEVEL1.
+018802040723              10 CURR-ACCOUNT             PIC 9(9).
+018902000000
+019002000000       01  PREV-CONTROLS.
+019102000000           05 PREV-LEVEL1.
+019202040723              10 PREV-ACCOUNT             PIC 9(9).
+019302000000
+019402041104       01  WS-FILE-STATUS                 PIC XX.
+019502000000      ******************************************************************
+019602000000      * array to store investment and it schedule and lower limit days
+019702090312R64527 01  ARYSIZ1                        PIC S9(9).
+019802000000       01  WS-INVESTMENT-ARRAY.
+019902090312R64527*    05 WS-INVESTMENT-ENTRY          OCCURS 800 TIMES
+020002090312R64527     05 WS-INVESTMENT-ENTRY          OCCURS 1 TO 30000 TIMES
+020102090312R64527                                     DEPENDING ON ARYSIZ1
+020202000000                             ASCENDING KEY IS AR-INVESTMENT
+020302000000                                           INDEXED BY INVIDX.
+020402090925R72304       07 WS-INVESTMENT-ELEMENT.
+020502000000              10 AR-INVESTMENT            PIC  X(05) VALUE HIGH-VALUE.
+020602000000              10 AR-INV-TRL-VAR-SCHED     PIC  X(04) VALUE HIGH-VALUE.
+020702100204R67590        10 Ar-Inv-EndDate           PIC  S9(8) VALUE ZERO.
+020802000000              10 AR-INV-LOWER-DAYS-CNT    PIC  9(5)  VALUE ZERO.
+020902000000              10 AR-INV-LOWER-DAYS-ENTRY  OCCURS 50 TIMES
+021002000000                                           INDEXED BY LMTIDX.
+021102000000                 15 AR-INV-LOWER-LIMIT-DAYS   PIC  S9(05) VALUE ZERO.
+021202000000
+021302040720      ******************************************************************
+021402000000       01  WS-LMTDAY-FETCH-ARRAY.
+021502040723           05 WS-LMTDAY-FETCH-ENTRY        OCCURS 800 TIMES.
+021602000000              10 AR-LMTDAY-INV            PIC  X(05).
+021702000000              10 AR-LMTDAY-SCHED          PIC  X(04).
+021802100204R67590        10 Ar-LmtDay-EndDate        PIC  S9(8).
+021902000000              10 AR-LMTDAY-DAYS           PIC  S9(05).
+022002040723           05 WS-LMTDAY-FETCH-IND OCCURS 800 TIMES.
+022102000000              10 AR-IND-1                 PIC S9(4) BINARY OCCURS
+022202100204R67590                                              4 TIMES.
+022302000000      ******************************************************************
+022402000000      * array to update the lower limit days per account
+022502000000      * use by FXVARUAI program with option P
+022602000000       01  WS-AR-PUT-CNT                  PIC S9(5).
+022702000000       01  WS-INV-LIMIT-DAYS-ARRAY-P.
+022802000000           05 WS-INV-LIMIT-DAYS-ENTRY-P    OCCURS 50 TIMES.
+022902000000              10 AR-LOWER-LIMIT-DAYS-P    PIC  S9(05).
+023002000000              10 AR-UNITS-VAR-P           PIC  S9(10)V9(3).
+023102000000              10 AR-REC-EXIST-P           PIC  X.
+023202000000              10 AR-STATUS-CODE-P         PIC  X.
+023302000000                 88 ADD-REC               VALUES "A".
+023402000000                 88 CHG-REC               VALUES "C".
+02350207060437142         10 AR-DIST-UNITS-VAR-P      PIC  S9(10)V9(3).
+023602000000
+023702000000      ******************************************************************
+023802000000      * working array to store the investment limit days
+023902000000       01  WS-INV-LIMIT-DAYS-ARRAY.
+024002000000           05 WS-INV-LIMIT-DAYS-ENTRY      OCCURS 50 TIMES
+024102000000                                           INDEXED BY DAYIDX.
+024202000000              10 AR-LOWER-LIMIT-DAYS      PIC  S9(05).
+024302000000              10 AR-UNITS-VAR             PIC  S9(10)V9(3).
+024402000000              10 AR-REC-EXIST             PIC  X.
+024502000000              10 AR-STATUS-CODE           PIC  X.
+02460207060437142         10 AR-DIST-UNITS-VAR        PIC  S9(10)V9(3).
+024702000000
+024802000000      ******************************************************************
+024902000000      * array to retreive lower limit days per account
+025002000000      * use by FXVARUAI progrm with option G
+025102000000       01  WS-ACCT-LIMIT-DAYS-ARRAY.
+025202000000           05 WS-ACCT-LIMIT-DAYS-ENTRY      OCCURS 50 TIMES
+025302000000                                        INDEXED BY ACTIDX.
+025402000000              10 AR-ACT-DAYS              PIC  S9(05).
+025502000000              10 AR-ACT-UNITS-VAR         PIC  S9(10)V9(3).
+025602000000              10 AR-ACT-DTL-EXISTS        PIC  X.
+025702000000              10 AR-ACT-DTL-STATUS-CD     PIC  X.
+02580207060437142         10 AR-ACT-DIST-UNITS-VAR    PIC  S9(10)V9(3).
+025902000000
+026002000000      ******************************************************************
+026102000000       01  WS-TRNCUR-FETCH-ARRAY.
+026202040723           05 WS-TRNCUR-FETCH-ENTRY        OCCURS  500 TIMES
+026302040723                                           INDEXED BY TRNIDX.
+026402000000              10 AR-PLACEMENT-DATE        PIC  S9(09) COMP-3.
+026502000000              10 AR-TRANS-NO              PIC  S9(09) COMP-3.
+026602000000              10 AR-PROCESS-DATE          PIC  S9(09) COMP-3.
+026702000000              10 AR-TRANS-TYPE-CODE       PIC   X(03).
+026802000000              10 AR-ACCOUNT               PIC  S9(9).
+026902040721              10 AR-INVEST-CODE           PIC   X(5).
+027002040721              10 AR-TRANS-PROC-SEQ-NO     PIC  S9(3)  COMP-3.
+027102000000              10 AR-TRANS-STATUS-CODE     PIC   X(03).
+027202120716108942        10 AR-TRANS-UNIT-AMT        PIC  S9(10)V9(3) COMP-3.
+027302000000
+027402040723           05 WS-TRNCUR-FETCH-IND          OCCURS 500  TIMES.
+027502000000              10 AR-TRNCUR-IND            PIC S9(4) BINARY OCCURS
+027602040721                                                    8 TIMES.
+027702000000
+027802000000      ******************************************************************
+027902000000       01  WS-CDSC-DTL-ARRAY.
+028002040723           05 WS-CDSC-DTL-ARRAY-ENTRY      OCCURS 200 TIMES
+028102040723                                           INDEXED BY DTLIDX.
+028202000000              10 AR-UNITS                 PIC  S9(10)V9(3).
+028302000000              10 AR-AGE-DATE              PIC  S9(08).
+02840207060437142         10 AR-DIST-IND              PIC  X(01).
+028502000000
+028602040720           05 WS-CDSC-FETCH-IND           OCCURS 200  TIMES.
+028702000000              10 WS-CDSC-IND              PIC S9(4) BINARY OCCURS
+028802000000                                                    2 TIMES.
+028902000000
+029002000000      ******************************************************************
+029102000000       01  WS-FIX-VALUES.
+029202040723           05 WS-ARRAY-800                PIC  S9(4) VALUE 800.
+029302040721           05 WS-ARRAY-500                PIC  S9(4) VALUE 500.
+029402040720           05 WS-ARRAY-200                PIC  S9(4) VALUE 200.
+029502040716           05 WS-ARRAY-50                 PIC  S9(4) VALUE 50.
+029602000000           05 WS-PROGRAM-NAME             PIC  X(10) VALUE "SRVVCN".
+029702000000
+029802040817       01  WS-OPEN-FILES                  PIC  X    VALUE "Y".
+029902040817       01  WS-PREV-TRL-SCHED              PIC  X(4) VALUE SPACES.
+030002000000
+030102040805       01  WS-INDICATOR-FIELDS.
+030202040805           05 WS-IND-1                    PIC S9(4) BINARY.
+030302040805           05 WS-IND-2                    PIC S9(4) BINARY.
+030402040805
+030502000000       01  WS-MISC-FIELDS.
+030602040716           05 WS-END-TRN-FETCH            PIC  X.
+030702041104           05 WS-FETCH-CNT                PIC  9(4).
+030802040716           05 WS-ACT-TRN-EXISTS           PIC  X.
+030902040720           05 WS-CNT                      PIC S9(4).
+031002040720           05 WS-CDSC-CNT                 PIC  9(4).
+031102000000           05 WS-MAX-DAYS-ROW             PIC  9(4).
+031202000000           05 WS-MAX-TRN-ROW              PIC  9(4).
+031302000000           05 WS-MAX-DTL-ROW              PIC  9(4).
+031402000000           05 WS-TRNCUR-OPEN              PIC  X.
+031502000000           05 WS-TRNCUR2-OPEN             PIC  X.
+031602000000           05 WS-NEXT-TRN-FETCH           PIC  X.
+031702000000           05 WS-ORIG-PLACEMENT-DATE      PIC  S9(9).
+031802000000           05 WS-ORIG-TRANS-NO            PIC  S9(9).
+031902000000           05 WS-PLACEMENT-DATE           PIC  S9(9).
+032002000000           05 WS-TRANS-NO                 PIC  S9(9).
+032102000000           05 WS-BYPASS-ACT               PIC  X.
+032202000000           05 WS-AGE-START-DATE           FORMAT DATE "@Y%m%d".
+032302000000           05 WS-AGE-END-DATE             FORMAT DATE "@Y%m%d".
+032402000000           05 WS-DAYS                     PIC  9(8).
+032502000000           05 WS-UNITS                    PIC S9(10)V9(3) COMP-3.
+032602000000           05 WS-INVEST-CODE              PIC  X(5).
+032702040719           05 WS-SETUP-TABLE              PIC  X.
+032802040720           05 WS-ACCOUNT-NO               PIC S9(9).
+032902070604
+03300207060437142      05 ln_PrevAccount             PIC S9(9).
+033102070608           05 lc_InitialiseMe            PIC  X Value "N".
+03320207060437142      05 ln_DistUnits               PIC S9(10)V9(3).
+03330207060837142      05 ln_TotalVarUnits           PIC S9(10)V9(3).
+03340207060437142      05 li_LowerLimitDays          PIC S9(07).
+03350207060437142      05 li_PreviousDistUnits       PIC S9(10)V9(3).
+03360207060437142      05 li_PreviousVarUnits        PIC S9(10)V9(3).
+03370207060437142      05 li_PreviousLowerDays       PIC S9(07).
+03380207060437142      05 li_CurrentDistUnits        PIC S9(10)V9(3).
+03390207060437142      05 li_CurrentVarUnits         PIC S9(10)V9(3).
+03400207060437142      05 li_CurrentLowerDays        PIC S9(07).
+03410207060537142      05 li_LowerDay                PIC S9(07).
+03420207060537142      05 li_Dayidx                  PIC S9(04).
+03430207060537142      05 li_MaxLimitDay             PIC S9(04).
+03440207081037142      05 li_EarliestPurAgeDate      PIC S9(8).
+034502070813
+03460207081343561      05 lc_EofCdscRec             PIC  X Value "N".
+034702070813  ¦        05 li_PlacementDate          PIC S9(9) COMP-3.
+034802070813  ¦        05 li_TransNo                PIC S9(9) COMP-3.
+03490207081343561      05 ln_GrossAmt               PIC S9(13)V9(2).
+035002040719
+03510207092144223      05 lc_AddbackDist            PIC  X Value "N".
+035202120716108942     05 ln_unitamt                 PIC S9(10)V9(3).
+035302120716108942     05 lc_includedist             PIC X.
+035402070921
+035502100204      *Rfs67590 - Start
+035602100204           05 li-Sched-EndDate          PIC S9(8) VALUE 0.
+035702100204      *Rfs67590 - End
+035802100204
+035902040723           05 WS-SYSDATE                  PIC S9(8).
+036002040723           05 WS-SYSTIME                  PIC S9(8).
+036102000000
+036202000000           05 WS-TIME-BEGIN.
+036302040723              07 WS-TB-HH                 PIC 9(2).
+036402040723              07 WS-TB-MM                 PIC 9(2).
+036502040723              07 WS-TB-SS                 PIC 9(2).
+036602040723              07 WS-TB-TT                 PIC 9(2).
+036702000000
+036802000000           05 WS-TIME-END.
+036902040723              07 WS-TE-HH                 PIC 9(2).
+037002040723              07 WS-TE-MM                 PIC 9(2).
+037102040723              07 WS-TE-SS                 PIC 9(2).
+037202040723              07 WS-TE-TT                 PIC 9(2).
+037302000000
+037402000000           05 WS-TIME-USED.
+037502040723              07 WS-TU-HH                 PIC 9(2).
+037602040723              07 FILLER                   PIC X(1) VALUE ":".
+037702040723              07 WS-TU-MM                 PIC 9(2).
+037802040723              07 FILLER                   PIC X(1) VALUE ":".
+037902040723              07 WS-TU-SS                 PIC 9(2).
+038002040723              07 FILLER                   PIC X(1) VALUE ":".
+038102040723              07 WS-TU-TT                 PIC 9(2).
+038202000000
+038302040723           05 WS-LOG-LIMIT-DAYS           PIC 9(5).
+038402040723           05 WS-LOG-UNITS                PIC Z(9)9(1).9(3)-.
+038502040723           05 WS-LOG-CODE                 PIC X(3).
+038602040723           05 WS-STATS-EVENT              PIC X(1).
+038702040723           05 WS-LOG-PROGRAM-CALLED       PIC X(10).
+038802000000
+038902040723       01  WS-LOG-ERROR                   PIC X(1).
+039002040723           88 LOG-ERROR-ON                VALUE "Y".
+039102040723           88 LOG-ERROR-OFF               VALUE "N" " ".
+039202000000
+039302040723       01  WS-LOG-STATS                   PIC X(1).
+039402040723           88 LOG-STATS-ON                VALUE "Y".
+039502040723           88 LOG-STATS-OFF               VALUE "N" " ".
+039602070604
+039702070604      *Rfs 37142
+039802070604       01  lnc-Screen-Edit-Codes.
+039902070604           05 lnc-Screen-Code           PIC X(08) VALUE  "SRVCALC".
+040002070604           05 lnc-Edit-Code             PIC X(06) VALUE  "DSTVAR".
+040102070604           05 lnc-Level-Code            PIC X(01) VALUE  "T".
+040202070604           05 lnc-Edit-Alw-Flag         PIC X(01) VALUE  "N".
+040302070604      *Rfs 37142
+040402000000
+040502090505      *RFS50475 Add - Beg
+040602090505       01  lc_ScreenAllowed_ALDTTF.
+040702090505           05 lc_ALDTTF_ScreenCode        PIC X(8) VALUE "ACCCDTL "    .
+040802090505           05 lc_ALDTTF_EditCode          PIC X(6) VALUE "ALDTTF".
+040902090505           05 lc_ALDTTF_EditLevel         PIC X(1) VALUE "A".
+041002090505           05 lc_ALDTTF_RtnFlag           PIC X.
+041102090505              88 lb_ALDTTF_EditYes           Value "Y".
+041202090505              88 lb_ALDTTF_EditNo            Value "N".
+041302090512       01  lncc_Constants.
+041402090512           05 lncc_FIFO                   PIC X(5) VALUE "FIFO ".
+041502090505      *RFS50475 Add - End
+041602090505
+041702000000      *******************************************************************
+041802000000      **
+041902000000      * Error and Statistics log record
+042002000000
+042102000000       01 WS-LOG-REC.
+042202000000          COPY DD-ALL-FORMATS OF MFASRVLOGP.
+042302000000
+042402070604      * Rfs 37142
+042502070604      * Copy SQLSTATE working variables
+042602070925        COPY CPYSQLFLD
+04270207092544223        REPLACING == "CURRENT_PROGRAM" == BY == "SRVVCN" ==.
+042802000000
+042902000000      * Data area MFASDAPARM - SERVICE FEE DAILY ACCRUAL PARM
+043002000000
+043102000000       COPY CPYSDAPARM.
+043202000000
+043302000000      * Data area MFASRVCTL  - Service Fee Process Control
+043402000000
+043502000000       COPY CPYSRVCTL.
+043602000000
+043702000000      ******************************************************************
+043802000000       01  FXVARUAI-PARMS.
+043902000000           05 WS-CALL-OPTION              PIC  X.
+044002000000           05 WS-CALL-RETURN-CODE         PIC  X(2).
+044102000000           05 WS-HDR-EXISTS               PIC  X.
+044202000000           05 WS-HDR-STATUS-CODE          PIC  X.
+044302000000           05 WS-LAST-PROCESS-DATE        PIC S9(9).
+044402000000           05 WS-TOT-UNITS                PIC S9(10)V9(3).
+044502000000           05 WS-TOT-DAYS-RANGE           PIC S9(5).
+044602000000
+044702000000      ******************************************************************
+044802000000       01 TRANSACTION-CATEGORIES.
+044902000000          05 TRANS-TYPE-CATEGORY         PIC X(3).
+045002120716108942       88 DIST-TRANSACTION         VALUES "INC" "CPG" "INT".
+045102000000             88 ADDITION-TRANSACTION     VALUES "BUY" "INC" "CPG" "BAJ"
+045202000000                                                "SWI" "TRI" "INT" "MFR".
+045302000000             88 REDUCTION-TRANSACTION    VALUES "SEL" "SWO" "TRO"
+045402000000                                                "TFE" "CQD" "FEE" "SAJ".
+045502000000             88 VALID-TRANSACTION        VALUES "BUY" "SEL" "SWI"
+045602000000                                                "SWO" "TRI" "TRO"
+045702000000                                                "CPG" "INC" "INT"
+045802000000                                                "TFE" "CQD" "FEE"
+045902000000                                                "MFR" "SAJ" "BAJ".
+046002041203             88 SWITCH-TRANSFER-IN       VALUES "SWI" "TRI".
+046102000000
+046202000000          05 TRANS-STATUS-CATEGORY       PIC X(3).
+046302000000             88 HISTORY                  VALUES "HST" "HSC".
+046402000000             88 RVSD                     VALUES "RVS".
+046502000000             88 VALID-STATUS             VALUES "HST" "HSC" "RVS".
+046602000000
+046702000000      *******************************************************************
+046802000000      **  SQL variables
+046902000000      **
+047002000000       01  WS-SQLLOG-VARIABLES.
+047102000000           05 WS-ROUTINE-NAME               PIC X(25).
+047202000000           05 WS-SQLERR-STATEMENT           PIC X(25)   VALUE " ".
+047302000000           05 WS-SQLERR-DATA                PIC X(1780) VALUE " ".
+047402000000           05 WS-SQL-STATS                  PIC X(1966) VALUE " ".
+047502000000           05 WS-SQLERR-REPLY               PIC X(01)  VALUE " ".
+047602000000
+047702000000           EXEC SQL
+047802000000                INCLUDE SQLCA
+047902000000           END-EXEC.
+048002000000      /
+048102000000       LINKAGE SECTION.
+048202000000       01  COMM-OPTION                    PIC X(3).
+048302000000           88 ALL-ACCOUNTS                VALUES "ALL".
+048402000000           88 ONE-ACCOUNT                 VALUES "ONE".
+048502040714           88 VALID-OPTIONS               VALUES "ALL" "ONE".
+048602000000      *    ALL - calculate variable units for all account
+048702000000      *    ONE - calculate variable units for one account
+048802000000       01  COMM-PROCESS-DATE              PIC S9(8).
+048902000000
+049002000000       01  COMM-START-DATE                PIC S9(8).
+049102000000      *  start date is when variable units apply to this investment
+049202000000      *    - effective date of investment
+049302000000
+049402000000       01  COMM-END-DATE                  PIC S9(8).
+049502000000      *  end date is when variable units apply to service fee process
+049602000000      *    - implement date of investment
+049702000000
+049802000000       01  COMM-FROM-DATE                 PIC S9(8).
+049902000000       01  COMM-TO-DATE                   PIC S9(8).
+050002000000      *  from-date and to-date is the transaction process date range
+050102000000
+050202000000       01  COMM-INVESTMENT                PIC X(5).
+050302000000       01  COMM-ACCOUNT                   PIC S9(9).
+050402000000       01  COMM-CLEAR-FILE                PIC X.
+050502000000      *    Y   - initailize the MFAACIDVP and MFAACIDUP
+050602000000      *    N   - NOT initailize the MFAACIDVP and MFAACIDUP
+050702000000       01  COMM-RETURN-CODE               PIC X(3).
+050802000000      /
+050902000000       PROCEDURE DIVISION USING COMM-OPTION
+051002000000                                COMM-PROCESS-DATE
+051102000000                                COMM-START-DATE
+051202000000                                COMM-END-DATE
+051302000000                                COMM-FROM-DATE
+051402000000                                COMM-TO-DATE
+051502000000                                COMM-INVESTMENT
+051602000000                                COMM-ACCOUNT
+051702000000                                COMM-CLEAR-FILE
+051802000000                                COMM-RETURN-CODE.
+051902000000       MAINLINE.
+052002000000           PERFORM INITIAL-LOGIC       THRU INL-EXIT.
+052102000000           IF CURR-CONTROLS IS EQUAL TO HIGH-VALUES
+052202000000              GO TO ML-1300.
+052302000000
+052402000000       ML-0200.
+052502000000           PERFORM GET-CURRENT-RECORD  THRU GCR-EXIT.
+052602000000           IF PREV-LEVEL1  IS EQUAL TO CURR-LEVEL1
+052702000000              GO TO ML-1000.
+052802000000
+052902000000           IF PREV-CONTROLS IS EQUAL TO LOW-VALUES
+053002000000              GO TO ML-0400.
+053102000000
+053202000000       ML-0300.
+053302000000           PERFORM LEVEL-SUMMARY-1     THRU LS1-EXIT.
+053402000000
+053502000000       ML-0400.
+053602000000           IF CURR-CONTROLS IS EQUAL TO HIGH-VALUES
+053702000000              GO TO ML-1200.
+053802000000
+053902000000       ML-0500.
+054002000000           PERFORM LEVEL-REINIT-1      THRU LR1-EXIT.
+054102040722           IF CURR-CONTROLS IS EQUAL TO HIGH-VALUES
+054202040722              GO TO ML-1200.
+054302040722
+054402000000           MOVE CURR-CONTROLS          TO PREV-CONTROLS.
+054502000000
+054602000000       ML-1000.
+054702000000           PERFORM DETAIL-PROCESS      THRU DPR-EXIT.
+054802000000           GO TO ML-0200.
+054902000000
+055002000000       ML-1200.
+055102000000           PERFORM UPDATE-ACCT-INV     THRU UAI-EXIT.
+055202000000
+055302000000       ML-1300.
+055402000000           PERFORM END-JOB             THRU EOJ-EXIT.
+055502000000           GOBACK.
+055602000000      /
+055702000000       DECLARE-SQL-STATEMENTS.
+055802000000           MOVE "DECLARE-SQL-STATEMENTS" TO WS-ROUTINE-NAME.
+055902000000***********************************************************************
+056002000000******* CURSOR: LMTDAYS   - select upper limit days for a schedule
+056102000000***********************************************************************
+056202000000******* ALIAS        FILENAME                         OPENNAME
+056302000000***********************************************************************
+056402000000******* TRSCVP       TRAILER-RATE-VAR-SCHEDULE        MFATRSCVP
+056502000000***********************************************************************
+056602000000           MOVE "DECLARE LMTDAYS"   TO WS-SQLERR-STATEMENT.
+056702000000           EXEC SQL
+056802000000             DECLARE LMTDAYS  CURSOR FOR
+056902000000              SELECT INVTVP.INVESTMENT_CODE,
+057002000000                     INVTVP.TRAILER_SCHEDULE_CODE,
+057102100204R67590               invtvp.End_Date,
+057202000000                     TRSCVP.LOWER_LIMIT_DAYS
+057302000000                FROM MFAINVTVP INVTVP,
+057402000000                     MFATRSCVP TRSCVP
+057403200722      *RFS185175-Starts
+057404200723                    ,MFATRSCDP TRSCDP
+057405200722      *RFS185175-Ends
+057502000000               WHERE TRSCVP.TRAILER_SCHEDULE_CODE =
+057602000000                            INVTVP.TRAILER_SCHEDULE_CODE
+057603200713      *RFS185175-Starts
+057604200723                 AND TRSCVP.TRAILER_SCHEDULE_CODE =
+057605200723                            TRSCDP.TRAILER_SCHEDULE_CODE
+057606200723                 AND TRSCDP.TRAILER_RATE_TYPE = "V"
+057607200723                 AND TRSCDP.ASSETS_RULE = "0"
+057608200713      *RFS185175-Ends
+057702000000               ORDER BY INVTVP.INVESTMENT_CODE,
+057802000000                        INVTVP.TRAILER_SCHEDULE_CODE,
+057902000000                        TRSCVP.LOWER_LIMIT_DAYS
+058002000000                 FOR READ ONLY
+058102000000           END-EXEC.
+058202000000
+058302000000***********************************************************************
+058402000000******* CURSOR: ADDCUR    - select trans-cdsc-purchase rec
+058502000000***********************************************************************
+058602000000******* ALIAS        FILENAME                         OPENNAME
+058702000000***********************************************************************
+058802000000******* TRNCPP       TRANS-CDSC-PURCHASE              MFATRNCPP
+058902000000***********************************************************************
+059002000000           MOVE "DECLARE ADDCUR"   TO WS-SQLERR-STATEMENT.
+059102000000           EXEC SQL
+059202000000             DECLARE ADDCUR   CURSOR FOR
+059302000000              SELECT TRNCPP.ORIG_UNIT_BAL,
+059402070604                     TRNCPP.AGE_DATE,
+05950207060437142                CASE
+059602070604  |                  WHEN (TRNCPP.ALL_UNITS_FREE ="Y"
+059702070604  |                        AND TRNCPP.REINVEST_DISTR_AS ="F"
+059802070604  |                        AND :lnc-Edit-Alw-Flag = "Y")
+059902070604  |                  THEN "Y"
+060002070604  |                  ELSE "N"
+06010207060437142                END CASE
+060202000000                FROM MFATRNCPP   TRNCPP
+060302040719               WHERE TRNCPP.PLACEMENT_DATE  = :WS-ORIG-PLACEMENT-DATE
+060402040719                 AND TRNCPP.TRANS_NO        = :WS-ORIG-TRANS-NO
+060502040719                 AND TRNCPP.ACCOUNT_NO      = :WS-ACCOUNT-NO
+060602040719                 AND TRNCPP.INVESTMENT_CODE = :WS-INVEST-CODE
+060702000000                 AND TRNCPP.ORIG_UNIT_BAL <> 0
+060802120716108942           AND (:lc_includedist = "N" OR
+060902120716  |                  (:lc_includedist  = "Y" AND
+061002120716108942                 TRNCPP.DISTR_DATE = "D"))
+061102000000                 FOR READ ONLY
+061202000000           END-EXEC.
+061302000000
+061402000000***********************************************************************
+061502000000******* CURSOR: REDCUR    - select trans-cdsc-purch-reduction rec
+061602000000***********************************************************************
+061702000000******* ALIAS        FILENAME                         OPENNAME
+061802000000***********************************************************************
+061902000000******* TRNRDP       TRANS-CDSC-PURCH-REDUCTION       MFATRNRDP
+062002000000******* TRNCPP       TRANS-CDSC-PURCHASE              MFATRNCPP
+062102000000***********************************************************************
+062202000000           MOVE "DECLARE REDCUR"   TO WS-SQLERR-STATEMENT.
+062302000000           EXEC SQL
+062402000000             DECLARE REDCUR   CURSOR FOR
+062502000000              SELECT (TRNRDP.FREE_UNITS_TAKEN_DOWN +
+062602000000                      TRNRDP.CHRG_UNITS_TAKEN_DOWN),
+062702070604                     TRNCPP.AGE_DATE,
+06280207060437142                CASE
+062902070604  |                  WHEN (TRNCPP.ALL_UNITS_FREE ="Y"
+063002070604  |                        AND TRNCPP.REINVEST_DISTR_AS ="F"
+063102070604  |                        AND :lnc-Edit-Alw-Flag = "Y")
+063202070604  |                  THEN "Y"
+063302070604  |                  ELSE "N"
+06340207060437142                END CASE
+063502000000                FROM MFATRNRDP   TRNRDP,
+063602000000                     MFATRNCPP   TRNCPP
+063702000000               WHERE TRNRDP.PLACEMENT_DATE = :WS-ORIG-PLACEMENT-DATE
+063802000000                 AND TRNRDP.TRANS_NO       = :WS-ORIG-TRANS-NO
+063902000000                 AND TRNCPP.PLACEMENT_DATE = TRNRDP.PLACEMENT_DATE_2
+064002000000                 AND TRNCPP.TRANS_NO       = TRNRDP.TRANS_NO_2
+064102000000                 AND TRNCPP.CDSC_SEQ_NO    = TRNRDP.CDSC_SEQ_NO_2
+064202040719                 AND TRNCPP.ACCOUNT_NO      = :WS-ACCOUNT-NO
+064302040719                 AND TRNCPP.INVESTMENT_CODE = :WS-INVEST-CODE
+064402000000                 AND (TRNRDP.FREE_UNITS_TAKEN_DOWN <> 0 OR
+064502000000                      TRNRDP.CHRG_UNITS_TAKEN_DOWN <> 0)
+064602120716108942           AND (:lc_includedist = "N" OR
+064702120716108942               (:lc_includedist  = "Y" AND
+064802120716108942                 TRNCPP.DISTR_DATE = "D"))
+064902000000                 FOR READ ONLY
+065002000000           END-EXEC.
+065102090505      *RFS50475 Add - Beg
+065202090505***********************************************************************
+065302090505******* CURSOR: ADDCUR1   - select trans-purchase-units rec
+065402090505***********************************************************************
+065502090505******* ALIAS        FILENAME                         OPENNAME
+065602090505***********************************************************************
+065702090505******* TRNPUP       TRANS-PURCHASE-UNITS             MFATRNPUP
+065802090505***********************************************************************
+065902090505           MOVE "DECLARE ADDCUR1"  TO WS-SQLERR-STATEMENT.
+066002090505           EXEC SQL
+066102090505             DECLARE ADDCUR1  CURSOR FOR
+066202090505              SELECT TRNPUP.PURCH_ORIG_UNIT_BAL,
+066302090505                     TRNPUP.PURCH_AGE_DATE, "N"
+066402090505                FROM MFATRNPUP   TRNPUP
+066502090512               WHERE TRNPUP.UNIT_MONITOR_TYPE = :lncc_FIFO
+066602090512                 AND TRNPUP.PLACEMENT_DATE    = :WS-ORIG-PLACEMENT-DATE
+066702090512                 AND TRNPUP.TRANS_NO          = :WS-ORIG-TRANS-NO
+066802090512                 AND TRNPUP.ACCOUNT_NO        = :WS-ACCOUNT-NO
+066902090512                 AND TRNPUP.INVESTMENT_CODE   = :WS-INVEST-CODE
+067002090505                 AND TRNPUP.PURCH_ORIG_UNIT_BAL <> 0
+067102090505                 FOR READ ONLY
+067202090505           END-EXEC.
+067302090505
+067402090505***********************************************************************
+067502090505******* CURSOR: REDCUR1   - select trans-cdsc-purch-reduction rec
+067602090505***********************************************************************
+067702090505******* ALIAS        FILENAME                         OPENNAME
+067802090505***********************************************************************
+067902090505******* TRNRUP       TRANS-REDUCTION-UNITS            MFATRNRUP
+068002090505******* TRNPUP       TRANS-PURCHASE-UNITS             MFATRNPUP
+068102090505***********************************************************************
+068202090505           MOVE "DECLARE REDCUR1"  TO WS-SQLERR-STATEMENT.
+068302090505           EXEC SQL
+068402090505             DECLARE REDCUR1  CURSOR FOR
+068502090505              SELECT TRNRUP.UNITS_TAKEN_DOWN,
+068602090505                     TRNPUP.PURCH_AGE_DATE, "N"
+068702090505                FROM MFATRNRUP   TRNRUP,
+068802090505                     MFATRNPUP   TRNPUP
+068902090512               WHERE TRNRUP.UNIT_MONITOR_TYPE = :lncc_FIFO
+069002090512                 AND TRNRUP.PLACEMENT_DATE = :WS-ORIG-PLACEMENT-DATE
+069102090505                 AND TRNRUP.TRANS_NO       = :WS-ORIG-TRANS-NO
+069202090512                 AND TRNPUP.UNIT_MONITOR_TYPE =
+069302090512                                             TRNRUP.UNIT_MONITOR_TYPE_2
+069402090505                 AND TRNPUP.PLACEMENT_DATE = TRNRUP.PLACEMENT_DATE_2
+069502090505                 AND TRNPUP.TRANS_NO       = TRNRUP.TRANS_NO_2
+069602090505                 AND TRNPUP.PURCH_SEQ_NO   = TRNRUP.PURCH_SEQ_NO_2
+069702090505                 AND TRNPUP.ACCOUNT_NO      = :WS-ACCOUNT-NO
+069802090505                 AND TRNPUP.INVESTMENT_CODE = :WS-INVEST-CODE
+069902090505                 AND TRNRUP.UNITS_TAKEN_DOWN <> 0
+070002090505                 FOR READ ONLY
+070102090505           END-EXEC.
+070202090505      *RFS50475 Add - End
+070302090505
+070402000000***********************************************************************
+070502041104******* CURSOR: TRNCUR    - select trans for one investment
+070602000000***********************************************************************
+070702000000******* ALIAS        FILENAME                         OPENNAME
+070802000000***********************************************************************
+070902000000******* TRNP         TRANS                            MFATRNP
+071002000000***********************************************************************
+071102000000           MOVE "DECLARE TRNCUR"   TO WS-SQLERR-STATEMENT.
+071202000000           EXEC SQL
+071302000000             DECLARE TRNCUR   CURSOR FOR
+071402000000              SELECT TRNP.PLACEMENT_DATE,
+071502000000                     TRNP.TRANS_NO,
+071602000000                     TRNP.PROCESS_DATE,
+071702000000                     TRNP.TRANS_TYPE_CODE,
+071802000000                     TRNP.ACCOUNT_NO,
+071902040721                     TRNP.INVESTMENT_CODE,
+072002040721                     TRNP.TRANS_PROC_SEQ_NO,
+072102120716                     TRNP.TRANS_STATUS_CODE,
+072202120716108942               TRNP.UNIT_AMT
+072302000000                FROM MFATRNP     TRNP
+072402000000               WHERE TRNP.INVESTMENT_CODE  = :COMM-INVESTMENT
+072502000000                 AND TRNP.PROCESS_DATE    >= :COMM-FROM-DATE
+072602000000                 AND TRNP.PROCESS_DATE    <= :COMM-TO-DATE
+072702000000                 AND TRNP.TRANS_STATUS_CODE IN ("HST", "HSC", "RVS")
+072802121113116342           AND TRNP.TRANS_TYPE_CODE <> "CPL"
+072902120716108942*          AND TRNP.UNIT_AMT > 0
+073002000000               ORDER BY TRNP.ACCOUNT_NO,
+073102040721                        TRNP.INVESTMENT_CODE,
+073202040721                        TRNP.PROCESS_DATE,
+073302040721                        TRNP.TRANS_PROC_SEQ_NO
+073402000000                 FOR READ ONLY
+073502000000           END-EXEC.
+073602000000***********************************************************************
+073702000000******* CURSOR: TRNCUR2   - select trans for 1 account
+073802000000***********************************************************************
+073902000000******* ALIAS        FILENAME                         OPENNAME
+074002000000***********************************************************************
+074102000000******* TRNP         TRANS                            MFATRNP
+074202000000***********************************************************************
+074302000000           MOVE "DECLARE TRNCUR2"   TO WS-SQLERR-STATEMENT.
+074402000000           EXEC SQL
+074502000000             DECLARE TRNCUR2   CURSOR FOR
+074602000000              SELECT TRNP.PLACEMENT_DATE,
+074702000000                     TRNP.TRANS_NO,
+074802000000                     TRNP.PROCESS_DATE,
+074902000000                     TRNP.TRANS_TYPE_CODE,
+075002000000                     TRNP.ACCOUNT_NO,
+075102040721                     TRNP.INVESTMENT_CODE,
+075202040721                     TRNP.TRANS_PROC_SEQ_NO,
+075302120716                     TRNP.TRANS_STATUS_CODE,
+075402120716108942               TRNP.UNIT_AMT
+075502000000                FROM MFATRNP     TRNP
+075602040817               WHERE TRNP.ACCOUNT_NO       = :COMM-ACCOUNT
+075702040817                 AND TRNP.INVESTMENT_CODE  = :COMM-INVESTMENT
+075802000000                 AND TRNP.PROCESS_DATE    >= :COMM-FROM-DATE
+075902000000                 AND TRNP.PROCESS_DATE    <= :COMM-TO-DATE
+076002000000                 AND TRNP.TRANS_STATUS_CODE IN ("HST", "HSC", "RVS")
+076102121113116342           AND TRNP.TRANS_TYPE_CODE <> "CPL"
+076202120716108942*          AND TRNP.UNIT_AMT > 0
+076302040721               ORDER BY TRNP.ACCOUNT_NO,
+076402040721                        TRNP.INVESTMENT_CODE,
+076502040721                        TRNP.PROCESS_DATE,
+076602040721                        TRNP.TRANS_PROC_SEQ_NO
+076702000000                 FOR READ ONLY
+076802000000           END-EXEC.
+076902000000       DSS-EXIT.
+077002000000           EXIT.
+077102000000      /
+077202000000       GET-CURRENT-RECORD.
+077302040716           IF WS-NEXT-TRN-FETCH = "N"
+077402000000              GO TO GCR-NEXT-TRN.
+077502000000
+077602000000           IF ALL-ACCOUNTS
+077702000000              GO TO GCR-ALL-ACCT-FETCH.
+077802000000
+077902000000       GCR-ONE-ACCT-FETCH.
+078002040716           IF WS-END-TRN-FETCH = "Y"
+078102040716              MOVE HIGH-VALUE TO CURR-CONTROLS
+078202040716              GO TO GCR-EXIT
+078302040716           END-IF.
+078402040716
+078502040716           INITIALIZE WS-TRNCUR-FETCH-ARRAY
+078602040716                      WS-MAX-TRN-ROW.
+078702000000           MOVE "FETCH TRNCUR2"   TO WS-SQLERR-STATEMENT.
+078802000000           EXEC SQL
+078902000000             FETCH NEXT FROM TRNCUR2
+079002040721               FOR :WS-ARRAY-500 ROWS
+079102000000              INTO :WS-TRNCUR-FETCH-ENTRY
+079202000000                   :WS-TRNCUR-FETCH-IND
+079302000000           END-EXEC.
+079402000000
+079502000000           IF SQLCODE = 100 OR SQLCODE < 0
+079602000000              MOVE HIGH-VALUE TO CURR-CONTROLS
+079702000000              GO TO GCR-EXIT
+079802000000           END-IF.
+079902040716
+080002040716           MOVE "N" TO WS-NEXT-TRN-FETCH.
+080102040716           COMPUTE WS-MAX-TRN-ROW = SQLERRD(3).
+080202000000
+080302040716           IF SQLERRD(5) = 100
+080402040716              MOVE "Y" TO WS-END-TRN-FETCH.
+080502040716
+080602040716           IF WS-ACT-TRN-EXISTS = SPACES
+080702040716              MOVE "Y" TO WS-ACT-TRN-EXISTS.
+080802000000
+080902000000           SET TRNIDX TO 0.
+081002000000           GO TO GCR-NEXT-TRN.
+081102000000
+081202000000       GCR-ALL-ACCT-FETCH.
+081302040722           IF WS-END-TRN-FETCH = "Y"
+081402040722              MOVE HIGH-VALUE TO CURR-CONTROLS
+081502040722              GO TO GCR-EXIT
+081602040722           END-IF.
+081702040722
+081802040716           INITIALIZE WS-TRNCUR-FETCH-ARRAY
+081902040716                      WS-MAX-TRN-ROW.
+082002000000           MOVE "FETCH TRNCUR"   TO WS-SQLERR-STATEMENT.
+082102000000           EXEC SQL
+082202000000             FETCH NEXT FROM TRNCUR
+082302040721               FOR :WS-ARRAY-500 ROWS
+082402000000              INTO :WS-TRNCUR-FETCH-ENTRY
+082502000000                   :WS-TRNCUR-FETCH-IND
+082602000000           END-EXEC.
+082702000000
+082802000000           IF SQLCODE = 100 OR SQLCODE < 0
+082902000000              MOVE HIGH-VALUE TO CURR-CONTROLS
+083002000000              GO TO GCR-EXIT
+083102000000           END-IF.
+083202000000
+083302040716           MOVE "N" TO WS-NEXT-TRN-FETCH.
+083402000000           COMPUTE WS-MAX-TRN-ROW = SQLERRD(3).
+083502040716           IF SQLERRD(5) = 100
+083602040716              MOVE "Y" TO WS-END-TRN-FETCH.
+083702000000
+083802000000           SET TRNIDX TO 0.
+083902000000
+084002000000       GCR-NEXT-TRN.
+084102000000           SET TRNIDX UP BY 1.
+084202000000           IF TRNIDX > WS-MAX-TRN-ROW
+084302000000              IF ALL-ACCOUNTS
+084402000000                 GO TO GCR-ALL-ACCT-FETCH
+084502000000              ELSE
+084602000000                 GO TO GCR-ONE-ACCT-FETCH
+084702000000              END-IF
+084802000000           END-IF.
+084902000000
+085002000000           MOVE AR-PLACEMENT-DATE(TRNIDX)    TO WS-ORIG-PLACEMENT-DATE
+085102000000                                                WS-PLACEMENT-DATE.
+085202000000           MOVE AR-TRANS-NO(TRNIDX)          TO WS-ORIG-TRANS-NO
+085302000000                                                WS-TRANS-NO.
+085402040719           MOVE AR-ACCOUNT(TRNIDX)           TO CURR-ACCOUNT
+085502040719                                                WS-ACCOUNT-NO.
+085602000000           MOVE AR-TRANS-TYPE-CODE(TRNIDX)   TO TRANS-TYPE-CATEGORY.
+085702000000           MOVE AR-TRANS-STATUS-CODE(TRNIDX) TO TRANS-STATUS-CATEGORY.
+085802120716108942     MOVE AR-TRANS-UNIT-AMT(TRNIDX)    TO ln_unitamt.
+085902120716  |        IF DIST-TRANSACTION  AND LN_UNITAMT = 0
+086002120716  |            MOVE "Y" TO lc_includedist
+086102120716  |        ELSE
+086202120716  |            MOVE "N" TO lc_includedist
+086302120716108942     END-IF
+086402000000           IF NOT VALID-TRANSACTION
+086502000000              GO TO GCR-NEXT-TRN.
+086602000000       GCR-EXIT.
+086702000000           EXIT.
+086802000000      /
+086902000000       DETAIL-PROCESS.
+087002000000           IF WS-BYPASS-ACT = "Y"
+087102000000              GO TO DPR-EXIT.
+087202000000
+087302000000           IF HISTORY
+087402000000              IF ADDITION-TRANSACTION
+08750209050550475a           IF lb_ALDTTF_EditYes
+08760209050550475a            PERFORM PROCESS-ADDITION-TRN1 THRU PAT1-EXIT
+08770209050550475a           ELSE
+087802000000                 PERFORM PROCESS-ADDITION-TRN THRU PAT-EXIT
+087902120716108942           IF DIST-TRANSACTION  AND LN_UNITAMT = 0
+088002120716  |                MOVE "SEL" TO TRANS-TYPE-CATEGORY
+088102120716  |                 PERFORM PROCESS-REDUCTION-TRN THRU PRT-EXIT
+088202120716108942           END-IF
+08830209050550475a           END-IF
+088402041203X19162** handle SWI/TRI with commission that create MFATRRDP record
+088502041203                 IF SWITCH-TRANSFER-IN
+088602041203                    MOVE "SEL" TO TRANS-TYPE-CATEGORY
+08870209050550475a              IF lb_ALDTTF_EditYes
+08880209050550475a               PERFORM PROCESS-REDUCTION-TRN1 THRU PRT1-EXIT
+08890209050550475a              ELSE
+089002041203                    PERFORM PROCESS-REDUCTION-TRN THRU PRT-EXIT
+08910209050550475a              END-IF
+089202041203X19162           END-IF
+089302000000              ELSE
+08940209050550475a           IF lb_ALDTTF_EditYes
+08950209050550475a            PERFORM PROCESS-REDUCTION-TRN1 THRU PRT1-EXIT
+08960209050550475a           ELSE
+089702000000                 PERFORM PROCESS-REDUCTION-TRN THRU PRT-EXIT
+08980209050550475a              END-IF
+089902000000              END-IF
+090002000000           ELSE
+090102000000              PERFORM PROCESS-REVERSAL-TRN     THRU PVT-EXIT
+090202000000           END-IF.
+090302000000       DPR-EXIT.
+090402000000           EXIT.
+090502000000
+090602000000       PROCESS-ADDITION-TRN.
+090702000000           MOVE "OPEN ADDCUR"   TO WS-SQLERR-STATEMENT.
+090802000000           EXEC SQL
+090902000000             OPEN ADDCUR
+091002000000           END-EXEC.
+091102041104           MOVE 0      TO WS-FETCH-CNT.
+091202041104
+091302000000       PAT-ADD-NEXT-FETCH.
+091402000000           INITIALIZE WS-CDSC-DTL-ARRAY
+091502000000                      WS-MAX-DTL-ROW.
+091602000000
+091702000000           MOVE "FETCH ADDCUR"   TO WS-SQLERR-STATEMENT.
+091802000000           EXEC SQL
+091902000000             FETCH NEXT FROM ADDCUR
+092002040720               FOR :WS-ARRAY-200 ROWS
+092102000000              INTO :WS-CDSC-DTL-ARRAY-ENTRY
+092202000000                   :WS-CDSC-FETCH-IND
+092302000000           END-EXEC.
+092402000000
+092502000000           IF SQLCODE = 100 OR SQLCODE < 0
+092602000000              MOVE 0 TO WS-MAX-DTL-ROW
+092702041104              IF WS-FETCH-CNT = 0
+092802041104                 IF LOG-ERROR-ON
+092902041104                    MOVE "101" TO WS-LOG-CODE
+093002041104                    PERFORM LOG-WARNING-ROUTINE THRU LWR-EXIT
+093102041104                 END-IF
+093202041104              END-IF
+093302000000              GO TO PAT-CLOSE
+093402000000           END-IF.
+093502040719
+093602041104           ADD 1 TO WS-FETCH-CNT.
+093702000000           COMPUTE WS-MAX-DTL-ROW = SQLERRD(3).
+093802000000           PERFORM PROCESS-CDSC-DTL  THRU PCD-EXIT.
+093902041104
+094002041104      **** if not more than 200 MFATRNCPP don't need to fetch the
+094102041104      **** the second time
+094202041104           IF WS-MAX-DTL-ROW < WS-ARRAY-200
+094302041104              GO TO PAT-CLOSE.
+094402041104
+094502041104           GO TO PAT-ADD-NEXT-FETCH.
+094602000000
+094702000000       PAT-CLOSE.
+094802000000           MOVE "CLOSE ADDCUR"   TO WS-SQLERR-STATEMENT.
+094902000000           EXEC SQL
+095002000000             CLOSE ADDCUR
+095102000000           END-EXEC.
+095202000000       PAT-EXIT.
+095302000000           EXIT.
+095402000000
+095502000000       PROCESS-REDUCTION-TRN.
+095602000000           MOVE "OPEN REDCUR"   TO WS-SQLERR-STATEMENT.
+095702000000           EXEC SQL
+095802000000             OPEN REDCUR
+095902000000           END-EXEC.
+096002041104           MOVE 0      TO WS-FETCH-CNT.
+096102041104
+096202000000       PRT-RED-NEXT-FETCH.
+096302000000           INITIALIZE WS-CDSC-DTL-ARRAY
+096402000000                      WS-MAX-DTL-ROW.
+096502000000
+096602000000           MOVE "FETCH REDCUR"   TO WS-SQLERR-STATEMENT.
+096702000000           EXEC SQL
+096802000000             FETCH NEXT FROM REDCUR
+096902040720               FOR :WS-ARRAY-200 ROWS
+097002000000              INTO :WS-CDSC-DTL-ARRAY-ENTRY
+097102000000                   :WS-CDSC-FETCH-IND
+097202000000           END-EXEC.
+097302000000
+097402000000           IF SQLCODE = 100 OR SQLCODE < 0
+097502000000              MOVE 0 TO WS-MAX-DTL-ROW
+097602041104              IF WS-FETCH-CNT = 0
+097702041104                 IF LOG-ERROR-ON
+097802041104                    MOVE "102" TO WS-LOG-CODE
+097902041104                    PERFORM LOG-WARNING-ROUTINE THRU LWR-EXIT
+098002041104                 END-IF
+098102041104              END-IF
+098202000000              GO TO PRT-CLOSE
+098302000000           END-IF.
+098402041104
+098502041104           ADD 1 TO WS-FETCH-CNT.
+098602000000           COMPUTE WS-MAX-DTL-ROW = SQLERRD(3).
+098702000000
+098802000000           PERFORM PROCESS-CDSC-DTL  THRU PCD-EXIT.
+098902041104
+099002041104      **** if not more than 200 MFATRNRDP don't need to fetch the
+099102041104      **** the second time
+099202041104           IF WS-MAX-DTL-ROW < WS-ARRAY-200
+099302041104              GO TO PRT-CLOSE.
+099402041104
+099502041104           GO TO PRT-RED-NEXT-FETCH.
+099602000000
+099702000000       PRT-CLOSE.
+099802000000           MOVE "CLOSE REDCUR"   TO WS-SQLERR-STATEMENT.
+099902000000           EXEC SQL
+100002000000             CLOSE REDCUR
+100102000000           END-EXEC.
+100202000000       PRT-EXIT.
+100302000000           EXIT.
+100402000000
+100502090505      *RFS50475 Add - Beg
+100602090505       PROCESS-ADDITION-TRN1.
+100702090505           MOVE "OPEN ADDCUR1"  TO WS-SQLERR-STATEMENT.
+100802090505           EXEC SQL
+100902090505             OPEN ADDCUR1
+101002090505           END-EXEC.
+101102090505           MOVE 0      TO WS-FETCH-CNT.
+101202090505
+101302090505       PAT1-ADD-NEXT-FETCH.
+101402090505           INITIALIZE WS-CDSC-DTL-ARRAY
+101502090505                      WS-MAX-DTL-ROW.
+101602090505
+101702090505           MOVE "FETCH ADDCUR1"  TO WS-SQLERR-STATEMENT.
+101802090505           EXEC SQL
+101902090505             FETCH NEXT FROM ADDCUR1
+102002090505               FOR :WS-ARRAY-200 ROWS
+102102090505              INTO :WS-CDSC-DTL-ARRAY-ENTRY
+102202090505                   :WS-CDSC-FETCH-IND
+102302090505           END-EXEC.
+102402090505
+102502090505           IF SQLCODE = 100 OR SQLCODE < 0
+102602090505              MOVE 0 TO WS-MAX-DTL-ROW
+102702090505              IF WS-FETCH-CNT = 0
+102802090505                 IF LOG-ERROR-ON
+102902090505                    MOVE "101" TO WS-LOG-CODE
+103002090505                    PERFORM LOG-WARNING-ROUTINE THRU LWR-EXIT
+103102090505                 END-IF
+103202090505              END-IF
+103302090505              GO TO PAT1-CLOSE
+103402090505           END-IF.
+103502090505
+103602090505           ADD 1 TO WS-FETCH-CNT.
+103702090505           COMPUTE WS-MAX-DTL-ROW = SQLERRD(3).
+103802090505           PERFORM PROCESS-CDSC-DTL  THRU PCD-EXIT.
+103902090505
+104002090505      **** if not more than 200 MFATRNPUP don't need to fetch the
+104102090505      **** the second time
+104202090505           IF WS-MAX-DTL-ROW < WS-ARRAY-200
+104302090505              GO TO PAT1-CLOSE.
+104402090505
+104502090505           GO TO PAT1-ADD-NEXT-FETCH.
+104602090505
+104702090505       PAT1-CLOSE.
+104802090505           MOVE "CLOSE ADDCUR1"  TO WS-SQLERR-STATEMENT.
+104902090505           EXEC SQL
+105002090505             CLOSE ADDCUR1
+105102090505           END-EXEC.
+105202090505       PAT1-EXIT.
+105302090505           EXIT.
+105402090505
+105502090505       PROCESS-REDUCTION-TRN1.
+105602090505           MOVE "OPEN REDCUR1"  TO WS-SQLERR-STATEMENT.
+105702090505           EXEC SQL
+105802090505             OPEN REDCUR1
+105902090505           END-EXEC.
+106002090505           MOVE 0      TO WS-FETCH-CNT.
+106102090505
+106202090505       PRT1-RED-NEXT-FETCH.
+106302090505           INITIALIZE WS-CDSC-DTL-ARRAY
+106402090505                      WS-MAX-DTL-ROW.
+106502090505
+106602090505           MOVE "FETCH REDCUR1"  TO WS-SQLERR-STATEMENT.
+106702090505           EXEC SQL
+106802090505             FETCH NEXT FROM REDCUR1
+106902090505               FOR :WS-ARRAY-200 ROWS
+107002090505              INTO :WS-CDSC-DTL-ARRAY-ENTRY
+107102090505                   :WS-CDSC-FETCH-IND
+107202090505           END-EXEC.
+107302090505
+107402090505           IF SQLCODE = 100 OR SQLCODE < 0
+107502090505              MOVE 0 TO WS-MAX-DTL-ROW
+107602090505              IF WS-FETCH-CNT = 0
+107702090505                 IF LOG-ERROR-ON
+107802090505                    MOVE "102" TO WS-LOG-CODE
+107902090505                    PERFORM LOG-WARNING-ROUTINE THRU LWR-EXIT
+108002090505                 END-IF
+108102090505              END-IF
+108202090505              GO TO PRT1-CLOSE
+108302090505           END-IF.
+108402090505
+108502090505           ADD 1 TO WS-FETCH-CNT.
+108602090505           COMPUTE WS-MAX-DTL-ROW = SQLERRD(3).
+108702090505
+108802090505           PERFORM PROCESS-CDSC-DTL  THRU PCD-EXIT.
+108902090505
+109002090505      **** if not more than 200 MFATRNRUP don't need to fetch the
+109102090505      **** the second time
+109202090505           IF WS-MAX-DTL-ROW < WS-ARRAY-200
+109302090505              GO TO PRT1-CLOSE.
+109402090505
+109502090505           GO TO PRT1-RED-NEXT-FETCH.
+109602090505
+109702090505       PRT1-CLOSE.
+109802090505           MOVE "CLOSE REDCUR1"  TO WS-SQLERR-STATEMENT.
+109902090505           EXEC SQL
+110002090505             CLOSE REDCUR1
+110102090505           END-EXEC.
+110202090505       PRT1-EXIT.
+110302090505           EXIT.
+110402090505      *RFS50475 Add - End
+110502090505
+110602000000       PROCESS-REVERSAL-TRN.
+110702040817           MOVE 0 TO WS-ORIG-PLACEMENT-DATE
+110802040817                     WS-ORIG-TRANS-NO.
+110902041104
+111002041203           INITIALIZE MFATRNTGP OF TRANS-TARGET-REC-2.
+111102041203           MOVE WS-PLACEMENT-DATE
+111202041203             TO PLACEMENT-DATE-2 OF TRANS-TARGET-2.
+111302041203           MOVE WS-TRANS-NO
+111402041203             TO TRANS-NO-2 OF TRANS-TARGET-2.
+111502041203      *    MOVE "RVS"
+111602041203      *      TO RELATIONSHIP-TYPE OF TRANS-TARGET-2.
+111702041203
+111802041203           START TRANS-TARGET-2
+111902041203              KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+112002041203              INVALID KEY
+112102041203              GO TO PVT-TARGET-1
+112202041203           END-START.
+112302041203
+112402041203       PVT-TARGET-2.
+112502041203           READ TRANS-TARGET-2 NEXT
+112602041203             AT END
+112702041203                GO TO PVT-TARGET-1
+112802041203           END-READ.
+112902041203
+113002041203           IF PLACEMENT-DATE-2 OF TRANS-TARGET-2 NOT =
+113102041203                  WS-PLACEMENT-DATE
+113202041203              OR  TRANS-NO-2       OF TRANS-TARGET-2 NOT = WS-TRANS-NO
+113302041203                GO TO PVT-TARGET-1.
+113402041203
+113502041203           IF RELATIONSHIP-TYPE OF TRANS-TARGET-2 NOT = "RVS"
+113602041203                GO TO PVT-TARGET-2.
+113702041203
+113802041203           IF PLACEMENT-DATE-2 OF TRANS-TARGET-2 = WS-PLACEMENT-DATE
+113902041203              AND  TRANS-NO-2       OF TRANS-TARGET-2 = WS-TRANS-NO
+114002041203              AND  RELATIONSHIP-TYPE OF TRANS-TARGET-2 = "RVS"
+114102041203                MOVE PLACEMENT-DATE OF TRANS-TARGET-2
+114202041203                  TO WS-ORIG-PLACEMENT-DATE
+114302041203                MOVE TRANS-NO OF TRANS-TARGET-2
+114402041203                  TO WS-ORIG-TRANS-NO
+114502041203                GO TO PVT-DTL-PROCESS
+114602041203           END-IF.
+114702041203           GO TO PVT-TARGET-2.
+114802041203
+114902041203       PVT-TARGET-1.
+115002041203
+115102041105           INITIALIZE MFATRNTGP OF TRANS-TARGET-REC.
+115202041104           MOVE WS-PLACEMENT-DATE
+115302041104             TO PLACEMENT-DATE OF TRANS-TARGET.
+115402041104           MOVE WS-TRANS-NO
+115502041104             TO TRANS-NO OF TRANS-TARGET.
+115602041117      *    MOVE "RVS"
+115702041117      *      TO RELATIONSHIP-TYPE OF TRANS-TARGET.
+115802041105           START TRANS-TARGET
+115902041105              KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+116002041105              INVALID KEY
+116102041203              GO TO PVT-DTL-PROCESS
+116202041105           END-START.
+116302041104
+116402041203       PVT-TARGET-1R.
+116502041117           READ TRANS-TARGET NEXT
+116602041105             AT END
+116702041203                GO TO PVT-DTL-PROCESS
+116802041105           END-READ.
+116902041105
+117002041105           IF PLACEMENT-DATE   OF TRANS-TARGET NOT = WS-PLACEMENT-DATE
+117102041105              OR  TRANS-NO         OF TRANS-TARGET NOT = WS-TRANS-NO
+117202041203                GO TO PVT-DTL-PROCESS.
+117302041105
+117402041105           IF RELATIONSHIP-TYPE OF TRANS-TARGET NOT = "RVS"
+117502041203                GO TO PVT-TARGET-1R.
+117602041105
+117702041105           IF PLACEMENT-DATE   OF TRANS-TARGET   = WS-PLACEMENT-DATE
+117802041105              AND  TRANS-NO         OF TRANS-TARGET   = WS-TRANS-NO
+117902041105              AND  RELATIONSHIP-TYPE OF TRANS-TARGET = "RVS"
+118002041105                MOVE PLACEMENT-DATE-2 OF TRANS-TARGET
+118102041105                  TO WS-ORIG-PLACEMENT-DATE
+118202041105                MOVE TRANS-NO-2 OF TRANS-TARGET
+118302041105                  TO WS-ORIG-TRANS-NO
+118402041203                GO TO PVT-DTL-PROCESS
+118502041105           END-IF.
+118602041203           GO TO PVT-TARGET-1R.
+118702040817
+118802000000       PVT-DTL-PROCESS.
+118902040716           IF WS-ORIG-PLACEMENT-DATE = 0 AND WS-ORIG-TRANS-NO = 0
+119002040714              IF LOG-ERROR-ON
+119102040714                 MOVE "103" TO WS-LOG-CODE
+119202040714                 PERFORM LOG-WARNING-ROUTINE THRU LWR-EXIT
+119302040714              END-IF
+119402000000              GO TO PVT-EXIT
+119502000000           END-IF.
+119602000000
+119702000000           IF ADDITION-TRANSACTION
+11980209050550475a        IF lb_ALDTTF_EditYes
+11990209050550475a           PERFORM PROCESS-ADDITION-TRN1 THRU PAT1-EXIT
+12000209050550475a        ELSE
+120102000000              PERFORM PROCESS-ADDITION-TRN THRU PAT-EXIT
+120202120716108942           IF DIST-TRANSACTION  AND LN_UNITAMT = 0
+120302120716  |                 MOVE "SEL" TO TRANS-TYPE-CATEGORY
+120402120716  |                 PERFORM PROCESS-REDUCTION-TRN THRU PRT-EXIT
+120502120716108942           END-IF
+12060209050550475a        END-IF
+120702041207X19162** handle SWI/TRI with commission that create MFATRRDP record
+120802041207XXXX          IF SWITCH-TRANSFER-IN
+120902041207XXXX             MOVE "SEL" TO TRANS-TYPE-CATEGORY
+12100209050550475a           IF lb_ALDTTF_EditYes
+12110209050550475a              PERFORM PROCESS-REDUCTION-TRN1 THRU PRT1-EXIT
+12120209050550475a           ELSE
+121302041207                 PERFORM PROCESS-REDUCTION-TRN THRU PRT-EXIT
+12140209050550475a           END-IF
+121502041207X19162        END-IF
+121602000000           ELSE
+12170209050550475a        IF lb_ALDTTF_EditYes
+12180209050550475a           PERFORM PROCESS-REDUCTION-TRN1 THRU PRT1-EXIT
+12190209050550475a        ELSE
+122002000000              PERFORM PROCESS-REDUCTION-TRN THRU PRT-EXIT
+12210209050550475a        END-IF
+122202000000           END-IF.
+122302000000       PVT-EXIT.
+122402000000           EXIT.
+122502000000
+122602000000       PROCESS-CDSC-DTL.
+122702000000           SET DTLIDX TO 0.
+122802000000
+122902000000       PCD-NEXT-CDSC-DTL.
+123002000000           SET DTLIDX UP BY 1.
+123102000000           IF DTLIDX > WS-MAX-DTL-ROW
+123202000000              GO TO PCD-EXIT.
+123302000000
+123402040719           IF AR-AGE-DATE(DTLIDX) < COMM-START-DATE OR
+123502040719              AR-AGE-DATE(DTLIDX) > COMM-END-DATE
+123602040719              GO TO PCD-NEXT-CDSC-DTL.
+123702040719
+123802000000           MOVE AR-AGE-DATE(DTLIDX) TO WS-AGE-START-DATE.
+123902000000           COMPUTE WS-DAYS = FUNCTION FIND-DURATION
+124002000000                   (WS-AGE-START-DATE WS-AGE-END-DATE DAYS).
+124102100204      *Rfs67590 - Start
+124202100204           IF li-Sched-EndDate > ZEROES
+124302100204              IF Ar-Age-Date(DTLIDX)  >= li-Sched-EndDate
+124402100204                 MOVE ZEROES TO WS-DAYS
+124502100204              END-IF
+124602100204           END-IF.
+124702100204      *Rfs67590 - End
+124802100204
+124902000000           ADD 1 TO WS-DAYS.
+125002000000
+125102000000           IF (HISTORY AND REDUCTION-TRANSACTION) OR
+125202000000              (RVSD    AND ADDITION-TRANSACTION)
+125302000000              COMPUTE WS-UNITS = AR-UNITS(DTLIDX) * -1
+125402070608      * 37142.18
+125502070608              Compute ln_TotalVarUnits = ln_TotalVarUnits + WS-UNITS
+125602070608      * 37142.18
+125702070608
+125802000000           ELSE
+125902000000              COMPUTE WS-UNITS = AR-UNITS(DTLIDX)
+126002000000           END-IF.
+126102000000
+126202070604      *   37142
+126302070604            IF AR-DIST-IND(DTLIDX) NOT EQUAL TO "Y"
+126402070604              PERFORM UPDATE-VARIABLE-UNITS THRU UVU-EXIT
+126502070604           ELSE
+126602070604              COMPUTE ln_DistUnits = ln_DistUnits + WS-UNITS
+126702070604           END-IF
+126802070604      *   37142
+126902070604      *    PERFORM UPDATE-VARIABLE-UNITS THRU UVU-EXIT.
+127002000000           GO TO PCD-NEXT-CDSC-DTL.
+127102000000       PCD-EXIT.
+127202000000           EXIT.
+127302000000
+127402000000       UPDATE-VARIABLE-UNITS.
+127502000000           SET DAYIDX TO 0.
+127602000000
+127702000000       UVU-NEXT-LOWER-DAYS.
+127802000000           SET DAYIDX UP BY 1.
+127902040722           IF DAYIDX > WS-MAX-DAYS-ROW
+128002040722              GO TO UVU-DAYS-NOT-DEFINE.
+128102040722
+128202040722           IF AR-LOWER-LIMIT-DAYS (DAYIDX) <  WS-DAYS
+128302040722              GO TO UVU-NEXT-LOWER-DAYS.
+128402040722
+128502040722       UVU-DAYS-FOUND.
+128602040722           ADD WS-UNITS TO AR-UNITS-VAR(DAYIDX).
+128702040722
+128802040722           IF AR-REC-EXIST(DAYIDX) NOT = "Y"
+128902040722              MOVE "A" TO AR-STATUS-CODE(DAYIDX)
+129002040722           ELSE
+129102040722              MOVE "C" TO AR-STATUS-CODE(DAYIDX)
+129202040722           END-IF.
+129302040722           GO TO UVU-EXIT.
+129402040722
+129502040716       UVU-DAYS-NOT-DEFINE.
+129602040716           IF LOG-ERROR-ON
+129702040716              MOVE "104" TO WS-LOG-CODE
+129802040716              PERFORM LOG-WARNING-ROUTINE THRU LWR-EXIT
+129902040716           END-IF.
+130002000000
+130102040716           ADD WS-UNITS TO AR-UNITS-VAR(DAYIDX - 1)
+130202000000
+130302040716           IF AR-REC-EXIST(DAYIDX - 1) = "Y"
+130402040716              MOVE "C" TO AR-STATUS-CODE(DAYIDX - 1)
+130502040716           ELSE
+130602040716              MOVE "A" TO AR-STATUS-CODE(DAYIDX - 1)
+130702040716           END-IF.
+130802000000       UVU-EXIT.
+130902000000           EXIT.
+131002000000
+131102000000       LEVEL-SUMMARY-1.
+131202000000           IF WS-BYPASS-ACT = "Y"
+131302000000              GO TO LS1-EXIT.
+131402000000
+131502000000           IF WS-HDR-EXISTS = "Y"
+131602000000              MOVE "C" TO WS-HDR-STATUS-CODE
+131702000000           ELSE
+131802000000              MOVE "A" TO WS-HDR-STATUS-CODE
+131902000000           END-IF.
+132002000000
+132102070604      *  rfs37142 begins
+132202070604      ** Get the current distribution unit and the tier to which
+132302070604      *  it belongs
+132402070604           Move zeroes To
+132502070604                       li_PreviousDistUnits,
+132602070604                       li_PreviousVarUnits,
+132702070604                       li_PreviousLowerDays.
+132802070604           Compute ln_PrevAccount  = Prev-Account
+132902070613           If  lnc-Edit-Alw-Flag = "Y" Then
+133002070613              Exec Sql
+133102070613                   Select Dist_Units_Var,
+133202070604                     Units_Var,
+133302070604                     Lower_limit_days
+133402070613                   Into :li_PreviousDistUnits,
+133502070613                        :li_PreviousVarUnits,
+133602070613                        :li_PreviousLowerDays
+133702070613                   From   MFAACIDVP
+133802070613                   Where Account_no       = :ln_PrevAccount  And
+133902070613                       Investment_Code  = :Comm-Investment
+134002070613                   Order by Lower_limit_days desc
+134102070613                   Fetch First Row Only
+134202070613               End-Exec
+134302070928      **
+134402070928      *44223.1 if there is no dist skip this process
+134502070928               If li_PreviousDistUnits Not = 0 OR
+134602070928                  ln_distUnits Not = 0
+134702070928                  Perform AdjustDistUnits
+134802070928               End-if
+134902070928      *44223.1 ends
+135002070605           End-if.
+135102070604      *  rfs37142 begins
+135202070604
+135302000000           PERFORM VARYING DAYIDX    FROM 1 BY 1
+135402000000                   UNTIL DAYIDX    > WS-MAX-DAYS-ROW
+135502000000             IF AR-UNITS-VAR(DAYIDX) < 0
+135602040714               MOVE AR-UNITS-VAR(DAYIDX) TO WS-LOG-UNITS
+135702040714               MOVE 0              TO AR-UNITS-VAR(DAYIDX)
+135802040714               IF LOG-ERROR-ON
+135902040719                  MOVE "106" TO WS-LOG-CODE
+136002040714                  PERFORM LOG-WARNING-ROUTINE THRU LWR-EXIT
+136102040714               END-IF
+136202000000             END-IF
+136302040714
+136402000000             IF AR-REC-EXIST(DAYIDX)   = "N"   AND
+136502000000                AR-STATUS-CODE(DAYIDX) = "A"   AND
+136602000000                AR-UNITS-VAR(DAYIDX)   = 0
+136702000000                MOVE SPACES TO AR-STATUS-CODE(DAYIDX)
+136802000000             END-IF
+136902070608      * 37142.18
+137002070608      *      IF AR-STATUS-CODE(DAYIDX) = "C" OR
+137102070608      *        (AR-STATUS-CODE(DAYIDX) = "A" AND
+137202070608      *         AR-UNITS-VAR(DAYIDX)  > 0)
+137302070608      *         ADD 1 TO WS-AR-PUT-CNT
+137402070608      *         MOVE WS-INV-LIMIT-DAYS-ENTRY(DAYIDX)
+137502070608      *            TO WS-INV-LIMIT-DAYS-ENTRY-P(WS-AR-PUT-CNT)
+137602070608      *      END-IF
+137702070613      * 37142.18
+137802070608             IF AR-STATUS-CODE(DAYIDX) = "C" OR
+137902070608               (AR-STATUS-CODE(DAYIDX) = "A" AND
+138002070608                lc_InitialiseMe  =  "Y"      AND
+138102070608                AR-UNITS-VAR(DAYIDX)  >= 0)
+138202070608                ADD 1 TO WS-AR-PUT-CNT
+138302070608                MOVE WS-INV-LIMIT-DAYS-ENTRY(DAYIDX)
+138402070608                   TO WS-INV-LIMIT-DAYS-ENTRY-P(WS-AR-PUT-CNT)
+138502070608             ELSE
+138602070608                 IF AR-STATUS-CODE(DAYIDX) = "C" OR
+138702070608                    (AR-STATUS-CODE(DAYIDX) = "A" AND
+138802070608                     lc_InitialiseMe  =  "N"      AND
+138902070608                     AR-UNITS-VAR(DAYIDX)  > 0)
+139002070608                     ADD 1 TO WS-AR-PUT-CNT
+139102070608                      MOVE WS-INV-LIMIT-DAYS-ENTRY(DAYIDX)
+139202070608                       TO WS-INV-LIMIT-DAYS-ENTRY-P(WS-AR-PUT-CNT)
+139302070608                 END-IF
+139402070608            END-IF
+139502070608      * 37142.18
+139602000000           END-PERFORM.
+139702000000
+139802000000           IF WS-AR-PUT-CNT = 0 AND WS-HDR-STATUS-CODE = "A"
+139902000000              GO TO LS1-EXIT.
+140002000000
+140102000000           INITIALIZE WS-CALL-RETURN-CODE
+140202000000                      WS-TOT-UNITS.
+140302000000
+140402000000           MOVE WS-AR-PUT-CNT   TO WS-TOT-DAYS-RANGE.
+140502000000
+140602000000           MOVE COMM-PROCESS-DATE TO WS-LAST-PROCESS-DATE.
+140702000000           MOVE "P" TO WS-CALL-OPTION.
+140802000000
+140902000000           IF LOG-STATS-ON OR LOG-ERROR-ON
+141002000000              MOVE "FXVARUAI"
+141102000000                             TO WS-LOG-PROGRAM-CALLED
+141202000000           END-IF.
+141302000000
+141402000000           IF LOG-STATS-ON
+141502000000              MOVE "S"       TO WS-STATS-EVENT
+141602000000              PERFORM LOG-STATS-ROUTINE THRU LSR-EXIT
+141702000000           END-IF.
+141802000000
+141902000000           CALL "FXVARUAI" USING PREV-ACCOUNT,
+142002000000                                 COMM-INVESTMENT,
+142102000000                                 WS-CALL-OPTION,
+142202000000                                 WS-HDR-EXISTS,
+142302000000                                 WS-HDR-STATUS-CODE,
+142402000000                                 WS-CALL-RETURN-CODE,
+142502000000                                 WS-LAST-PROCESS-DATE,
+142602000000                                 WS-TOT-UNITS,
+142702000000                                 WS-TOT-DAYS-RANGE,
+142802000000                                 WS-INV-LIMIT-DAYS-ARRAY-P.
+142902000000           IF LOG-STATS-ON
+143002000000              MOVE "E"       TO WS-STATS-EVENT
+143102000000              PERFORM LOG-STATS-ROUTINE THRU LSR-EXIT
+143202000000           END-IF.
+143302000000
+143402000000           IF WS-CALL-RETURN-CODE NOT = SPACE
+143502040719              MOVE "013" TO WS-LOG-CODE
+143602040719              PERFORM LOG-ERROR-ROUTINE THRU LER-EXIT
+143702000000              IF COMM-RETURN-CODE = SPACES
+143802040714                 MOVE "013" TO COMM-RETURN-CODE
+143902000000              END-IF
+144002000000           END-IF.
+144102070604
+144202000000       LS1-EXIT.
+144302000000           EXIT.
+144402000000
+144502000000       LEVEL-REINIT-1.
+144602070604
+144702070604      * Rfs 37142
+144802070608           MOVE 0        TO ln_DistUnits
+144902070608      * 37142.18
+145002070608           MOVE 0        TO ln_TotalVarunits
+145102070608           MOVE "N"      TO lc_InitialiseMe
+145202070608      * 37142.18
+145302070608           MOVE 0        TO li_EarliestPurAgeDate
+145402070608           MOVE 0        TO li_LowerLimitDays
+145502070608           MOVE 0        TO li_LowerDay
+145602070604      * Rfs 37142
+145702070604
+145802000000      * setup error and statistic indicators -begin
+145902000000           ACCEPT WS-MFASRVCTL-DTAARA
+146002000000             FROM WS-DATA-AREA-1 FOR "MFASRVCTL".
+146102000000
+146202000000           IF WS-SV-STATS-OPT-ALL    = "Y" OR
+146302000000              WS-SV-STATS-OPT-SRVVCN = "Y"
+146402000000              MOVE "Y"       TO WS-LOG-STATS
+146502000000           ELSE
+146602000000              MOVE "N"       TO WS-LOG-STATS
+146702000000           END-IF.
+146802000000
+146902000000           IF WS-SV-ERROR-OPT-ALL    = "Y" OR
+147002000000              WS-SV-ERROR-OPT-SRVVCN = "Y"
+147102000000              MOVE "Y"       TO WS-LOG-ERROR
+147202000000           ELSE
+147302000000              MOVE "N"       TO WS-LOG-ERROR
+147402000000           END-IF.
+147502000000
+147602000000           IF LOG-STATS-ON OR LOG-ERROR-ON
+147702000000              MOVE "FXVARUAI"
+147802000000                             TO WS-LOG-PROGRAM-CALLED
+147902000000           END-IF.
+148002000000      * setup error and statistic indicators - end
+148102000000
+148202000000           INITIALIZE WS-INV-LIMIT-DAYS-ARRAY-P
+148302000000                      WS-AR-PUT-CNT.
+148402000000
+148502040714           MOVE "Y" TO WS-SETUP-TABLE.
+148602000000           PERFORM VARYING DAYIDX    FROM 1 BY 1
+148702000000                   UNTIL DAYIDX    > WS-MAX-DAYS-ROW
+148802000000             MOVE 0              TO AR-UNITS-VAR(DAYIDX)
+14890207060537142        MOVE 0              TO AR-DIST-UNITS-VAR(DAYIDX)
+149002000000             MOVE "N"            TO AR-REC-EXIST(DAYIDX)
+149102000000             MOVE SPACE          TO AR-STATUS-CODE(DAYIDX)
+149202000000           END-PERFORM.
+149302000000
+149402070605      * Rfs 37142 begins
+149502070605           PERFORM VARYING ACTIDX    FROM 1 BY 1
+149602070605                   UNTIL ACTIDX    > WS-MAX-DAYS-ROW
+149702070605             MOVE 0              TO AR-ACT-UNITS-VAR(ACTIDX)
+149802070605             MOVE 0              TO AR-ACT-DIST-UNITS-VAR(ACTIDX)
+149902070605             MOVE "N"            TO AR-ACT-DTL-EXISTS(ACTIDX)
+150002070605             MOVE SPACE          TO AR-ACT-DTL-STATUS-CD(ACTIDX)
+150102070605           END-PERFORM.
+150202070605      * Rfs 37142 Ends
+150302070605
+150402000000           MOVE "N"   TO WS-BYPASS-ACT.
+150502000000           INITIALIZE WS-ACCT-LIMIT-DAYS-ARRAY
+150602000000                      WS-HDR-STATUS-CODE
+150702000000                      WS-HDR-EXISTS
+150802000000                      WS-CALL-RETURN-CODE
+150902000000                      WS-LAST-PROCESS-DATE
+151002000000                      WS-TOT-UNITS
+151102000000                      WS-TOT-DAYS-RANGE.
+151202000000
+151302000000           MOVE "G" TO WS-CALL-OPTION.
+151402000000
+151502000000           IF LOG-STATS-ON
+151602000000              MOVE "S"       TO WS-STATS-EVENT
+151702000000              PERFORM LOG-STATS-ROUTINE THRU LSR-EXIT
+151802000000           END-IF.
+151902000000
+152002000000           CALL "FXVARUAI" USING CURR-ACCOUNT,
+152102000000                                 COMM-INVESTMENT,
+152202000000                                 WS-CALL-OPTION,
+152302000000                                 WS-HDR-EXISTS,
+152402000000                                 WS-HDR-STATUS-CODE,
+152502000000                                 WS-CALL-RETURN-CODE,
+152602000000                                 WS-LAST-PROCESS-DATE,
+152702000000                                 WS-TOT-UNITS,
+152802000000                                 WS-TOT-DAYS-RANGE,
+152902000000                                 WS-ACCT-LIMIT-DAYS-ARRAY.
+153002000000
+153102000000           IF LOG-STATS-ON
+153202000000              MOVE "E"       TO WS-STATS-EVENT
+153302000000              PERFORM LOG-STATS-ROUTINE THRU LSR-EXIT
+153402000000           END-IF.
+153502000000
+153602000000           IF WS-CALL-RETURN-CODE NOT = SPACE
+153702040719              MOVE "012" TO WS-LOG-CODE
+153802040719              PERFORM LOG-ERROR-ROUTINE THRU LER-EXIT
+153902000000
+154002000000              IF COMM-RETURN-CODE = SPACES
+154102040714                 MOVE "012" TO COMM-RETURN-CODE
+154202000000              END-IF
+154302000000              MOVE "Y" TO WS-BYPASS-ACT
+154402040714              GO TO LR1-UPD-FIELD
+154502000000           END-IF.
+154602000000
+154702000000           IF WS-HDR-EXISTS NOT = "Y"
+154802040714              GO TO LR1-UPD-FIELD.
+154902000000
+155002000000           IF COMM-CLEAR-FILE = "Y"  AND ONE-ACCOUNT
+155102000000              PERFORM VARYING ACTIDX   FROM 1 BY 1
+155202000000                      UNTIL ACTIDX    > WS-TOT-DAYS-RANGE
+155302040716                  MOVE 0            TO AR-ACT-UNITS-VAR(ACTIDX)
+155402000000                  MOVE "C"          TO AR-ACT-DTL-STATUS-CD(ACTIDX)
+155502000000              END-PERFORM
+155602000000           END-IF.
+155702000000
+155802000000           SET ACTIDX TO 0.
+155902000000
+156002000000       LR1-ACT-DAYS-REC.
+156102000000           SET ACTIDX UP BY 1.
+156202000000           IF ACTIDX > WS-TOT-DAYS-RANGE
+156302040714              GO TO LR1-UPD-FIELD.
+156402000000
+156502000000           PERFORM UPLOAD-VARIABLE-UNITS THRU ULU-EXIT.
+156602000000           GO TO LR1-ACT-DAYS-REC.
+156702040722
+156802040714       LR1-UPD-FIELD.
+156902040714           MOVE "N" TO WS-SETUP-TABLE.
+157002040722           IF ONE-ACCOUNT AND COMM-RETURN-CODE NOT = SPACES
+157102040722              MOVE HIGH-VALUE TO CURR-CONTROLS
+157202040722           END-IF.
+157302000000       LR1-EXIT.
+157402000000           EXIT.
+157502000000
+157602000000       UPLOAD-VARIABLE-UNITS.
+157702000000           SET DAYIDX TO 0.
+157802000000
+157902000000       ULU-NEXT-LOWER-DAYS.
+158002000000           SET DAYIDX UP BY 1.
+158102000000
+158202040722           IF DAYIDX >  WS-MAX-DAYS-ROW
+158302040722              GO TO ULU-DAYS-NOT-DEFINE.
+158402040722
+158502040722           IF AR-LOWER-LIMIT-DAYS (DAYIDX)  < AR-ACT-DAYS(ACTIDX)
+158602040722              GO TO ULU-NEXT-LOWER-DAYS.
+158702040722
+158802040722       ULU-CHK-DAYS.
+158902040722           IF AR-LOWER-LIMIT-DAYS (DAYIDX)  = AR-ACT-DAYS(ACTIDX)
+159002040722              MOVE "Y" TO AR-REC-EXIST(DAYIDX)
+159102040722              GO TO  ULU-DAYS-UPD.
+159202040722
+159302040722       ULU-CHK-DAYS-DIFF.
+159402040722           IF ONE-ACCOUNT AND  COMM-CLEAR-FILE = "N"  AND
+159502040722              AR-ACT-UNITS-VAR(ACTIDX) > 0
+159602040722
+159702040722              MOVE "014" TO COMM-RETURN-CODE
+159802040722                            WS-LOG-CODE
+159902040722              PERFORM LOG-ERROR-ROUTINE THRU LER-EXIT
+160002040722
+160102040722              MOVE "Y"   TO WS-BYPASS-ACT
+160202041207      *       MOVE WS-TOT-DAYS-RANGE TO ACTIDX
+160302041207              SET ACTIDX TO WS-TOT-DAYS-RANGE
+160402040722              GO TO ULU-EXIT
+160502040722           END-IF.
+160602040722
+160702040722           ADD 1 TO WS-AR-PUT-CNT.
+160802040722           MOVE WS-ACCT-LIMIT-DAYS-ENTRY(ACTIDX)
+160902040722             TO WS-INV-LIMIT-DAYS-ENTRY-P(WS-AR-PUT-CNT).
+161002040722           MOVE 0   TO AR-UNITS-VAR-P(WS-AR-PUT-CNT).
+161102040722           MOVE "C" TO AR-STATUS-CODE-P(WS-AR-PUT-CNT).
+161202040722
+161302040722       ULU-DAYS-UPD.
+161402040722           ADD AR-ACT-UNITS-VAR(ACTIDX) TO AR-UNITS-VAR(DAYIDX).
+161502040722
+161602040722           IF AR-REC-EXIST(DAYIDX) = "Y"
+161702040722              MOVE "C" TO AR-STATUS-CODE(DAYIDX)
+161802040722           ELSE
+161902040722              MOVE "A" TO AR-STATUS-CODE(DAYIDX)
+162002040722           END-IF.
+162102040722
+162202040722           GO TO ULU-EXIT.
+162302040722
+162402040716       ULU-DAYS-NOT-DEFINE.
+162502040722           IF ONE-ACCOUNT AND  COMM-CLEAR-FILE = "N"  AND
+162602040722              AR-ACT-UNITS-VAR(ACTIDX) > 0
+162702040722
+162802040722              MOVE "014" TO COMM-RETURN-CODE
+162902040722                            WS-LOG-CODE
+163002040722              PERFORM LOG-ERROR-ROUTINE THRU LER-EXIT
+163102040722
+163202040722              MOVE "Y"   TO WS-BYPASS-ACT
+163302041207      *       MOVE WS-TOT-DAYS-RANGE TO ACTIDX
+163402041207              SET ACTIDX TO WS-TOT-DAYS-RANGE
+163502040722              GO TO ULU-EXIT
+163602040722           END-IF.
+163702040722
+163802040722      *    IF LOG-ERROR-ON AND AR-ACT-UNITS-VAR(ACTIDX) > 0
+163902040722      *       MOVE "105" TO WS-LOG-CODE
+164002040722      *       PERFORM LOG-WARNING-ROUTINE THRU LWR-EXIT
+164102040722      *    END-IF.
+164202040716
+164302040722           ADD 1 TO WS-AR-PUT-CNT.
+164402040722           MOVE WS-ACCT-LIMIT-DAYS-ENTRY(ACTIDX)
+164502040722             TO WS-INV-LIMIT-DAYS-ENTRY-P(WS-AR-PUT-CNT).
+164602040722           MOVE 0   TO AR-UNITS-VAR-P(WS-AR-PUT-CNT).
+164702040722           MOVE "C" TO AR-STATUS-CODE-P(WS-AR-PUT-CNT).
+164802040722
+164902040716           ADD AR-ACT-UNITS-VAR(ACTIDX) TO
+165002040716                  AR-UNITS-VAR(DAYIDX - 1)
+165102040716           IF AR-REC-EXIST(DAYIDX - 1) = "Y"
+165202040716              MOVE "C" TO AR-STATUS-CODE(DAYIDX - 1)
+165302040716           ELSE
+165402040716              MOVE "A" TO AR-STATUS-CODE(DAYIDX - 1)
+165502040716           END-IF.
+165602000000       ULU-EXIT.
+165702000000           EXIT.
+165802000000
+165902000000       RESET-ACCT-INV.
+166002000000           IF COMM-CLEAR-FILE NOT = "Y" OR ONE-ACCOUNT
+166102000000              GO TO RAI-EXIT.
+166202000000
+166302000000           MOVE "UPDATE MFAACIDUP #1"  TO WS-SQLERR-STATEMENT.
+166402000000           EXEC SQL
+166502000000             UPDATE MFAACIDUP
+166602000000                SET PROCESS_DATE = 0
+166702000000              WHERE INVESTMENT_CODE = :COMM-INVESTMENT
+166802000000           END-EXEC.
+166902000000
+167002000000           MOVE "UPDATE MFAACIDVP #1"  TO WS-SQLERR-STATEMENT.
+167102000000           EXEC SQL
+167202000000             UPDATE MFAACIDVP
+167302000000                SET UNITS_VAR = 0
+167402000000              WHERE INVESTMENT_CODE = :COMM-INVESTMENT
+167502000000           END-EXEC.
+167602000000
+167702000000       RAI-EXIT.
+167802000000           EXIT.
+167902000000      /
+168002040716      ** This process is to update the MFAACIDUP and the MFAACIDVP file
+168102040716      ** where the account does not have trade within the period.
+168202000000       UPDATE-ACCT-INV.
+168302000000           IF ONE-ACCOUNT
+168402000000              GO TO UAI-ACCT-LEVEL.
+168502000000
+168602000000           EXEC SQL
+168702000000             UPDATE MFAACIDUP ACIDUP
+168802000000                SET ACIDUP.PROCESS_DATE = :COMM-PROCESS-DATE
+168902000000              WHERE ACIDUP.INVESTMENT_CODE = :COMM-INVESTMENT
+169002000000                AND ACIDUP.PROCESS_DATE < :COMM-PROCESS-DATE
+169102000000                AND NOT EXISTS
+169202000000                    (SELECT * FROM MFATRNP TRNP
+169302000000                      WHERE TRNP.ACCOUNT_NO = ACIDUP.ACCOUNT_NO
+169402000000                        AND TRNP.INVESTMENT_CODE =
+169502000000                                 ACIDUP.INVESTMENT_CODE
+169602000000                        AND TRNP.PROCESS_DATE    >= :COMM-FROM-DATE
+169702000000                        AND TRNP.PROCESS_DATE    <= :COMM-TO-DATE
+169802000000                        AND TRNP.TRANS_STATUS_CODE IN
+169902000000                                 ("HST", "HSC", "RVS")
+170002000000                        AND TRNP.UNIT_AMT > 0)
+170102000000           END-EXEC.
+170202000000           GO TO UAI-EXIT.
+170302000000
+170402040716       UAI-ACCT-LEVEL.
+170502040716           IF COMM-RETURN-CODE NOT = SPACES   OR
+170602040716              WS-ACT-TRN-EXISTS    = "Y"
+170702000000              GO TO UAI-EXIT.
+170802000000
+170902040716           IF COMM-CLEAR-FILE  NOT = "Y"
+171002040716              GO TO UAI-ACCT-HDR.
+171102040716
+171202040716      ** for recalculation and no trade within the period
+171302040716      ** update the details and header
+171402040716       UAI-ACCT-DTL.
+171502000000           EXEC SQL
+171602000000             UPDATE MFAACIDVP
+171702040716                SET UNITS_VAR       = 0
+171802040716              WHERE ACCOUNT_NO      = :COMM-ACCOUNT
+171902000000                AND INVESTMENT_CODE = :COMM-INVESTMENT
+172002000000           END-EXEC.
+172102040716
+172202040716       UAI-ACCT-HDR.
+172302040716           EXEC SQL
+172402040716             UPDATE MFAACIDUP
+172502040716                SET PROCESS_DATE    = :COMM-PROCESS-DATE
+172602040716              WHERE ACCOUNT_NO      = :COMM-ACCOUNT
+172702040716                AND INVESTMENT_CODE = :COMM-INVESTMENT
+172802040716           END-EXEC.
+172902000000       UAI-EXIT.
+173002000000           EXIT.
+173102000000      /
+173202000000       INITIAL-LOGIC.
+173302070604      *    EXEC SQL
+173402070604      *         WHENEVER SQLERROR GO TO SQL-ERROR-RTN
+173502070604      *    END-EXEC.
+173602070604      *    EXEC SQL
+173702070604      *         WHENEVER NOT FOUND CONTINUE
+173802070604      *    END-EXEC.
+173902000000
+174002000000           MOVE SPACES TO COMM-RETURN-CODE.
+174102000000           INITIALIZE WS-MISC-FIELDS.
+174202000000           MOVE LOW-VALUES TO CURR-CONTROLS
+174302000000                              PREV-CONTROLS.
+174402000000
+174502090505      *RFS50475 Add - Beg
+174602090505           Initialize lc_ALDTTF_RtnFlag.
+174702090505           CALL "FXSCEDTAL1" USING lc_ALDTTF_ScreenCode
+174802090505                                   lc_ALDTTF_EditCode
+174902090505                                   lc_ALDTTF_EditLevel
+175002090505                                   lc_ALDTTF_RtnFlag.
+175102090505           CANCEL "FXSCEDTAL1".
+175202090505      *RFS50475 Add - End
+175302090505
+175402070604      *Rfs 37142
+175502070604           CALL "FXSCEDTAL1" USING lnc-Screen-Code
+175602070604                                   lnc-Edit-Code
+175702070604                                   lnc-Level-Code
+175802070604                                   lnc-Edit-Alw-Flag
+175902070604           CANCEL "FXSCEDTAL1"
+176002070604      *Rfs 37142
+176102070604
+176202040715           PERFORM VALIDATE-PARMATERS THRU VPV-EXIT.
+176302040715           IF COMM-RETURN-CODE NOT = SPACES
+176402040720              MOVE COMM-RETURN-CODE TO WS-LOG-CODE
+176502040720              PERFORM LOG-ERROR-ROUTINE THRU LER-EXIT
+176602040715              MOVE HIGH-VALUES TO CURR-CONTROLS
+176702040715              GO TO INL-EXIT.
+176802040715
+176902040817           IF WS-OPEN-FILES = "N"
+177002000000              GO TO INL-START.
+177102000000
+177202041104           OPEN    INPUT TRANS-TARGET
+177302070810                         TRANS-TARGET-2
+17740209050550475a                   TRANS-PURCHASE-UNITS
+17750207081043561                    TRANS-CDSC-PURCHASE.
+177602070810
+177702000000           PERFORM DECLARE-SQL-STATEMENTS THRU DSS-EXIT.
+177802000000           PERFORM LOAD-INVESTMENT-ARRAY  THRU LIA-EXIT.
+177902000000           MOVE "N" TO WS-OPEN-FILES.
+178002000000
+178102000000       INL-START.
+178202100204           MOVE ZEROES TO li-Sched-EndDate.
+178302000000           PERFORM SET-INV-INDEX THRU SID-EXIT.
+178402000000           IF CURR-CONTROLS = HIGH-VALUES
+178502000000              GO TO INL-EXIT.
+178602040714
+178702040714           IF COMM-CLEAR-FILE = "Y" AND ALL-ACCOUNTS
+178802040714              PERFORM RESET-ACCT-INV THRU RAI-EXIT.
+178902000000
+179002040719           MOVE COMM-END-DATE   TO WS-AGE-END-DATE.
+179102040719           MOVE COMM-INVESTMENT TO WS-INVEST-CODE.
+179202000000
+179302000000           IF ALL-ACCOUNTS
+179402000000              MOVE "OPEN TRNCUR"  TO WS-SQLERR-STATEMENT
+179502000000              EXEC SQL
+179602000000                OPEN TRNCUR
+179702000000              END-EXEC
+179802000000
+179902000000              IF SQLCODE = 0
+180002000000                 MOVE "Y" TO WS-TRNCUR-OPEN
+180102000000              END-IF
+180202000000           ELSE
+180302000000              MOVE "OPEN TRNCUR2"  TO WS-SQLERR-STATEMENT
+180402000000              EXEC SQL
+180502000000                OPEN TRNCUR2
+180602000000              END-EXEC
+180702000000
+180802000000              IF SQLCODE = 0
+180902000000                 MOVE "Y" TO WS-TRNCUR2-OPEN
+181002000000              END-IF
+181102000000           END-IF.
+181202000000       INL-EXIT.
+181302040714           EXIT.
+181402040714
+181502040714       VALIDATE-PARMATERS.
+181602040714           IF NOT VALID-OPTIONS
+181702040714              MOVE "001" TO COMM-RETURN-CODE
+181802040714              GO TO VPV-EXIT.
+181902040714
+182002040714           IF COMM-PROCESS-DATE IS NOT NUMERIC  OR
+182102040714              COMM-PROCESS-DATE  = 0
+182202040714              MOVE "002" TO COMM-RETURN-CODE
+182302040714              GO TO VPV-EXIT.
+182402040714
+182502040714           IF COMM-START-DATE   IS NOT NUMERIC  OR
+182602040714              COMM-START-DATE   = 0
+182702040714              MOVE "003" TO COMM-RETURN-CODE
+182802040714              GO TO VPV-EXIT.
+182902040714
+183002040714           IF COMM-END-DATE     IS NOT NUMERIC  OR
+183102040714              COMM-END-DATE     = 0
+183202040714              MOVE "004" TO COMM-RETURN-CODE
+183302040714              GO TO VPV-EXIT.
+183402040714
+183502040714           IF COMM-END-DATE < COMM-START-DATE
+183602040714              MOVE "005" TO COMM-RETURN-CODE
+183702040714              GO TO VPV-EXIT.
+183802040714
+183902040714           IF COMM-FROM-DATE    IS NOT NUMERIC  OR
+184002040714              COMM-FROM-DATE    = 0
+184102040714              MOVE "006" TO COMM-RETURN-CODE
+184202040714              GO TO VPV-EXIT.
+184302040714
+184402040714           IF COMM-TO-DATE      IS NOT NUMERIC  OR
+184502040714              COMM-TO-DATE      = 0
+184602040714              MOVE "007" TO COMM-RETURN-CODE
+184702040714              GO TO VPV-EXIT.
+184802040714
+184902040714           IF COMM-TO-DATE < COMM-FROM-DATE
+185002040714              MOVE "008" TO COMM-RETURN-CODE
+185102040714              GO TO VPV-EXIT.
+185202040714
+185302040714           IF ONE-ACCOUNT
+185402040714              IF COMM-ACCOUNT IS NOT NUMERIC OR
+185502040714                 COMM-ACCOUNT = 0
+185602040714                 MOVE "009" TO COMM-RETURN-CODE
+185702040714              END-IF
+185802040714           END-IF.
+185902040714       VPV-EXIT.
+186002000000           EXIT.
+186102000000      /
+186202000000       SET-INV-INDEX.
+186302000000           SEARCH ALL WS-INVESTMENT-ENTRY
+186402000000           AT END
+186502040714                MOVE "010" TO COMM-RETURN-CODE
+186602000000                MOVE HIGH-VALUE TO CURR-CONTROLS
+186702040720                MOVE COMM-RETURN-CODE TO WS-LOG-CODE
+186802040720                PERFORM LOG-ERROR-ROUTINE THRU LER-EXIT
+186902000000                GO TO SID-EXIT
+187002000000           WHEN AR-INVESTMENT(INVIDX) = COMM-INVESTMENT
+187102000000                MOVE AR-INV-LOWER-DAYS-CNT(INVIDX) TO WS-MAX-DAYS-ROW
+187202100204R67590          MOVE Ar-Inv-EndDate(INVIDX) TO li-Sched-EndDate
+187302000000           END-SEARCH.
+187402000000
+187502000000           IF WS-MAX-DAYS-ROW  = 0
+187602040714              MOVE "011" TO COMM-RETURN-CODE
+187702000000              MOVE HIGH-VALUE TO CURR-CONTROLS
+187802040720              MOVE COMM-RETURN-CODE TO WS-LOG-CODE
+187902040720              PERFORM LOG-ERROR-ROUTINE THRU LER-EXIT
+188002000000              GO TO SID-EXIT
+188102000000           END-IF.
+188202000000
+188302000000           IF AR-INV-TRL-VAR-SCHED(INVIDX) = WS-PREV-TRL-SCHED
+188402000000              GO TO SID-EXIT.
+188502000000
+188602000000           MOVE AR-INV-TRL-VAR-SCHED(INVIDX) TO WS-PREV-TRL-SCHED.
+188702000000
+188802000000           INITIALIZE WS-INV-LIMIT-DAYS-ARRAY.
+188902000000           MOVE 0 TO WS-CNT.
+189002000000
+189102000000       SID-NEXT-DAYS.
+189202000000           ADD 1 TO WS-CNT.
+189302000000           IF WS-CNT > WS-MAX-DAYS-ROW
+189402000000              GO TO SID-EXIT.
+189502000000
+189602000000           MOVE AR-INV-LOWER-LIMIT-DAYS(INVIDX, WS-CNT)
+189702000000             TO AR-LOWER-LIMIT-DAYS(WS-CNT).
+189802000000           GO TO SID-NEXT-DAYS.
+189902000000       SID-EXIT.
+190002000000           EXIT.
+190102000000
+190202000000       LOAD-INVESTMENT-ARRAY.
+190302000000           MOVE "LOAD-INVESTMENT-ARRAY" TO WS-ROUTINE-NAME.
+190402000000
+190502000000           MOVE "OPEN LMTDAYS"  TO WS-SQLERR-STATEMENT.
+190602000000           EXEC SQL
+190702000000             OPEN LMTDAYS
+190802000000           END-EXEC.
+190902000000
+191002090925R64527***  MOVE 10    TO ARYSIZ1.
+191102090925R72304     MOVE 1     TO ARYSIZ1.
+191202000000           SET INVIDX TO 0.
+191302000000           MOVE SPACES TO WS-INVEST-CODE.
+191402000000
+191502000000       LIA-FETCH-NEXT.
+191602000000           INITIALIZE WS-LMTDAY-FETCH-ARRAY.
+191702000000           MOVE "FETCH LMTDAYS"  TO WS-SQLERR-STATEMENT.
+191802000000           EXEC SQL
+191902000000             FETCH NEXT FROM LMTDAYS
+192002040723               FOR :WS-ARRAY-800 ROWS
+192102000000              INTO :WS-LMTDAY-FETCH-ENTRY
+192202000000                   :WS-LMTDAY-FETCH-IND
+192302000000           END-EXEC.
+192402000000
+192502000000           IF SQLCODE = 100
+192602090925R72304        SET INVIDX UP BY 1
+192702090925R72304        INITIALIZE        WS-INVESTMENT-ELEMENT(INVIDX)
+192802000000              MOVE 0 TO WS-MAX-DAYS-ROW
+192902000000              GO TO LIA-CLOSE-CURSOR
+193002000000           ELSE
+193102000000              COMPUTE WS-MAX-DAYS-ROW = SQLERRD(3)
+193202000000           END-IF.
+193302000000
+193402000000           MOVE 0 TO WS-CNT.
+193502000000
+193602000000       LIA-NEXT-DAYS.
+193702000000           ADD 1 TO WS-CNT
+193802000000           IF WS-CNT >  WS-MAX-DAYS-ROW
+193902000000              GO TO LIA-FETCH-NEXT.
+194002000000
+194102000000           IF AR-LMTDAY-INV(WS-CNT) NOT = WS-INVEST-CODE
+194202000000              SET INVIDX UP BY 1
+194302090312R64527        IF INVIDX >= ARYSIZ1
+194402090925R64527***        COMPUTE ARYSIZ1 = ARYSIZ1 + 500
+194502090925R72304           COMPUTE ARYSIZ1 = ARYSIZ1 + 1
+194602090312R64527        END-IF
+194702000000              MOVE AR-LMTDAY-INV(WS-CNT) TO AR-INVESTMENT(INVIDX)
+194802000000                                            WS-INVEST-CODE
+194902000000              MOVE AR-LMTDAY-SCHED(WS-CNT)
+195002000000                TO AR-INV-TRL-VAR-SCHED(INVIDX)
+195102000000              MOVE 0 TO AR-INV-LOWER-DAYS-CNT(INVIDX)
+195202100204              MOVE Ar-LmtDay-EndDate(WS-CNT) TO Ar-Inv-EndDate(INVIDX)
+195302000000              SET LMTIDX TO 0
+195402000000           END-IF.
+195502000000
+195602000000           SET LMTIDX UP BY 1.
+195702000000           MOVE AR-LMTDAY-DAYS(WS-CNT)
+195802000000             TO AR-INV-LOWER-LIMIT-DAYS(INVIDX, LMTIDX).
+195902000000           ADD 1 TO AR-INV-LOWER-DAYS-CNT(INVIDX)
+196002000000           GO TO LIA-NEXT-DAYS.
+196102000000
+196202000000       LIA-CLOSE-CURSOR.
+196302000000           MOVE "CLOSE LMTDAYS"  TO WS-SQLERR-STATEMENT.
+196402000000           EXEC SQL
+196502000000             CLOSE LMTDAYS
+196602000000           END-EXEC.
+196702000000       LIA-EXIT.
+196802000000           EXIT.
+196902000000
+197002000000       END-JOB.
+197102000000           MOVE "END-JOB" TO WS-ROUTINE-NAME.
+197202000000           IF WS-TRNCUR-OPEN = "Y"
+197302000000              MOVE "CLOSE TRNCUR"  TO WS-SQLERR-STATEMENT
+197402000000              EXEC SQL
+197502000000                CLOSE TRNCUR
+197602000000              END-EXEC
+197702000000           END-IF.
+197802000000
+197902000000           IF WS-TRNCUR2-OPEN = "Y"
+198002000000              MOVE "CLOSE TRNCUR2"  TO WS-SQLERR-STATEMENT
+198102000000              EXEC SQL
+198202000000                CLOSE TRNCUR2
+198302000000              END-EXEC
+198402000000           END-IF.
+198502070608
+198602070810      * Rfs43561 Begins
+198702070810            If  lnc-Edit-Alw-Flag = "Y" Then
+198802070608      * Rfs 37142.18
+198902070810                EXEC SQL
+199002070810                  DELETE
+199102070810                  From   MFAACIDVP
+199202070810                  Where Account_no       = :ln_PrevAccount  And
+199302070810                        Investment_Code  = :Comm-Investment And
+199402070810                        Units_var        =  0
+199502070810                  End-Exec
+199602070608      * Rfs 37142.18
+199702070810            End-if.
+199802070810      * Rfs43561 Ends
+199902070810
+200002000000       EOJ-EXIT.
+200102000000           EXIT.
+200202000000
+200302000000      *****************************************************************
+200402040714       LOG-ERROR-ROUTINE.
+200502000000      *****************************************************************
+200602000000
+200702000000      * Log error information
+200802000000
+200902000000           INITIALIZE MFASRVLOGP OF WS-LOG-REC.
+201002000000
+201102000000           ACCEPT WS-SYSDATE FROM DATE YYYYMMDD.
+201202000000           ACCEPT WS-SYSTIME FROM TIME.
+201302000000
+201402000000           MOVE WS-SYSDATE   TO LOG-DATE OF WS-LOG-REC.
+201502000000           MOVE WS-SYSTIME   TO LOG-TIME OF WS-LOG-REC.
+201602000000           MOVE WS-PROGRAM-NAME
+201702000000                             TO PROGRAM-CODE OF WS-LOG-REC.
+201802000000
+201902040714           MOVE "E"          TO LOG-TYPE OF WS-LOG-REC.
+202002040723           IF WS-LOG-CODE NOT = "001" AND "002"
+202102040723              MOVE COMM-PROCESS-DATE
+202202000000                             TO PROCESS-DATE OF WS-LOG-REC.
+202302000000           MOVE COMM-INVESTMENT
+202402000000                             TO INVESTMENT-CODE OF WS-LOG-REC.
+202502040714           MOVE WS-LOG-CODE
+202602000000                             TO LOG-CODE OF WS-LOG-REC.
+202702000000
+202802000000           EVALUATE WS-LOG-CODE
+202902040720             WHEN "001"
+203002040720               STRING "Invalid option pass in = "    DELIMITED BY SIZE
+203102040720                       COMM-OPTION                   DELIMITED BY SIZE
+203202040720                 INTO  ADDL-DTL OF WS-LOG-REC
+203302040720             WHEN "002"
+203402040720               STRING "Invalid process date pass in " DELIMITED BY SIZE
+203502040723                       "= "                           DELIMITED BY SIZE
+203602040723                       COMM-PROCESS-DATE              DELIMITED BY SIZE
+203702040720                 INTO  ADDL-DTL OF WS-LOG-REC
+203802040720             WHEN "003"
+203902040723               STRING "Invalid start date pass in = " DELIMITED BY SIZE
+204002040723                       COMM-START-DATE                DELIMITED BY SIZE
+204102040720                 INTO  ADDL-DTL OF WS-LOG-REC
+204202040720
+204302040720             WHEN "004"
+204402040723               STRING "Invalid end date pass in = "   DELIMITED BY SIZE
+204502040723                       COMM-END-DATE                  DELIMITED BY SIZE
+204602040720                 INTO  ADDL-DTL OF WS-LOG-REC
+204702040720             WHEN "005"
+204802040728               STRING "Start Dt ("                    DELIMITED BY SIZE
+204902040720                       COMM-START-DATE                DELIMITED BY SIZE
+205002040728                      ") > End Dt ("                  DELIMITED BY SIZE
+205102040720                       COMM-END-DATE                  DELIMITED BY SIZE
+205202040723                      ")"                             DELIMITED BY SIZE
+205302040720                 INTO  ADDL-DTL OF WS-LOG-REC
+205402040720             WHEN "006"
+205502040723               STRING "Invalid from date pass in = "  DELIMITED BY SIZE
+205602040723                       COMM-FROM-DATE                 DELIMITED BY SIZE
+205702040720                 INTO  ADDL-DTL OF WS-LOG-REC
+205802040720
+205902040720             WHEN "007"
+206002040723               STRING "Invalid to date pass in = "    DELIMITED BY SIZE
+206102040723                       COMM-TO-DATE                   DELIMITED BY SIZE
+206202040720                 INTO  ADDL-DTL OF WS-LOG-REC
+206302040720             WHEN "008"
+206402040728               STRING "From Dt ("                     DELIMITED BY SIZE
+206502040723                       COMM-FROM-DATE                 DELIMITED BY SIZE
+206602040728                      ") > To Dt ("                   DELIMITED BY SIZE
+206702040723                       COMM-TO-DATE                   DELIMITED BY SIZE
+206802040723                      ")"                             DELIMITED BY SIZE
+206902040720                 INTO  ADDL-DTL OF WS-LOG-REC
+207002040720             WHEN "009"
+207102040723               STRING "Invalid account no pass in = " DELIMITED BY SIZE
+207202040723                       COMM-ACCOUNT                   DELIMITED BY SIZE
+207302040720                 INTO  ADDL-DTL OF WS-LOG-REC
+207402040720             WHEN "010"
+207502040720               STRING "Investment not attach to a schedule"
+207602040720                       DELIMITED BY SIZE
+207702040720                 INTO  ADDL-DTL OF WS-LOG-REC
+207802040720             WHEN "011"
+207902040720               STRING "Schedule not setup."       DELIMITED BY SIZE
+208002040720                      "Schedule code = "          DELIMITED BY SIZE
+208102040720                      WS-PREV-TRL-SCHED           DELIMITED BY SIZE
+208202040720                 INTO  ADDL-DTL OF WS-LOG-REC
+208302040719             WHEN "012"
+208402000000               MOVE CURR-ACCOUNT
+208502000000                    TO ACCOUNT-NO OF WS-LOG-REC
+208602000000               MOVE WS-LOG-PROGRAM-CALLED
+208702000000                    TO PROGRAM-CALLED OF WS-LOG-REC
+208802040714               STRING "Problem calling to FXVARUAI program - GET"
+208902040714                      DELIMITED BY SIZE
+209002040714                 INTO  ADDL-DTL OF WS-LOG-REC
+209102040719             WHEN "013"
+209202000000               MOVE PREV-ACCOUNT
+209302000000                    TO ACCOUNT-NO OF WS-LOG-REC
+209402000000               MOVE WS-LOG-PROGRAM-CALLED
+209502000000                    TO PROGRAM-CALLED OF WS-LOG-REC
+209602040714               STRING "Problem calling to FXVARUAI program - PUT"
+209702000000                      DELIMITED BY SIZE
+209802000000                 INTO  ADDL-DTL OF WS-LOG-REC
+209902040722             WHEN "014"
+210002040722               MOVE CURR-ACCOUNT
+210102040722                    TO ACCOUNT-NO OF WS-LOG-REC
+210202040723               STRING "Schedule table was chg after conversion"
+210302040722                                                 DELIMITED BY SIZE
+210402040722                 INTO  ADDL-DTL OF WS-LOG-REC
+210502040719           END-EVALUATE.
+210602040714
+210702000000           MOVE "INSERT MFASRVLOGP - ERROR"
+210802000000                             TO WS-SQLERR-STATEMENT.
+210902000000
+211002000000           EXEC SQL
+211102000000             INSERT INTO MFASRVLOGP VALUES (:MFASRVLOGP)
+211202000000           END-EXEC.
+211302000000
+211402040714       LER-EXIT.
+211502040714           EXIT.
+211602070604
+211702070604
+211802040714      *****************************************************************
+211902040714       LOG-WARNING-ROUTINE.
+212002040714      *****************************************************************
+212102040714      * Log warning information
+212202040714
+212302040714           INITIALIZE MFASRVLOGP OF WS-LOG-REC.
+212402040714
+212502040714           ACCEPT WS-SYSDATE FROM DATE YYYYMMDD.
+212602040714           ACCEPT WS-SYSTIME FROM TIME.
+212702040714
+212802040714           MOVE WS-SYSDATE   TO LOG-DATE OF WS-LOG-REC.
+212902040714           MOVE WS-SYSTIME   TO LOG-TIME OF WS-LOG-REC.
+213002040714           MOVE WS-PROGRAM-NAME
+213102040714                             TO PROGRAM-CODE OF WS-LOG-REC.
+213202040714
+213302040714           MOVE "W"          TO LOG-TYPE OF WS-LOG-REC.
+213402040723           IF WS-LOG-CODE NOT = "001" AND "002"
+213502040723           MOVE COMM-PROCESS-DATE
+213602040714                             TO PROCESS-DATE OF WS-LOG-REC.
+213702040714           MOVE COMM-INVESTMENT
+213802040714                             TO INVESTMENT-CODE OF WS-LOG-REC.
+213902040714           MOVE WS-LOG-CODE
+214002040714                             TO LOG-CODE OF WS-LOG-REC.
+214102040714
+214202040714           EVALUATE WS-LOG-CODE
+214302040719             WHEN "101"
+214402040714               MOVE CURR-ACCOUNT
+214502040714                    TO ACCOUNT-NO OF WS-LOG-REC
+214602040714               MOVE WS-PLACEMENT-DATE
+214702040714                    TO PLACEMENT-DATE OF WS-LOG-REC
+214802040714               MOVE WS-TRANS-NO
+214902040714                    TO TRANS-NO       OF WS-LOG-REC
+215002040714               STRING "Missing MFATRNCPP record "    DELIMITED BY SIZE
+215102040714                 INTO  ADDL-DTL OF WS-LOG-REC
+215202040714
+215302040719             WHEN "102"
+215402040714               MOVE CURR-ACCOUNT
+215502040714                    TO ACCOUNT-NO OF WS-LOG-REC
+215602040714               MOVE WS-PLACEMENT-DATE
+215702040714                    TO PLACEMENT-DATE OF WS-LOG-REC
+215802040714               MOVE WS-TRANS-NO
+215902040714                    TO TRANS-NO       OF WS-LOG-REC
+216002040714               STRING "Missing MFATRNRDP record "    DELIMITED BY SIZE
+216102040714                 INTO  ADDL-DTL OF WS-LOG-REC
+216202040714
+216302040719             WHEN "103"
+216402040714               MOVE CURR-ACCOUNT
+216502040714                    TO ACCOUNT-NO OF WS-LOG-REC
+216602040714               MOVE WS-PLACEMENT-DATE
+216702040714                    TO PLACEMENT-DATE OF WS-LOG-REC
+216802040714               MOVE WS-TRANS-NO
+216902040714                    TO TRANS-NO       OF WS-LOG-REC
+217002040714               STRING "Missing MFATRNTGP record "    DELIMITED BY SIZE
+217102040714                 INTO  ADDL-DTL OF WS-LOG-REC
+217202040714
+217302040719             WHEN "104"
+217402040714               MOVE CURR-ACCOUNT
+217502040714                    TO ACCOUNT-NO OF WS-LOG-REC
+217602040714               MOVE WS-ORIG-PLACEMENT-DATE
+217702040714                    TO PLACEMENT-DATE OF WS-LOG-REC
+217802040714               MOVE WS-ORIG-TRANS-NO
+217902040714                    TO TRANS-NO       OF WS-LOG-REC
+218002040723               STRING "Next days range not defined"
+218102040714                 DELIMITED BY SIZE
+218202040714                 INTO  ADDL-DTL OF WS-LOG-REC
+218302040719
+218402040722      *      WHEN "105"
+218502040722      *        MOVE PREV-ACCOUNT
+218602040722      *             TO ACCOUNT-NO OF WS-LOG-REC
+218702040722      *        MOVE WS-LOG-PROGRAM-CALLED
+218802040722      *             TO PROGRAM-CALLED OF WS-LOG-REC
+218902040722      *        STRING "Next higher day range is undefined in the table"
+219002040722      *          DELIMITED BY SIZE
+219102040722      *          INTO  ADDL-DTL OF WS-LOG-REC
+219202040714
+219302040719             WHEN "106"
+219402040714               MOVE PREV-ACCOUNT
+219502040714                    TO ACCOUNT-NO OF WS-LOG-REC
+219602040723               STRING "Limit days ("                DELIMITED BY SIZE
+219702040714                      WS-LOG-LIMIT-DAYS             DELIMITED BY SIZE
+219802040723                      ") = "                        DELIMITED BY SIZE
+219902040714                      WS-LOG-UNITS                  DELIMITED BY SIZE
+220002040714                 INTO  ADDL-DTL OF WS-LOG-REC
+220102040714           END-EVALUATE.
+220202040714
+220302040714           MOVE "INSERT MFASRVLOGP - ERROR"
+220402040714                             TO WS-SQLERR-STATEMENT.
+220502040714
+220602040714           EXEC SQL
+220702040714             INSERT INTO MFASRVLOGP VALUES (:MFASRVLOGP)
+220802040714           END-EXEC.
+220902040714       LWR-EXIT.
+221002040714           EXIT.
+221102040714
+221202070810      *Rfs 43561 Change the SQL  to a native COBOL read
+221302070810      *so as to enhance performance.
+221402070810
+221502070605      *Rfs37142 Begins
+221602070605       GetLowerLimit.
+221702070810      *    EXEC SQL
+221802070810      *       SELECT MIN(TRNCPP.AGE_DATE)
+221902070810      *         INTO :li_EarliestPurAgeDate
+222002070810      *         FROM MFATRNCPP TRNCPP, MFATRNP TRNP
+222102070810      *        WHERE TRNCPP.PLACEMENT_DATE = TRNP.PLACEMENT_DATE
+222202070810      *          AND TRNCPP.TRANS_NO = TRNP.TRANS_NO
+222302070810      *          AND TRNP.ACCOUNT_NO = :ln_PrevAccount
+222402070810      *          AND TRNP.INVESTMENT_CODE = :COMM-INVESTMENT
+222502070810      *          AND TRNP.PROCESS_DATE >= :COMM-START-DATE
+222602070810      *          AND TRNP.PROCESS_DATE <= :COMM-TO-DATE
+222702070810      *          AND TRNP.TRANS_STATUS_CODE IN ("HST","HSC")
+222802070810      *          AND TRNP.TRANS_TYPE_CODE IN ("INC","CPG","INT")
+222902070810      *          AND TRNP.REVERSE <> "Y"
+223002070810      *    END-EXEC
+223102070810      *    IF SQLSTATE =  WS-SQL-SUCCESSFUL  Then
+223202070810      *          MOVE li_EarliestPurAgeDate TO WS-AGE-START-DATE
+223302070810      *          COMPUTE li_LowerLimitDays = FUNCTION FIND-DURATION
+223402070810      *          (WS-AGE-START-DATE WS-AGE-END-DATE DAYS)
+223502070810      *          ADD 1 TO li_LowerLimitDays
+223602070810      *       Else
+223702070810      *          Compute li_LowerLimitDays = li_LowerLimitDays + 1
+223802070810      *      End-if
+223902070810
+224002090505      *RFS50475 Begin
+224102090505           IF lb_ALDTTF_EditYes
+224202090505             Initialize MFATRNPUL1-RECORD of Trans-Purchase-Units
+224302090505             Move ln_PrevAccount  to Account-No of Trans-Purchase-Units
+224402090505             Move COMM-INVESTMENT to Investment-Code of
+224502090505                                     Trans-Purchase-Units
+224602090505             Move COMM-START-DATE to Purch-Age-Date of
+224702090505                                     Trans-Purchase-Units
+224802090505             MOVE ZEROS           TO Placement-Date of
+224902090505                                     Trans-Purchase-Units
+225002090505                                     Trans-No       of
+225102090505                                     Trans-Purchase-Units
+225202090505                                     Purch-Seq-No   of
+225302090505                                     Trans-Purchase-Units
+225402090505             Move "N" to lc_EofCdscRec
+225502090505
+225602090505             Start Trans-Purchase-Units
+225702090505                 Key is not less than Externally-Described-Key
+225802090505                 Invalid Key
+225902090505                   Compute li_LowerLimitDays = li_LowerLimitDays + 1
+226002090505                 Not Invalid Key
+226102090505                   Perform GetFirstCdscRecord1 Until lc_EofCdscRec = "Y"
+226202090505             End-Start
+226302090505           ELSE
+226402070810           Initialize MFATRNCPLA-RECORD of Trans-Cdsc-Purchase
+226502070810           Move ln_PrevAccount  to Account-No of Trans-Cdsc-Purchase
+226602070810           Move COMM-INVESTMENT to Investment-Code of
+226702070810                                   Trans-Cdsc-Purchase
+226802070810           Move COMM-START-DATE to Age-Date  of Trans-Cdsc-Purchase
+22690208121959781b     MOVE ZEROS           TO Placement-Date of Trans-Cdsc-Purchase
+227002081219  |                                Trans-No       of Trans-Cdsc-Purchase
+22710208121959781e                             Cdsc-Seq-No    of Trans-Cdsc-Purchase
+227202070810           Move "N" to lc_EofCdscRec
+227302070810
+227402070810           Start Trans-Cdsc-Purchase
+227502070810               Key is not less than Externally-Described-Key
+227602070810               Invalid Key
+227702070810                 Compute li_LowerLimitDays = li_LowerLimitDays + 1
+227802070810               Not Invalid Key
+227902070810                 Perform GetFirstCdscRecord Until lc_EofCdscRec = "Y"
+228002070810           End-Start
+228102090505           End-If.
+228202070810
+228302070810           If li_EarliestPurAgeDate > 0 Then
+228402070810               MOVE li_EarliestPurAgeDate TO WS-AGE-START-DATE
+228502070810               COMPUTE li_LowerLimitDays = FUNCTION FIND-DURATION
+228602070810                       (WS-AGE-START-DATE WS-AGE-END-DATE DAYS)
+228702070810               ADD 1 TO li_LowerLimitDays
+228802070810            Else
+228902070810               Compute li_LowerLimitDays = li_LowerLimitDays + 1
+229002070810           End-if
+229102070810      * Rfs43561 Ends
+229202070810
+229302070605           Exec Sql
+229402070605              SELECT TRSCVP.LOWER_LIMIT_DAYS
+229502070605                INTO :li_lowerDay
+229602070605                FROM MFAINVTVP INVTVP,
+229702070605                     MFATRSCVP TRSCVP
+229802070605               WHERE TRSCVP.TRAILER_SCHEDULE_CODE =
+229902070605                            INVTVP.TRAILER_SCHEDULE_CODE
+230002070605                     AND INVTVP.INVESTMENT_CODE = :Comm-Investment
+230102070605                     AND TRSCVP.LOWER_LIMIT_DAYS >= :li_LowerLimitDays
+230202070605               FETCH FIRST ROW ONLY
+230302070605               END-EXEC.
+230402070605
+230502070605
+230602070605       AdjustDistUnits.
+230702070605           Compute li_MaxLimitDay  = 0
+230802070605           Set li_Dayidx to DAYIDX
+230902070927
+231002070927      * 44223.1 move from subsequent section
+231102070927           Perform GetlowerLimit
+231202070605           PERFORM VARYING DAYIDX    FROM 1 BY 1
+231302070605                   UNTIL DAYIDX    > WS-MAX-DAYS-ROW
+231402070605             IF AR-UNITS-VAR(DAYIDX) > 0
+231502070823
+231602070823      *43561.3 begins
+231702070823      *         Set  li_MaxLimitDay To Dayidx
+231802070823                IF (AR-UNITS-VAR(DAYIDX) = li_PreviousDistUnits AND
+231902070927                   AR-LOWER-LIMIT-DAYS (DAYIDX) = li_PreviousLowerDays
+232002070927      *44223.1
+232102070928                   AND li_LowerDay <  li_PreviousLowerDays)
+232202070927      *44223.1
+232302070927
+232402070823                   Move 0 TO AR-UNITS-VAR(DAYIDX)
+232502070823                Else
+232602070823                   Set  li_MaxLimitDay To Dayidx
+232702070823                End-if
+232802070823      *43561.3 ends
+232902070823
+233002070605             ELSE
+233102070605                MOVE 0 TO AR-DIST-UNITS-VAR(DAYIDX)
+233202070605             END-IF
+233302070605           END-PERFORM
+233402070605           Perform MoveUnits
+233502070605           Set Dayidx to li_Dayidx.
+233602070605
+233702070605       MoveUnits.
+233802070927      * 44223.1 move the get lower limit to the upper routine
+233902070927      *    Perform GetlowerLimit
+23400207092144223      Move "N" To lc_AddbackDist
+234102070605           If li_MaxLimitDay > 0 then
+234202070605             Set Dayidx to li_MaxLimitDay
+234302070605               Else
+234402070605             Set Dayidx to 1
+234502070605           End-if
+234602070613ADex       IF  AR-LOWER-LIMIT-DAYS (DAYIDX) > li_LowerDay
+234702070613               Move AR-LOWER-LIMIT-DAYS (DAYIDX) To li_LowerDay
+234802070613           END-if
+234902070608
+235002070613      *37142.17 begins
+235102070613
+235202070928      * As a result of an all units sell/swo/tri if all the dist is
+235302070928      * fully used up, then initiliase the var unit column since
+235402070928      * the distribution is fully used up
+235502070928
+235602070613            If  (ln_TotalVarUnits + ln_DistUnits +
+235702070613                       li_PreviousDistUnits  +
+235802070613                       li_PreviousVarUnits   = 0 ) AND
+235902070613                       ln_TotalVarUnits Not = 0 Then
+236002070614                   SET DAYIDX To 0
+236102070613                   PERFORM VARYING DAYIDX    FROM 1 BY 1
+236202070613                         UNTIL DAYIDX    > WS-MAX-DAYS-ROW
+236302070928      * 44223.1
+236402070928                        IF li_lowerDay = li_PreviousLowerDays
+236502070928      * 44223.1
+236602070613                         MOVE "C" TO AR-STATUS-CODE(DAYIDX )
+236702070613                         Move 0 To AR-DIST-UNITS-VAR(DAYIDX)
+236802070613                         Move 0 To AR-UNITS-VAR(DAYIDX)
+236902070613                         MOve "Y"  to lc_InitialiseMe
+237002070928      * 44223.1
+237102070928                       END-IF
+237202070928      * 44223.1
+237302070613                   END-PERFORM
+237402070613             End-if
+237502070613
+237602070614           SET DAYIDX To 0
+237702070613           IF li_lowerDay  >  li_PreviousLowerDays
+237802070613            PERFORM VARYING DAYIDX FROM 1 BY 1
+237902070614      *      UNTIL (AR-LOWER-LIMIT-DAYS (DAYIDX) > li_PreviousLowerDays
+238002070614             UNTIL DAYIDX > 50
+238102070614              IF (AR-LOWER-LIMIT-DAYS (DAYIDX) = li_PreviousLowerDays
+238202070921                  AND li_PreviousLowerDays Not = 0
+23830207092144223             AND li_PreviousDistUnits Not = 0)
+238402070921  ¦
+238502070921  ¦            Subtract li_PreviousDistUnits From
+238602070921  ¦                           AR-UNITS-VAR(DAYIDX)
+23870207092144223          Move "Y" To lc_AddbackDist
+238802070613               Move  0  To AR-DIST-UNITS-VAR(DAYIDX )
+238902070613               Move "Y" TO AR-REC-EXIST (DAYIDX)
+239002070613               Move "C" TO AR-STATUS-CODE(DAYIDX )
+239102070613              END-IF
+239202070613            END-PERFORM
+239302070613           END-IF
+239402070613
+239502070614           SET DAYIDX To 0
+239602070613           PERFORM VARYING DAYIDX    FROM 1 BY 1
+239702070614      *       UNTIL (AR-LOWER-LIMIT-DAYS (DAYIDX) > li_lowerDay
+239802070614              UNTIL  DAYIDX > 50
+239902070822            IF AR-LOWER-LIMIT-DAYS (DAYIDX) = li_lowerDay
+240002070822               If (li_PreviousDistUnits = li_PreviousVarUnits
+240102070822                   And AR-UNITS-VAR(DAYIDX ) = 0
+240202070822                   And li_PreviousLowerDays > 0)
+240302070822                  Move li_PreviousDistUnits To AR-UNITS-VAR(DAYIDX)
+240402070822               End-if
+240502070822
+240602070822      *43561.2 Begins
+240702070822               If li_PreviousLowerDays > li_lowerDay
+240802070822                    Add  li_PreviousDistUnits To AR-UNITS-VAR(DAYIDX)
+240902070822               End-if
+241002070822      *43561.2 Ends
+241102070822
+24120207092144223          If lc_AddbackDist = "Y"
+241302070921  ¦                 Add  li_PreviousDistUnits To AR-UNITS-VAR(DAYIDX)
+24140207092144223          End-if
+241502070921
+241602070822               Add ln_DistUnits To AR-UNITS-VAR(DAYIDX )
+241702070822               Add ln_DistUnits To AR-DIST-UNITS-VAR(DAYIDX )
+241802070822               Add li_PreviousDistUnits To AR-DIST-UNITS-VAR(DAYIDX )
+241902070822               If AR-STATUS-CODE(DAYIDX ) = "  "
+242002070822                      Move "A" TO AR-STATUS-CODE(DAYIDX)
+242102070822                      Move " " TO AR-REC-EXIST (DAYIDX)
+242202070822               End-if
+242302070822            Else
+242402070822               Move 0  To AR-DIST-UNITS-VAR(DAYIDX)
+242502070822            END-IF
+242602070822adex        END-PERFORM.
+242702070822
+242802070613      *37142.17 comment out old codes begin
+242902070613      *    If  ln_DistUnits Not = 0 Then
+243002070613      *            IF li_LowerDay > AR-LOWER-LIMIT-DAYS (DAYIDX)
+243102070613      *                PERFORM VARYING DAYIDX    FROM 1 BY 1
+243202070613      *                  UNTIL DAYIDX    > WS-MAX-DAYS-ROW
+243302070613      *                  IF AR-LOWER-LIMIT-DAYS (DAYIDX) = li_lowerDay
+243402070613      *                     Perform UpdateDistUnits
+243502070613      *                     MOVE "A" TO AR-STATUS-CODE(DAYIDX )
+243602070613      *                     MOVE " " TO AR-REC-EXIST (DAYIDX)
+243702070613      *                  Else
+243802070613      *                     Move 0  To AR-DIST-UNITS-VAR(DAYIDX)
+243902070613      *                  END-IF
+244002070613      *                 END-PERFORM
+244102070613      *                 Perform RemovePreviousDist
+244202070613      *            ELSE
+244302070613      *                 Perform UpdateDistUnits
+244402070613      *                 if  AR-STATUS-CODE(DAYIDX ) = "  "
+244502070613      *                     MOVE "A" TO AR-STATUS-CODE(DAYIDX )
+244602070613      *                  end-if
+244702070613      *            END-IF
+244802070613      *       END-IF
+244902070613      *    If  ln_DistUnits  = 0 Then
+245002070613      *        IF li_LowerDay > AR-LOWER-LIMIT-DAYS (DAYIDX)
+245102070613      *           PERFORM VARYING DAYIDX    FROM 1 BY 1
+245202070613      *              UNTIL DAYIDX    > WS-MAX-DAYS-ROW
+245302070613      *              IF AR-LOWER-LIMIT-DAYS (DAYIDX) = li_lowerDay
+245402070613      *                 MOVE "A" TO AR-STATUS-CODE(DAYIDX )
+245502070613      *                 Add li_PreviousDistUnits To
+245602070613      *                     *R-DIST-UNITS-VAR(DAYIDX )
+245702070613      *                 Add li_PreviousDistUnits To
+245802070613      *                     AR-UNITS-VAR(DAYIDX )
+245902070613      *               END-IF
+246002070613      *           END-PERFORM
+246102070613      *           Perform RemovePreviousDist
+246202070613      *         ELSE
+246302070608
+246402070608      * 37142.18
+246502070613      *           If  (ln_TotalVarUnits + ln_DistUnits +
+246602070613      *                li_PreviousDistUnits  +
+246702070613      *                li_PreviousVarUnits   = 0 ) AND
+246802070613      *                ln_TotalVarUnits Not = 0 Then
+246902070613      *                PERFORM VARYING DAYIDX    FROM 1 BY 1
+247002070613      *                  UNTIL DAYIDX    > WS-MAX-DAYS-ROW
+247102070613      *                  MOVE "C" TO AR-STATUS-CODE(DAYIDX )
+247202070613      *                  Move 0 To AR-DIST-UNITS-VAR(DAYIDX)
+247302070613      *                  Move 0 To AR-UNITS-VAR(DAYIDX)
+247402070613      *                  MOve "Y"  to lc_InitialiseMe
+247502070613      *                END-PERFORM
+247602070613      *            Else
+247702070613      *                Move li_PreviousDistUnits To
+247802070613     **                     AR-DIST-UNITS-VAR(DAYIDX)
+247902070613      *            End-if
+248002070613      *         END-IF
+248102070613      *     END-IF.
+248202070608
+248302070608       UpdateDistUnits.
+248402070608            Add ln_DistUnits To AR-UNITS-VAR(DAYIDX )
+248502070608            Add ln_DistUnits To AR-DIST-UNITS-VAR(DAYIDX )
+248602070608            Add li_PreviousDistUnits To AR-DIST-UNITS-VAR(DAYIDX ).
+248702070608
+248802070925      *RFS 44223 - commented out below routine, as it's not called.
+248902070921      *RemovePreviousDist.
+249002070921      *     If Dayidx > 1 Then
+249102070921      *       Subtract li_PreviousDistUnits From
+249202070921      *                       AR-UNITS-VAR(DAYIDX - 1)
+249302070921      *       Move 0 To AR-DIST-UNITS-VAR(DAYIDX - 1 ).
+249402070608
+249502070608      *37142.17.18.19  comment out old code
+249602070608      *
+249702070608      *    If  ln_DistUnits Not =  0  Then
+249802070608      *        If  (Dayidx > 1  And
+249902070608      *            AR-UNITS-VAR(DAYIDX) = ln_DistUnits)
+250002070608      *            Subtract ln_DistUnits From AR-UNITS-VAR(DAYIDX)
+250102070608      *            Add ln_DistUnits to AR-UNITS-VAR(DAYIDX - 1)
+250202070608      *            Add ln_DistUnits to AR-DIST-UNITS-VAR(DAYIDX - 1)
+250302070608      *        End-if
+250402070608      *        If (ln_DistUnits Not =  0  And Dayidx > 1 And
+250502070608      *           AR-UNITS-VAR(DAYIDX) > 0  And
+250602070608      *           AR-LOWER-LIMIT-DAYS (DAYIDX) > li_PreviousLowerDays )
+250702070608      *             Subtract li_PreviousDistUnits From
+250802070608      *                 AR-UNITS-VAR(DAYIDX - 1)
+250902070608      *             Add ln_DistUnits To
+251002070608      *                 AR-UNITS-VAR(DAYIDX )
+251102070608      *
+251202070608      *             Add ln_DistUnits To
+251302070608      *                 AR-DIST-UNITS-VAR(DAYIDX )
+251402070608      *             Add li_PreviousDistUnits To
+251502070608      *                 AR-DIST-UNITS-VAR(DAYIDX )
+251602070608      *         End-if
+251702070608      *        If  (Dayidx = 1  And
+251802070608      *            AR-UNITS-VAR(DAYIDX) = ln_DistUnits)
+251902070608      *            Add ln_DistUnits to AR-DIST-UNITS-VAR(DAYIDX)
+252002070608      *        End-if
+252102070608      *        If (ln_DistUnits Not =  0  And Dayidx > 1 And
+252202070608      *           AR-UNITS-VAR(DAYIDX) > 0  And
+252302070608      *           AR-LOWER-LIMIT-DAYS (DAYIDX) = li_PreviousLowerDays )
+252402070608      *           Add ln_DistUnits To
+252502070608      *                 AR-UNITS-VAR(DAYIDX )
+252602070608      *           Add ln_DistUnits To
+252702070608      *                 AR-DIST-UNITS-VAR(DAYIDX )
+252802070608      *           Add li_PreviousDistUnits To
+252902070608      *                 AR-DIST-UNITS-VAR(DAYIDX )
+253002070608      *           End-if
+253102070608      *        If  (Dayidx = 1  And
+253202070608      *            AR-UNITS-VAR(DAYIDX) = 0 And
+253302070608      *            ln_DistUnits Not = 0 And li_PreviousDistUnits = 0)
+253402070608      *            Perform GetlowerLimit
+253502070608      *            PERFORM VARYING DAYIDX    FROM 1 BY 1
+253602070608      *               UNTIL DAYIDX    > WS-MAX-DAYS-ROW
+253702070608      *            IF AR-LOWER-LIMIT-DAYS (DAYIDX) = li_lowerDay
+253802070608      *               Add ln_DistUnits to AR-DIST-UNITS-VAR(DAYIDX)
+253902070608      *               Add ln_DistUnits to AR-UNITS-VAR(DAYIDX)
+254002070608      *               MOVE "A" TO AR-STATUS-CODE(DAYIDX )
+254102070608      *               MOVE " " TO AR-REC-EXIST (DAYIDX)
+254202070608      *             END-IF
+254302070608      *            END-PERFORM
+254402070608      *          End-if
+254502070608      *
+254602070608      *        If  (Dayidx = 1  And
+254702070608      *            AR-UNITS-VAR(DAYIDX) > 0 And
+254802070608      *            ln_DistUnits Not = 0 And li_PreviousDistUnits > 0)
+254902070608      *               Add ln_DistUnits to AR-DIST-UNITS-VAR(DAYIDX)
+255002070608      *               Add ln_DistUnits to AR-UNITS-VAR(DAYIDX)
+255102070608      *               Add li_PreviousDistUnits To
+255202070608      *                                   AR-DIST-UNITS-VAR(DAYIDX )
+255302070608      *          End-if
+255402070608      *
+255502070608      *        If  (Dayidx = 1  And
+255602070608      *            AR-UNITS-VAR(DAYIDX) > 0 And
+255702070608      *            ln_DistUnits Not = 0 And li_PreviousDistUnits = 0)
+255802070608      *              Add ln_DistUnits to AR-DIST-UNITS-VAR(DAYIDX)
+255902070608      *              Add ln_DistUnits to AR-UNITS-VAR(DAYIDX)
+256002070608      *        End-if
+256102070608      *
+256202070608      *        If  (Dayidx = 1  And
+256302070608      *            AR-UNITS-VAR(DAYIDX) = 0 And
+256402070608      *            ln_DistUnits Not = 0 And li_PreviousDistUnits > 0)
+256502070608      *               Perform GetlowerLimit
+256602070608      *               PERFORM VARYING DAYIDX    FROM 1 BY 1
+256702070608      *                 UNTIL DAYIDX    > WS-MAX-DAYS-ROW
+256802070608      *                 IF AR-LOWER-LIMIT-DAYS (DAYIDX) = li_lowerDay
+256902070608      *                  Move ln_DistUnits to AR-DIST-UNITS-VAR(DAYIDX)
+257002070608      *                  Move ln_DistUnits to AR-UNITS-VAR(DAYIDX)
+257102070608      *                  MOVE "C" TO AR-STATUS-CODE(DAYIDX )
+257202070608      *                  MOVE " " TO AR-REC-EXIST (DAYIDX)
+257302070608      *                 END-IF
+257402070608      *                END-PERFORM
+257502070608      *             End-if
+257602070608      *         End-if
+257702070608      *
+257802070608      *    If ln_Distunits = 0  AND AR-UNITS-VAR(DAYIDX) > 0
+257902070608      *             Add li_PreviousDistUnits To
+258002070608      *                 AR-DIST-UNITS-VAR(DAYIDX )
+258102070608      *    End-if
+258202070608      *    PERFORM VARYING DAYIDX    FROM 1 BY 1
+258302070608      *            UNTIL DAYIDX    > WS-MAX-DAYS-ROW
+258402070608      *      IF AR-UNITS-VAR(DAYIDX) = 0
+258502070608      *          Move " " TO  AR-REC-EXIST (Dayidx )
+258602070608      *      END-IF
+258702070608      *    END-PERFORM.
+258802070605      * Rfs 37142
+258902000000      /
+259002070810
+259102070813      * Rfs 43561 Begins
+259202070813       GetFirstCdscRecord.
+259302070813           READ Trans-Cdsc-Purchase Next Record
+259402070813                  At End
+259502070813                  Move "Y"  To  lc_EofCdscRec
+259602070813           END-READ
+259702070820
+259802070820           IF ACCOUNT-NO OF TRANS-CDSC-PURCHASE NOT = ln_PrevAccount
+259902070820              OR INVESTMENT-CODE OF TRANS-CDSC-PURCHASE NOT =
+260002070820              COMM-INVESTMENT
+260102070820              Move "Y"  To  lc_EofCdscRec
+260202070820           End-If
+260302070813
+260402070820           IF  lc_EofCdscRec Not = "Y"
+260502070820            IF (ACCOUNT-NO OF TRANS-CDSC-PURCHASE = ln_PrevAccount AND
+260602070820               INVESTMENT-CODE OF TRANS-CDSC-PURCHASE = COMM-INVESTMENT
+260702070820               AND ALL-UNITS-FREE OF TRANS-CDSC-PURCHASE    = "Y"
+260802070820               AND REINVEST-DISTR-AS OF TRANS-CDSC-PURCHASE = "F")
+260902070820               Perform  VerifyDistributions
+261002070820            End-If
+261102070820           End-If.
+261202090505      *RFS50475 Add - Begin
+261302090505       GetFirstCdscRecord1.
+261402090505           READ Trans-Purchase-Units Next Record
+261502090505                  At End
+261602090505                  Move "Y"  To  lc_EofCdscRec
+261702090505           END-READ
+261802090505
+261902090505           IF ACCOUNT-NO OF TRANS-PURCHASE-UNITS NOT = ln_PrevAccount
+262002090505              OR INVESTMENT-CODE OF TRANS-PURCHASE-UNITS NOT =
+262102090505              COMM-INVESTMENT
+262202090505              Move "Y"  To  lc_EofCdscRec
+262302090505           End-If.
+262402090505      *RFS50475 Add - End
+262502070813       VerifyDistributions.
+262602070813           Move Placement-Date of Trans-Cdsc-Purchase
+262702070813                               To li_placementdate
+262802070813           Move Trans-No      of Trans-Cdsc-Purchase
+262902070813                              To li_TransNo
+263002070813           EXEC SQL
+263102070813             SELECT Gross_Amt
+263202070813                  INTO  :ln_GrossAmt
+263302070813             FROM MFATRNP
+263402070813             WHERE
+263502070813               Placement_date = :li_placementdate AND
+263602070813               Trans_No       = :li_TransNo       AND
+263702070813               Trans_Status_Code in ("HST", "HSC") AND
+263802070813               Trans_type_code  IN ("INC","CPG","INT") AND
+263902070813               Process_Date  >= :COMM-START-DATE      AND
+264002070813               Process_Date  <= :COMM-TO-DATE         AND
+264102070813               Reverse           <>    "Y"
+264202070813           End-EXEC
+264302140529      *RFS 136335 - Begins.
+264402140529           MOVE SQLSTATE TO lc_sqlStates.
+264502140529      *    IF  SqlState = Ws-Sql-Successful Then
+264602140529           IF lncc_sqlSuccessful Then
+264702140529      *RFS 136335 - Ends.
+264802070813                 Compute li_EarliestPurAgeDate =
+264902070813                         Age-Date of Trans-Cdsc-Purchase
+265002070813                 Move  "Y" To lc_EofCdscRec
+265102070813           END-IF.
+265202070813
+265302070813
+265402070813      * Rfs 43561 Ends
+265502000000      *****************************************************************
+265602000000       LOG-STATS-ROUTINE.
+265702000000      *****************************************************************
+265802000000
+265902000000      * Log statistics information
+266002000000
+266102000000           INITIALIZE MFASRVLOGP OF WS-LOG-REC.
+266202000000
+266302000000           ACCEPT WS-SYSDATE FROM DATE YYYYMMDD.
+266402000000           ACCEPT WS-SYSTIME FROM TIME.
+266502000000
+266602000000           MOVE WS-SYSDATE   TO LOG-DATE OF WS-LOG-REC.
+266702000000           MOVE WS-SYSTIME   TO LOG-TIME OF WS-LOG-REC.
+266802000000           MOVE WS-PROGRAM-NAME
+266902000000                             TO PROGRAM-CODE OF WS-LOG-REC.
+267002000000
+267102000000           MOVE "S"          TO LOG-TYPE OF WS-LOG-REC.
+267202000000           MOVE COMM-PROCESS-DATE
+267302000000                             TO PROCESS-DATE OF WS-LOG-REC.
+267402000000           MOVE COMM-INVESTMENT
+267502000000                             TO INVESTMENT-CODE OF WS-LOG-REC.
+267602000000
+267702000000           MOVE WS-LOG-PROGRAM-CALLED
+267802000000                             TO PROGRAM-CALLED OF WS-LOG-REC
+267902000000
+268002000000           EVALUATE WS-STATS-EVENT
+268102000000             WHEN "S"
+268202000000               MOVE WS-SYSTIME
+268302000000                             TO WS-TIME-BEGIN
+268402000000               IF WS-SETUP-TABLE = "Y"
+268502000000                  MOVE CURR-ACCOUNT
+268602000000                       TO ACCOUNT-NO OF WS-LOG-REC
+268702000000                  MOVE "GET - START"  TO ADDL-DTL OF WS-LOG-REC
+268802000000               ELSE
+268902000000                  MOVE PREV-ACCOUNT
+269002000000                       TO ACCOUNT-NO OF WS-LOG-REC
+269102000000                  MOVE "PUT - START"  TO ADDL-DTL OF WS-LOG-REC
+269202000000               END-IF
+269302000000             WHEN "E"
+269402000000               MOVE WS-SYSTIME
+269502000000                             TO WS-TIME-END
+269602000000               PERFORM CALC-USED-TIME THRU CUT-EXIT
+269702000000               IF WS-SETUP-TABLE = "Y"
+269802000000                  MOVE CURR-ACCOUNT
+269902000000                       TO ACCOUNT-NO OF WS-LOG-REC
+270002000000                  STRING "GET - END - ELAPSED "   DELIMITED BY SIZE
+270102000000                          WS-TIME-USED            DELIMITED BY SIZE
+270202000000                    INTO  ADDL-DTL OF WS-LOG-REC
+270302000000               ELSE
+270402000000                  MOVE PREV-ACCOUNT
+270502000000                       TO ACCOUNT-NO OF WS-LOG-REC
+270602000000                  STRING "PUT - END - ELAPSED "   DELIMITED BY SIZE
+270702000000                          WS-TIME-USED            DELIMITED BY SIZE
+270802000000                    INTO  ADDL-DTL OF WS-LOG-REC
+270902000000               END-IF
+271002000000           END-EVALUATE.
+271102000000
+271202000000
+271302000000           MOVE "INSERT MFASRVLOGP - STATS"
+271402000000                             TO WS-SQLERR-STATEMENT.
+271502000000
+271602000000           EXEC SQL
+271702000000             INSERT INTO MFASRVLOGP VALUES (:MFASRVLOGP)
+271802000000           END-EXEC.
+271902000000
+272002000000       LSR-EXIT.
+272102000000           EXIT.
+272202000000      /
+272302000000      *****************************************************************
+272402000000       CALC-USED-TIME.
+272502000000      *****************************************************************
+272602000000
+272702000000      * Calculate elapsed time used in HH:MM:SS:TT
+272802000000
+272902000000           IF WS-TE-TT >= WS-TB-TT
+273002000000              SUBTRACT WS-TB-TT FROM WS-TE-TT GIVING WS-TU-TT
+273102000000           ELSE
+273202000000              COMPUTE WS-TU-TT = WS-TE-TT + 100 - WS-TB-TT
+273302000000              SUBTRACT 1 FROM WS-TE-SS
+273402000000           END-IF.
+273502000000
+273602000000           IF WS-TE-SS >= WS-TB-SS
+273702000000              SUBTRACT WS-TB-SS FROM WS-TE-SS GIVING WS-TU-SS
+273802000000           ELSE
+273902000000              COMPUTE WS-TU-SS = WS-TE-SS + 60 - WS-TB-SS
+274002000000              SUBTRACT 1 FROM WS-TE-MM
+274102000000           END-IF.
+274202000000
+274302000000           IF WS-TE-MM >= WS-TB-MM
+274402000000              SUBTRACT WS-TB-MM FROM WS-TE-MM GIVING WS-TU-MM
+274502000000           ELSE
+274602000000              COMPUTE WS-TU-MM = WS-TE-MM + 60 - WS-TB-MM
+274702000000              SUBTRACT 1 FROM WS-TE-HH
+274802000000           END-IF.
+274902000000
+275002000000           IF WS-TE-HH >= WS-TB-HH
+275102000000              SUBTRACT WS-TB-HH FROM WS-TE-HH GIVING WS-TU-HH
+275202000000           ELSE
+275302000000              COMPUTE WS-TU-HH = WS-TE-HH + 24 - WS-TB-HH
+275402000000           END-IF.
+275502000000
+275602000000       CUT-EXIT.
+275702000000           EXIT.
+275802000000
+275902000000      *****************************************************************
+276002000000      ****** -SQL error routine
+276102000000      *****************************************************************
+276202000000       SQL-ERROR-RTN.
+276302000000           DISPLAY "SRVVCN - ENDED WITH ERROR".
+276402000000           DISPLAY "PROCEDURE: " WS-ROUTINE-NAME.
+276502000000           DISPLAY "STATEMENT: " WS-SQLERR-STATEMENT.
+276602000000           DISPLAY "SQLCODE = " SQLCODE, " SQLSTATE = " SQLSTATE.
+276702000000           DISPLAY SQLERRMC.
+276802000000
+276902000000       SER-1000.
+277002000000           CALL "SQLLOG" USING WS-PROGRAM-NAME
+277102000000                               WS-ROUTINE-NAME
+277202000000                               SQLCODE
+277302000000                               SQLERRD(1)
+277402000000                               SQLERRD(2)
+277502000000                               SQLERRD(3)
+277602000000                               SQLERRD(4)
+277702000000                               SQLERRD(5)
+277802000000                               SQLERRD(6)
+277902000000                               SQLSTATE
+278002000000                               WS-SQLERR-DATA
+278102000000                               WS-SQL-STATS
+278202000000                               WS-SQLERR-REPLY.
+278302000000           CANCEL "SQLLOG".
+278402000000           GOBACK.
+278502000000
+278602000000       SER-EXIT.
+278702000000           EXIT.

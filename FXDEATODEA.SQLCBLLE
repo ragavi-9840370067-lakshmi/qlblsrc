@@ -1,0 +1,485 @@
+000100121115       IDENTIFICATION DIVISION.
+000200121115       PROGRAM-ID.    FXDEATODEA.
+000300121115       AUTHOR.        Dharmendra Damke.
+000400121115       INSTALLATION.  L&T Infotech.
+000500121115       DATE-WRITTEN.  Nov 15, 2012.
+000600121115       DATE-COMPILED.
+000700121115      *****************************************************************
+000800121119      **   RFS-NUMBER : RFS114700                                      *
+000900121115      **                                                               *
+001000121115      **   DESCRIPTION: Program to generate QTEMP/DEATODEAP file.      *
+001100121115      **                                                               *
+001200121119      **   CALLED BY:  SALEXTTRN                                       *
+001300121115      **                                                               *
+001400121115      **   PARAMETERS:  As-At-Date                                     *
+001500121115      *****************************************************************
+001600121115      *****************************************************************
+001700121115      *    C H A N G E   H I S T O R Y
+001800121115      *****************************************************************
+001900121115      ******************************************************************
+002000121115      * PROGRAMMER  *DATE OF CHANGE* DESCRIPTION OF CHANGE             *
+002100121115      ******************************************************************
+002200121115      * Dharmendra D  * 2012/11/15 * RFS114700- Created new program    *
+002201121115      ******************************************************************
+002400121115
+002500121115       ENVIRONMENT DIVISION.
+002600121115       CONFIGURATION SECTION.
+002700121115       SOURCE-COMPUTER. IBM-AS400.
+002800121115       OBJECT-COMPUTER. IBM-AS400.
+002900121115       SPECIAL-NAMES.
+003000121115
+003100121115       INPUT-OUTPUT SECTION.
+003200121115       FILE-CONTROL.
+003300121115
+003400121115       DATA DIVISION.
+003500121115
+003600121115       WORKING-STORAGE SECTION.
+003700121115      *
+003800121115           Copy Cpysqlfld
+003900121115               REPLACING == "CURRENT_PROGRAM" == BY == "FXDEATODEA" ==.
+004000121115      *
+004100121115           EXEC SQL
+004200121115             INCLUDE SQLCA
+004300121115           END-EXEC.
+004400121115
+004500121115      * Error Codes, Uniquely Identify where the error happened
+004600121115       01 Ws-Err-Code                    PIC X(02) VALUE SPACES.
+004700121115           88 lncc_Err-Ok                    VALUE SPACES.
+004800121115           88 lncc_Err11                     VALUE "11".
+004900121115           88 lncc_Err12                     VALUE "12".
+005000121116           88 lncc_Err13                     VALUE "13".
+005100121115           88 lncc_Err14                     VALUE "14".
+005200121115      *
+005300121115       01 lc_Exception.
+005400121115           03 lncc_ErrorOpeningCursor    PIC X(80)
+005500121115           VALUE "Error while Opening Cursor".
+005600121115           03 lncc_ErrorFetchingCursor   PIC X(80)
+005700121115           VALUE "Error while Fetching Cursor".
+005800121116           03  lncc_ErrorSQL                           PIC X(80)
+005900121116               VALUE "Error in SQL Statement ".
+006000121115      *
+006100121115       01 lc_Static.
+006200121115           03 lnci_MaxFetchRec           PIC S9(03) VALUE 200.
+006500121116           03 lncc_History               PIC X(03)  VALUE "HST".
+006501121116           03 lncc_Reversed              PIC X(03)  VALUE "RVS".
+006502121116           03 lncc_SwitchOut             PIC X(03)  VALUE "SWO".
+006503121116           03 lncc_SwitchIn              PIC X(03)  VALUE "SWI".
+006504121116           03 lncc_TransferOut           PIC X(03)  VALUE "TRO".
+006505121116           03 lncc_TransferIn            PIC X(03)  VALUE "TRI".
+006506121116           03 lncc_Yes                   PIC X(03)  VALUE "Yes".
+006507121116           03 lncc_No                    PIC X(03)  VALUE "No ".
+006508121116
+006600121115       01 lc_WorkFields.
+006700121115           03 lc_SaveRecord.
+006701121116              05 li_SavePlaceDate           PIC S9(09) VALUE 0.
+006702121116              05 li_SaveTransNo             PIC S9(09) VALUE 0.
+006800121116              05 lc_SaveTransType           PIC X(3)   VALUE " ".
+006801121116              05 lc_SaveTransStat           PIC X(3)   VALUE " ".
+006900121116              05 lc_SaveDealer              PIC X(4)   VALUE " ".
+006901121116
+006902121116           03 lc_WorkDealer                 PIC X(4)   VALUE " ".
+006903121116           03 lc_Dealer2Dealer              PIC X(3)   VALUE " ".
+007400121115
+007500121115           03 lb_EndOfCursorFlag         PIC 1.
+007600121115              88  lb_EndOfCursorTrue         VALUE B"1".
+007700121115              88  lb_EndOfCursorFalse        VALUE B"0".
+007800121115           03 li_Counter                    PIC S9(03) VALUE 0.
+007900121115           03 li_NoOfRowsFetched            PIC S9(03) VALUE 0.
+008000121115
+008100121115       01  Tables.
+008200121115           03  ltb_FetchDepTable.
+008300121115               05  ltb_FetchDep       OCCURS 200 TIMES.
+008301121115                   07 ltb_SavePlaceDate     PIC S9(09).
+008302121115                   07 ltb_SaveTransNo       PIC S9(09).
+008400121115                   07 ltb_SaveTransType     PIC X(3).
+008500121115                   07 ltb_SaveTransStat     PIC X(3).
+008501121116                   07 ltb_SaveDealer        PIC X(4).
+009000121115
+009100121115           03  ltb_IndicatorsTable.
+009200121115               05  ltb_Indicators          OCCURS 200 TIMES.
+009300121115                   07  ltb_Indicator       PIC S9(04) BINARY
+009400121115                                           OCCURS  08 TIMES.
+009500121115      *
+009600121115       LINKAGE SECTION.
+009605121121
+009606121121           01 pi_ProcDate_X                         PIC X(08).
+009607121121           01 pi_ProcDate  REDEFINES pi_ProcDate_X  PIC S9(08).
+009609121121           01 pc_Batch                     PIC X(01).
+009610121121           01 pi_StartDate_X               PIC X(08).
+009611121121           01 pi_StartDate REDEFINES pi_StartDate_X PIC S9(08).
+009612121121           01 pi_EndDate_X                 PIC X(08).
+009613121121           01 pi_EndDate  REDEFINES pi_EndDate_X    PIC S9(08).
+009700121115      /
+009800121115      *
+009900121121       PROCEDURE DIVISION USING pi_ProcDate_X,
+009901121119                                pc_Batch,
+009902121121                                pi_StartDate_X,
+009903121121                                pi_EndDate_X.
+010000121115
+010100121115      *----------------------------------
+010200121115       MAINLINE.
+010300121115      *----------------------------------
+010400121115           EXEC SQL
+010500121115             WHENEVER SQLERROR CONTINUE
+010600121115           END-EXEC.
+010700121115
+010800121115           PERFORM InitialLogic.
+010900121115
+011000121115           PERFORM CreateMainCursor.
+011100121115           PERFORM ProcessMainCursor.
+011200121115
+011300121115           PERFORM EndOfProgram.
+011400121115
+011500121115      *----------------------------------
+011600121115       InitialLogic.
+011700121115      *----------------------------------
+011800121115
+011900121115      *Initialize all file variables.
+011901121116             INITIALIZE lc_WorkFields.
+011902121121             IF pi_ProcDate_X  = Spaces
+011903121121                MOVE ZEROS TO pi_ProcDate
+011904121121             END-IF.
+011905121121
+011906121121             IF pi_StartDate_X = Spaces
+011907121121                MOVE ZEROS TO pi_StartDate
+011908121121             END-IF.
+011909121115
+011910121121             IF pi_EndDate_X   = Spaces
+011911121121                MOVE ZEROS TO pi_EndDate_X
+011912121121             END-IF.
+011913121121
+011914121115           EXEC SQL
+011915121115             DROP TABLE QTEMP/DEATODEAP
+011916121115           END-EXEC.
+011917121115
+011918121115           MOVE SQLSTATE                       TO lc_sqlStates.
+011919121115           IF lncc_sqlTblNotExists OR lncc_sqlSuccessful
+011920121115              CONTINUE
+011921121115           ELSE
+011922121116              SET lncc_Err13                   TO TRUE
+011923121116              MOVE lncc_ErrorSQL               TO lc_sqlErrShortDESCR
+011924121115              PERFORM  Dsp-Error
+011925121115           END-IF.
+011931121115
+011932121115           EXEC SQL
+011933121115             CREATE TABLE QTEMP/DEATODEAP (
+011934121115             PLACEMENT_DATE      NUMERIC   (09) NOT NULL WITH DEFAULT,
+011935121119             TRANS_NO            NUMERIC   (09) NOT NULL WITH DEFAULT,
+011936121119             TRANS_TYPE          CHAR      (03) NOT NULL WITH DEFAULT,
+011937121119             TRANS_STATUS        CHAR      (03) NOT NULL WITH DEFAULT,
+011938121119             DEALER              CHAR      (04) NOT NULL WITH DEFAULT,
+011939121119             DlrToDlrFlag        CHAR      (03) NOT NULL WITH DEFAULT)
+011941121115           END-EXEC.
+011942121115
+012000121115
+012100121115      *-----------------*
+012200121115       CreateMainCursor.
+012300121115      **------**
+012400121115           SET lb_EndOfCursorFalse TO TRUE.
+012500121115           EXEC SQL
+012600121115             DECLARE MainCursor CURSOR FOR
+012700121116             SELECT COALESCE(TRNP.Placement_date, 0),
+012701121116                    COALESCE(TRNP.Trans_no,0),
+012702121116                    COALESCE(TRNP.Trans_Type_Code," "),
+012703121116                    COALESCE(TRNP.Trans_Status_Code," "),
+012800121115                    COALESCE(TRNP.Dealer_Code, " ")
+013300121115             FROM MFATRNP TRNP
+013400121119
+013600121119             WHERE  TRANS_STATUS_CODE IN("HST","HSC","RVS","RVC","CON",
+013900121119                                         "SET","CAN") AND
+013901121119                 ((Process_Date = :pi_ProcDate AND :pc_Batch <> "A") OR
+013902121119                  (Process_Date Between :pi_StartDate AND :pi_EndDate))
+013904121116             OPTIMIZE FOR ALL ROWS
+014000121115           END-EXEC.
+014100121115
+014200121115           EXEC SQL
+014300121115             OPEN MainCursor
+014400121115           END-EXEC.
+014500121115
+014600121115           MOVE SQLSTATE TO lc_sqlStates.
+014700121115           IF NOT lncc_sqlSuccessful
+014800121115              SET lb_EndOfCursorTrue  TO TRUE
+014900121115              SET lncc_Err11 TO TRUE
+015000121115              MOVE lncc_ErrorOpeningCursor TO lc_sqlErrShortDESCR
+015100121115              PERFORM SQLFailProcess
+015200121115           END-IF.
+015300121115
+015400121115           PERFORM ProcessMainCursor TEST BEFORE
+015500121115             UNTIL lb_EndOfCursorTrue.
+015600121115
+015700121115      *-----------------*
+015800121115       ProcessMainCursor.
+015900121115      **-----**
+016000121115           INITIALIZE ltb_FetchDepTable.
+016100121115           EXEC SQL
+016200121115             FETCH NEXT FROM MainCursor
+016300121115               FOR :lnci_MaxFetchRec ROWS
+016400121115              INTO :ltb_FetchDep
+016500121115                   :ltb_Indicators
+016600121115           END-EXEC.
+016700121115
+016800121115           MOVE SQLSTATE TO lc_sqlStates.
+016900121115           EVALUATE TRUE
+017000121115               WHEN lncc_sqlSuccessful
+017100121115                    COMPUTE li_NoOfRowsFetched = SQLERRD(3)
+017200121115               WHEN lncc_sqlEnd
+017300121115                    SET lb_EndOfCursorTrue TO TRUE
+017400121115                    COMPUTE li_NoOfRowsFetched = SQLERRD(3)
+017500121115               WHEN OTHER
+017600121115                    SET lncc_Err12  TO TRUE
+017700121115                    MOVE lncc_ErrorFetchingCursor
+017800121115                      TO lc_sqlErrShortDESCR
+017900121115                    PERFORM SQLFailProcess
+018000121115           END-EVALUATE.
+018100121115
+018200121115           COMPUTE li_Counter = 1.
+018300121115           PERFORM ProcessEachRec TEST BEFORE
+018400121115             UNTIL li_Counter > li_NoOfRowsFetched.
+018500121115
+018600121115      *---------------*
+018700121115       ProcessEachRec.
+018800121115      **------**
+018900121115           INITIALIZE lc_SaveRecord.
+019000121115           MOVE ltb_FetchDep(li_Counter)   TO lc_SaveRecord.
+019100121115
+019200121115      * ALL logic goes here                                             Seq#
+019300121115             PERFORM Process_Transaction.
+019400121115
+019500121115           COMPUTE li_Counter = li_Counter + 1.
+019600121115
+019700121115      *-----------------*
+019800121115       Process_Transaction.
+019900121115      **------**
+019901121115      **Inculde all the new logic here..
+019906121116           IF lc_SaveTransStat = lncc_History    AND
+019907121116             (lc_SaveTransType = lncc_SwitchOut  OR
+019908121116              lc_SaveTransType = lncc_TransferOut )
+019909121116                PERFORM Process_Money_Out_Hst
+019910121116           END-IF.
+019911121115
+019912121116           IF  lc_SaveTransStat = lncc_History   AND
+019913121116              (lc_SaveTransType = lncc_SwitchIn  OR
+019914121116               lc_SaveTransType = lncc_TransferIn)
+019915121116                  PERFORM Process_Money_In_Hst
+019916121116           END-IF.
+020001121115
+020006121116           IF  lc_SaveTransStat = lncc_Reversed  AND
+020007121116              (lc_SaveTransType = lncc_SwitchOut OR
+020008121116               lc_SaveTransType = lncc_TransferOut)
+020009121116              PERFORM Process_Money_Out_Rvs
+020010121116           END-IF.
+020011121115
+020015121116           IF  lc_SaveTransStat = lncc_Reversed AND
+020016121116              (lc_SaveTransType = lncc_SwitchIn OR
+020017121116               lc_SaveTransType = lncc_TransferIn)
+020018121116              PERFORM Process_Money_In_Rvs
+020019121116           END-IF.
+020020121115
+020021121115      *-----------------*
+020022121115       Process_Money_Out_Hst.
+020023121115      **------**
+020100121115      *
+020200121116           MOVE SPACES TO lc_WorkDealer.
+020201121116           MOVE SPACES TO lc_Dealer2Dealer.
+020300121115
+020400121115           EXEC SQL
+020500121115              SELECT Coalesce(TRNP.DEALER_CODE, " ")
+020600121115              INTO   :lc_WorkDealer
+020700121115              FROM   MFATRNTGP TGP
+020701121115              INNER JOIN MFATRNP TRNP
+020702121115               ON TGP.PLACEMENT_DATE_2 = TRNP.PLACEMENT_DATE AND
+020703121115                  TGP.TRANS_NO_2 = TRNP.TRANS_NO
+020800121116              WHERE  TGP.PLACEMENT_DATE = :li_SavePlaceDate  AND
+020801121115                     TGP.TRANS_NO = :li_SaveTransNo              AND
+020802121115                     TGP.RELATIONSHIP_TYPE IN ("DSB","WSB")
+020803121115              FETCH FIRST ROW ONLY
+020900121115           END-EXEC.
+021200121115
+021300121115           MOVE SQLSTATE TO lc_sqlStates.
+021400121115           IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+021500121116              SET lncc_Err13  TO TRUE
+021600121116              MOVE lncc_ErrorSQL                TO lc_sqlErrShortDESCR
+021700121115              PERFORM SQLFailProcess
+021800121115           END-IF.
+021900121115
+021901121115           IF lc_WorkDealer  NOT = SPACES
+021902121116              IF lc_WorkDealer NOT = lc_SaveDealer
+021903121116                 MOVE lncc_Yes TO lc_Dealer2Dealer
+021904121115              Else
+021905121116                 MOVE lncc_No  TO lc_Dealer2Dealer
+021906121115              END-IF
+021907121121
+021908121121              PERFORM Write-To-File
+021909121115           END-IF.
+022000121115
+022002121115
+022101121115      *-----------------*
+022102121115       Process_Money_In_Hst.
+022103121115      **------**
+022104121115      *
+022105121116           MOVE SPACES TO lc_WorkDealer.
+022106121116           MOVE SPACES TO lc_Dealer2Dealer.
+022107121115
+022108121115           EXEC SQL
+022109121115              SELECT Coalesce(TRNP.DEALER_CODE, " ")
+022110121115              INTO   :lc_WorkDealer
+022111121115              FROM   MFATRNTGP TGP
+022112121115              INNER JOIN MFATRNP TRNP
+022113121115               ON TGP.PLACEMENT_DATE = TRNP.PLACEMENT_DATE AND
+022114121115                  TGP.TRANS_NO = TRNP.TRANS_NO
+022115121116              WHERE  TGP.PLACEMENT_DATE_2 = :li_SavePlaceDate  AND
+022116121115                     TGP.TRANS_NO_2 = :li_SaveTransNo              AND
+022117121116                     TGP.RELATIONSHIP_TYPE IN ("DSB","WSB")
+022118121115              FETCH FIRST ROW ONLY
+022119121115           END-EXEC.
+022120121115
+022121121115           MOVE SQLSTATE TO lc_sqlStates.
+022122121115           IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+022123121116              SET lncc_Err13  TO TRUE
+022124121116              MOVE lncc_ErrorSQL                TO lc_sqlErrShortDESCR
+022125121115              PERFORM SQLFailProcess
+022126121115           END-IF.
+022127121115
+022128121115           IF lc_WorkDealer  NOT = SPACES
+022129121116              IF lc_WorkDealer NOT = lc_SaveDealer
+022130121116                 MOVE lncc_Yes TO lc_Dealer2Dealer
+022131121115              Else
+022132121116                 MOVE lncc_No  TO lc_Dealer2Dealer
+022133121115              END-IF
+022134121121
+022135121121              PERFORM Write-To-File
+022136121115           END-IF.
+022137121115
+022138121115
+022139121115      *-----------------*
+022140121115       Process_Money_Out_Rvs.
+022141121115      **------**
+022142121115      *
+022143121116           MOVE SPACES TO lc_WorkDealer.
+022144121116           MOVE SPACES TO lc_Dealer2Dealer.
+022145121115
+022146121115           EXEC SQL
+022147121115              SELECT Coalesce(TRNP.DEALER_CODE, " ")
+022148121115              INTO   :lc_WorkDealer
+022149121115              FROM   MFATRNTGP TGP
+022150121115              INNER JOIN MFATRNTGP TGP1
+022151121115               ON TGP.PLACEMENT_DATE   = TGP1.PLACEMENT_DATE AND
+022152121115                  TGP.TRANS_NO   = TGP1.TRANS_NO
+022153121115              INNER JOIN MFATRNTGP TGP2
+022154121115               ON TGP1.PLACEMENT_DATE_2   = TGP2.PLACEMENT_DATE AND
+022155121115                  TGP1.TRANS_NO_2   = TGP2.TRANS_NO
+022156121115              INNER JOIN MFATRNP TRNP
+022157121115               ON TGP2.PLACEMENT_DATE_2 = TRNP.PLACEMENT_DATE AND
+022158121115                  TGP2.TRANS_NO_2 = TRNP.TRANS_NO
+022159121116              WHERE  TGP.PLACEMENT_DATE_2 = :li_SavePlaceDate  AND
+022160121115                     TGP.TRANS_NO_2 = :li_SaveTransNo              AND
+022161121115                     TGP.RELATIONSHIP_TYPE = "RVS"                 AND
+022162121115                     TGP1.RELATIONSHIP_TYPE <> "RVS"
+022163121115              FETCH FIRST ROW ONLY
+022164121115           END-EXEC.
+022165121115
+022166121115           MOVE SQLSTATE TO lc_sqlStates.
+022167121115           IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+022168121116              SET lncc_Err13  TO TRUE
+022169121116              MOVE lncc_ErrorSQL                TO lc_sqlErrShortDESCR
+022170121115              PERFORM SQLFailProcess
+022171121115           END-IF.
+022172121115
+022173121115           IF lc_WorkDealer  NOT = SPACES
+022174121116              IF lc_WorkDealer NOT = lc_SaveDealer
+022175121116                 MOVE lncc_Yes TO lc_Dealer2Dealer
+022176121115              Else
+022177121116                 MOVE lncc_No  TO lc_Dealer2Dealer
+022178121115              END-IF
+022179121121
+022180121121              PERFORM Write-To-File
+022181121115           END-IF.
+022182121115
+022183121115
+022184121115      *-----------------*
+022185121115       Process_Money_In_Rvs.
+022186121115      **------**
+022187121115      *
+022188121116           MOVE SPACES TO lc_WorkDealer.
+022189121116           MOVE SPACES TO lc_Dealer2Dealer.
+022190121115
+022191121115           EXEC SQL
+022192121115              SELECT Coalesce(TRNP.DEALER_CODE, " ")
+022193121115              INTO   :lc_WorkDealer
+022194121115              FROM   MFATRNTGP TGP
+022195121115              INNER JOIN MFATRNTGP TGP1
+022196121115               ON TGP.PLACEMENT_DATE   = TGP1.PLACEMENT_DATE_2 AND
+022197121115                  TGP.TRANS_NO   = TGP1.TRANS_NO_2
+022198121115              INNER JOIN MFATRNTGP TGP2
+022199121115               ON TGP1.PLACEMENT_DATE     = TGP2.PLACEMENT_DATE AND
+022200121115                  TGP1.TRANS_NO     = TGP2.TRANS_NO
+022201121115              INNER JOIN MFATRNP TRNP
+022202121115               ON TGP2.PLACEMENT_DATE_2 = TRNP.PLACEMENT_DATE AND
+022203121115                  TGP2.TRANS_NO_2 = TRNP.TRANS_NO
+022204121116              WHERE  TGP.PLACEMENT_DATE_2 = :li_SavePlaceDate  AND
+022205121115                     TGP.TRANS_NO_2 = :li_SaveTransNo              AND
+022206121115                     TGP.RELATIONSHIP_TYPE = "RVS"                 AND
+022207121115                     TGP2.RELATIONSHIP_TYPE = "RVS"
+022208121115              FETCH FIRST ROW ONLY
+022209121115           END-EXEC.
+022210121115
+022211121115           MOVE SQLSTATE TO lc_sqlStates.
+022212121115           IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+022213121116              SET lncc_Err13  TO TRUE
+022214121116              MOVE lncc_ErrorSQL                TO lc_sqlErrShortDESCR
+022215121115              PERFORM SQLFailProcess
+022216121115           END-IF.
+022217121115
+022218121115           IF lc_WorkDealer  NOT = SPACES
+022219121116              IF lc_WorkDealer NOT = lc_SaveDealer
+022220121116                 MOVE lncc_Yes TO lc_Dealer2Dealer
+022221121115              Else
+022222121116                 MOVE lncc_No  TO lc_Dealer2Dealer
+022223121115              END-IF
+022224121121
+022225121121              PERFORM Write-To-File
+022226121115           END-IF.
+022227121115
+022228121115
+022229121115      *-----------------*
+022230121115       Write-To-File.
+022231121115      **------**
+022232121115
+022233121115           EXEC SQL
+022234121115             INSERT INTO QTEMP/DEATODEAP
+022235121115             VALUES(
+022236121116                 :li_SavePlaceDate,
+022237121116                 :li_SaveTransNo,
+022238121116                 :lc_SaveTransType,
+022239121116                 :lc_SaveTransStat,
+022240121116                 :lc_SaveDealer,
+022241121115                 :lc_Dealer2Dealer
+022242121115                 )
+022243121115           END-EXEC.
+022244121115           MOVE SQLSTATE                       TO lc_sqlStates.
+022245121115           EVALUATE TRUE
+022246121115               WHEN lncc_sqlSuccessful
+022247121115                    CONTINUE
+022248121115               WHEN OTHER
+022249121116                    SET lncc_Err13             TO TRUE
+022250121116                    MOVE lncc_ErrorSQL         TO lc_sqlErrShortDESCR
+022251121115                    PERFORM Dsp-Error
+022252121115           END-EVALUATE.
+022253121115
+022254121115      *--------------*
+022255121115       SQLFailProcess.
+022300121115      **-----**
+022400121115           PERFORM Dsp-Error.
+022500121115           GOBACK.
+022600121115
+022700121115      *----------------------------------
+022800121115       EndOfProgram.
+022900121115      *----------------------------------
+023000121115           GOBACK.
+023100121115
+023200121115      *----------------------------------
+023300121115      * DSP-ERROR and FORCE-MSGW Routines
+023400121115      *----------------------------------
+023500121115          COPY CPYSQLRTN.
+023600121115      *
+023700121115      *

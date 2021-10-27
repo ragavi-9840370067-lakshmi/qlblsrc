@@ -1,0 +1,173 @@
+000100190626       IDENTIFICATION DIVISION.
+000200190115       PROGRAM-ID.    FXMVAFLAG.
+000300130325       AUTHOR.        Dharmendra D
+000400190301       INSTALLATION.  L&T Financial Services.
+000500130325       DATE-WRITTEN.  January 03, 2013.
+000600130325       DATE-COMPILED.
+000700130325      *****************************************************************
+000800130325      * RFS-NUMBER : RFS-113783                                       *
+000900130325      *****************************************************************
+001000130325      * DESCRIPTION: This program will return penalty method and      *
+001100130325      *              replacement minimum amount based on Investment   *
+001200130325      *              code provided.                                   *
+001300130325      *                                                               *
+001400130325      * CALLED BY  :  TRNPST and INTCLC                               *
+001500130325      *                                                               *
+001600130325      * OUTPUT     :  Penalty Method                                  *
+001700130325      *               Replacement Minimum Amount                      *
+001800130325      *                                                               *
+001900130325      * LINKED MODULES: None.                                         *
+002000190618      *                                                               *
+002100130325      *       RE-WRITE: None.                                         *
+002200130325      *****************************************************************
+002300190626      *   CHANGE HISTORY
+002400130325      *****************************************************************
+002500130325      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE
+002600130325      *****************************************************************
+002700190618      * Dharmendra  *   2013/01/03  * RFS113783- Created Program.
+002800130325      *                               It is  copy of FXINVMIN.
+002801190618      * Ashwini B  *  2019/05/23  * RFS183743 - Recompile for MFAGIIDLP
+002802190626      * Thilaga K  *  2019/06/21  * RFS184167 - Recompile for MFAGIIDLP
+002900130325      *****************************************************************
+003000130325      /
+003100130325       ENVIRONMENT DIVISION.
+003200130325       CONFIGURATION SECTION.
+003300130325       SOURCE-COMPUTER. IBM-AS400.
+003400130325       OBJECT-COMPUTER. IBM-AS400.
+003500130325       SPECIAL-NAMES.
+003600130325
+003700130325      /
+003800130325      ********************************************************
+003900130325      *        I N P U T   O U T P U T   S E C T I O N       *
+004000130325      ********************************************************
+004100130325       INPUT-OUTPUT SECTION.
+004200190618       FILE-CONTROL.
+004300130325
+004400130325      *****************************************************************
+004500130325      *    D A T A   D I V I S I O N                                  *
+004600130325      *****************************************************************
+004700130325       DATA DIVISION.
+004800130325     /
+004900130325      *****************************************************************
+005000130325      *    F I L E   S E C T I O N                                    *
+005100130325      *****************************************************************
+005200130325       FILE SECTION.
+005300130325      /
+005400130325
+005500130325      ********************************************************
+005600130325      *     W O R K I N G  S T O R A G E  S E C T I O N      *
+005700130325      ********************************************************
+005800130325       WORKING-STORAGE SECTION.
+005900130325       01 SQL-WORK-FIELDS.
+006000130325          05 WS-CALLING-PROGRAM       PIC X(10)   VALUE "FXMVAFLAG".
+006100130325          05 WS-SQLERR-STATEMENT      PIC X(25)   VALUE " ".
+006200130325          05 WS-SQLERR-DATA           PIC X(1780) VALUE " ".
+006300130325          05 WS-SQL-STATS             PIC X(1966) VALUE " ".
+006400130325          05 WS-SQLERR-REPLY          PIC X(1)    VALUE " ".
+006500130325
+006600130325           EXEC SQL
+006700130325             INCLUDE SQLCA
+006800130325           END-EXEC.
+006900130325
+007000130325           EXEC SQL
+007100130325             INCLUDE SQLDA
+007200130325           END-EXEC.
+007300130325
+007400130325      ********************************************************
+007500130325      *         L I N K A G E    S E C T I O N               *
+007600130325      ********************************************************
+007700130325       LINKAGE SECTION.
+007800130325       01 COMM-INV-CODE                  PIC X(5).
+007900130325       01 COMM-PENALTY-METHOD            PIC X(2).
+008000130325       01 COMM-MINIMUM-AMOUNT            PIC S9(11)V9(2).
+008100130325      /
+008200130325      ********************************************************
+008300130325      *        P R O C E D U R E   D I V I S I O N           *
+008400130325      ********************************************************
+008500130325       PROCEDURE DIVISION USING COMM-INV-CODE
+008600130325                                COMM-PENALTY-METHOD
+008700130325                                COMM-MINIMUM-AMOUNT.
+008800130325      /
+008900130325      ********************************************************
+009000130325      *               M A I N L I N E                        *
+009100130325      ********************************************************
+009200130325       MAINLINE.
+009300130325
+009400130325           PERFORM INITIAL-LOGIC THRU INL-EXIT.
+009500130325           PERFORM SQL-DECLARES THRU SQLD-EXIT.
+009600130325           PERFORM DETAIL-PROCESSING THRU DPR-EXIT.
+009700130325
+009800130325       ML-EXIT.
+009900130325           GOBACK.
+010000130325      /
+010100130325      ****************************************************************
+010200130325      * ROUTINE: INITIAL LOGIC                                       *
+010300130325      * PURPOSE: Open files and setup module variables.              *
+010400130325      ****************************************************************
+010500130325       INITIAL-LOGIC.
+010600130325
+010700130325           INITIALIZE COMM-PENALTY-METHOD
+010800130325                      COMM-MINIMUM-AMOUNT.
+010900130325
+011000130325       INL-EXIT.
+011100130325           EXIT.
+011200130325     /
+011300130325      ****************************************************************
+011400130325      * ROUTINE: SQL DECLARES                                        *
+011500130325      * PURPOSE: Declare SQL                                         *
+011600130325      ****************************************************************
+011700130325       SQL-DECLARES.
+011800130325
+011900130325           EXEC SQL
+012000130325              WHENEVER SQLERROR GOTO SQLLOG
+012100130325           END-EXEC.
+012200130325
+012300130325       SQLD-EXIT.
+012400130325           EXIT.
+012500130325      /
+012600130325       DETAIL-PROCESSING.
+012700130325      *****************************************************************
+012800130325      * ROUTINE: DETAIL PROCESSING
+012900130325      *****************************************************************
+013000130325
+013100130325           MOVE "GET PENALTY" TO WS-SQLERR-STATEMENT.
+013200130325
+013300130325           EXEC SQL
+013400130325             SELECT   IFNULL(PENALTY_METHOD,  " "),
+013500130325                      IFNULL(REPLACEMENT_MIN, 00000000000.00)
+013600130325               INTO   :COMM-PENALTY-METHOD,:COMM-MINIMUM-AMOUNT
+013700130325               FROM   MFAGIIDLP
+013800130325              WHERE   INVESTMENT_CODE = :COMM-INV-CODE
+013900130325           END-EXEC.
+014000130325
+014100130325           IF COMM-PENALTY-METHOD   = '2' OR
+014200130325              COMM-PENALTY-METHOD   = '02'
+014300130325              MOVE '2' TO COMM-PENALTY-METHOD
+014400130325           END-IF.
+014500130325
+014600130325       DPR-EXIT.
+014700130325           EXIT.
+014800130325      /
+014900130325
+015000130325      *****************************************************************
+015100130325      * ROUTINE: SQLLOG
+015200130325      * PURPOSE: Handle SQL errors
+015300130325      *****************************************************************
+015400130325       SQLLOG.
+015500130325
+015600130325           CALL "SQLLOG"     USING WS-CALLING-PROGRAM
+015700130325                                   WS-SQLERR-STATEMENT
+015800130325                                   SQLCODE
+015900130325                                   SQLERRD(1)
+016000130325                                   SQLERRD(2)
+016100130325                                   SQLERRD(3)
+016200130325                                   SQLERRD(4)
+016300130325                                   SQLERRD(5)
+016400130325                                   SQLERRD(6)
+016500130325                                   SQLSTATE
+016600130325                                   WS-SQLERR-DATA
+016700130325                                   WS-SQL-STATS
+016800130325                                   WS-SQLERR-REPLY.
+016900130325           CANCEL "SQLLOG".
+017000130325           GOBACK.
+017100130325

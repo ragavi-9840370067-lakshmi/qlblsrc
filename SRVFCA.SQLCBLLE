@@ -1,0 +1,467 @@
+000100980204       IDENTIFICATION DIVISION.
+000200110801       PROGRAM-ID.    SRVFCA.
+000300111111       AUTHOR.        RAJ KUMAR A.
+000400111111       INSTALLATION.  L&T Financial Services Technology Inc.
+000500111111       DATE-WRITTEN.  20 AUG 2011.
+000600980204       DATE-COMPILED.
+000700110809      ****************************************************************
+000800110809      * RFS#      *64348
+000900110809      * PURPOSE   * This program will calculate the variable units
+001000110809      *           * for a given investment or all investment that
+001100110809      *           * start using variable units for service fee
+001200111111      *PARAMETERS * pc_Option      = ACT (call from JOBTSRVVCA)
+001300111111      *           *                  IMP (call from JOBTSRVFEE)
+001400110810      *           * pi_ProcessDate = as-at-date
+001500111111      *           * pi_StartDate   = service fee start date
+001600111111      *           * pi_EndDate     = service fee end date
+001700110810      *           * pc_ReturnCode
+001800110809      *           *  001 = Invalid option
+001900110809      *           *  002 = Invalid process date
+002000110809      *           *  003 = Invalid start date
+002100110809      *           *  004 = Invalid end date
+002200110809      *           *  005 = End date is less than the start date
+002300110809      *           *  006 = Problem calling SRVFCN
+002400110809      *****************************************************************
+002500110809      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE
+002600110809      *****************************************************************
+002700111114      * RAJKUMAR   * 2011/08/20   * RFS 64348 -Initial Version Created
+002701200812      * Rajesh     * 2020/08/12   * RFS185178 - Recompile (MFAFEESCLP)
+002800110809      *****************************************************************
+002900110809
+003000110809       ENVIRONMENT DIVISION.
+003100110809       CONFIGURATION SECTION.
+003200980204       SOURCE-COMPUTER. IBM-AS400.
+003300980204       OBJECT-COMPUTER. IBM-AS400.
+003400111111       SPECIAL-NAMES.   DATA-AREA  IS WS-DATA-AREA-1.
+003500111111
+003600980204       INPUT-OUTPUT SECTION.
+003700000217       FILE-CONTROL.
+003800000217       DATA DIVISION.
+003900000217       FILE SECTION.
+004000110809      *---------------------------
+004100980204       WORKING-STORAGE SECTION.
+004200110809      *---------------------------
+004300111020       01  lc_InvestmentArray.
+004400111111           03  lc_InvestArrayEntry          OCCURS 3000 TIMES
+004500111111                                            INDEXED BY lx_INV.
+004600111111               05  lc_ArInvestCode          PIC  X(05).
+004700111012
+004800111012       01  lc_SrvfcnParms.
+004900110809           03  lc_SrvfcnOption              PIC  X(03).
+005000110809           03  li_SrvfcnProcessDate         PIC S9(08).
+005100110809           03  li_SrvfcnStartDate           PIC S9(08).
+005200110809           03  li_SrvfcnEndDate             PIC S9(08).
+005300110809           03  li_SrvfcnFromDate            PIC S9(08).
+005400110809           03  li_SrvfcnToDate              PIC S9(08).
+005500110809           03  li_SrvfcnAccountNo           PIC S9(09).
+005600110809           03  lc_SrvfcnInvestCode          PIC  X(05).
+005700110809           03  lc_SrvfcnClearOption         PIC  X(01).
+005800110809           03  lc_SrvfcnReturnCode          PIC  X(03).
+005900111111
+006000110802       01  li_MiscFields.
+006100111111           03  li_ProcessDate               PIC S9(08).
+006200111111           03  li_NoOfRowsFetched           PIC  9(04).
+006300111111           03  li_CurrentProcessDate        PIC  9(08).
+006400111111           03  li_SysDate                   PIC S9(08).
+006500111111           03  li_SysTime                   PIC S9(08).
+006600110802           03  li_TimeBegin.
+006700111111               05  li_TbHh                  PIC  9(02).
+006800111111               05  li_TbMm                  PIC  9(02).
+006900111111               05  li_TbSs                  PIC  9(02).
+007000111111               05  li_TbTt                  PIC  9(02).
+007100110802           03  li_TimeEnd.
+007200111111               05  li_TeHh                  PIC  9(02).
+007300111111               05  li_TeMm                  PIC  9(02).
+007400111111               05  li_TeSs                  PIC  9(02).
+007500111111               05  li_TeTt                  PIC  9(02).
+007600110802           03  li_TimeUsed.
+007700111111               05  li_TuHh                  PIC  9(02).
+007800111111               05  lc_Filler                PIC  X(01) VALUE ":".
+007900111111               05  li_TuMm                  PIC  9(02).
+008000111111               05  lc_Filler                PIC  X(01) VALUE ":".
+008100111111               05  li_TuSs                  PIC  9(02).
+008200111111               05  lc_Filler                PIC  X(01) VALUE ":".
+008300111111               05  li_TuTt                  PIC  9(02).
+008400111111           03  lc_LogCode                   PIC  X(03).
+008500111111           03  lc_StatsEvent                PIC  X(01).
+008600111111           03  lc_LogProgramCalled          PIC  X(10).
+008700111111
+008800111114       01  lc_Flag.
+008900111114           03  lc_EndOfCursor               PIC  X(01).
+009000111114               88  lb_EndOfCursorTrue       VALUE "Y".
+009100111114               88  lb_EndOfCursorFalse      VALUE "N" " ".
+009200111114
+009300111114           03  lc_LogError                  PIC X(01).
+009400111114               88  lb_LogErrorOn            VALUE "Y".
+009500111114               88  lb_LogErrorOff           VALUE "N" " ".
+009600111114
+009700111114           03  lc_LogStats                  PIC X(05).
+009800111114               88  lb_LogStatsOn            VALUE "Y".
+009900111114               88  lb_LogStatsOff           VALUE "N" " ".
+010000111111
+010100111116       01  lc_ErrCode                       PIC X(02) VALUE SPACES.
+010200111111           88  lb_ErrOk                     VALUE SPACES.
+010300111116           88  lb_Err01                     VALUE "01".
+010400111116           88  lb_Err02                     VALUE "02".
+010500110802       01  lc_constants.
+010600111116           03  li_Array3000                 PIC S9(04) VALUE 3000.
+010700111116           03  lc_ProgramName               PIC  X(10) VALUE "SRVFCA".
+010800111020           03  li_Earlydate                 PIC S9(08) VALUE 19000101.
+010900111116           03  lnc_SRVF                     PIC  X(04) VALUE "SRVF".
+011000111116           03  lnc_001                      PIC  X(03) VALUE "001".
+011100111116           03  lnc_002                      PIC  X(03) VALUE "002".
+011200111116           03  lnc_003                      PIC  X(03) VALUE "003".
+011300111116           03  lnc_004                      PIC  X(03) VALUE "004".
+011400111116           03  lnc_005                      PIC  X(03) VALUE "005".
+011500111116           03  lnc_006                      PIC  X(03) VALUE "006".
+011600111116           03  lnc_All                      PIC  X(03) VALUE "ALL".
+011700111116           03  lnc_Y                        PIC  X(01) VALUE "Y".
+011800111116           03  lnc_N                        PIC  X(01) VALUE "N".
+011900111116           03  lnc_S                        PIC  X(01) VALUE "S".
+012000111116           03  lnc_A                        PIC  X(01) VALUE "A".
+012100111116           03  lnc_4                        PIC  X(01) VALUE "4".
+012200111116           03  lnc_5                        PIC  X(01) VALUE "5".
+012300111116           03  lnc_START                    PIC  X(05) VALUE "START".
+012400111116           03  lnc_E                        PIC  X(01) VALUE "E".
+012500111116           03  lnc_ErrorFetchingCursor      PIC  X(80)
+012600110808               VALUE "Error while fetching cursor".
+012700111116           03  lnc_ErrOpeningCursor         PIC  X(80)
+012800110808               VALUE "Error while opening cursor".
+012900111116
+013000111116       01  lc_SqlErrVariables.
+013100111116           05 lc_RoutineName               PIC X(25).
+013200111116           05 lc_SqlErrStatement           PIC X(25)   VALUE " ".
+013300111116           05 lc_SqlErrData                PIC X(1780) VALUE " ".
+013400111116           05 lc_SqlStats                  PIC X(1966) VALUE " ".
+013500111116           05 lc_SqlErrReply               PIC X(01)   VALUE " ".
+013600111116
+013700111020       01 lc_LogRec.
+013800110802           COPY DD-ALL-FORMATS OF MFASRVLOGP.
+013900111116
+014000111116           COPY CPYSDAPARM.
+014100111116
+014200111116           COPY CPYSRVCTL.
+014300111116           EXEC SQL
+014400111116            INCLUDE SQLCA
+014500111116           END-EXEC.
+014600111116           COPY CPYSQLFLD
+014700111116            REPLACING == "CURRENT_PROGRAM" == BY == "SRVFCA" ==.
+014800110809
+014900110802       LINKAGE SECTION.
+015000110922       COPY CPYSRVFCA.
+015100111020
+015200111116      * -----------------
+015300110805      * PROCEDURE DIVISION.
+015400111116      * -----------------
+015500110809       PROCEDURE DIVISION USING pc_Option
+015600110809                                pi_ProcessDate
+015700110809                                pi_StartDate
+015800110809                                pi_EndDate
+015900110810                                pc_ReturnCode.
+016000110809
+016100111116      * -----------------
+016200111116        Mainline.
+016300111116      * -----------------
+016400111201           ACCEPT li_TimeBegin FROM TIME.
+016500111201           DISPLAY "SRVFCA STARTED = " li_TbHh ":" li_TbMm ":" li_TbSs.
+016600111128
+016700110802           PERFORM Initial_Logic.
+016800110810           IF pc_ReturnCode = SPACES
+016900110802              PERFORM Create_Cursor
+017000110802              PERFORM Fetch_Cursor
+017100110802              PERFORM Process_Cursor UNTIL lb_EndOfCursorTrue
+017200110802              PERFORM Close_Cursor
+017300110802           END-IF.
+017400111116           PERFORM  Endofprogram.
+017500110809
+017600111116      * -----------------
+017700110802        Initial_Logic.
+017800111116      * -----------------
+017900111020             INITIALIZE         li_MiscFields
+018000111020                                lc_SrvfcnParms
+018100111020                                pc_ReturnCode
+018200111020                                lc_EndOfCursor.
+018300110809
+018400110922           IF NOT pc_ValidOptions
+018500111116              MOVE lnc_001 TO pc_ReturnCode
+018600111116              DISPLAY "Invalid option = "       pc_Option
+018700110808           ELSE
+018800110809           IF pi_ProcessDate IS NOT NUMERIC  OR
+018900111116              pi_ProcessDate = ZERO
+019000111116              MOVE lnc_002 TO pc_ReturnCode
+019100111020              DISPLAY "Invalid process date = " pi_ProcessDate
+019200110809           ELSE
+019300110809           IF pi_StartDate  IS NOT NUMERIC  OR
+019400111116              pi_StartDate   = ZERO
+019500111116              MOVE lnc_003 TO pc_ReturnCode
+019600111116              DISPLAY "Invalid start date = "   pi_StartDate
+019700110809           ELSE
+019800110809           IF pi_EndDate IS NOT NUMERIC  OR
+019900111116              pi_EndDate     = ZERO
+020000111116              MOVE lnc_004 TO pc_ReturnCode
+020100111116              DISPLAY "Invalid end date = "     pi_EndDate
+020200110809           ELSE
+020300110809           IF pi_EndDate < pi_StartDate
+020400111116              MOVE lnc_005 TO pc_ReturnCode
+020500111020              DISPLAY "Invalid start date less than end date"
+020600111116              DISPLAY "Start date = "           pi_StartDate
+020700111116              DISPLAY "End date = "             pi_EndDate
+020800110809           END-IF
+020900110809           END-IF
+021000110809           END-IF
+021100110809           END-IF
+021200110808           END-IF.
+021300111116
+021400111116           MOVE lnc_All          TO lc_SrvfcnOption.
+021500111116           MOVE lnc_Y            TO lc_SrvfcnClearOption.
+021600111116           MOVE pi_ProcessDate   TO li_ProcessDate
+021700111116                                    li_SrvfcnProcessDate
+021800111116                                    li_SrvfcnEndDate
+021900111116                                    li_SrvfcnToDate.
+022000111116           MOVE li_Earlydate     TO li_SrvfcnStartDate
+022100111116                                    li_SrvfcnFromDate.
+022200110809
+022300111116      * -----------------
+022400110802         Create_Cursor.
+022500111116      * -----------------
+022600111116             MOVE "Create_Cursor "  TO lc_RoutineName
+022700111116      *---------------------------------------------------------------
+022800111116      ** CURSOR: lcu_INV       - select investment need to proces
+022900111116      *---------------------------------------------------------------
+023000111116      ** ALIAS        FILENAME                         OPENNAME
+023100111116      *---------------------------------------------------------------
+023200111116      ** INVP          INVESTMENT                       MFAINVP
+023300111116      ** INVSXP        INVESTMENT-STRUCTURE-XREF        MFAINVSXP
+023400111116      ** FEESCLP       FEE-SCHEDULE-LEVEL               MFAFEESCLP
+023500111116      ** FEESCHP       FEE-SCHEDULE                     MFAFEESCHP
+023600111116      *---------------------------------------------------------------
+023700110802             EXEC SQL
+023800111116                DECLARE  lcu_INV  CURSOR  FOR
+023900111116                SELECT   invp.Investment_Code
+024000110809                FROM MFAFEESCLP feesclp
+024100110809                LEFT OUTER JOIN MFAINVSXP invsxp
+024200110809                ON    feesclp.Investment_Structure_Code =
+024300110809                      invsxp.Investment_Structure_Code
+024400110804
+024500110809                INNER  JOIN MFAINVP invp
+024600110809                ON    invsxp.Investment_Code  = invp.Investment_Code
+024700110809                OR    feesclp.Investment_Code = invp.Investment_Code
+024800110802
+024900110809                EXCEPTION JOIN MFAFEESCHP feeschp
+025000111116                ON    feeschp.Fee_Schedule    = feesclp.Fee_Schedule
+025100111116                AND   feeschp.Rate_Rule      IN ( :lnc_4,:lnc_5 )
+025200111128
+025300111213                EXCEPTION JOIN MFAACISVP  acisvp
+025400111213                ON invsxp.Investment_Code  = acisvp.Investment_Code
+025500111213                OR feesclp.Investment_Code = acisvp.Investment_Code
+025600111128
+025700110802                WHERE
+025800111116                         feesclp.Fee_Type_Code       = :lnc_SRVF
+025900111124                AND      feesclp.Dealer_Code         = " "
+026000111116                AND      feesclp.Dealer_Rep_Code     = " "
+026100111116                AND      feesclp.Account_No          = 0
+026200111116                AND      invp.Investment_Status_Code = :lnc_A
+026300110809                ORDER BY invp.Investment_Code
+026400110802             END-EXEC.
+026500110804
+026600111116             MOVE "Open lcu_INV cursor"   TO lc_SqlErrStatement.
+026700110802             EXEC SQL
+026800110923               OPEN lcu_INV
+026900110802             END-EXEC.
+027000110804
+027100111116             MOVE  SQLSTATE     TO lc_sqlStates.
+027200111116             IF  NOT lncc_sqlSuccessful
+027300111116                 SET lb_Err01   TO TRUE
+027400111116                 PERFORM SQL_ErrorRoutine
+027500110804             END-IF.
+027600111020
+027700111116      * -----------------
+027800110923         Fetch_Cursor.
+027900111116      * -----------------
+028000111116             MOVE "Fetch_Cursor "         TO lc_RoutineName
+028100111116             MOVE "Fetch lcu_INV cursor"  TO lc_SqlErrStatement.
+028200111116
+028300111020             INITIALIZE lc_InvestmentArray.
+028400110923             EXEC SQL
+028500110923               FETCH NEXT FROM lcu_INV
+028600110923                 FOR  :li_Array3000 ROWS
+028700110923                 INTO :lc_InvestArrayEntry
+028800110923             END-EXEC.
+028900111116
+029000110923             MOVE SQLSTATE TO lc_sqlStates.
+029100110923             EVALUATE TRUE
+029200111116               WHEN lncc_sqlSuccessful OR lncc_SqlWarning
+029300111116                    COMPUTE li_NoOfRowsFetched = SQLERRD(3)
+029400111116               WHEN lncc_sqlEnd
+029500111116                    SET lb_EndOfCursorTrue TO TRUE
+029600111116               WHEN OTHER
+029700111116                    SET lb_Err02 TO TRUE
+029800111116                    PERFORM Sql_ErrorRoutine
+029900110923              END-EVALUATE.
+030000110923             SET lx_INV TO 0.
+030100111116
+030200111116      * -----------------
+030300110802         Process_Cursor.
+030400111116      * -----------------
+030500111116
+030600111116            SET lx_INV UP BY 1.
+030700111116            MOVE lc_ArInvestCode(lx_INV) TO lc_SrvfcnInvestCode.
+030800111116            ACCEPT WS-MFASRVCTL-DTAARA
+030900111116            FROM WS-DATA-AREA-1 FOR "MFASRVCTL".
+031000111116
+031100111116            IF WS-SV-STATS-OPT-ALL       = lnc_Y
+031200111116               OR WS-SV-STATS-OPT-SRVVCA = lnc_Y
+031300111116               MOVE lnc_Y TO lc_LogStats
+031400111116            ELSE
+031500111116               MOVE lnc_N TO lc_LogStats
+031600111116            END-IF.
+031700111116
+031800111116            MOVE "SRVFCN"  TO lc_LogProgramCalled.
+031900111116
+032000111116            IF lb_LogStatsOn
+032100111116               MOVE lnc_S TO lc_StatsEvent
+032200111116               PERFORM LOG-STATS-ROUTINE
+032300111116            END-IF.
+032400111116
+032500111116           CALL "SRVFCN"  USING  lc_SrvfcnOption
+032600111116                                 li_SrvfcnProcessDate
+032700111116                                 li_SrvfcnStartDate
+032800111116                                 li_SrvfcnEndDate
+032900111116                                 li_SrvfcnFromDate
+033000111116                                 li_SrvfcnToDate
+033100111116                                 lc_SrvfcnInvestCode
+033200111116                                 li_SrvfcnAccountNo
+033300111116                                 lc_SrvfcnClearOption
+033400111116                                 lc_SrvfcnReturnCode.
+033500111116            IF lb_LogStatsOn
+033600111116               MOVE lnc_E TO lc_StatsEvent
+033700111116               PERFORM LOG-STATS-ROUTINE
+033800111116            END-IF.
+033900111125            IF lc_SrvfcnReturnCode  NOT= SPACES
+034000111116              MOVE  lnc_006  TO  pc_ReturnCode
+034100111116                                 lc_LogCode
+034200111116              DISPLAY "Problem calling SRVFCN  "
+034300111116              DISPLAY "Return code from SRVFCN:" lc_SrvfcnReturnCode
+034400111116              PERFORM Log_ErrorRoutine
+034500111116            END-IF.
+034600111116
+034700111116            IF lx_INV >= li_NoOfRowsFetched
+034800111116               PERFORM  Fetch_Cursor
+034900111125            END-IF.
+035000111124
+035100111124      * -----------------
+035200111124         Close_Cursor.
+035300111124      * -----------------
+035400110923             EXEC SQL
+035500110923               CLOSE lcu_INV
+035600110923             END-EXEC.
+035700111116      * -----------------
+035800110803         LOG-STATS-ROUTINE.
+035900111116      * -----------------
+036000111020             INITIALIZE MFASRVLOGP OF lc_LogRec.
+036100110803
+036200110803             ACCEPT li_SysDate FROM DATE YYYYMMDD.
+036300110803             ACCEPT li_SysTime FROM TIME.
+036400110803
+036500111116             MOVE li_SysDate      TO LOG-DATE     OF lc_LogRec.
+036600111116             MOVE li_SysTime      TO LOG-TIME     OF lc_LogRec.
+036700111116             MOVE lc_ProgramName  TO PROGRAM-CODE OF lc_LogRec.
+036800111116             MOVE lnc_S           TO LOG-TYPE     OF lc_LogRec.
+036900111116             MOVE pi_ProcessDate  TO PROCESS-DATE OF lc_LogRec.
+037000110804             MOVE lc_SrvfcnInvestCode
+037100111020                               TO INVESTMENT-CODE OF lc_LogRec.
+037200110803             MOVE lc_LogProgramCalled
+037300111116                               TO PROGRAM-CALLED  OF lc_LogRec
+037400110804             MOVE lc_SrvfcnReturnCode
+037500111116                               TO PROGRAM-RETCDE  OF lc_LogRec.
+037600110809
+037700110803             EVALUATE lc_StatsEvent
+037800111116               WHEN lnc_S
+037900110809                 MOVE li_SysTime TO li_TimeBegin
+038000111116                 MOVE lnc_START TO ADDL-DTL OF lc_LogRec
+038100111116               WHEN lnc_E
+038200110809                 MOVE li_SysTime TO li_TimeEnd
+038300111020                 PERFORM CALC-USED-TIME
+038400111020                 STRING "END - ELAPSED "   DELIMITED BY SIZE
+038500111116                        li_TimeUsed        DELIMITED BY SIZE
+038600111116                 INTO   ADDL-DTL           OF lc_LogRec
+038700110803             END-EVALUATE.
+038800110803
+038900110803               EXEC SQL
+039000110803                  INSERT INTO MFASRVLOGP VALUES (:MFASRVLOGP)
+039100110803               END-EXEC.
+039200110809
+039300111116      * -----------------
+039400111020          Log_ErrorRoutine.
+039500111116      * -----------------
+039600111020               INITIALIZE MFASRVLOGP OF lc_LogRec.
+039700110803
+039800110803               ACCEPT li_SysDate FROM DATE YYYYMMDD.
+039900110803               ACCEPT li_SysTime FROM TIME.
+040000110803
+040100111116               MOVE li_SysDate      TO LOG-DATE        OF lc_LogRec.
+040200111116               MOVE li_SysTime      TO LOG-TIME        OF lc_LogRec.
+040300111116               MOVE lc_ProgramName  TO PROGRAM-CODE    OF lc_LogRec.
+040400111116               MOVE lnc_E           TO LOG-TYPE        OF lc_LogRec.
+040500111116               MOVE pi_ProcessDate  TO PROCESS-DATE    OF lc_LogRec.
+040600111116               MOVE lc_LogCode      TO LOG-CODE        OF lc_LogRec.
+040700110804               MOVE lc_SrvfcnInvestCode
+040800111116                                    TO INVESTMENT-CODE OF lc_LogRec.
+040900110803               MOVE lc_LogProgramCalled
+041000111116                                    TO PROGRAM-CALLED  OF lc_LogRec.
+041100110804               MOVE lc_SrvfcnReturnCode
+041200111116                                    TO PROGRAM-RETCDE OF lc_LogRec.
+041300110804               STRING "Problem calling SRVFCN " DELIMITED BY SIZE
+041400111020                 INTO  ADDL-DTL OF lc_LogRec.
+041500110803
+041600110803               EXEC SQL
+041700110803                 INSERT INTO MFASRVLOGP VALUES (:MFASRVLOGP)
+041800110803               END-EXEC.
+041900110809
+042000111116      * -----------------
+042100110803         CALC-USED-TIME.
+042200111116      * -----------------
+042300110803             IF li_TeTt >= li_TbTt
+042400111116                COMPUTE  li_TuTt = li_TeTt - li_TbTt
+042500110803             ELSE
+042600110803                COMPUTE li_TuTt = li_TeTt + 100 - li_TbTt
+042700111116                COMPUTE li_TeSs = li_TeSs - 1
+042800110803             END-IF.
+042900110803
+043000110803             IF li_TeSs >= li_TbSs
+043100111116                COMPUTE  li_TuSs = li_TeSs - li_TbSs
+043200110803             ELSE
+043300110803                COMPUTE li_TuSs = li_TeSs + 60 - li_TbSs
+043400111116                COMPUTE li_TeMm = li_TeMm - 1
+043500110809             END-IF.
+043600110809
+043700110809             IF li_TeMm >= li_TbMm
+043800111116                COMPUTE li_TuMm = li_TeMm - li_TbMm
+043900110809             ELSE
+044000111116                COMPUTE li_TuMm = li_TeMm + 60 - li_TbMm
+044100111116                COMPUTE li_TeHh = li_TeHh - 1
+044200110809             END-IF.
+044300110803
+044400110809             IF li_TeHh >= li_TbHh
+044500111116                COMPUTE li_TuHh = li_TeHh - li_TbHh
+044600110809             ELSE
+044700111116                COMPUTE li_TuHh = li_TeHh + 24 - li_TbHh
+044800110809             END-IF.
+044900111116
+045000111116      *----------------
+045100111116       SQL_ErrorRoutine.
+045200111116      *----------------
+045300111116           DISPLAY "SRVFCA - ENDED WITH ERROR".
+045400111116           DISPLAY "PROCEDURE: "  lc_RoutineName.
+045500111116           DISPLAY "STATEMENT: "  lc_SqlErrStatement.
+045600111116           DISPLAY "SQLCODE = "   SQLCODE, " SQLSTATE = " SQLSTATE.
+045700111201           DISPLAY "lc_ErrCode: " lc_ErrCode.
+045800111116           PERFORM EndOfProgram.
+045900111116
+046000111116      *------------------
+046100111116       Endofprogram.
+046200111116      *------------------
+046300111116
+046400111201           ACCEPT li_TimeBegin FROM TIME.
+046500111201           DISPLAY "SRVFCA ENDED   = " li_TbHh ":" li_TbMm ":" li_TbSs.
+046600111116           GOBACK.

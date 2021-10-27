@@ -1,0 +1,263 @@
+000100101206       IDENTIFICATION DIVISION.
+000200180829       PROGRAM-ID.     PRGIMGSLT.
+000300101206       INSTALLATION.   CITI.
+000400101206       AUTHOR.         CITI.
+000500110126       DATE-WRITTEN.   January 2011.
+000600101206       DATE-COMPILED.
+000700110126      ******************************************************************
+000800110126      *    RFS-NUMBER : 84468                                          *
+000900110126      *                                                                *
+001000110126      *    DESCRIPTION: This program selects IMAGE-DOCUMENT and        *
+001100110127      *                 IMAGE-DOCUMENT-DETAILS for the purge process.  *
+001200110127      *                 Selected records will be in PURIMGP & PURIMGDP *
+001300110127      *                 file will be used in subsequent purge process  *
+001400110126      *                                                                *
+001500110126      *   CALLED BY: JOBPURGE                                          *
+001600110126      *                                                                *
+001700110126      ******************************************************************
+001800110126      *    C H A N G E   H I S T O R Y                                 *
+001900110126      ******************************************************************
+002000101206      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE              *
+002100101206      ******************************************************************
+002200110126      * B. Vergara * 2011/01/26 * RFS 84468 - New program to create    *
+002300110127      *            *            * Image Document / Detail purge files  *
+002400110411      *            * 2011/04/11 * Defect #32 - Fix issue of records not*
+002500110411      *            *            * purge even if Account is purge       *
+002600101206      ******************************************************************
+002700101206      /
+002800101206       ENVIRONMENT DIVISION.
+002900101206       CONFIGURATION SECTION.
+003000101206       SOURCE-COMPUTER. IBM-AS400.
+003100101206       OBJECT-COMPUTER. IBM-AS400.
+003200101206       SPECIAL-NAMES.
+003300101206              DATA-AREA IS WS-DATA-AREA.
+003400101206      /
+003500101206       INPUT-OUTPUT SECTION.
+003600101206      *****************************************************************
+003700101206      *    I N P U T   /   O U T P U T   S E C T I O N                *
+003800101206      *****************************************************************
+003900101206       FILE-CONTROL.
+004000101206      /
+004100101206       DATA DIVISION.
+004200101206      *****************************************************************
+004300101206      *    D A T A   D I V I S I O N                                  *
+004400101206      *****************************************************************
+004500101206
+004600101206       FILE SECTION.
+004700101206      *****************************************************************
+004800101206      *    F I L E   S E C T I O N                                    *
+004900101206      *****************************************************************
+005000101206       WORKING-STORAGE SECTION.
+005100101206      ******************************************************************
+005200101206      *    W O R K I N G   S T O R A G E   S E C T I O N               *
+005300101206      ******************************************************************
+005400110127       01 WS-VARIABLES.
+005500110127          05 WS-MFAPRCDTP.
+005600110127             10 WS-PDATE             PIC 9(8).
+005700110127             10 FILLER               PIC X(161).
+005800110127          05 WS-PROCESS-DATE         PIC S9(9).
+005900101206
+006000101206       01 CL-COMMANDS.
+006100110127          05 CMD-SIZE           PIC 9(10)V9(5) COMP-3 VALUE 25.
+006200110127          05 CLRPFM-PURWKFLP    PIC X(25) VALUE "CLRPFM PURWKFLP".
+006300101206
+006400101206      *SQLLOG Variables.
+006500110126        01 WS-CALLING-PROGRAM       PIC X(10)     VALUE "PRGIMGSLT ".
+006600101206        01 WS-SQLERR-STATEMENT      PIC X(25)     VALUE " ".
+006700101206        01 WS-SQLERR-DATA           PIC X(1780)   VALUE " ".
+006800101206        01 WS-SQL-STATS             PIC X(1966)   VALUE " ".
+006900101206        01 WS-SQLERR-REPLY          PIC X(1)      VALUE " ".
+007000101206        01 WS-SQLLOG                PIC X(1)      VALUE "Y".
+007100101206        01 WS-STRSQL                PIC X(1000)   VALUE SPACES.
+007200101206
+007300101206           EXEC SQL
+007400101206             INCLUDE SQLCA
+007500101206           END-EXEC.
+007600101206
+007700101206           EXEC SQL
+007800101206             INCLUDE SQLDA
+007900101206           END-EXEC.
+008000101206
+008100101206
+008200101206       LINKAGE SECTION.
+008300101206       01  COMM-MFAPURPARM.
+008400101206      ***************************************
+008500101206      *    P U R G E   D A T A   A R E A    *
+008600101206      ***************************************
+008700110202           03 COMM-CUTOFF-DATE                PIC X(6).
+008800110202           03 COMM-PURGE-MODE                 PIC X(1).
+008900110202           03 COMM-ACTIVE-ACCOUNTS            PIC X(1).
+009000110202           03 COMM-ACTIVE-INVESTMENT          PIC X(1).
+009100110202           03 COMM-PURGE-TYPE                 PIC X(1).
+009200110202           03 COMM-SWITCH-TRANSFER            PIC X(1).
+009300110202           03 COMM-MIN-NUM-OF-TRANS           PIC X(2).
+009400110202           03 COMM-ACCOUNT-OWNER-TYPE         PIC X(1).
+009500110202           03 COMM-ACCT-INVESTOR-CUTOFF-DATE  PIC X(6).
+009600110202           03 COMM-PURGE-QUEUE                PIC X(10).
+009700110202           03 COMM-REPORT-PURGE-QUEUE         PIC X(10).
+009800110202       01 COMM-RETURN-CODE                    PIC X(2).
+009900101206
+010000110120       PROCEDURE DIVISION USING COMM-MFAPURPARM,
+010100101206                                COMM-RETURN-CODE.
+010200101206      *********************************************
+010300101206      *    P R O C E D U R E   D I V I S I O N    *
+010400101206      *********************************************
+010500101206
+010600101206       MAINLINE.
+010700101206      **************************
+010800101206      *    M A I N L I N E     *
+010900101206      **************************
+011000101206           PERFORM INITIAL-LOGIC THRU IL-EXIT.
+011100101206           PERFORM DETAIL-PROCESSING THRU DPR-EXIT.
+011200101206           PERFORM END-JOB THRU EOJ-EXIT.
+011300101206
+011400110131       INITIAL-LOGIC.
+011500110131      *********************
+011600110131      *   INITIAL LOGIC   *
+011700110131      *********************
+011800110131
+011900110131           DISPLAY WS-CALLING-PROGRAM " - Start ".
+012000110131           INITIALIZE WS-VARIABLES.
+012100110131           ACCEPT WS-MFAPRCDTP FROM WS-DATA-AREA FOR "MFAPRCDTP".
+012200110131           MOVE WS-PDATE TO WS-PROCESS-DATE.
+012300110131
+012400110131           EXEC SQL
+012500110131            CREATE INDEX PURWKFLP1 ON PURWKFLP (
+012600110131                IMAGE_DOCUMENT_ID,
+012700110131                IMAGE_INVESTOR,
+012800110131                IMAGE_ACCOUNT,
+012900110131                IMAGE_INVESTMENT,
+013000110131                IMAGE_PLACE_DATE,
+013100110131                IMAGE_TRANS_NO,
+013200110131                IMAGE_DATE,
+013300110131                IMAGE_TIME,
+013400110131                IMAGE_RECFMT ASC)
+013500110131            END-EXEC.
+013600110131
+013700110131       IL-EXIT.
+013800110131           EXIT.
+013900110131
+014000101206       DETAIL-PROCESSING.
+014100101206      *************************
+014200101206      *   DETAIL PROCESSING   *
+014300101206      *************************
+014400101206
+014500101206           EXEC SQL
+014600101206             WHENEVER SQLERROR GOTO SQLLOG
+014700101206           END-EXEC.
+014800101206
+014900110127      *** Create Purge Image Document from MFAWKFLP.
+015000110127
+015100110127             DISPLAY WS-CALLING-PROGRAM
+015200110127             " - CREATE-PURWKFLP".
+015300110127             PERFORM CREATE-PURWKFLP THRU CIMGP-EXIT.
+015400110127
+015500101206       DPR-EXIT.
+015600101206           EXIT.
+015700101216      /
+015800101206      /
+015900110127       CREATE-PURWKFLP.
+016000101206      ****---------------------------------------****
+016100110127      ****  Create Purge Image Document          ****
+016200101206      ****---------------------------------------****
+016300101206      ***************************************************
+016400101206      * ALIAS        FILENAME                 OPENNAME  *
+016500101206      ***************************************************
+016600101206      * PURACCNTP    PURGE-ACCOUNT            PURACCNTP *
+016700110127      * WKFLP        IMAGE-DOCUMENT           MFAWKFLP  *
+016800110127      * PURWKFLP     PURGE-IMAGE-DOCUMENT     PURIMGP   *
+016900101206      ***************************************************
+017000101206
+017100101206           MOVE SPACE TO WS-SQLERR-STATEMENT.
+017200110127           MOVE "INSERT INTO PURWKFLP  " TO WS-SQLERR-STATEMENT.
+017300101206
+017400110127           CALL "QCMDEXC" USING CLRPFM-PURWKFLP CMD-SIZE.
+017500101206
+017600101206           PERFORM DSP-SQLERR-STATEMENT.
+017700101206
+017800110127      * Investor level purge
+017900110131           IF COMM-PURGE-TYPE = "I"
+018000110131             EXEC SQL
+018100110131              INSERT INTO PURWKFLP
+018200110131               SELECT WKFLP.*
+018300110131               FROM MFAWKFLP WKFLP
+018400110131               INNER JOIN PURIVRP IVRP ON
+018500110131                 WKFLP.IMAGE_INVESTOR = IVRP.INVESTOR_NO
+018600110131               WHERE
+018700110131               (NOT EXISTS (SELECT * FROM PURWKFLP PWKFLP WHERE
+018800110131                 PWKFLP.IMAGE_DOCUMENT_ID = WKFLP.IMAGE_DOCUMENT_ID
+018900110131                 AND PWKFLP.IMAGE_INVESTOR   = WKFLP.IMAGE_INVESTOR
+019000110131                 AND PWKFLP.IMAGE_ACCOUNT    = WKFLP.IMAGE_ACCOUNT
+019100110131                 AND PWKFLP.IMAGE_INVESTMENT = WKFLP.IMAGE_INVESTMENT
+019200110131                 AND PWKFLP.IMAGE_PLACE_DATE = WKFLP.IMAGE_PLACE_DATE
+019300110131                 AND PWKFLP.IMAGE_TRANS_NO   = WKFLP.IMAGE_TRANS_NO
+019400110131                 AND PWKFLP.IMAGE_DATE       = WKFLP.IMAGE_DATE
+019500110131                 AND PWKFLP.IMAGE_TIME       = WKFLP.IMAGE_TIME
+019600110131                 AND PWKFLP.IMAGE_RECFMT     = WKFLP.IMAGE_RECFMT))
+019700110127              END-EXEC.
+019800110411      * defect #11 - begin
+019900110127      * Account level Purge
+020000110411      *    IF COMM-PURGE-TYPE = "A"
+020100110411           IF COMM-PURGE-TYPE = "A" OR COMM-PURGE-TYPE = "I"
+020200110411      * defect #11 - end
+020300110131            EXEC SQL
+020400110131             INSERT INTO PURWKFLP
+020500110131             SELECT WKFLP.*
+020600110131             FROM MFAWKFLP WKFLP
+020700110131             INNER JOIN PURACCNTP ACCNTP ON
+020800110131                WKFLP.IMAGE_ACCOUNT = ACCNTP.ACCOUNT_NO
+020900110131             WHERE
+021000110207              (NOT EXISTS (SELECT * FROM PURWKFLP PWKFLP WHERE
+021100110207               PWKFLP.IMAGE_DOCUMENT_ID = WKFLP.IMAGE_DOCUMENT_ID
+021200110131               AND PWKFLP.IMAGE_INVESTOR   = WKFLP.IMAGE_INVESTOR
+021300110131               AND PWKFLP.IMAGE_ACCOUNT    = WKFLP.IMAGE_ACCOUNT
+021400110131               AND PWKFLP.IMAGE_INVESTMENT = WKFLP.IMAGE_INVESTMENT
+021500110131               AND PWKFLP.IMAGE_PLACE_DATE = WKFLP.IMAGE_PLACE_DATE
+021600110131               AND PWKFLP.IMAGE_TRANS_NO   = WKFLP.IMAGE_TRANS_NO
+021700110131               AND PWKFLP.IMAGE_DATE       = WKFLP.IMAGE_DATE
+021800110131               AND PWKFLP.IMAGE_TIME       = WKFLP.IMAGE_TIME
+021900110131               AND PWKFLP.IMAGE_RECFMT     = WKFLP.IMAGE_RECFMT))
+022000110127              END-EXEC.
+022100110127
+022200110127       CIMGP-EXIT.
+022300101206           EXIT.
+022400101206      /
+022500101206       END-JOB.
+022600101206      *****************************
+022700101206      *    E N D   O F   J O B    *
+022800101206      *****************************
+022900101206           STOP RUN.
+023000101206
+023100101206       EOJ-EXIT.
+023200101206           EXIT.
+023300101206      /
+023400101206      **********
+023500101206      * SQLLOG *
+023600101206      **********
+023700101206       DSP-SQLERR-STATEMENT.
+023800101206           CONTINUE.
+023900101206
+024000101206       SQLLOG.
+024100101206
+024200101206           IF WS-SQLLOG = "Y"
+024300101206              CALL "SQLLOG"     USING WS-CALLING-PROGRAM
+024400101206                                      WS-SQLERR-STATEMENT
+024500101206                                      SQLCODE
+024600101206                                      SQLERRD(1)
+024700101206                                      SQLERRD(2)
+024800101206                                      SQLERRD(3)
+024900101206                                      SQLERRD(4)
+025000101206                                      SQLERRD(5)
+025100101206                                      SQLERRD(6)
+025200101206                                      SQLSTATE
+025300101206                                      WS-SQLERR-DATA
+025400101206                                      WS-SQL-STATS
+025500101206                                      WS-SQLERR-REPLY
+025600101206              CANCEL "SQLLOG"
+025700101206           END-IF.
+025800101206
+025900101206           MOVE "99" TO COMM-RETURN-CODE.
+026000101206           DISPLAY WS-CALLING-PROGRAM " - End   ".
+026100101206           STOP RUN.
+026200101206       SQLLOG-EXIT.
+026300101206           EXIT.

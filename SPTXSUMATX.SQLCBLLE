@@ -1,0 +1,3252 @@
+000001170313      * %ATTR OPTION(*XREF *GEN) CLOSQLCSR(*ENDMOD) DBGVIEW(*SOURCE)+
+000002170313      * %ATTR COMPILEOPT('ACTGRP(*CALLER)')
+000104120504       IDENTIFICATION DIVISION.
+000204120504       PROGRAM-ID.    SPTXSUMATX.
+000304120504       AUTHOR.        Alex Jayasundara.
+000404120504       INSTALLATION.
+000504120504       DATE-WRITTEN.  June 2012.
+000604120504       DATE-COMPILED.
+000704120504      *
+000804120504      *****************************************************************
+000904120504      **   RFS-NUMBER : RFS-98455                                      *
+001004120504      **                                                               *
+001104120504      **   DESCRIPTION: Stored procedure will render transaction       *
+001204120504      **                information
+001304120504      **                                                               *
+001404120504      **   CALLED BY:   ATRAX application                              *
+001504120504      **                                                               *
+001604120504      **                                                               *
+001704120504      *****************************************************************
+001804120504      *****************************************************************
+001904120504      *    C H A N G E   H I S T O R Y
+002004120504      *****************************************************************
+002104120504      ******************************************************************
+002204120504      * PROGRAMMER  *DATE OF CHANGE* DESCRIPTION OF CHANGE             *
+002304120504      ******************************************************************
+002404120504      * Alex        * 2012/05/04 * RFS98455 - Create program           *
+002504120504      *  Jayasundara*            *  Modeled after SPTXSUMADV and added *
+002604120504      *             *            *  FUND ID as a new parameter.        *
+002704120504      *             *            *                                     *
+002804121003      * Rekha S     * 2012/10/03 * RFS110989 - Phase 2 Transaction     *
+002904121003      *             *            * Summary changes                     *
+003004120504      *             *            *                                     *
+003104121115      * Alex        * 2012/11/15 * RFS110999- Include Txn Charge Indi. *
+003204121115      *  Jayasundara*            *  information instead of Charge Total*
+003304121115      *             *            *  This is because of Mouse Over      *
+003404121115      *             *            *  function at the front end.         *
+003504130426      * Ewa K.      * 2013/04/26 * RFS121563                           *
+003604130426      *             *            *  Gain Loss not calculated if        *
+003704130426      *             *            *  RFTAXEVP (MFAACTEVP) is not set up.*
+003804130516      * Poornima V  * 2013/05/08 * RFS122061 - Deduction codes to be   *
+003904130516      *             *            * displayed with Full description.    *
+004004130610      * Aashish K.  * 2013/06/10 * RFS123426 - Distribution option and *
+004104130610      *             *            * re new IA Trax                      *
+004204130621      * Uday K A    * 2013/06/21 * RFS124266 - French Translation issue*
+004304130621      *             *            * for new I/A Trax                    *
+004404130708      * Uday K A    * 2013/07/08 * RFS124291 - Issues in Fund code in A*
+004504130708      *             *            * ccount summary re RLI new I/A Trax  *
+004604130905      * Alex        * 2013/09/05 * RFS126759- Add New Parameter for    *
+004704130905      *  Jayasundara*            * Order By (Customized Order By)      *
+004804130905      *             *            *                                     *
+004904140130      * R Miguel    * 2014/01/30 * RFS126759- Add New Parameter for    *
+005004140130      *             *            * Trn Type and provide summary        *
+005104140130      *             *            * totals for Gross, Net and Charges.  *
+005204140424      *             * 2014/04/24 * Issue 8 - Wrong number of records   *
+005304140424      *             *            * are being returned.                 *
+005404140512      * Arthy K     * 2014/05/12 * RFS134771 Recompile                 *
+005504140807      * Ashmitha K  * 2014/08/07 * RFS136915 - RLI ATrax Testing defect*
+005604140807      *             *            * (backend)                           *
+005704140902      * Antony S    * 2014/09/02 * RFS139981 - New Trax-Transaction    *
+005804140902      *             *            * summary deduction list (backend)    *
+005904150219      * Naveenn K   * 2015/02/18 * RFS143347 - Update to display the   *
+006004150219      *             *            * 'Net Total' of the Transactions in  *
+006104150219      *             *            * the result set                      *
+006204150717      * Ramya K     * 2015/07/14 * RFS147345 - Incorrect Total         *
+006304150717      *             *            * deduction value                     *
+006404150915      * Manjusha V. * 2015/08/24 * RFS146397 - Performance improvement.*
+006504150915      * & Ewa K     *            *                                     *
+006604160208      * Ewa K.      * 2015/11/27 * RFS153652 - Performance improvement *
+006704160208      *             *            * continue. Max requested number of   *
+006804160208      *             *            * rows to be returnd is 5000.         *
+006904160315      * Ewa K.      * 2016/03/03 * RFS154265 - Select trades based on  *
+007004160315      *             *            * Process Date.                       *
+007104160509      * Ewa K.      * 2016/04/21 * RFS158524 - Performance of          *
+007204160509      *             *            * TransTmpCure cursor. Use OLAP       *
+007304160509      *             *            * ROW_NUMBER() function instead.      *
+007404161021      * Ewa K.      * 2016/10/21 * RFS162060 - Subtract CDSCD deduction*
+007504161111      *             *            * from the Capital Gain/Loss.         *
+007604120504      ******************************************************************
+007704120504
+007804120504       ENVIRONMENT DIVISION.
+007904120504       CONFIGURATION SECTION.
+008004120504       SOURCE-COMPUTER. IBM-AS400.
+008104120504       OBJECT-COMPUTER. IBM-AS400.
+008204120504       SPECIAL-NAMES.
+008304160208153652     LINKAGE TYPE IS PROCEDURE FOR "FXCHKOBJ".
+008404120504      /
+008504120504       INPUT-OUTPUT SECTION.
+008604120504       FILE-CONTROL.
+008704120504
+008804120504
+008904120504       DATA DIVISION.
+009004120504       FILE SECTION.
+009104120504
+009204120504       WORKING-STORAGE SECTION.
+009304120504      *
+009404120504           Copy Cpysqlfld
+009504120504               REPLACING == "CURRENT_PROGRAM" == BY == "SPTXSUMATX" ==.
+009604120504      *
+009704120504      * Error Codes, Uniquely Identify where the error happened
+009804120504       01 Ws-Err-Code                    PIC X(02) VALUE SPACES.
+009904120504          88 lncc-Err-Ok                    VALUE SPACES.
+010004120504          88 lncc-ErrOK                     VALUE "00".
+010104120504          88 lncc-Err01                     VALUE "01".
+010204120504          88 lncc-Err02                     VALUE "02".
+010304120504          88 lncc-Err03                     VALUE "03".
+010404120504          88 lncc-Err04                     VALUE "04".
+010504120504          88 lncc-Err05                     VALUE "05".
+010604120504          88 lncc-Err06                     VALUE "06".
+010704120504          88 lncc-Err07                     VALUE "07".
+010804150305          88 lncc-Err08                     VALUE "08".
+010904120504          88 lncc-Err09                     VALUE "09".
+011004150305143347    88 lncc-Err10                     VALUE "10".
+011104150915      * RFS146397 Starts
+011204150915          88 lncc-Err11                     VALUE "11".
+011304150915          88 lncc-Err12                     VALUE "12".
+011404150915          88 lncc-Err13                     VALUE "13".
+011504150915          88 lncc-Err14                     VALUE "14".
+011604150915          88 lncc-Err15                     VALUE "15".
+011704150915          88 lncc-Err16                     VALUE "16".
+011804150915          88 lncc-Err17                     VALUE "17".
+011904150915          88 lncc-Err18                     VALUE "18".
+012004150915      * RFS146397 Ends
+012104160509158524    88 lncc-Err19                     VALUE "19".
+012204160509158524    88 lncc-Err20                     VALUE "20".
+012304120504
+012404120504      * ---------------------------------
+012504120504       01 lc-StaticFields.
+012604120504           03 lncc-E                     PIC X(01) VALUE "E".
+012704120504           03 lncc-Y                     PIC X(01) VALUE "Y".
+012804120504           03 lncc-N                     PIC X(01) VALUE "N".
+012904120504           03 lncc-All                   PIC X(03) VALUE "ALL".
+013004121004           03 lncc-Blank                 PIC X(01) VALUE " ".
+013104121004110989     03 lnc_I                      PIC X(01) VALUE "I".
+013204121016110989     03 lnc_A                      PIC X(01) VALUE "A".
+013304150915146397     03 li_MaxIdx                  PIC S9(9) VALUE 5000.
+013404161021162060     03 lncc-CDSC                  PIC X(04) VALUE "CDSC".
+013504120504
+013604120504      * ---------------------------------
+013704120504       01 li-WorkFields.
+013804120504           03 li-StrRow             PIC S9(9).
+013904120504           03 li-NumRow             PIC S9(9).
+014004120504           03 li-EndRow             PIC S9(9).
+014104120504           03 li-TotRow             PIC S9(9).
+014204150915146397     03 li-FetchRows          PIC S9(09) COMP-3.
+014304120504           03 li-FrmDate            PIC S9(8).
+014404120504           03 li-ToDate             PIC S9(8).
+014504120504           03 li-AccountNo          PIC S9(9).
+014604140221      * RFS 126759 * begin RM
+014704140221      *    03 lc-OrderBy            PIC X.
+014804140221           03 lc-OrderBy            PIC X(2).
+014904140221      * RFS 126759 * end   RM
+015004130911           03 lc-OrderByDir         PIC X.
+015104160208153652     03 ln_TotGrossAmt        PIC S9(16)v99 COMP-3.
+015204160208   |       03 ln_TotNetAmt          PIC S9(16)v99 COMP-3.
+015304160208   |       03 ln_TotDeduct          PIC S9(16)v99 COMP-3.
+015404160208153652     03 ln_SystemTime8            PIC S9(08) VALUE 0.
+015504120504
+015604150915      *RFS146397 Start
+015704150915       01 FetchRecArr.
+015804150915         03 lc_FetchRecArray OCCURS  5000 TIMES.
+015904150915           05  li_ArrTranPlaDate           PIC S9(09) COMP-3.
+016004150915           05  li_ArrTranTrnNo             PIC S9(09) COMP-3.
+016104150915           05  li_ArrTranAccNo             PIC S9(09).
+016204150915           05  lc_ArrTranTrnTypeCode       PIC  X(03).
+016304150915           05  lc_ArrTranTrnStatusCode     PIC  X(03).
+016404150915           05  lc_ArrTranTrnOrigCode       PIC  X(03).
+016504150915           05  lc_ArrTranInvCode           PIC  X(05).
+016604150915           05  li_ArrTranTrdDate           PIC S9(09) COMP-3.
+016704150915           05  li_ArrTranProDate           PIC S9(09) COMP-3.
+016804150915           05  ln_ArrTranGrossAmt          PIC S9(11)V9(2) COMP-3.
+016904150915           05  ln_ArrTranUnitPrice         PIC S9(05)V9(4) COMP-3.
+017004150915           05  ln_ArrTranUnitAmt           PIC S9(10)V9(3) COMP-3.
+017104150915           05  ln_ArrTranNetAmt            PIC S9(11)V9(2) COMP-3.
+017204150915           05  lc_ArrTranReverse           PIC  X(01).
+017304150915           05  lc_ArrGainOrLoss            PIC  X(01).
+017404150915           05  ln_ArrTranAverageUnitCost   PIC S9(05)V9(4) COMP-3.
+017504150915           05  lc_ArrTranContrRedeCode     PIC  X(06).
+017604150915           05  lc_ArrDealerAcctNo          PIC  X(15).
+017704150915           05  lc_ArrAcctTypeCd            PIC  X(05).
+017804150915
+017904150915       01  lb_Ind.
+018004150915           03 lb_IndArray    OCCURS 5000 TIMES.
+018104150915              05 Inds                      PIC S9(4) BINARY
+018204150915                                           OCCURS 19 TIMES.
+018304150915       01  lb_IndTot                       PIC S9(4) BINARY.
+018404150915
+018504150915       01 lcnd_conditions.
+018604150915         03 lb_TranDeaCurOpened            PIC  X(01) VALUE SPACE.
+018704150915           88 lncc_TranDeaCurOpenedNo      VALUES "N".
+018804150915           88 lncc_TranDeaCurOpenedYes     VALUES "Y".
+018904160208
+019004160208      *RFS153652 Start
+019104160208      * FXCHKOBJ parametes
+019204160208       01 lc_checkObjectParms.
+019304160208         03 lc_checkObjectConstants.
+019404160208           05 lnc_libQtemp                 PIC X(10) VALUE "QTEMP".
+019504160208           05 lnc_objectTypeFile           PIC X(10) VALUE "*FILE".
+019604160208         03 lc_objectName                  PIC X(10).
+019704160208         03 lc_messageId                   PIC X(10).
+019804160208           88 lnc_messageIdOk                 VALUE SPACES.
+019904160208      *RFS153652 End
+020004150915
+020104160516      *RFS158524 Starts
+020204160516       01 lc_CLRPfmCmds.
+020304160516         03 lc_ClrPfm1                PIC X(25) VALUE
+020404160516            "CLRPFM QTEMP/BTRANSUM".
+020504160516         03 lc_ClrPfm2                PIC X(25) VALUE
+020604160516            "CLRPFM QTEMP/BTRANSUM2".
+020704160516         03 lc_ClrPfm3                PIC X(25) VALUE
+020804160516            "CLRPFM QTEMP/BDEDUSUM".
+020904160516         03 lc_ClrPfm4                PIC X(25) VALUE
+021004160516            "CLRPFM QTEMP/TRANSTMP".
+021104160516         03 CMD-LEN                   PIC 9(10)V9(5) COMP-3 VALUE 25.
+021204160516      *RFS158524 Ends
+021304160516
+021404150915      * Constants.
+021504150915       77 lc_OrderBy1                    PIC X(02) VALUE "1 ".
+021604150915       77 lc_OrderBy2                    PIC X(02) VALUE "2 ".
+021704150915       77 lc_OrderBy3                    PIC X(02) VALUE "3 ".
+021804150915       77 lc_OrderBy4                    PIC X(02) VALUE "4 ".
+021904150915       77 lc_OrderBy5                    PIC X(02) VALUE "5 ".
+022004150915       77 lc_OrderBy6                    PIC X(02) VALUE "6 ".
+022104150915       77 lc_OrderBy7                    PIC X(02) VALUE "7 ".
+022204150915       77 lc_OrderBy8                    PIC X(02) VALUE "8 ".
+022304150915       77 lc_OrderBy9                    PIC X(02) VALUE "9 ".
+022404150915       77 lc_OrderBy10                   PIC X(02) VALUE "10".
+022504150915       77 lncc_RVS                       PIC X(03) VALUE "RVS".
+022604160208153652 77 pc_TableName1                  PIC X(10) VALUE "BTRANSUM".
+022704160208   |   77 pc_TableName2                  PIC X(10) VALUE "BTRANSUM2".
+022804160208   |   77 pc_TableName3                  PIC X(10) VALUE "BDEDUSUM".
+022904160208153652 77 pc_TableName4                  PIC X(10) VALUE "TRANSTMP".
+023004160208
+023104150915      *RFS146397 End
+023204120504           EXEC SQL
+023304120504              INCLUDE SQLCA
+023404120504           END-EXEC.
+023504120504
+023604120504       LINKAGE SECTION.
+023704120504       01  COMM-STRROW              PIC  X(9).
+023804120504       01  COMM-NUMROW              PIC  X(9).
+023904120504       01  COMM-FROM-DATE           PIC  X(8).
+024004120504       01  COMM-TO-DATE             PIC  X(8).
+024104120504       01  COMM-DLRCODE             PIC  X(4).
+024204120504       01  COMM-REPCODE             PIC  X(6).
+024304120504       01  COMM-ACCTNO              PIC  X(9).
+024404120504       01  COMM-DLRACCTNO           PIC  X(15).
+024504120504       01  COMM-TRANSTATUS          PIC  X(3).
+024604120504      *RFS98455  Start
+024704140807      *RFS136915 changing Fund ID to length 5
+024804140807      *01  COMM-FUND-ID             PIC  X(3).
+024904140807       01  COMM-FUND-ID             PIC  X(5).
+025004140807      *RFS136915 End
+025104120504      *RFS98455  End
+025204121004      *RFS110989-Start
+025304121004       01  COMM-ROLE                PIC  X(1).
+025404121004      *RFS110989-End
+025504130905      *RFS126759-Start
+025604140221      *RFS126759- begin RM
+025704140221      *01  COMM-OrderById           PIC  X(1).
+025804140220       01  COMM-OrderById           PIC  X(2).
+025904140221      *RFS126759- end   RM
+026004130911       01  COMM-OrderByDir          PIC  X(1).
+026104130905      *RFS126759-End
+026204140130      *RFS126759- begin RM
+026304140130       01  COMM-TrnType             PIC  X(3).
+026404140130      *RFS126759- end   RM
+026504150915146397 01  COMM-ReturnScope         PIC  X(1).
+026604150915146397     88 ncc_ReturnAll          VALUE "A".
+026704150915146397     88 ncc_ReturnTrans        VALUE "T".
+026804150915146397     88 ncc_ReturnSummary      VALUE "S".
+026904160315154265 01  COMM-DateTypeInd         PIC  X(1).
+027004160509158524     88 ncc_TradeDate          VALUE "T".
+027104160509158524     88 ncc_ProcessDate        VALUE "P".
+027204120504       01  COMM-LANG-CODE           PIC  X(1).
+027304120504       01  COMM-TOTROWSX            PIC  X(9).
+027404120504       01  COMM-TOTROWS REDEFINES COMM-TOTROWSX
+027504120504                                    PIC 9(9).
+027604120504       01  COMM-ERR-CODE            PIC  X(2).
+027704120504
+027804120504       PROCEDURE DIVISION USING     COMM-STRROW
+027904120504                                    COMM-NUMROW
+028004120504                                    COMM-FROM-DATE
+028104120504                                    COMM-TO-DATE
+028204120504                                    COMM-DLRCODE
+028304120504                                    COMM-REPCODE
+028404120504                                    COMM-ACCTNO
+028504120504                                    COMM-DLRACCTNO
+028604120504                                    COMM-TRANSTATUS
+028704120504      *RFS98455  Start
+028804120504                                    COMM-FUND-ID
+028904120504      *RFS98455  End
+029004121004110989                              COMM-ROLE
+029104130906      *RFS126759 Start
+029204130906                                    COMM-OrderById
+029304130911                                    COMM-OrderByDir
+029404140130      *RFS126759 - begin RM
+029504140130                                    COMM-TRNTYPE
+029604140130      *RFS126759 - end RM
+029704150915146397                              COMM-ReturnScope
+029804160315154265                              COMM-DateTypeInd
+029904120504                                    COMM-LANG-CODE
+030004120504                                    COMM-TOTROWSX
+030104120504                                    COMM-ERR-CODE.
+030204120504
+030304120504      * ---------------------------------
+030404120504      * ---------------------------------
+030504120504       MAINLINE.
+030604120504      * ---------------------------------
+030704120504      * ---------------------------------
+030804120504           EXEC SQL
+030904120504             WHENEVER SQLERROR CONTINUE
+031004120504           END-EXEC.
+031104120504
+031204120504      * Initialize varaibles
+031304120504           PERFORM Initial-Routine
+031404120504      * Create temp table
+031504120504           PERFORM CreateTable
+031604120504      * Insert into temp table
+031704150915146397*    IF lncc-ErrOK
+031804150915146397     IF lncc-ErrOK AND (ncc_ReturnAll OR ncc_ReturnTrans)
+031904150915146397      IF lc-OrderBy = lc_OrderBy9
+032004150915              PERFORM InsertTemp
+032104150915      *RFS146397 starts
+032204150915            ELSE
+032304150915              PERFORM InsertTempX
+032404150915              IF lncc-ErrOK
+032504150915                PERFORM Insert-BTRANSUM
+032604150915              END-IF
+032704150915            END-IF
+032804150915      *RFS146397 ends
+032904150915           END-IF.
+033004120504      * Create resultset
+033104120504           PERFORM DeclareResultSet.
+033204120504      * End of the program
+033304120504           PERFORM EndOfProgram.
+033404120504      /
+033504120504      * ---------------------------------
+033604120504       Initial-Routine.
+033704120504      * ---------------------------------
+033804120504           INITIALIZE li-WorkFields.
+033904120504           MOVE ZEROES TO COMM-TOTROWS
+034004150305143347     MOVE ZEROES TO COMM-ERR-CODE
+034104120504           SET lncc-ErrOK TO TRUE.
+034204160208153652     ACCEPT ln_SystemTime8 FROM TIME.
+034304160208153652     DISPLAY "SPTXSUMATX starts: " ln_SystemTime8.
+034404120504           EXEC SQL
+034504120504              SET :li-StrRow  = INTEGER(:Comm-StrRow)
+034604120504           END-EXEC.
+034704120504           MOVE SQLSTATE TO lc_sqlStates.
+034804120504           EVALUATE TRUE
+034904120504             WHEN lncc_sqlSuccessful
+035004120504                  CONTINUE
+035104120504             WHEN OTHER
+035204120504                  SET lncc-Err01  TO TRUE
+035304120504           END-EVALUATE.
+035404120504           EXEC SQL
+035504120504              SET :li-NumRow  = INTEGER(:Comm-NumRow)
+035604120504           END-EXEC.
+035704120504           MOVE SQLSTATE TO lc_sqlStates.
+035804120504           EVALUATE TRUE
+035904120504             WHEN lncc_sqlSuccessful
+036004120504                  CONTINUE
+036104120504             WHEN OTHER
+036204120504                  SET lncc-Err02  TO TRUE
+036304120504           END-EVALUATE.
+036404120504           EXEC SQL
+036504120504              SET :li-FrmDate = INTEGER(:Comm-From-Date)
+036604120504           END-EXEC.
+036704120504           MOVE SQLSTATE TO lc_sqlStates.
+036804120504           EVALUATE TRUE
+036904120504             WHEN lncc_sqlSuccessful
+037004120504                  CONTINUE
+037104120504             WHEN OTHER
+037204120504                  SET lncc-Err03  TO TRUE
+037304120504           END-EVALUATE.
+037404120504           EXEC SQL
+037504120504              SET :li-ToDate = INTEGER(:Comm-To-Date)
+037604120504           END-EXEC.
+037704120504           MOVE SQLSTATE TO lc_sqlStates.
+037804120504           EVALUATE TRUE
+037904120504             WHEN lncc_sqlSuccessful
+038004120504                  CONTINUE
+038104120504             WHEN OTHER
+038204120504                  SET lncc-Err04  TO TRUE
+038304120504           END-EVALUATE.
+038404120504           EXEC SQL
+038504120504              SET :li-AccountNo = INTEGER(:Comm-AcctNo)
+038604120504           END-EXEC.
+038704120504           MOVE SQLSTATE TO lc_sqlStates.
+038804120504           EVALUATE TRUE
+038904120504             WHEN lncc_sqlSuccessful
+039004120504                  CONTINUE
+039104120504             WHEN OTHER
+039204120504                  SET lncc-Err05  TO TRUE
+039304120504           END-EVALUATE.
+039404120504           IF Comm-TranStatus = SPACES
+039504120504              MOVE "ALL" TO Comm-TranStatus
+039604120504           END-IF.
+039704120504           IF Comm-Lang-Code  = SPACES
+039804120504              MOVE "E" TO Comm-Lang-Code
+039904120504           END-IF.
+040004160315154265     IF COMM-DateTypeInd = SPACES
+040104160315   |          MOVE "T" TO COMM-DateTypeInd
+040204160315154265     END-IF.
+040304120504           COMPUTE li-EndRow = (li-StrRow + li-NumRow) - 1.
+040404120504           IF li-EndRow > 0 AND li-EndRow < li-StrRow
+040504120504              SET lncc-Err06  TO TRUE
+040604120504           END-IF.
+040704150915      *RFS146397 Start - Max number of the returned rows = 5000
+040804150915           IF li-NumRow > li_MaxIdx
+040904150915              AND COMM-OrderById NOT = lc_OrderBy9
+041004150915              AND (ncc_ReturnAll OR ncc_ReturnTrans)
+041104150915              SET lncc-Err11  TO TRUE
+041204150915           END-IF.
+041304150915      *RFS146397 End
+041404120504      *RFS98455  Start
+041504120504           IF Comm-Fund-Id    = SPACES
+041604120504              MOVE "ALL" TO Comm-Fund-Id
+041704120504           END-IF.
+041804120504      *RFS98455  End
+041904121010      *RFS110989-Start
+042004121010           IF COMM-ROLE = lnc_I
+042104121010              MOVE lncc-All   TO COMM-DLRCODE
+042204121010                                 COMM-REPCODE
+042304121010           END-IF.
+042404121016           IF COMM-ROLE = lnc_A
+042504121016             IF COMM-REPCODE = SPACES
+042604121016                MOVE SPACES   TO COMM-REPCODE
+042704121016             END-IF
+042804121016             IF COMM-REPCODE = lncc-All
+042904121016                MOVE lncc-All TO COMM-REPCODE
+043004121016             END-IF
+043104121016           END-IF.
+043204121010      *RFS110989-End
+043304130905      *RFS126759-Start
+043404130906           MOVE  COMM-OrderById   TO  lc-OrderBy.
+043504130911           MOVE  COMM-OrderByDir  TO  lc-OrderByDir.
+043604130905      *RFS126759-End
+043704140130      *RFS126759- begin RM
+043804140130           IF COMM-TrnType = SPACES
+043904140130              MOVE lncc-All   TO COMM-Trntype
+044004140130           END-IF.
+044104140130      *RFS126759- end   RM
+044204160208153652*    PERFORM CloseCursors.
+044304120504
+044404120504      /
+044504120504      * ---------------------------------
+044604120504       CreateTable.
+044704120504      * ---------------------------------
+044804160208      *RFS153652 Start
+044904160208           IF lc-OrderBy = lc_OrderBy9
+045004160208              PERFORM CreateBTRANSUM
+045104160208              PERFORM CreateBTRANSUM2
+045204160208              PERFORM CreateTRANSTMP
+045304160208              PERFORM CreateBDEDUSUM
+045404160208           ELSE
+045504160208              IF ncc_ReturnAll
+045604160208                 PERFORM CreateBTRANSUM
+045704160208                 PERFORM CreateTRANSTMP
+045804160208                 PERFORM CreateBDEDUSUM
+045904160208              END-IF
+046004160208              IF ncc_ReturnTrans
+046104160208                 PERFORM CreateBTRANSUM
+046204160208                 PERFORM CreateTRANSTMP
+046304160208              END-IF
+046404160208              IF ncc_ReturnSummary
+046504160208                 CONTINUE
+046604160208              END-IF
+046704160208           END-IF.
+046804160208
+046904160208      * ---------------------------------
+047004160208       CreateBTRANSUM.
+047104160208      * ---------------------------------
+047204160208      *Check if the table exists, before creating it
+047304160208      *    EXEC SQL
+047404160208      *         DROP TABLE QTEMP/BTRANSUM
+047504160208      *    END-EXEC.
+047604160208           MOVE pc_TableName1 TO lc_objectName.
+047704160208           PERFORM CheckObject.
+047804160208           IF lnc_messageIdOk
+047904160516158524        CALL "QCMDEXC"  USING lc_ClrPfm1 CMD-LEN
+048004160516   |  *       EXEC SQL
+048104160516   |  *            DELETE FROM QTEMP/BTRANSUM
+048204160516158524*       END-EXEC
+048304160208           ELSE
+048404160208              EXEC SQL
+048504160208              CREATE TABLE QTEMP/BTRANSUM
+048604160208              (Placement_Date     DEC(9)      NOT NULL WITH DEFAULT,
+048704160208               Trans_No           DEC(9)      NOT NULL WITH DEFAULT,
+048804160208               Account_No         NUMERIC(9)  NOT  NULL WITH DEFAULT,
+048904160208               Trans_Type_Code    CHAR(3)     NOT NULL WITH DEFAULT,
+049004160208               Trans_Status_Code  CHAR(3)     NOT NULL WITH DEFAULT,
+049104160208               Trans_Origin_Code  CHAR(3)     NOT NULL WITH DEFAULT,
+049204160208               Investment_Code    CHAR(5)     NOT NULL WITH DEFAULT,
+049304160208               Trade_Date         NUMERIC(9)  NOT NULL WITH DEFAULT,
+049404160208               Process_Date       NUMERIC(9)  NOT NULL WITH DEFAULT,
+049504160208               Gross_Amt          DEC(13, 2)  NOT NULL WITH DEFAULT,
+049604160208               Unit_PRICE         DEC(9, 4)   NOT NULL WITH DEFAULT,
+049704160208               Unit_Amt           DEC(13, 3)  NOT  NULL WITH DEFAULT,
+049804160208               Net_Amt            DEC(13, 3)  NOT NULL WITH DEFAULT,
+049904160208143347         Reverse            CHAR(1)     NOT NULL WITH DEFAULT,
+050004160208               Gain_OR_Loss       CHAR(1)     NOT NULL WITH DEFAULT,
+050104160208               Avg_Unit_Cost      DEC(9, 4)   NOT NULL WITH DEFAULT,
+050204160208               Contr_Redem_Code   CHAR(6)     NOT NULL WITH DEFAULT,
+050304160208               Dealer_Acct_No     CHAR(15)    NOT NULL WITH DEFAULT,
+050404160208110989         Account_Type_Code  CHAR(5)     NOT NULL WITH DEFAULT,
+050504160208      *RFS110999 - Start
+050604160208110989*     Deduction_Amt      DEC(13,3)   NOT NULL WITH DEFAULT)
+050704160208110999         Deduction_Amt      DEC(13,3)   NOT NULL WITH DEFAULT,
+050804160208110999         Deduction_Code     CHAR(5)     NOT NULL WITH DEFAULT,
+050904160208122061         Deduction_Desc     CHAR(25)    NOT NULL WITH DEFAULT
+051004161021162060        ,CDSC_Deductions    DEC(13,3)   NOT NULL WITH DEFAULT
+051104160208110999         )
+051204160208      *RFS110999 - End
+051304160208              END-EXEC
+051404160208           END-IF.
+051504160208      *    MOVE SQLSTATE TO lc_sqlStates.
+051604160208      *    EVALUATE TRUE
+051704160208      *      WHEN lncc_sqlTblAlreadyExists
+051804160208      *           EXEC SQL
+051904160208      *                DELETE FROM QTEMP/BTRANSUM
+052004160208      *           END-EXEC
+052104160208      *    END-EVALUATE.
+052204160208
+052304160208      * ---------------------------------
+052404160208       CreateBTRANSUM2.
+052504160208      * ---------------------------------
+052604160208      *RFS143347 --begin
+052704160208      *      EXEC SQL
+052804160208      *           DROP TABLE QTEMP/BTRANSUM2
+052904160208      *      END-EXEC.
+053004160208           MOVE pc_TableName2 TO lc_objectName.
+053104160208           PERFORM CheckObject.
+053204160208           IF lnc_messageIdOk
+053304160516158524        CALL "QCMDEXC"  USING lc_ClrPfm2 CMD-LEN
+053404160516   |  *       EXEC SQL
+053504160516   |  *            DELETE FROM QTEMP/BTRANSUM2
+053604160516158524*       END-EXEC
+053704160208           ELSE
+053804160208             EXEC SQL
+053904160208             CREATE TABLE QTEMP/BTRANSUM2
+054004160208             (Gross_Total        DEC(13, 2)  NOT NULL WITH DEFAULT,
+054104160208              Net_Total          DEC(13, 3)  NOT NULL WITH DEFAULT,
+054204160208              Deduction_Total    DEC(13, 3)  NOT NULL WITH DEFAULT
+054304160208              )
+054404160208             END-EXEC
+054504160208           END-IF.
+054604160208
+054704160208      *    MOVE SQLSTATE TO lc_sqlStates.
+054804160208      *    EVALUATE TRUE
+054904160208      *      WHEN lncc_sqlTblAlreadyExists
+055004160208      *           EXEC SQL
+055104160208      *                DELETE FROM QTEMP/BTRANSUM2
+055204160208      *           END-EXEC
+055304160208      *    END-EVALUATE.
+055404160208
+055504160208      * ---------------------------------
+055604160208       CreateBDEDUSUM.
+055704160208      * ---------------------------------
+055804160208      *RFS139981 Start
+055904160208
+056004160208      *    EXEC SQL
+056104160208      *         DROP TABLE QTEMP/BDEDUSUM
+056204160208      *    END-EXEC.
+056304160208
+056404160208           MOVE pc_TableName3 TO lc_objectName.
+056504160208           PERFORM CheckObject.
+056604160208           IF lnc_messageIdOk
+056704160516158524        CALL "QCMDEXC"  USING lc_ClrPfm3 CMD-LEN
+056804160516   |  *       EXEC SQL
+056904160516   |  *            DELETE FROM QTEMP/BDEDUSUM
+057004160516158524*       END-EXEC
+057104160208           ELSE
+057204160208            EXEC SQL
+057304160208               CREATE TABLE QTEMP/BDEDUSUM
+057404160208            (
+057504160208             Placement_Date     DEC(9) NOT NULL WITH DEFAULT,
+057604160208             Trans_No           DEC(9) NOT NULL WITH DEFAULT,
+057704160208             Account_No         NUMERIC(9),
+057804160208147345*     Trans_Type_Code    CHAR(30),
+057904160208147345       Trans_Type_Code    CHAR(31),
+058004160208             Trans_Status_Code  CHAR(3),
+058104160208             Trans_Origin_Code  CHAR(3),
+058204160208             Investment_Name    CHAR(46),
+058304160208             Trade_Date         NUMERIC(9),
+058404160208             Process_Date       NUMERIC(9),
+058504160208             Gross_Amt          DEC(13, 2),
+058604160208             Unit_PRICE         DEC(9, 4),
+058704160208             Unit_Amt           DEC(13, 3),
+058804160208             Net_Amt            DEC(13, 3),
+058904160208             Market_Value       DEC(22, 4),
+059004160208             Dealer_Acct_No     CHAR(15),
+059104160208             Account_Type_Code  CHAR(5),
+059204160208             Account_Type_Code_Lang  CHAR(5),
+059304160208             Deduction_Amt      DEC(13,3),
+059404160208             Deduction_Amt_Net  DEC(13,3),
+059504160208             Row_No             NUMERIC(15)
+059604160208            )
+059704160208            END-EXEC
+059804160208           END-IF.
+059904160208      *    MOVE SQLSTATE TO lc_sqlStates.
+060004160208      *    EVALUATE TRUE
+060104160208      *      WHEN lncc_sqlTblAlreadyExists
+060204160208      *           EXEC SQL
+060304160208147345*                DELETE FROM QTEMP/BTRANSUM
+060404160208147345*                DELETE FROM QTEMP/BDEDUSUM
+060504160208      *           END-EXEC
+060604160208      *    END-EVALUATE.
+060704160208      *RFS139981 End
+060804160208
+060904160208      * ---------------------------------
+061004160208       CreateTRANSTMP.
+061104160208      * ---------------------------------
+061204160208           MOVE pc_TableName4 TO lc_objectName.
+061304160208           PERFORM CheckObject.
+061404160208           IF lnc_messageIdOk
+061504160516158524        CALL "QCMDEXC"  USING lc_ClrPfm4 CMD-LEN
+061604160516   |  *       EXEC SQL
+061704160516   |  *            DELETE FROM QTEMP/TRANSTMP
+061804160516158524*       END-EXEC
+061904160208           ELSE
+062004160208      *RFS146397 Start
+062104160208      *    EXEC SQL
+062204160208      *         DROP TABLE QTEMP/TRANSTMP
+062304160208      *    END-EXEC.
+062404160208      *
+062504160208              EXEC SQL
+062604160208              CREATE TABLE QTEMP/TRANSTMP
+062704160208              (Placement_Date     DEC(9, 0)   NOT NULL WITH DEFAULT,
+062804160208               Trans_No           DEC(9, 0)   NOT NULL WITH DEFAULT,
+062904160208               Account_No         NUMERIC(9)  NOT  NULL WITH DEFAULT,
+063004160208               Trans_Type_Code    CHAR(3)     NOT NULL WITH DEFAULT,
+063104160208               Trans_Status_Code  CHAR(3)     NOT NULL WITH DEFAULT,
+063204160208               Trans_Origin_Code  CHAR(3)     NOT NULL WITH DEFAULT,
+063304160208               Investment_Code    CHAR(5)     NOT NULL WITH DEFAULT,
+063404160208               Trade_Date         DEC(9, 0)   NOT NULL WITH DEFAULT,
+063504160208               Process_Date       DEC(9, 0)   NOT NULL WITH DEFAULT,
+063604160208               Gross_Amt          DEC(13, 2)  NOT NULL WITH DEFAULT,
+063704160208               Unit_Price         DEC(9, 4)   NOT NULL WITH DEFAULT,
+063804160208               Unit_Amt           DEC(13, 3)  NOT NULL WITH DEFAULT,
+063904160208               Net_Amt            DEC(13, 2)  NOT NULL WITH DEFAULT,
+064004160208               Reverse            CHAR(1)     NOT NULL WITH DEFAULT,
+064104160208               Gain_OR_Loss       CHAR(1)     NOT NULL WITH DEFAULT,
+064204160208153652*        Average_Unit_Cost  DEC(9, 4)   NOT NULL WITH DEFAULT,
+064304160208153652         Avg_Unit_Cost      DEC(9, 4)   NOT NULL WITH DEFAULT,
+064404160208               Contr_Redem_Code   CHAR(6)     NOT NULL WITH DEFAULT,
+064504160208               Dealer_Acct_No     CHAR(15)    NOT NULL WITH DEFAULT,
+064604160509               Account_Type_Code  CHAR(5)     NOT NULL WITH DEFAULT,
+064704160509158524         Row_Number         NUMERIC(15)
+064804160208              )
+064904160208              END-EXEC
+065004160509      *RFS158524 Starts
+065104160509              EXEC SQL
+065204160509                CREATE INDEX QTEMP/IDXTRNTMP ON QTEMP/TRANSTMP
+065304160509                ( Placement_Date asc,
+065404160509                  Trans_No asc
+065504160509                )
+065604160509              END-EXEC
+065704160516      *RFS158524 Ends
+065804160208           END-IF.
+065904160208
+066004160208      *    MOVE SQLSTATE TO lc_sqlStates.
+066104160208      *    EVALUATE TRUE
+066204160208      *      WHEN lncc_sqlTblAlreadyExists
+066304160208      *           EXEC SQL
+066404160208      *                DELETE FROM QTEMP/TRANSTMP
+066504160208      *           END-EXEC
+066604160208      *    END-EVALUATE.
+066704160208      *RFS-146397  ends
+066804160208      *RFS153652 End
+066904120504      /
+067004120504      * ---------------------------------
+067104120504       InsertTemp.
+067204120504      * ---------------------------------
+067304120504           CONTINUE.
+067404120504           EXEC SQL
+067504120504             INSERT INTO QTEMP/BTRANSUM
+067604120504             WITH TransTmp  AS
+067704140903             (SELECT *
+067804120504              FROM Mfatrnp trnp
+067904160315      *RFS154265 -  Start
+068004160315      *       WHERE trnp.Trade_Date BETWEEN :li-FrmDate AND
+068104160315      *             :li-ToDate
+068204160315              WHERE ((trnp.Trade_Date BETWEEN :li-FrmDate AND
+068304160315                    :li-ToDate AND :COMM-DateTypeInd = "T")
+068404160315                 OR (trnp.Process_Date BETWEEN :li-FrmDate AND
+068504160315                    :li-ToDate AND :COMM-DateTypeInd = "P" ))
+068604160315      *RFS154265 -  End
+068704121005      *RFS110989 -  Start
+068804121005                AND (trnp.Dealer_Code = :Comm-DlrCode OR
+068904121005                     :Comm-DlrCode = :lncc-All)
+069004121005                AND (trnp.Dealer_Rep_Code = :Comm-RepCode OR
+069104121005                     :Comm-RepCode = :lncc-All)
+069204121005      *RFS110989 -  End
+069304120504                AND (trnp.Account_no = :li-AccountNo OR
+069404120504                    :li-AccountNo  = 0)
+069504140130      *RFS126759 begin - RM
+069604140130                AND (trnp.Trans_Type_code = :Comm-TrnType OR
+069704140130                      :Comm-TrnType = :lncc-All)
+069804140130      *RFS126759 end   - RM
+069904120504                AND (trnp.Trans_Status_Code = :Comm-TranStatus OR
+070004120504                     :Comm-TranStatus = :lncc-All)
+070104120504      *RFS98455  Start
+070204120504                AND (trnp.Investment_Code = :Comm-Fund-Id OR
+070304120504                     :Comm-Fund-Id   =  :lncc-All)
+070404120504      *RFS98455  Start
+070504120504             )
+070604120504              SELECT
+070704120504                temp.Placement_date,
+070804120504                temp.Trans_No,
+070904140424      * RFS 126759 - begin RM
+071004140424      *         temp.Account_No,
+071104140424      *         temp.Trans_Type_Code,
+071204140424      *         temp.Trans_Status_Code,
+071304140424      *         temp.Trans_Origin_code,
+071404140424      *         temp.Investment_Code,
+071504140424      *         temp.Trade_Date,
+071604140424      *         temp.Process_date,
+071704140424      *         temp.Gross_Amt,
+071804140424      *         temp.Unit_Price,
+071904140424      *         temp.Unit_Amt,
+072004140424      *         temp.net_Amt,
+072104140424                max(temp.Account_No),
+072204140424                max(temp.Trans_Type_Code),
+072304140424                max(temp.Trans_Status_Code),
+072404140424                max(temp.Trans_Origin_code),
+072504140424                max(temp.Investment_Code),
+072604140424                max(temp.Trade_Date),
+072704140424                max(temp.Process_date),
+072804140424                max(temp.Gross_Amt),
+072904140424                max(temp.Unit_Price),
+073004140424                max(temp.Unit_Amt),
+073104140424                max(temp.net_Amt),
+073204140424      * RFS 126759 - end   RM
+073304150302      * RFS 143347 - Starts
+073404150302                max(COALESCE(temp.Reverse, " ")),
+073504150302      * RFS 143347 - End
+073604130426      * RFS121563 Starts
+073704130426      *         CASE WHEN actevp.Transfer_At_Average IS NOT NULL
+073804130426      *              AND (actevp.Transfer_At_Average <> "Y"  OR
+073904130426      *                   actevp.Taxable_Event_Indicator = "D")
+074004140424      * RFS 126759 - begin RM
+074104140424      *         CASE WHEN (actevp.Transfer_At_Average IS NOT NULL
+074204140424                max(CASE WHEN (actevp.Transfer_At_Average IS NOT NULL
+074304130426                     AND (actevp.Transfer_At_Average <> "Y"  OR
+074404130426                          actevp.Taxable_Event_Indicator = "D"))
+074504130426                      OR actevp.Transfer_At_Average IS NULL
+074604130426      * RFS121563 Ends
+074704130426                     THEN :lncc-Y
+074804120504                     ELSE :lncc-N
+074904140424      *              END,
+075004140424                     END),
+075104140424      * RFS 126759 - end   RM
+075204140424      * RFS 126759 - begin RM
+075304140424      *         temp.Average_Unit_Cost,
+075404140424      *         temp.Contr_Redem_Code,
+075504140424                max(temp.Average_Unit_Cost),
+075604140424                max(temp.Contr_Redem_Code),
+075704140424      * RFS 126759 - end   RM
+075804140424                max(COALESCE(accntp.Dealer_Account_No," ")),
+075904140424110989          max(COALESCE(accntp.Account_Type_Code," ")),
+076004121115      *RFS110999 - Start
+076104121115110989*         COALESCE(SUM(trnchp.Charge),0)
+076204140424      * RFS 126759 - begin RM
+076304140424      *         COALESCE(trnchp.Charge,0),
+076404140424                COALESCE(SUM(trnchp.Charge),0),
+076504140424      * RFS 126759 - end   RM
+076604140424110999          max(COALESCE(trnchp.DEDUCTION_CODE, " ")),
+076704140424122061          max(COALESCE(Trndep.Deduction_Long_Descr, " "))
+076804161021      *RFS110999 - End
+076904161021      *RFS162060 - Start
+077004161021               ,COALESCE(
+077104161021                SUM(CASE
+077204161021                 WHEN trnchp.DEDUCTION_CODE = :lncc-CDSC
+077304161021                 THEN trnchp.Charge
+077404161021                 ELSE 0
+077504161021                 END),0)
+077604161021      *RFS162060 - End
+077704120504
+077804120504              FROM TransTmp temp
+077904120504                LEFT OUTER JOIN Mfaaccntp accntp ON
+078004120504                     temp.Account_No = accntp.Account_No
+078104120504                LEFT OUTER JOIN Mfaactevp actevp ON
+078204120504                     accntp.Account_Type_Code =
+078304120504                     actevp.Account_Type_Code
+078404120504                 AND temp.Contr_Redem_Code = actevp.Contr_Redem_Code
+078504120504                 AND temp.Trans_type_Code = actevp.Trans_type_Code
+078604121004      *RFS110989-Start
+078704121004                LEFT OUTER JOIN Mfatrnchp trnchp ON
+078804121004                     trnchp.Placement_date = temp.Placement_date
+078904121004                 AND trnchp.Trans_No = temp.Trans_No
+079004161207      *         CASE WHEN actevp.Transfer_At_Average IS NOT NULL
+079104130516122061          LEFT OUTER JOIN Mfatrndep Trndep ON
+079204130516122061               Trndep.Deduction_Code = trnchp.Deduction_Code
+079304130516122061           AND Trndep.Language_Code = :Comm-Lang-Code
+079404121004      *RFS110989-End
+079504120504              WHERE
+079604120504                    temp.Hidden_trans <> "Y"
+079704120504                AND (accntp.Dealer_Account_No = :Comm-Dlracctno OR
+079804120504                    :Comm-Dlracctno = "  ")
+079904140424      * RFS 126759 begin RM -- Changes to include Sum of Charges
+080004140424      *  of each transaction and do grouping for each transaction
+080104140424              GROUP  BY temp.Placement_date,
+080204140424                        temp.Trans_No
+080304140424      * RFS 126759 end   RM
+080404121005      *RFS110989 - Start
+080504121115      * Group By Clause is not required when Sum is taken away.
+080604121115      *RFS110999 - Start
+080704121115      *       GROUP BY temp.Placement_date,temp.Trans_No,
+080804121115      *             temp.Account_No,temp.Trans_Type_Code,
+080904121115      *             temp.Trans_Status_Code,temp.Trans_Origin_code,
+081004121115      *             temp.Investment_Code,temp.Trade_Date,
+081104121115      *             temp.Process_date,temp.Gross_Amt,
+081204121115      *             temp.Unit_Price,temp.Unit_Amt,temp.net_Amt,
+081304121115      *         CASE WHEN actevp.Transfer_At_Average IS NOT NULL
+081404121115      *              AND (actevp.Transfer_At_Average <> "Y"  OR
+081504121115      *                   actevp.Taxable_Event_Indicator = "D")
+081604121115      *              THEN :lncc-Y
+081704121115      *              ELSE :lncc-N
+081804121115      *              END,
+081904121115      *             temp.Average_Unit_Cost,
+082004121115      *             temp.Contr_Redem_Code,accntp.Dealer_Account_No,
+082104121115      *             accntp.Account_Type_Code
+082204121005      *RFS110989 - End
+082304121115      *RFS110999 - Start
+082404120504           END-EXEC.
+082504120504           MOVE SQLSTATE TO lc_sqlStates.
+082604120504           EVALUATE TRUE
+082704120504             WHEN lncc_sqlSuccessful
+082804120504                  COMPUTE li-TotRow = SQLERRD(3)
+082904120504             WHEN OTHER
+083004120504                  SET lncc-Err07  TO TRUE
+083104140903           END-EVALUATE.
+083204140903      *RFS139981 Start
+083304140904           EXEC SQL
+083404140904               INSERT INTO QTEMP/BDEDUSUM
+083504140917               SELECT * FROM
+083604140904               (SELECT
+083704140904                 trnp.Placement_date,
+083804140904                 trnp.Trans_No,
+083904140904                 trnp.Account_No,
+084004140904                 trnp.Trans_Type_Code || " - " ||
+084104140904                 TRIM(COALESCE(trntdp.Trans_Type_Code_Descr, " ")),
+084204140904                 trnp.Trans_Status_Code,
+084304140904                 trnp.Trans_Origin_code,
+084404140904                 TRIM(invp.Industry_Fund_Code) || " - " ||
+084504140904                 TRIM(COALESCE(invnmp.Investment_Name_Long," ")),
+084604140904                 trnp.Trade_Date,
+084704140904                 trnp.Process_date,
+084804140904                 trnp.Gross_Amt,
+084904140904                 trnp.Unit_Price,
+085004140904                 trnp.Unit_Amt,
+085104140904                 trnp.net_Amt,
+085204140904                 CASE WHEN trnp.Avg_Unit_Cost > 0
+085304140904                       AND trnp.Gain_Or_Loss = :lncc-Y
+085404140916                       THEN
+085504140916                          (trnp.Unit_price -
+085604140916                           trnp.Avg_Unit_Cost) *
+085704140916                           trnp.Unit_Amt
+085804140904                       ELSE 0
+085904140904                 END,
+086004140904                 trnp.Dealer_Acct_No,
+086104140904                 COALESCE(actylp.Account_Type_Code," "),
+086204140904                 COALESCE(actylp.Account_Type_Code_Lang," "),
+086304140904                 trnp.Deduction_Amt,
+086404140904                 CASE WHEN (trnp.Gross_Amt = trnp.net_Amt)
+086504140904                       THEN 0
+086604140904                       ELSE trnp.Deduction_Amt
+086704140904                 END,
+086804140904                 ROW_NUMBER() OVER (
+086904140904                 ORDER BY
+087004140904                 CASE WHEN (:lc-OrderBy = "1"  AND
+087104140904                            :lc-OrderByDir = "A" ) THEN
+087204140904                     CAST(DIGITS(cast(trnp.Account_No * 1 AS
+087304140904                         Decimal(15,0))) AS Char(15))
+087404140904                     END ASC,
+087504140904                 CASE WHEN (:lc-OrderBy = "1"  AND
+087604140904                            :lc-OrderByDir = "D" ) THEN
+087704140904                     CAST(DIGITS(cast(trnp.Account_No * 1 AS
+087804140904                         Decimal(15,0))) AS Char(15))
+087904140904                     END DESC,
+088004140904                 CASE WHEN (:lc-OrderBy = "2"  AND
+088104140904                            :lc-OrderByDir = "A" ) THEN
+088204140904                     CAST(trnp.Trans_Type_Code   AS Char(15))
+088304140904                     END ASC,
+088404140904                 CASE WHEN (:lc-OrderBy = "2"  AND
+088504140904                            :lc-OrderByDir = "D" ) THEN
+088604140904                     CAST(trnp.Trans_Type_Code   AS Char(15))
+088704140904                     END DESC,
+088804140904                 CASE WHEN (:lc-OrderBy = "3"  AND
+088904140904                            :lc-OrderByDir = "A" ) THEN
+089004140904                     CAST(invp.Industry_Fund_Code AS Char(15))
+089104140904                     END ASC,
+089204140904                 CASE WHEN (:lc-OrderBy = "3"  AND
+089304140904                            :lc-OrderByDir = "D" ) THEN
+089404140904                     CAST(invp.Industry_Fund_Code  AS Char(15))
+089504140904                     END DESC,
+089604140904                 CASE WHEN (:lc-OrderBy = "4"  AND
+089704140904                            :lc-OrderByDir = "A" ) THEN
+089804140904                     CAST(trnp.Trans_Status_Code  AS Char(15))
+089904140904                     END ASC,
+090004140904                 CASE WHEN (:lc-OrderBy = "4"  AND
+090104140904                            :lc-OrderByDir = "D" ) THEN
+090204140904                     CAST(trnp.Trans_Status_Code   AS Char(15))
+090304140904                     END DESC,
+090404140904                 CASE WHEN (:lc-OrderBy = "5"  AND
+090504140904                            :lc-OrderByDir = "A" ) THEN
+090604140904                     CAST(trnp.Trade_Date         AS Char(15))
+090704140904                     END ASC,
+090804140904                 CASE WHEN (:lc-OrderBy = "5"  AND
+090904140904                            :lc-OrderByDir = "D" ) THEN
+091004140904                     CAST(trnp.Trade_Date          AS Char(15))
+091104140904                     END DESC,
+091204140904                 CASE WHEN (:lc-OrderBy = "6"  AND
+091304140904                            :lc-OrderByDir = "A" ) THEN
+091404140904                     CAST(DIGITS(cast(Unit_price * 10000 AS
+091504140904                            Decimal(15,0))) AS Char(15))
+091604140904                     END ASC,
+091704140904                 CASE WHEN (:lc-OrderBy = "6"  AND
+091804140904                            :lc-OrderByDir = "D" ) THEN
+091904140904                      CAST(DIGITS(cast(Unit_Price * 10000 AS
+092004140904                            Decimal(15,0))) AS Char(15))
+092104140904                      END DESC,
+092204140904                 CASE WHEN (:lc-OrderBy = "7"  AND
+092304140904                            :lc-OrderByDir = "A" ) THEN
+092404140904                     CAST(DIGITS(cast(Unit_Amt * 1000 AS
+092504140904                            Decimal(15,0))) AS Char(15))
+092604140904                     END ASC,
+092704140904                 CASE WHEN (:lc-OrderBy = "7"  AND
+092804140904                            :lc-OrderByDir = "D" ) THEN
+092904140904                      CAST(DIGITS(cast(Unit_Amt * 1000 AS
+093004140904                            Decimal(15,0))) AS Char(15))
+093104140904                      END DESC,
+093204140904                 CASE WHEN (:lc-OrderBy = "8"  AND
+093304140904                            :lc-OrderByDir = "A" ) THEN
+093404140904                     CAST(DIGITS(cast(Gross_Amt * 100 AS
+093504140904                            Decimal(15,0))) AS Char(15))
+093604140904                     END ASC,
+093704140904                 CASE WHEN (:lc-OrderBy = "8"  AND
+093804140904                            :lc-OrderByDir = "D" ) THEN
+093904140904                      CAST(DIGITS(cast(Gross_Amt * 100 AS
+094004140904                            Decimal(15,0))) AS Char(15))
+094104140904                      END DESC,
+094204140904                 CASE WHEN (:lc-OrderBy = "9"  AND
+094304140904                            :lc-OrderByDir = "A" ) THEN
+094404140904                     CAST(DIGITS(cast(Deduction_Amt * 100 AS
+094504140904                            Decimal(15,0))) AS Char(15))
+094604140904                     END ASC,
+094704140904                 CASE WHEN (:lc-OrderBy = "9"  AND
+094804140904                            :lc-OrderByDir = "D" ) THEN
+094904140904                      CAST(DIGITS(cast(Deduction_Amt * 100 AS
+095004140904                            Decimal(15,0))) AS Char(15))
+095104140904                      END DESC,
+095204140904                 CASE WHEN (:lc-OrderBy = "10"  AND
+095304140904                            :lc-OrderByDir = "A" ) THEN
+095404140904                     CAST(DIGITS(cast(Net_Amt * 100 AS
+095504140904                            Decimal(15,0))) AS Char(15))
+095604140904                     END ASC,
+095704140904                 CASE WHEN (:lc-OrderBy = "10"  AND
+095804140904                            :lc-OrderByDir = "D" ) THEN
+095904140904                      CAST(DIGITS(cast(Net_Amt * 100 AS
+096004140904                            Decimal(15,0))) AS Char(15))
+096104140904                      END DESC
+096204140917                 ) AS rownum
+096304140904
+096404140904             FROM QTEMP/BTRANSUM  trnp
+096504140904                LEFT OUTER JOIN Mfainvnmp invnmp ON
+096604140904                     trnp.Investment_Code = invnmp.Investment_Code
+096704140904                 AND invnmp.Language_Code = :Comm-Lang-Code
+096804140904                LEFT OUTER JOIN Mfatrntdp trntdp ON
+096904140904                     trnp.Trans_Type_Code = trntdp.Trans_Type_Code
+097004140904                 AND trntdp.Language_Code = :Comm-Lang-Code
+097104140904                LEFT OUTER JOIN Mfaactylp actylp ON
+097204140904                     trnp.Account_Type_Code = actylp.Account_Type_Code
+097304140904                 AND actylp.Language_Code = :Comm-Lang-Code
+097404140904                LEFT OUTER JOIN Mfainvp invp ON
+097504140904                     trnp.Investment_Code = invp.Investment_Code
+097604140904
+097704140904             ORDER BY
+097804140904                 CASE WHEN (:lc-OrderBy = "1"  AND
+097904140904                            :lc-OrderByDir = "A" ) THEN
+098004140904                     CAST(DIGITS(cast(trnp.Account_No * 1 AS
+098104140904                         Decimal(15,0))) AS Char(15))
+098204140904                     END ASC,
+098304140904                 CASE WHEN (:lc-OrderBy = "1"  AND
+098404140904                            :lc-OrderByDir = "D" ) THEN
+098504140904                     CAST(DIGITS(cast(trnp.Account_No * 1 AS
+098604140904                         Decimal(15,0))) AS Char(15))
+098704140904                     END DESC,
+098804140904                 CASE WHEN (:lc-OrderBy = "2"  AND
+098904140904                            :lc-OrderByDir = "A" ) THEN
+099004140904                     CAST(trnp.Trans_Type_Code   AS Char(15))
+099104140904                     END ASC,
+099204140904                 CASE WHEN (:lc-OrderBy = "2"  AND
+099304140904                            :lc-OrderByDir = "D" ) THEN
+099404140904                     CAST(trnp.Trans_Type_Code   AS Char(15))
+099504140904                     END DESC,
+099604140904                 CASE WHEN (:lc-OrderBy = "3"  AND
+099704140904                            :lc-OrderByDir = "A" ) THEN
+099804140904                     CAST(invp.Industry_Fund_Code AS Char(15))
+099904140904                     END ASC,
+100004140904                 CASE WHEN (:lc-OrderBy = "3"  AND
+100104140904                            :lc-OrderByDir = "D" ) THEN
+100204140904                     CAST(invp.Industry_Fund_Code  AS Char(15))
+100304140904                     END DESC,
+100404140904                 CASE WHEN (:lc-OrderBy = "4"  AND
+100504140904                            :lc-OrderByDir = "A" ) THEN
+100604140904                     CAST(trnp.Trans_Status_Code  AS Char(15))
+100704140904                     END ASC,
+100804140904                 CASE WHEN (:lc-OrderBy = "4"  AND
+100904140904                            :lc-OrderByDir = "D" ) THEN
+101004140904                     CAST(trnp.Trans_Status_Code   AS Char(15))
+101104140904                     END DESC,
+101204140904                 CASE WHEN (:lc-OrderBy = "5"  AND
+101304140904                            :lc-OrderByDir = "A" ) THEN
+101404140904                     CAST(trnp.Trade_Date         AS Char(15))
+101504140904                     END ASC,
+101604140904                 CASE WHEN (:lc-OrderBy = "5"  AND
+101704140904                            :lc-OrderByDir = "D" ) THEN
+101804140904                     CAST(trnp.Trade_Date          AS Char(15))
+101904140904                     END DESC,
+102004140904                 CASE WHEN (:lc-OrderBy = "6"  AND
+102104140904                            :lc-OrderByDir = "A" ) THEN
+102204140904                     CAST(DIGITS(cast(Unit_price * 10000 AS
+102304140904                            Decimal(15,0))) AS Char(15))
+102404140904                     END ASC,
+102504140904                 CASE WHEN (:lc-OrderBy = "6"  AND
+102604140904                            :lc-OrderByDir = "D" ) THEN
+102704140904                      CAST(DIGITS(cast(Unit_Price * 10000 AS
+102804140904                            Decimal(15,0))) AS Char(15))
+102904140904                      END DESC,
+103004140904                 CASE WHEN (:lc-OrderBy = "7"  AND
+103104140904                            :lc-OrderByDir = "A" ) THEN
+103204140904                     CAST(DIGITS(cast(Unit_Amt * 1000 AS
+103304140904                            Decimal(15,0))) AS Char(15))
+103404140904                     END ASC,
+103504140904                 CASE WHEN (:lc-OrderBy = "7"  AND
+103604140904                            :lc-OrderByDir = "D" ) THEN
+103704140904                      CAST(DIGITS(cast(Unit_Amt * 1000 AS
+103804140904                            Decimal(15,0))) AS Char(15))
+103904140904                      END DESC,
+104004140904                 CASE WHEN (:lc-OrderBy = "8"  AND
+104104140904                            :lc-OrderByDir = "A" ) THEN
+104204140904                     CAST(DIGITS(cast(Gross_Amt * 100 AS
+104304140904                            Decimal(15,0))) AS Char(15))
+104404140904                     END ASC,
+104504140904                 CASE WHEN (:lc-OrderBy = "8"  AND
+104604140904                            :lc-OrderByDir = "D" ) THEN
+104704140904                      CAST(DIGITS(cast(Gross_Amt * 100 AS
+104804140904                            Decimal(15,0))) AS Char(15))
+104904140904                      END DESC,
+105004140904                 CASE WHEN (:lc-OrderBy = "9"  AND
+105104140904                            :lc-OrderByDir = "A" ) THEN
+105204140904                     CAST(DIGITS(cast(Deduction_Amt * 100 AS
+105304140904                            Decimal(15,0))) AS Char(15))
+105404140904                     END ASC,
+105504140904                 CASE WHEN (:lc-OrderBy = "9"  AND
+105604140904                            :lc-OrderByDir = "D" ) THEN
+105704140904                      CAST(DIGITS(cast(Deduction_Amt * 100 AS
+105804140904                            Decimal(15,0))) AS Char(15))
+105904140904                      END DESC,
+106004140904                 CASE WHEN (:lc-OrderBy = "10"  AND
+106104140904                            :lc-OrderByDir = "A" ) THEN
+106204140904                     CAST(DIGITS(cast(Net_Amt * 100 AS
+106304140904                            Decimal(15,0))) AS Char(15))
+106404140904                     END ASC,
+106504140904                 CASE WHEN (:lc-OrderBy = "10"  AND
+106604140904                            :lc-OrderByDir = "D" ) THEN
+106704140904                      CAST(DIGITS(cast(Net_Amt * 100 AS
+106804140904                            Decimal(15,0))) AS Char(15))
+106904140904                      END DESC
+107004140917             ) AS numbRows
+107104140904             WHERE rownum BETWEEN :li-StrRow  AND :li-EndRow
+107204140917
+107304140903           END-EXEC.
+107404140911           MOVE SQLSTATE TO lc_sqlStates.
+107504140911           EVALUATE TRUE
+107604140911             WHEN lncc_sqlSuccessful
+107704140924                  CONTINUE
+107804140911             WHEN OTHER
+107904150305143347            SET lncc-Err08  TO TRUE
+108004150305143347*           SET lncc-Err07  TO TRUE
+108104140911           END-EVALUATE.
+108204140903
+108304140903      *RFS139981 End
+108404150915      /
+108504150915      *rfs146397 start
+108604150915      * ---------------------------------
+108704150915       InsertTempX.
+108804150915      * ---------------------------------
+108904160516      *RFS158524 Starts
+109004160509           IF ncc_ProcessDate
+109104160509              PERFORM InsertIntoTRANSTMPpd
+109204160509           ELSE
+109304160509              PERFORM InsertIntoTRANSTMPtd
+109404160509           END-IF.
+109504160509      *    PERFORM Declare-DealerCur.
+109604160509      *    PERFORM Open-DealerCur.
+109704160509      *    IF lncc_TranDeaCurOpenedYes
+109804160509      *      PERFORM Fetch-DealerCur
+109904160509      *    END-IF.
+110004160509      * ---------------------------------
+110104160509       InsertIntoTRANSTMPpd.
+110204160509      * ---------------------------------
+110304160509           EXEC SQL
+110404160509              INSERT INTO QTEMP/TRANSTMP
+110504160509              SELECT *  FROM
+110604160509              (
+110704160509              SELECT
+110804160509                     trnp.Placement_date,
+110904160509                     trnp.Trans_No,
+111004160509                     trnp.Account_No,
+111104160509                     trnp.Trans_Type_Code,
+111204160509                     trnp.Trans_Status_Code,
+111304160509                     trnp.Trans_Origin_code,
+111404160509                     trnp.Investment_Code,
+111504160509                     trnp.Trade_Date,
+111604160509                     trnp.Process_date,
+111704160509                     trnp.Gross_Amt,
+111804160509                     trnp.Unit_Price,
+111904160509                     trnp.Unit_Amt,
+112004160509                     trnp.Net_Amt,
+112104160509                     trnp.Reverse,
+112204160509                     CASE WHEN(actevp.Transfer_At_Average IS NOT NULL
+112304160509                     AND (actevp.Transfer_At_Average <> "Y"  OR
+112404160509                          actevp.Taxable_Event_Indicator = "D"))
+112504160509                      OR actevp.Transfer_At_Average IS NULL
+112604160509                     THEN CAST(:lncc-Y AS CHAR(1))
+112704160509                     ELSE CAST(:lncc-N AS CHAR(1))
+112804160509                     END,
+112904160509                     trnp.Average_Unit_Cost,
+113004160509                     trnp.Contr_Redem_Code,
+113104160509                     COALESCE(accntp.Dealer_Account_No," "),
+113204160509                     COALESCE(accntp.Account_Type_Code," "),
+113304160509                 ROW_NUMBER() OVER(ORDER BY
+113404160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy1 AND
+113504160509                            :lc-OrderByDir = "A" ) THEN
+113604160509                     CAST(DIGITS(cast(trnp.Account_No * 1 AS
+113704160509                         Decimal(15,0))) AS Char(15))
+113804160509                     END ASC,
+113904160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy1 AND
+114004160509                            :lc-OrderByDir = "D" ) THEN
+114104160509                     CAST(DIGITS(cast(trnp.Account_No * 1 AS
+114204160509                         Decimal(15,0))) AS Char(15))
+114304160509                     END DESC,
+114404160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy2 AND
+114504160509                            :lc-OrderByDir = "A" ) THEN
+114604160509                     CAST(trnp.Trans_Type_Code   AS Char(15))
+114704160509                     END ASC,
+114804160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy2 AND
+114904160509                            :lc-OrderByDir = "D" ) THEN
+115004160509                     CAST(trnp.Trans_Type_Code   AS Char(15))
+115104160509                     END DESC,
+115204160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy3 AND
+115304160509                            :lc-OrderByDir = "A" ) THEN
+115404160509                     CAST(invp.Industry_Fund_Code AS Char(15))
+115504160509                     END ASC,
+115604160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy3 AND
+115704160509                            :lc-OrderByDir = "D" ) THEN
+115804160509                     CAST(invp.Industry_Fund_Code  AS Char(15))
+115904160509                     END DESC,
+116004160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy4 AND
+116104160509                            :lc-OrderByDir = "A" ) THEN
+116204160509                     CAST(trnp.Trans_Status_Code  AS Char(15))
+116304160509                     END ASC,
+116404160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy4 AND
+116504160509                            :lc-OrderByDir = "D" ) THEN
+116604160509                     CAST(trnp.Trans_Status_Code   AS Char(15))
+116704160509                     END DESC,
+116804160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy5 AND
+116904160509                            :lc-OrderByDir = "A" ) THEN
+117004160509                     CAST(trnp.Trade_Date         AS Char(15))
+117104160509                     END ASC,
+117204160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy5 AND
+117304160509                            :lc-OrderByDir = "D" ) THEN
+117404160509                     CAST(trnp.Trade_Date         AS Char(15))
+117504160509                     END DESC,
+117604160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy6 AND
+117704160509                            :lc-OrderByDir = "A" ) THEN
+117804160509                     CAST(DIGITS(cast(Unit_price * 10000 AS
+117904160509                            Decimal(15,0))) AS Char(15))
+118004160509                     END ASC,
+118104160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy6 AND
+118204160509                            :lc-OrderByDir = "D" ) THEN
+118304160509                      CAST(DIGITS(cast(Unit_Price * 10000 AS
+118404160509                            Decimal(15,0))) AS Char(15))
+118504160509                      END DESC,
+118604160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy7 AND
+118704160509                            :lc-OrderByDir = "A" ) THEN
+118804160509                     CAST(DIGITS(cast(Unit_Amt * 1000 AS
+118904160509                            Decimal(15,0))) AS Char(15))
+119004160509                     END ASC,
+119104160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy7 AND
+119204160509                            :lc-OrderByDir = "D" ) THEN
+119304160509                      CAST(DIGITS(cast(Unit_Amt * 1000 AS
+119404160509                            Decimal(15,0))) AS Char(15))
+119504160509                      END DESC,
+119604160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy8 AND
+119704160509                            :lc-OrderByDir = "A" ) THEN
+119804160509                     CAST(DIGITS(cast(Gross_Amt * 100 AS
+119904160509                            Decimal(15,0))) AS Char(15))
+120004160509                     END ASC,
+120104160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy8 AND
+120204160509                            :lc-OrderByDir = "D" ) THEN
+120304160509                      CAST(DIGITS(cast(Gross_Amt * 100 AS
+120404160509                            Decimal(15,0))) AS Char(15))
+120504160509                      END DESC,
+120604160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy10 AND
+120704160509                            :lc-OrderByDir = "A" ) THEN
+120804160509                     CAST(DIGITS(cast(Net_Amt * 100 AS
+120904160509                            Decimal(15,0))) AS Char(15))
+121004160509                     END ASC,
+121104160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy10 AND
+121204160509                            :lc-OrderByDir = "D" ) THEN
+121304160509                      CAST(DIGITS(cast(Net_Amt * 100 AS
+121404160509                            Decimal(15,0))) AS Char(15))
+121504160509                      END DESC,
+121604160509                  trnp.Placement_date,
+121704160509                  trnp.Trans_No
+121804160509                 ) AS ROW_Number
+121904160509
+122004160509              FROM Mfatrnp trnp
+122104160509              INNER JOIN Mfainvp invp ON
+122204160509                   trnp.Investment_Code = invp.Investment_Code
+122304160509              LEFT OUTER JOIN Mfaaccntp accntp ON
+122404160509                   trnp.Account_No = accntp.Account_No
+122504160509                AND ((accntp.Dealer_Account_No = :Comm-Dlracctno
+122604160509                AND :Comm-Dlracctno <> "  ")
+122704160509                 OR :Comm-Dlracctno  = "  ")
+122804160509              LEFT OUTER JOIN Mfaactevp actevp ON
+122904160509                   accntp.Account_Type_Code =
+123004160509                   actevp.Account_Type_Code
+123104160509               AND trnp.Contr_Redem_Code = actevp.Contr_Redem_Code
+123204160509               AND trnp.Trans_type_Code  = actevp.Trans_type_Code
+123304160509              WHERE trnp.Process_Date BETWEEN :li-FrmDate AND
+123404160509                    :li-ToDate
+123504160509                AND (trnp.Dealer_Code = :Comm-DlrCode OR
+123604160509                     :Comm-DlrCode = :lncc-All)
+123704160509                AND (trnp.Dealer_Rep_Code = :Comm-RepCode OR
+123804160509                     :Comm-RepCode = :lncc-All)
+123904160509                AND (trnp.Account_no = :li-AccountNo OR
+124004160509                    :li-AccountNo  = 0)
+124104160509                AND (trnp.Trans_Type_code = :Comm-TrnType OR
+124204160509                      :Comm-TrnType = :lncc-All)
+124304160509                AND (trnp.Trans_Status_Code = :Comm-TranStatus OR
+124404160509                     :Comm-TranStatus = :lncc-All)
+124504160509                AND (trnp.Investment_Code = :Comm-Fund-Id OR
+124604160509                     :Comm-Fund-Id   =  :lncc-All)
+124704160509                AND trnp.Hidden_Trans <> "Y"
+124804160509                ORDER BY
+124904160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy1 AND
+125004160509                            :lc-OrderByDir = "A" ) THEN
+125104160509                     CAST(DIGITS(cast(trnp.Account_No * 1 AS
+125204160509                         Decimal(15,0))) AS Char(15))
+125304160509                     END ASC,
+125404160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy1 AND
+125504160509                            :lc-OrderByDir = "D" ) THEN
+125604160509                     CAST(DIGITS(cast(trnp.Account_No * 1 AS
+125704160509                         Decimal(15,0))) AS Char(15))
+125804160509                     END DESC,
+125904160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy2 AND
+126004160509                            :lc-OrderByDir = "A" ) THEN
+126104160509                     CAST(trnp.Trans_Type_Code   AS Char(15))
+126204160509                     END ASC,
+126304160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy2 AND
+126404160509                            :lc-OrderByDir = "D" ) THEN
+126504160509                     CAST(trnp.Trans_Type_Code   AS Char(15))
+126604160509                     END DESC,
+126704160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy3 AND
+126804160509                            :lc-OrderByDir = "A" ) THEN
+126904160509                     CAST(invp.Industry_Fund_Code AS Char(15))
+127004160509                     END ASC,
+127104160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy3 AND
+127204160509                            :lc-OrderByDir = "D" ) THEN
+127304160509                     CAST(invp.Industry_Fund_Code  AS Char(15))
+127404160509                     END DESC,
+127504160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy4 AND
+127604160509                            :lc-OrderByDir = "A" ) THEN
+127704160509                     CAST(trnp.Trans_Status_Code  AS Char(15))
+127804160509                     END ASC,
+127904160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy4 AND
+128004160509                            :lc-OrderByDir = "D" ) THEN
+128104160509                     CAST(trnp.Trans_Status_Code   AS Char(15))
+128204160509                     END DESC,
+128304160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy5 AND
+128404160509                            :lc-OrderByDir = "A" ) THEN
+128504160509                     CAST(trnp.Trade_Date         AS Char(15))
+128604160509                     END ASC,
+128704160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy5 AND
+128804160509                            :lc-OrderByDir = "D" ) THEN
+128904160509                     CAST(trnp.Trade_Date         AS Char(15))
+129004160509                     END DESC,
+129104160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy6 AND
+129204160509                            :lc-OrderByDir = "A" ) THEN
+129304160509                     CAST(DIGITS(cast(Unit_price * 10000 AS
+129404160509                            Decimal(15,0))) AS Char(15))
+129504160509                     END ASC,
+129604160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy6 AND
+129704160509                            :lc-OrderByDir = "D" ) THEN
+129804160509                      CAST(DIGITS(cast(Unit_Price * 10000 AS
+129904160509                            Decimal(15,0))) AS Char(15))
+130004160509                      END DESC,
+130104160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy7 AND
+130204160509                            :lc-OrderByDir = "A" ) THEN
+130304160509                     CAST(DIGITS(cast(Unit_Amt * 1000 AS
+130404160509                            Decimal(15,0))) AS Char(15))
+130504160509                     END ASC,
+130604160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy7 AND
+130704160509                            :lc-OrderByDir = "D" ) THEN
+130804160509                      CAST(DIGITS(cast(Unit_Amt * 1000 AS
+130904160509                            Decimal(15,0))) AS Char(15))
+131004160509                      END DESC,
+131104160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy8 AND
+131204160509                            :lc-OrderByDir = "A" ) THEN
+131304160509                     CAST(DIGITS(cast(Gross_Amt * 100 AS
+131404160509                            Decimal(15,0))) AS Char(15))
+131504160509                     END ASC,
+131604160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy8 AND
+131704160509                            :lc-OrderByDir = "D" ) THEN
+131804160509                      CAST(DIGITS(cast(Gross_Amt * 100 AS
+131904160509                            Decimal(15,0))) AS Char(15))
+132004160509                      END DESC,
+132104160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy10 AND
+132204160509                            :lc-OrderByDir = "A" ) THEN
+132304160509                     CAST(DIGITS(cast(Net_Amt * 100 AS
+132404160509                            Decimal(15,0))) AS Char(15))
+132504160509                     END ASC,
+132604160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy10 AND
+132704160509                            :lc-OrderByDir = "D" ) THEN
+132804160509                      CAST(DIGITS(cast(Net_Amt * 100 AS
+132904160509                            Decimal(15,0))) AS Char(15))
+133004160509                      END DESC,
+133104160509                  trnp.Placement_date,
+133204160509                  trnp.Trans_No
+133304160509                )  AS X
+133404160509             WHERE  ROW_Number BETWEEN :li-StrRow  AND :li-EndRow
+133504160509           END-EXEC.
+133604160509           MOVE SQLSTATE TO lc_sqlStates.
+133704160509           EVALUATE TRUE
+133804160509             WHEN lncc_sqlSuccessful
+133904160509                  CONTINUE
+134004160509             WHEN OTHER
+134104160509                  SET lncc-Err19  TO TRUE
+134204160509           END-EVALUATE.
+134304160509      * ---------------------------------
+134404160509       InsertIntoTRANSTMPtd.
+134504160509      * ---------------------------------
+134604160509           EXEC SQL
+134704160509              INSERT INTO QTEMP/TRANSTMP
+134804160509              SELECT * from
+134904160509              (
+135004160509              SELECT
+135104160509                     trnp.Placement_date,
+135204160509                     trnp.Trans_No,
+135304160509                     trnp.Account_No,
+135404160509                     trnp.Trans_Type_Code,
+135504160509                     trnp.Trans_Status_Code,
+135604160509                     trnp.Trans_Origin_code,
+135704160509                     trnp.Investment_Code,
+135804160509                     trnp.Trade_Date,
+135904160509                     trnp.Process_date,
+136004160509                     trnp.Gross_Amt,
+136104160509                     trnp.Unit_Price,
+136204160509                     trnp.Unit_Amt,
+136304160509                     trnp.Net_Amt,
+136404160509                     trnp.Reverse,
+136504160509                     CASE WHEN(actevp.Transfer_At_Average IS NOT NULL
+136604160509                     AND (actevp.Transfer_At_Average <> "Y"  OR
+136704160509                          actevp.Taxable_Event_Indicator = "D"))
+136804160509                      OR actevp.Transfer_At_Average IS NULL
+136904160509                     THEN CAST(:lncc-Y AS CHAR(1))
+137004160509                     ELSE CAST(:lncc-N AS CHAR(1))
+137104160509                     END,
+137204160509                     trnp.Average_Unit_Cost,
+137304160509                     trnp.Contr_Redem_Code,
+137404160509                     COALESCE(accntp.Dealer_Account_No," "),
+137504160509                     COALESCE(accntp.Account_Type_Code," "),
+137604160509                 ROW_NUMBER() OVER(ORDER BY
+137704160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy1 AND
+137804160509                            :lc-OrderByDir = "A" ) THEN
+137904160509                     CAST(DIGITS(cast(trnp.Account_No * 1 AS
+138004160509                         Decimal(15,0))) AS Char(15))
+138104160509                     END ASC,
+138204160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy1 AND
+138304160509                            :lc-OrderByDir = "D" ) THEN
+138404160509                     CAST(DIGITS(cast(trnp.Account_No * 1 AS
+138504160509                         Decimal(15,0))) AS Char(15))
+138604160509                     END DESC,
+138704160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy2 AND
+138804160509                            :lc-OrderByDir = "A" ) THEN
+138904160509                     CAST(trnp.Trans_Type_Code   AS Char(15))
+139004160509                     END ASC,
+139104160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy2 AND
+139204160509                            :lc-OrderByDir = "D" ) THEN
+139304160509                     CAST(trnp.Trans_Type_Code   AS Char(15))
+139404160509                     END DESC,
+139504160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy3 AND
+139604160509                            :lc-OrderByDir = "A" ) THEN
+139704160509                     CAST(invp.Industry_Fund_Code AS Char(15))
+139804160509                     END ASC,
+139904160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy3 AND
+140004160509                            :lc-OrderByDir = "D" ) THEN
+140104160509                     CAST(invp.Industry_Fund_Code  AS Char(15))
+140204160509                     END DESC,
+140304160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy4 AND
+140404160509                            :lc-OrderByDir = "A" ) THEN
+140504160509                     CAST(trnp.Trans_Status_Code  AS Char(15))
+140604160509                     END ASC,
+140704160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy4 AND
+140804160509                            :lc-OrderByDir = "D" ) THEN
+140904160509                     CAST(trnp.Trans_Status_Code   AS Char(15))
+141004160509                     END DESC,
+141104160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy5 AND
+141204160509                            :lc-OrderByDir = "A" ) THEN
+141304160509                     CAST(trnp.Trade_Date         AS Char(15))
+141404160509                     END ASC,
+141504160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy5 AND
+141604160509                            :lc-OrderByDir = "D" ) THEN
+141704160509                     CAST(trnp.Trade_Date         AS Char(15))
+141804160509                     END DESC,
+141904160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy6 AND
+142004160509                            :lc-OrderByDir = "A" ) THEN
+142104160509                     CAST(DIGITS(cast(Unit_price * 10000 AS
+142204160509                            Decimal(15,0))) AS Char(15))
+142304160509                     END ASC,
+142404160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy6 AND
+142504160509                            :lc-OrderByDir = "D" ) THEN
+142604160509                      CAST(DIGITS(cast(Unit_Price * 10000 AS
+142704160509                            Decimal(15,0))) AS Char(15))
+142804160509                      END DESC,
+142904160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy7 AND
+143004160509                            :lc-OrderByDir = "A" ) THEN
+143104160509                     CAST(DIGITS(cast(Unit_Amt * 1000 AS
+143204160509                            Decimal(15,0))) AS Char(15))
+143304160509                     END ASC,
+143404160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy7 AND
+143504160509                            :lc-OrderByDir = "D" ) THEN
+143604160509                      CAST(DIGITS(cast(Unit_Amt * 1000 AS
+143704160509                            Decimal(15,0))) AS Char(15))
+143804160509                      END DESC,
+143904160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy8 AND
+144004160509                            :lc-OrderByDir = "A" ) THEN
+144104160509                     CAST(DIGITS(cast(Gross_Amt * 100 AS
+144204160509                            Decimal(15,0))) AS Char(15))
+144304160509                     END ASC,
+144404160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy8 AND
+144504160509                            :lc-OrderByDir = "D" ) THEN
+144604160509                      CAST(DIGITS(cast(Gross_Amt * 100 AS
+144704160509                            Decimal(15,0))) AS Char(15))
+144804160509                      END DESC,
+144904160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy10 AND
+145004160509                            :lc-OrderByDir = "A" ) THEN
+145104160509                     CAST(DIGITS(cast(Net_Amt * 100 AS
+145204160509                            Decimal(15,0))) AS Char(15))
+145304160509                     END ASC,
+145404160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy10 AND
+145504160509                            :lc-OrderByDir = "D" ) THEN
+145604160509                      CAST(DIGITS(cast(Net_Amt * 100 AS
+145704160509                            Decimal(15,0))) AS Char(15))
+145804160509                      END DESC,
+145904160509                  trnp.Placement_date,
+146004160509                  trnp.Trans_No
+146104160509                 ) AS ROW_Number
+146204160509
+146304160509              FROM Mfatrnp trnp
+146404160509              INNER JOIN Mfainvp invp ON
+146504160509                   trnp.Investment_Code = invp.Investment_Code
+146604160509              LEFT OUTER JOIN Mfaaccntp accntp ON
+146704160509                   trnp.Account_No = accntp.Account_No
+146804160509                AND ((accntp.Dealer_Account_No = :Comm-Dlracctno
+146904160509                AND :Comm-Dlracctno <> "  ")
+147004160509                 OR :Comm-Dlracctno  = "  ")
+147104160509              LEFT OUTER JOIN Mfaactevp actevp ON
+147204160509                   accntp.Account_Type_Code =
+147304160509                   actevp.Account_Type_Code
+147404160509               AND trnp.Contr_Redem_Code = actevp.Contr_Redem_Code
+147504160509               AND trnp.Trans_type_Code  = actevp.Trans_type_Code
+147604160509              WHERE trnp.Trade_Date BETWEEN :li-FrmDate AND
+147704160509                    :li-ToDate
+147804160509                AND (trnp.Dealer_Code = :Comm-DlrCode OR
+147904160509                     :Comm-DlrCode = :lncc-All)
+148004160509                AND (trnp.Dealer_Rep_Code = :Comm-RepCode OR
+148104160509                     :Comm-RepCode = :lncc-All)
+148204160509                AND (trnp.Account_no = :li-AccountNo OR
+148304160509                    :li-AccountNo  = 0)
+148404160509                AND (trnp.Trans_Type_code = :Comm-TrnType OR
+148504160509                      :Comm-TrnType = :lncc-All)
+148604160509                AND (trnp.Trans_Status_Code = :Comm-TranStatus OR
+148704160509                     :Comm-TranStatus = :lncc-All)
+148804160509                AND (trnp.Investment_Code = :Comm-Fund-Id OR
+148904160509                     :Comm-Fund-Id   =  :lncc-All)
+149004160509                AND trnp.Hidden_Trans <> "Y"
+149104160509                ORDER BY
+149204160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy1 AND
+149304160509                            :lc-OrderByDir = "A" ) THEN
+149404160509                     CAST(DIGITS(cast(trnp.Account_No * 1 AS
+149504160509                         Decimal(15,0))) AS Char(15))
+149604160509                     END ASC,
+149704160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy1 AND
+149804160509                            :lc-OrderByDir = "D" ) THEN
+149904160509                     CAST(DIGITS(cast(trnp.Account_No * 1 AS
+150004160509                         Decimal(15,0))) AS Char(15))
+150104160509                     END DESC,
+150204160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy2 AND
+150304160509                            :lc-OrderByDir = "A" ) THEN
+150404160509                     CAST(trnp.Trans_Type_Code   AS Char(15))
+150504160509                     END ASC,
+150604160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy2 AND
+150704160509                            :lc-OrderByDir = "D" ) THEN
+150804160509                     CAST(trnp.Trans_Type_Code   AS Char(15))
+150904160509                     END DESC,
+151004160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy3 AND
+151104160509                            :lc-OrderByDir = "A" ) THEN
+151204160509                     CAST(invp.Industry_Fund_Code AS Char(15))
+151304160509                     END ASC,
+151404160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy3 AND
+151504160509                            :lc-OrderByDir = "D" ) THEN
+151604160509                     CAST(invp.Industry_Fund_Code  AS Char(15))
+151704160509                     END DESC,
+151804160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy4 AND
+151904160509                            :lc-OrderByDir = "A" ) THEN
+152004160509                     CAST(trnp.Trans_Status_Code  AS Char(15))
+152104160509                     END ASC,
+152204160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy4 AND
+152304160509                            :lc-OrderByDir = "D" ) THEN
+152404160509                     CAST(trnp.Trans_Status_Code   AS Char(15))
+152504160509                     END DESC,
+152604160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy5 AND
+152704160509                            :lc-OrderByDir = "A" ) THEN
+152804160509                     CAST(trnp.Trade_Date         AS Char(15))
+152904160509                     END ASC,
+153004160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy5 AND
+153104160509                            :lc-OrderByDir = "D" ) THEN
+153204160509                     CAST(trnp.Trade_Date         AS Char(15))
+153304160509                     END DESC,
+153404160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy6 AND
+153504160509                            :lc-OrderByDir = "A" ) THEN
+153604160509                     CAST(DIGITS(cast(Unit_price * 10000 AS
+153704160509                            Decimal(15,0))) AS Char(15))
+153804160509                     END ASC,
+153904160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy6 AND
+154004160509                            :lc-OrderByDir = "D" ) THEN
+154104160509                      CAST(DIGITS(cast(Unit_Price * 10000 AS
+154204160509                            Decimal(15,0))) AS Char(15))
+154304160509                      END DESC,
+154404160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy7 AND
+154504160509                            :lc-OrderByDir = "A" ) THEN
+154604160509                     CAST(DIGITS(cast(Unit_Amt * 1000 AS
+154704160509                            Decimal(15,0))) AS Char(15))
+154804160509                     END ASC,
+154904160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy7 AND
+155004160509                            :lc-OrderByDir = "D" ) THEN
+155104160509                      CAST(DIGITS(cast(Unit_Amt * 1000 AS
+155204160509                            Decimal(15,0))) AS Char(15))
+155304160509                      END DESC,
+155404160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy8 AND
+155504160509                            :lc-OrderByDir = "A" ) THEN
+155604160509                     CAST(DIGITS(cast(Gross_Amt * 100 AS
+155704160509                            Decimal(15,0))) AS Char(15))
+155804160509                     END ASC,
+155904160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy8 AND
+156004160509                            :lc-OrderByDir = "D" ) THEN
+156104160509                      CAST(DIGITS(cast(Gross_Amt * 100 AS
+156204160509                            Decimal(15,0))) AS Char(15))
+156304160509                      END DESC,
+156404160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy10 AND
+156504160509                            :lc-OrderByDir = "A" ) THEN
+156604160509                     CAST(DIGITS(cast(Net_Amt * 100 AS
+156704160509                            Decimal(15,0))) AS Char(15))
+156804160509                     END ASC,
+156904160509                 CASE WHEN (:lc-OrderBy = :lc_OrderBy10 AND
+157004160509                            :lc-OrderByDir = "D" ) THEN
+157104160509                      CAST(DIGITS(cast(Net_Amt * 100 AS
+157204160509                            Decimal(15,0))) AS Char(15))
+157304160509                      END DESC,
+157404160509                  trnp.Placement_date,
+157504160509                  trnp.Trans_No
+157604160509                )  AS X
+157704160509             WHERE  ROW_Number BETWEEN :li-StrRow  AND :li-EndRow
+157804160509           END-EXEC.
+157904160509           MOVE SQLSTATE TO lc_sqlStates.
+158004160509           EVALUATE TRUE
+158104160509             WHEN lncc_sqlSuccessful
+158204160509                  CONTINUE
+158304160509             WHEN OTHER
+158404160509                  SET lncc-Err20  TO TRUE
+158504160509           END-EVALUATE.
+158604150915      * ---------------------------------
+158704160509      *Declare-DealerCur.
+158804150915      * ---------------------------------
+158904160509      *    EXEC SQL
+159004160509      *      DECLARE TransTmpCur INSENSITIVE SCROLL CURSOR FOR
+159104160509      *       SELECT
+159204160509      *              trnp.Placement_date,
+159304160509      *              trnp.Trans_No,
+159404160509      *              trnp.Account_No,
+159504160509      *              trnp.Trans_Type_Code,
+159604160509      *              trnp.Trans_Status_Code,
+159704160509      *              trnp.Trans_Origin_code,
+159804160509      *              trnp.Investment_Code,
+159904160509      *              trnp.Trade_Date,
+160004160509      *              trnp.Process_date,
+160104160509      *              trnp.Gross_Amt,
+160204160509      *              trnp.Unit_Price,
+160304160509      *              trnp.Unit_Amt,
+160404160509      *              trnp.Net_Amt,
+160504160509      *              trnp.Reverse,
+160604160509      *              CASE WHEN(actevp.Transfer_At_Average IS NOT NULL
+160704160509      *              AND (actevp.Transfer_At_Average <> "Y"  OR
+160804160509      *                   actevp.Taxable_Event_Indicator = "D"))
+160904160509      *               OR actevp.Transfer_At_Average IS NULL
+161004160509      *              THEN CAST(:lncc-Y AS CHAR(1))
+161104160509      *              ELSE CAST(:lncc-N AS CHAR(1))
+161204160509      *              END,
+161304160509      *              trnp.Average_Unit_Cost,
+161404160509      *              trnp.Contr_Redem_Code,
+161504160509153652*              COALESCE(accntp.Dealer_Account_No," "),
+161604160509153652*              COALESCE(accntp.Account_Type_Code," ")
+161704160509153652*              accntp.Dealer_Account_No,
+161804160509153652*              accntp.Account_Type_Code
+161904160509      *       FROM Mfatrnp trnp
+162004160509      *       INNER JOIN Mfainvp invp ON
+162104160509      *            trnp.Investment_Code = invp.Investment_Code
+162204160208153652*       INNER JOIN Mfaaccntp accntp ON
+162304160509153652*       LEFT OUTER JOIN Mfaaccntp accntp ON
+162404160509      *            trnp.Account_No = accntp.Account_No
+162504160509153652*         AND ((accntp.Dealer_Account_No = :Comm-Dlracctno
+162604160509153652*         AND :Comm-Dlracctno <> "  ")
+162704160509153652*          OR :Comm-Dlracctno  = "  ")
+162804160509      *       LEFT OUTER JOIN Mfaactevp actevp ON
+162904160509      *            accntp.Account_Type_Code =
+163004160509      *            actevp.Account_Type_Code
+163104160509      *        AND trnp.Contr_Redem_Code = actevp.Contr_Redem_Code
+163204160509      *        AND trnp.Trans_type_Code  = actevp.Trans_type_Code
+163304160509      *RFS154265 -  Start
+163404160509      *       WHERE trnp.Trade_Date BETWEEN :li-FrmDate AND
+163504160315      *             :li-ToDate
+163604160509      *       WHERE ((trnp.Trade_Date BETWEEN :li-FrmDate AND
+163704160509      *             :li-ToDate AND :COMM-DateTypeInd = "T")
+163804160509      *          OR (trnp.Process_Date BETWEEN :li-FrmDate AND
+163904160509      *             :li-ToDate AND :COMM-DateTypeInd = "P" ))
+164004160315      *RFS154265 -  End
+164104160509      *         AND (trnp.Dealer_Code = :Comm-DlrCode OR
+164204160509      *              :Comm-DlrCode = :lncc-All)
+164304160509      *         AND (trnp.Dealer_Rep_Code = :Comm-RepCode OR
+164404160509      *              :Comm-RepCode = :lncc-All)
+164504160509      *         AND (trnp.Account_no = :li-AccountNo OR
+164604160509      *             :li-AccountNo  = 0)
+164704160509      *         AND (trnp.Trans_Type_code = :Comm-TrnType OR
+164804160509      *               :Comm-TrnType = :lncc-All)
+164904160509      *         AND (trnp.Trans_Status_Code = :Comm-TranStatus OR
+165004160509      *              :Comm-TranStatus = :lncc-All)
+165104160509      *         AND (trnp.Investment_Code = :Comm-Fund-Id OR
+165204160509      *              :Comm-Fund-Id   =  :lncc-All)
+165304160509      *         AND trnp.Hidden_Trans <> "Y"
+165404160509153652*         AND (accntp.Dealer_Account_No = :Comm-Dlracctno OR
+165504160509153652*             :Comm-Dlracctno = "  ")
+165604160509      *      ORDER BY
+165704160509      *          CASE WHEN (:lc-OrderBy = :lc_OrderBy1 AND
+165804160509      *                     :lc-OrderByDir = "A" ) THEN
+165904160509      *              CAST(DIGITS(cast(trnp.Account_No * 1 AS
+166004160509      *                  Decimal(15,0))) AS Char(15))
+166104160509      *              END ASC,
+166204160509      *          CASE WHEN (:lc-OrderBy = :lc_OrderBy1 AND
+166304160509      *                     :lc-OrderByDir = "D" ) THEN
+166404160509      *              CAST(DIGITS(cast(trnp.Account_No * 1 AS
+166504160509      *                  Decimal(15,0))) AS Char(15))
+166604160509      *              END DESC,
+166704160509      *          CASE WHEN (:lc-OrderBy = :lc_OrderBy2 AND
+166804160509      *                     :lc-OrderByDir = "A" ) THEN
+166904160509      *              CAST(trnp.Trans_Type_Code   AS Char(15))
+167004160509      *              END ASC,
+167104160509      *          CASE WHEN (:lc-OrderBy = :lc_OrderBy2 AND
+167204160509      *                     :lc-OrderByDir = "D" ) THEN
+167304160509      *              CAST(trnp.Trans_Type_Code   AS Char(15))
+167404160509      *              END DESC,
+167504160509      *          CASE WHEN (:lc-OrderBy = :lc_OrderBy3 AND
+167604160509      *                     :lc-OrderByDir = "A" ) THEN
+167704160509      *              CAST(invp.Industry_Fund_Code AS Char(15))
+167804160509      *              END ASC,
+167904160509      *          CASE WHEN (:lc-OrderBy = :lc_OrderBy3 AND
+168004160509      *                     :lc-OrderByDir = "D" ) THEN
+168104160509      *              CAST(invp.Industry_Fund_Code  AS Char(15))
+168204160509      *              END DESC,
+168304160509      *          CASE WHEN (:lc-OrderBy = :lc_OrderBy4 AND
+168404160509      *                     :lc-OrderByDir = "A" ) THEN
+168504160509      *              CAST(trnp.Trans_Status_Code  AS Char(15))
+168604160509      *              END ASC,
+168704160509      *          CASE WHEN (:lc-OrderBy = :lc_OrderBy4 AND
+168804160509      *                     :lc-OrderByDir = "D" ) THEN
+168904160509      *              CAST(trnp.Trans_Status_Code   AS Char(15))
+169004160509      *              END DESC,
+169104160509      *          CASE WHEN (:lc-OrderBy = :lc_OrderBy5 AND
+169204160509      *                     :lc-OrderByDir = "A" ) THEN
+169304160509      *              CAST(trnp.Trade_Date         AS Char(15))
+169404160509      *              END ASC,
+169504160509      *          CASE WHEN (:lc-OrderBy = :lc_OrderBy5 AND
+169604160509      *                     :lc-OrderByDir = "D" ) THEN
+169704160509      *              CAST(trnp.Trade_Date         AS Char(15))
+169804160509      *              END DESC,
+169904160509      *          CASE WHEN (:lc-OrderBy = :lc_OrderBy6 AND
+170004160509      *                     :lc-OrderByDir = "A" ) THEN
+170104160509      *              CAST(DIGITS(cast(Unit_price * 10000 AS
+170204160509      *                     Decimal(15,0))) AS Char(15))
+170304160509      *              END ASC,
+170404160509      *          CASE WHEN (:lc-OrderBy = :lc_OrderBy6 AND
+170504160509      *                     :lc-OrderByDir = "D" ) THEN
+170604160509      *               CAST(DIGITS(cast(Unit_Price * 10000 AS
+170704160509      *                     Decimal(15,0))) AS Char(15))
+170804160509      *               END DESC,
+170904160509      *          CASE WHEN (:lc-OrderBy = :lc_OrderBy7 AND
+171004160509      *                     :lc-OrderByDir = "A" ) THEN
+171104160509      *              CAST(DIGITS(cast(Unit_Amt * 1000 AS
+171204160509      *                     Decimal(15,0))) AS Char(15))
+171304160509      *              END ASC,
+171404160509      *          CASE WHEN (:lc-OrderBy = :lc_OrderBy7 AND
+171504160509      *                     :lc-OrderByDir = "D" ) THEN
+171604160509      *               CAST(DIGITS(cast(Unit_Amt * 1000 AS
+171704160509      *                     Decimal(15,0))) AS Char(15))
+171804160509      *               END DESC,
+171904160509      *          CASE WHEN (:lc-OrderBy = :lc_OrderBy8 AND
+172004160509      *                     :lc-OrderByDir = "A" ) THEN
+172104160509      *              CAST(DIGITS(cast(Gross_Amt * 100 AS
+172204160509      *                     Decimal(15,0))) AS Char(15))
+172304160509      *              END ASC,
+172404160509      *          CASE WHEN (:lc-OrderBy = :lc_OrderBy8 AND
+172504160509      *                     :lc-OrderByDir = "D" ) THEN
+172604160509      *               CAST(DIGITS(cast(Gross_Amt * 100 AS
+172704160509      *                     Decimal(15,0))) AS Char(15))
+172804160509      *               END DESC,
+172904160509      *          CASE WHEN (:lc-OrderBy = :lc_OrderBy10 AND
+173004160509      *                     :lc-OrderByDir = "A" ) THEN
+173104160509      *              CAST(DIGITS(cast(Net_Amt * 100 AS
+173204160509      *                     Decimal(15,0))) AS Char(15))
+173304160509      *              END ASC,
+173404160509      *          CASE WHEN (:lc-OrderBy = :lc_OrderBy10 AND
+173504160509      *                     :lc-OrderByDir = "D" ) THEN
+173604160509      *               CAST(DIGITS(cast(Net_Amt * 100 AS
+173704160509      *                     Decimal(15,0))) AS Char(15))
+173804160509      *               END DESC,
+173904160509      *           trnp.Placement_date,
+174004160509      *           trnp.Trans_No
+174104160509      *      FOR READ ONLY
+174204160509      *    END-EXEC.
+174304150915
+174404150915      * ---------------------------------
+174504160509      *Open-DealerCur.
+174604150915      * ---------------------------------
+174704160509      *    SET lncc_TranDeaCurOpenedNo  TO TRUE.
+174804160509
+174904160509      *    EXEC SQL
+175004160509      *         OPEN TransTmpCur
+175104160509      *    END-EXEC.
+175204160509
+175304160509      *    MOVE SQLSTATE TO Ws-Sql-States.
+175404160509      *    EVALUATE TRUE
+175504160509      *      WHEN lncc_sqlSuccessful
+175604160509      *        SET lncc_TranDeaCurOpenedYes  TO TRUE
+175704160509      *For insesitive cursor SQLERRD(2) contains the actual number of
+175804160509      *in the result set
+175904160509      *        COMPUTE li-TotRow = SQLERRD(2)
+176004160509      *      WHEN lncc_sqlEnd
+176104160509      *        CONTINUE
+176204160509      *      WHEN OTHER
+176304160509      *        SET lncc-Err12  TO TRUE
+176404160509      *    END-EVALUATE.
+176504150915
+176604150915      * ---------------------------------
+176704160509      *Fetch-DealerCur.
+176804150915      * ---------------------------------
+176904150915      * Expect to max of 5000 transactions to be returned to IATrax
+177004160509      *    INITIALIZE FetchRecArr.
+177104150915
+177204160509      *    EXEC SQL
+177304160509      *         FETCH RELATIVE :li-StrRow
+177404160509      *         FROM TransTmpCur
+177504160509      *         FOR  :li-NumRow ROWS
+177604160509      *         INTO :lc_FetchRecArray:lb_IndArray
+177704160509      *    END-EXEC.
+177804160509      *    MOVE SQLSTATE TO lc_sqlStates.
+177904160509      *    EVALUATE TRUE
+178004160509      *      WHEN lncc_sqlSuccessful
+178104160509      *        COMPUTE li-FetchRows = SQLERRD(3)
+178204160509      *        EXEC SQL
+178304160509      *          INSERT INTO QTEMP/TRANSTMP
+178404160509      *          :li-FetchRows ROWS
+178504160509      *          VALUES (:lc_FetchRecArray)
+178604160509153652*          WITH NC
+178704160509      *        END-EXEC
+178804160509      *      WHEN lncc_sqlEnd
+178904160509      *        CONTINUE
+179004160509      *      WHEN OTHER
+179104160509      *        SET lncc-Err13  TO TRUE
+179204160509      *    END-EVALUATE
+179304150915
+179404160509      *    EXEC SQL
+179504160509      *      CLOSE TransTmpCur
+179604160509      *    END-EXEC
+179704160509      *    .
+179804160516      *RFS158524 Ends
+179904150915      * ---------------------------------
+180004150915       Insert-BTRANSUM.
+180104150915      * ---------------------------------
+180204150915      * Get changes.
+180304150915           EXEC SQL
+180404150915             INSERT INTO QTEMP/BTRANSUM
+180504160208             (SELECT
+180604150915                temp.Placement_date,
+180704150915                temp.Trans_No,
+180804150915                max(temp.Account_No),
+180904150915                max(temp.Trans_Type_Code),
+181004150915                max(temp.Trans_Status_Code),
+181104150915                max(temp.Trans_Origin_code),
+181204150915                max(temp.Investment_Code),
+181304150915                max(temp.Trade_Date),
+181404150915                max(temp.Process_date),
+181504150915                max(temp.Gross_Amt),
+181604150915                max(temp.Unit_Price),
+181704150915                max(temp.Unit_Amt),
+181804150915                max(temp.net_Amt),
+181904150915                max(temp.Reverse),
+182004150915                max(temp.Gain_OR_Loss),
+182104160208153652*         max(temp.Average_Unit_Cost),
+182204160208153652          max(temp.Avg_Unit_Cost),
+182304150915                max(temp.Contr_Redem_Code),
+182404150915                max(temp.Dealer_Acct_No),
+182504150915                max(temp.Account_Type_Code),
+182604150915                COALESCE(SUM(trnchp.Charge),0),
+182704150915                " ",
+182804150915                " "
+182904161021      *RFS162060 - Start
+183004161021               ,COALESCE(
+183104161021                SUM(CASE
+183204161021                 WHEN trnchp.DEDUCTION_CODE = :lncc-CDSC
+183304161021                 THEN trnchp.Charge
+183404161021                 ELSE 0
+183504161021                 END),0)
+183604161021      *RFS162060 - End
+183704150915                FROM QTEMP/TRANSTMP temp
+183804150915                LEFT OUTER JOIN Mfatrnchp trnchp ON
+183904150915                     trnchp.Placement_date = temp.Placement_date
+184004150915                 AND trnchp.Trans_No       = temp.Trans_No
+184104150915             GROUP  BY temp.Placement_date,
+184204150915                       temp.Trans_No
+184304160208153652       )WITH NC
+184404150915           END-EXEC.
+184504150915           MOVE SQLSTATE TO lc_sqlStates.
+184604150915           EVALUATE TRUE
+184704150915             WHEN lncc_sqlSuccessful
+184804151002                  CONTINUE
+184904150915             WHEN OTHER
+185004150915                  SET lncc-Err07  TO TRUE
+185104150915           END-EVALUATE.
+185204150915
+185304160208      *rfs153652 Starts
+185404160208      *    EXEC SQL
+185504160208      *        INSERT INTO QTEMP/BDEDUSUM
+185604160208      *         SELECT
+185704160208      *          trnp.Placement_date,
+185804160208      *          trnp.Trans_No,
+185904160208      *          trnp.Account_No,
+186004160208      *          trnp.Trans_Type_Code || " - " ||
+186104160208      *          TRIM(COALESCE(trntdp.Trans_Type_Code_Descr, " ")),
+186204160208      *          trnp.Trans_Status_Code,
+186304160208      *          trnp.Trans_Origin_code,
+186404160208      *          TRIM(invp.Industry_Fund_Code) || " - " ||
+186504160208      *          TRIM(COALESCE(invnmp.Investment_Name_Long," ")),
+186604160208      *          trnp.Trade_Date,
+186704160208      *          trnp.Process_date,
+186804160208      *          trnp.Gross_Amt,
+186904160208      *          trnp.Unit_Price,
+187004160208      *          trnp.Unit_Amt,
+187104160208      *          trnp.net_Amt,
+187204160208      *          CASE WHEN trnp.Avg_Unit_Cost > 0
+187304160208      *                AND trnp.Gain_Or_Loss = :lncc-Y
+187404160208      *                THEN
+187504160208      *                   (trnp.Unit_price -
+187604160208      *                    trnp.Avg_Unit_Cost) *
+187704160208      *                    trnp.Unit_Amt
+187804160208      *                ELSE 0
+187904160208      *          END,
+188004160208      *          trnp.Dealer_Acct_No,
+188104160208      *          COALESCE(actylp.Account_Type_Code," "),
+188204160208      *          COALESCE(actylp.Account_Type_Code_Lang," "),
+188304160208      *          trnp.Deduction_Amt,
+188404160208      *          CASE WHEN (trnp.Gross_Amt = trnp.net_Amt)
+188504160208      *                THEN 0
+188604160208      *                ELSE trnp.Deduction_Amt
+188704160208      *          END,
+188804160208      *          0
+188904160208      *      FROM QTEMP/BTRANSUM  trnp
+189004160208      *         INNER JOIN Mfainvp invp ON
+189104160208      *              trnp.Investment_Code = invp.Investment_Code
+189204160208      *         LEFT OUTER JOIN Mfainvnmp invnmp ON
+189304160208      *              trnp.Investment_Code = invnmp.Investment_Code
+189404160208      *          AND invnmp.Language_Code = :Comm-Lang-Code
+189504160208      *         LEFT OUTER JOIN Mfatrntdp trntdp ON
+189604160208      *              trnp.Trans_Type_Code = trntdp.Trans_Type_Code
+189704160208      *          AND trntdp.Language_Code = :Comm-Lang-Code
+189804160208      *         LEFT OUTER JOIN Mfaactylp actylp ON
+189904160208      *              trnp.Account_Type_Code = actylp.Account_Type_Code
+190004160208      *          AND actylp.Language_Code = :Comm-Lang-Code
+190104160208      *    END-EXEC.
+190204160208      *    MOVE SQLSTATE TO lc_sqlStates.
+190304160208      *    EVALUATE TRUE
+190404160208      *      WHEN lncc_sqlSuccessful
+190504160208      *           CONTINUE
+190604160208      *      WHEN OTHER
+190704160208      *           SET lncc-Err16  TO TRUE
+190804160208      *    END-EVALUATE.
+190904160208      *rfs146397 Ends
+191004160208      *rfs153652 Ends
+191104120504      /
+191204120504      * ---------------------------------
+191304120504       DeclareResultSet.
+191404120504      * ---------------------------------
+191504160208      *rfs153652 Start -Return only the required result sets
+191604160208      *Currently, li-NumRow < 0 is not in a use by IATrax
+191704160208      *    IF li-NumRow < 0
+191804160208      *       PERFORM DeclareResultSetAll
+191904160208      *    ELSE
+192004160208      *rfs153652 Ends
+192104150915146397      IF lc-OrderBy = lc_OrderBy9
+192204120504              PERFORM DeclareResultSetRows
+192304160208153652        PERFORM BuildSummaryResultSet
+192404160208   |          PERFORM SummaryResultSet
+192504160208153652        PERFORM DeductionSummaryResultSet
+192604150915146397      ELSE
+192704160208153652        IF ncc_ReturnAll
+192804160208146397         PERFORM DeclareResultSetRowsX
+192904160208      *RFS153652 Start
+193004160208               PERFORM SummaryResultSetX
+193104160208               PERFORM DeductionSumResultSetX
+193204160208              END-IF
+193304160208              IF ncc_ReturnTrans
+193404160208               PERFORM DeclareResultSetRowsX
+193504160208               PERFORM DeductionSumResultSetX
+193604160208              END-IF
+193704160208              IF ncc_ReturnSummary
+193804160208               PERFORM SummaryResultSetX
+193904160208              END-IF
+194004160208            END-IF.
+194104160208      *     END-IF
+194204160208      *    END-IF.
+194304160208
+194404160208           PERFORM PrepareResultSets.
+194504160208
+194604160208      * ---------------------------------
+194704160208       BuildSummaryResultSet.
+194804160208      * ---------------------------------
+194904160208      *RFS-143347-Begin
+195004160208           IF COMM-TRANSTATUS  EQUAL TO "RVS"
+195104160208              PERFORM InsertTemptab2
+195204160208           ELSE
+195304160208               PERFORM InsertTemptab
+195404160208           END-IF.
+195504160208      *RFS-143347-End
+195604160208      *RFS146397 starts
+195704160208      *    EVALUATE TRUE
+195804160208      *      WHEN (ncc_ReturnAll OR ncc_ReturnSummary)
+195904160208      *       AND COMM-TRANSTATUS = lncc_RVS
+196004160208      *           PERFORM InsertTotGrossNetRVS
+196104160208      *           PERFORM InsertTotDeductionRVS
+196204160208      *      WHEN (ncc_ReturnAll OR ncc_ReturnSummary)
+196304160208      *       AND COMM-TRANSTATUS NOT = lncc_RVS
+196404160208      *           PERFORM InsertTotGrossNet
+196504160208      *           PERFORM InsertTotDeduction
+196604160208      *    END-EVALUATE.
+196704160208      *RFS146397 ends
+196804160208      *RFS126759 begin - RM
+196904160208      *       PERFORM SummaryResultSet.
+197004160208
+197104160208      *       PERFORM DeductionSummaryResultSet.
+197204160208
+197304160208      *       PERFORM PrepareResultSets.
+197404160208      *RFS126759 end   - RM
+197504160208      *RFS153652 End
+197604120504      /
+197704120504      * ---------------------------------
+197804120504       DeclareResultSetAll.
+197904120504      * ---------------------------------
+198004120504           EXEC SQL
+198104120504             DECLARE Cur_TranSumAll CURSOR FOR
+198204120504               SELECT
+198304120504                 trnp.Placement_date,
+198404120504                 trnp.Trans_No,
+198504120504                 trnp.Account_No,
+198604120504                 trnp.Trans_Type_Code || " - " ||
+198704120504                 TRIM(COALESCE(trntdp.Trans_Type_Code_Descr, " ")),
+198804120504                 trnp.Trans_Status_Code,
+198904120504                 trnp.Trans_Origin_code,
+199004130708124291*          TRIM(trnp.Investment_Code) || " - " ||
+199104130708124291           TRIM(invp.Industry_Fund_Code) || " - " ||
+199204120504                 TRIM(COALESCE(invnmp.Investment_Name_Long," ")),
+199304120504                 trnp.Trade_Date,
+199404161110                 trnp.Process_date,
+199504120504                 trnp.Gross_Amt,
+199604120504                 trnp.Unit_Price,
+199704120504                 trnp.Unit_Amt,
+199804120504                 trnp.net_Amt,
+199904120504                 CASE WHEN trnp.Avg_Unit_Cost > 0
+200004120504                       AND trnp.Gain_Or_Loss = :lncc-Y
+200104120504                       THEN
+200204120504                          (trnp.Unit_price -
+200304120504                           trnp.Avg_Unit_Cost) *
+200404161111                           trnp.Unit_Amt
+200504120504                       ELSE 0
+200604120504                 END,
+200704120504                 trnp.Dealer_Acct_No,
+200804130624      *RFS124266 - Start
+200904130624110989*          COALESCE(actylp.Account_Type_Code," "),
+201004130624                 COALESCE(actylp.Account_Type_Code_Lang," "),
+201104130624      *RFS124266 - End
+201204121115      *RFS11099 - Start
+201304121115110989*          trnp.Deduction_Amt
+201404130610      *RFS123426 - Start
+201504130610110999*          trnp.Deduction_Amt,
+201604130610                 CASE WHEN (trnp.Gross_Amt = trnp.net_Amt)
+201704130610                       THEN 0
+201804130610                       ELSE trnp.Deduction_Amt
+201904130610                 END,
+202004130610      *RFS123426 - End
+202104130509110999           trnp.Deduction_Code,
+202204130516122061           trnp.Deduction_Desc
+202304121115      *RFS11099 - End
+202404120504
+202504120504             FROM QTEMP/BTRANSUM  trnp
+202604120504                LEFT OUTER JOIN Mfainvnmp invnmp ON
+202704120504                     trnp.Investment_Code = invnmp.Investment_Code
+202804130621124266*          AND invnmp.Language_Code = :lncc-E
+202904130621124266           AND invnmp.Language_Code = :Comm-Lang-Code
+203004120504                LEFT OUTER JOIN Mfatrntdp trntdp ON
+203104120504                     trnp.Trans_Type_Code = trntdp.Trans_Type_Code
+203204130621124266*          AND trntdp.Language_Code = :lncc-E
+203304130621124266           AND trntdp.Language_Code = :Comm-Lang-Code
+203404120504                LEFT OUTER JOIN Mfaactylp actylp ON
+203504120504                     trnp.Account_Type_Code = actylp.Account_Type_Code
+203604130621124266*          AND actylp.Language_Code = :lncc-E
+203704130621124266           AND actylp.Language_Code = :Comm-Lang-Code
+203804130708      *RFS124291 -Start
+203904130708                LEFT OUTER JOIN Mfainvp invp ON
+204004130708                     trnp.Investment_Code = invp.Investment_Code
+204104130708      *RFS124291 - End
+204204120504
+204304120504             ORDER BY trnp.Process_date DESC,
+204404120504                      trnp.Trade_Date, trnp.Account_No
+204504120504
+204604120504           END-EXEC.
+204704120504
+204804120504           EXEC SQL
+204904120504             OPEN Cur_TranSumAll
+205004120504           END-EXEC.
+205104120504
+205204140206      * RFS 126759 - begin
+205304140206      *    EXEC SQL
+205404140206      *      SET RESULT SETS CURSOR Cur_TranSumAll
+205504140206      *    END-EXEC.
+205604140206      * RFS 126759 - end
+205704120504      /
+205804120504      * ---------------------------------
+205904120504       DeclareResultSetRows.
+206004120504      * ---------------------------------
+206104120504
+206204120504           EXEC SQL
+206304120504             DECLARE Cur_BTranSum CURSOR FOR
+206404120504               SELECT * FROM
+206504120504               (SELECT
+206604120504                 trnp.Placement_date,
+206704120504                 trnp.Trans_No,
+206804120504                 trnp.Account_No,
+206904120504                 trnp.Trans_Type_Code || " - " ||
+207004120504                 TRIM(COALESCE(trntdp.Trans_Type_Code_Descr, " ")),
+207104120504                 trnp.Trans_Status_Code,
+207204120504                 trnp.Trans_Origin_code,
+207304130708124291*          TRIM(trnp.Investment_Code) || " - " ||
+207404130708124291           TRIM(invp.Industry_Fund_Code) || " - " ||
+207504120504                 TRIM(COALESCE(invnmp.Investment_Name_Long," ")),
+207604120504                 trnp.Trade_Date,
+207704120504                 trnp.Process_date,
+207804120504                 trnp.Gross_Amt,
+207904120504                 trnp.Unit_Price,
+208004120504                 trnp.Unit_Amt,
+208104120504                 trnp.net_Amt,
+208204120504                 CASE WHEN trnp.Avg_Unit_Cost > 0
+208304120504                       AND trnp.Gain_Or_Loss = :lncc-Y
+208404120504                       THEN
+208504120504                          (trnp.Unit_price -
+208604120504                           trnp.Avg_Unit_Cost) *
+208704161111162060                     trnp.Unit_Amt - trnp.CDSC_Deductions
+208804161110162060*                    trnp.Unit_Amt
+208904120504                       ELSE 0
+209004120504                 END,
+209104120504                 trnp.Dealer_Acct_No,
+209204130624      *RFS124266 - Start
+209304130624110989*          COALESCE(actylp.Account_Type_Code," "),
+209404130624                 COALESCE(actylp.Account_Type_Code_Lang," "),
+209504130624      *RFS124266 - End
+209604130610      *RFS123426 - Start
+209704130610110989*          trnp.Deduction_Amt,
+209804130610                 CASE WHEN (trnp.Gross_Amt = trnp.net_Amt)
+209904130610                       THEN 0
+210004130610                       ELSE trnp.Deduction_Amt
+210104130610                 END,
+210204130610      *RFS123426 - End
+210304131121      * RFS126759 -  Start  ****************************************** *
+210404131121      * Previous Code - Comment Start
+210504130906      *          ROW_NUMBER() OVER
+210604130906      *           (ORDER BY trnp.Process_date DESC,
+210704130906      *            trnp.Trade_Date, trnp.Account_No) AS rownum
+210804131121      * Previous Code - Comment End
+210904131121      * New Code -  Start                                             *
+211004130906                 ROW_NUMBER() OVER (
+211104130906                 ORDER BY
+211204131118                 CASE WHEN (:lc-OrderBy = "1"  AND
+211304131118                            :lc-OrderByDir = "A" ) THEN
+211404131120                     CAST(DIGITS(cast(trnp.Account_No * 1 AS
+211504131120                         Decimal(15,0))) AS Char(15))
+211604131120                     END ASC,
+211704131118                 CASE WHEN (:lc-OrderBy = "1"  AND
+211804131118                            :lc-OrderByDir = "D" ) THEN
+211904131120                     CAST(DIGITS(cast(trnp.Account_No * 1 AS
+212004131120                         Decimal(15,0))) AS Char(15))
+212104131120                     END DESC,
+212204131118                 CASE WHEN (:lc-OrderBy = "2"  AND
+212304131118                            :lc-OrderByDir = "A" ) THEN
+212404131119                     CAST(trnp.Trans_Type_Code   AS Char(15))
+212504131119                     END ASC,
+212604131118                 CASE WHEN (:lc-OrderBy = "2"  AND
+212704131118                            :lc-OrderByDir = "D" ) THEN
+212804131119                     CAST(trnp.Trans_Type_Code   AS Char(15))
+212904131119                     END DESC,
+213004131119                 CASE WHEN (:lc-OrderBy = "3"  AND
+213104131119                            :lc-OrderByDir = "A" ) THEN
+213204131119                     CAST(invp.Industry_Fund_Code AS Char(15))
+213304131119                     END ASC,
+213404131119                 CASE WHEN (:lc-OrderBy = "3"  AND
+213504131119                            :lc-OrderByDir = "D" ) THEN
+213604131119                     CAST(invp.Industry_Fund_Code  AS Char(15))
+213704131119                     END DESC,
+213804131119                 CASE WHEN (:lc-OrderBy = "4"  AND
+213904131119                            :lc-OrderByDir = "A" ) THEN
+214004131119                     CAST(trnp.Trans_Status_Code  AS Char(15))
+214104131119                     END ASC,
+214204131119                 CASE WHEN (:lc-OrderBy = "4"  AND
+214304131119                            :lc-OrderByDir = "D" ) THEN
+214404131119                     CAST(trnp.Trans_Status_Code   AS Char(15))
+214504131119                     END DESC,
+214604131119                 CASE WHEN (:lc-OrderBy = "5"  AND
+214704131119                            :lc-OrderByDir = "A" ) THEN
+214804131119                     CAST(trnp.Trade_Date         AS Char(15))
+214904131119                     END ASC,
+215004131119                 CASE WHEN (:lc-OrderBy = "5"  AND
+215104131119                            :lc-OrderByDir = "D" ) THEN
+215204131119                     CAST(trnp.Trade_Date          AS Char(15))
+215304131119                     END DESC,
+215404140220      * RFS 126759 - begin RM
+215504140220      *          CASE WHEN (:lc-OrderBy = "6"  AND
+215604140220      *                     :lc-OrderByDir = "A" ) THEN
+215704140220      *              CAST(DIGITS(cast(net_Amt * 1000  AS
+215804140220      *                     Decimal(15,0))) AS Char(15))
+215904140220      *              END ASC,
+216004140220      *          CASE WHEN (:lc-OrderBy = "6"  AND
+216104140220      *                     :lc-OrderByDir = "D" ) THEN
+216204140220      *               CAST(DIGITS(cast(net_Amt * 1000  AS
+216304140220      *                     Decimal(15,0))) AS Char(15))
+216404140220      *               END DESC
+216504140220                 CASE WHEN (:lc-OrderBy = "6"  AND
+216604140220                            :lc-OrderByDir = "A" ) THEN
+216704140220                     CAST(DIGITS(cast(Unit_price * 10000 AS
+216804140220                            Decimal(15,0))) AS Char(15))
+216904140220                     END ASC,
+217004140220                 CASE WHEN (:lc-OrderBy = "6"  AND
+217104140220                            :lc-OrderByDir = "D" ) THEN
+217204140220                      CAST(DIGITS(cast(Unit_Price * 10000 AS
+217304140220                            Decimal(15,0))) AS Char(15))
+217404140220                      END DESC,
+217504140220                 CASE WHEN (:lc-OrderBy = "7"  AND
+217604140220                            :lc-OrderByDir = "A" ) THEN
+217704140220                     CAST(DIGITS(cast(Unit_Amt * 1000 AS
+217804140220                            Decimal(15,0))) AS Char(15))
+217904140220                     END ASC,
+218004140220                 CASE WHEN (:lc-OrderBy = "7"  AND
+218104140220                            :lc-OrderByDir = "D" ) THEN
+218204140220                      CAST(DIGITS(cast(Unit_Amt * 1000 AS
+218304140220                            Decimal(15,0))) AS Char(15))
+218404140220                      END DESC,
+218504140220                 CASE WHEN (:lc-OrderBy = "8"  AND
+218604140220                            :lc-OrderByDir = "A" ) THEN
+218704140220                     CAST(DIGITS(cast(Gross_Amt * 100 AS
+218804140220                            Decimal(15,0))) AS Char(15))
+218904140220                     END ASC,
+219004140220                 CASE WHEN (:lc-OrderBy = "8"  AND
+219104140220                            :lc-OrderByDir = "D" ) THEN
+219204140220                      CAST(DIGITS(cast(Gross_Amt * 100 AS
+219304140220                            Decimal(15,0))) AS Char(15))
+219404140220                      END DESC,
+219504140220                 CASE WHEN (:lc-OrderBy = "9"  AND
+219604140220                            :lc-OrderByDir = "A" ) THEN
+219704140220                     CAST(DIGITS(cast(Deduction_Amt * 100 AS
+219804140220                            Decimal(15,0))) AS Char(15))
+219904140220                     END ASC,
+220004140220                 CASE WHEN (:lc-OrderBy = "9"  AND
+220104140220                            :lc-OrderByDir = "D" ) THEN
+220204140220                      CAST(DIGITS(cast(Deduction_Amt * 100 AS
+220304140220                            Decimal(15,0))) AS Char(15))
+220404140220                      END DESC,
+220504140220                 CASE WHEN (:lc-OrderBy = "10"  AND
+220604140220                            :lc-OrderByDir = "A" ) THEN
+220704140220                     CAST(DIGITS(cast(Net_Amt * 100 AS
+220804140220                            Decimal(15,0))) AS Char(15))
+220904140220                     END ASC,
+221004140220                 CASE WHEN (:lc-OrderBy = "10"  AND
+221104140220                            :lc-OrderByDir = "D" ) THEN
+221204140220                      CAST(DIGITS(cast(Net_Amt * 100 AS
+221304140220                            Decimal(15,0))) AS Char(15))
+221404140220                      END DESC
+221504140220      * RFS 126759 - end   RM
+221604131118                 ) AS rownum
+221704131121      * New Code -  End                                               *
+221804131121      * RFS126759 - End  **********************************************
+221904120504
+222004120504             FROM QTEMP/BTRANSUM  trnp
+222104120504                LEFT OUTER JOIN Mfainvnmp invnmp ON
+222204120504                     trnp.Investment_Code = invnmp.Investment_Code
+222304130621124266*          AND invnmp.Language_Code = :lncc-E
+222404130621124266           AND invnmp.Language_Code = :Comm-Lang-Code
+222504120504                LEFT OUTER JOIN Mfatrntdp trntdp ON
+222604120504                     trnp.Trans_Type_Code = trntdp.Trans_Type_Code
+222704130621124266*          AND trntdp.Language_Code = :lncc-E
+222804130621124266           AND trntdp.Language_Code = :Comm-Lang-Code
+222904120504                LEFT OUTER JOIN Mfaactylp actylp ON
+223004120504                     trnp.Account_Type_Code = actylp.Account_Type_Code
+223104130621124266*          AND actylp.Language_Code = :lncc-E
+223204130621124266           AND actylp.Language_Code = :Comm-Lang-Code
+223304130708      *RFS124291 -Start
+223404130708                LEFT OUTER JOIN Mfainvp invp ON
+223504130708                     trnp.Investment_Code = invp.Investment_Code
+223604130708      *RFS124291 - End
+223704120504
+223804131121      *RFS126759 - Start  ******************************************** *
+223904131121      *Previous Code Comment - Start
+224004130905      *      ORDER BY trnp.Process_date DESC,
+224104130905      *               trnp.Trade_Date, trnp.Account_No
+224204131121      *Previous Code Comment - End
+224304131121      *New Code  - Start                                               *
+224404130905             ORDER BY
+224504131119                 CASE WHEN (:lc-OrderBy = "1"  AND
+224604131119                            :lc-OrderByDir = "A" ) THEN
+224704131120                     CAST(DIGITS(cast(trnp.Account_No * 1 AS
+224804131120                         Decimal(15,0))) AS Char(15))
+224904131120                     END ASC,
+225004131119                 CASE WHEN (:lc-OrderBy = "1"  AND
+225104131119                            :lc-OrderByDir = "D" ) THEN
+225204131120                     CAST(DIGITS(cast(trnp.Account_No * 1 AS
+225304131120                         Decimal(15,0))) AS Char(15))
+225404131120                     END DESC,
+225504131119                 CASE WHEN (:lc-OrderBy = "2"  AND
+225604131119                            :lc-OrderByDir = "A" ) THEN
+225704131119                     CAST(trnp.Trans_Type_Code   AS Char(15))
+225804131119                     END ASC,
+225904131119                 CASE WHEN (:lc-OrderBy = "2"  AND
+226004131119                            :lc-OrderByDir = "D" ) THEN
+226104131119                     CAST(trnp.Trans_Type_Code   AS Char(15))
+226204131119                     END DESC,
+226304131119                 CASE WHEN (:lc-OrderBy = "3"  AND
+226404131119                            :lc-OrderByDir = "A" ) THEN
+226504131119                     CAST(invp.Industry_Fund_Code AS Char(15))
+226604131119                     END ASC,
+226704131119                 CASE WHEN (:lc-OrderBy = "3"  AND
+226804131119                            :lc-OrderByDir = "D" ) THEN
+226904131119                     CAST(invp.Industry_Fund_Code  AS Char(15))
+227004131119                     END DESC,
+227104131119                 CASE WHEN (:lc-OrderBy = "4"  AND
+227204131119                            :lc-OrderByDir = "A" ) THEN
+227304131119                     CAST(trnp.Trans_Status_Code  AS Char(15))
+227404131119                     END ASC,
+227504131119                 CASE WHEN (:lc-OrderBy = "4"  AND
+227604131119                            :lc-OrderByDir = "D" ) THEN
+227704131119                     CAST(trnp.Trans_Status_Code   AS Char(15))
+227804131119                     END DESC,
+227904131119                 CASE WHEN (:lc-OrderBy = "5"  AND
+228004131119                            :lc-OrderByDir = "A" ) THEN
+228104131119                     CAST(trnp.Trade_Date         AS Char(15))
+228204131119                     END ASC,
+228304131119                 CASE WHEN (:lc-OrderBy = "5"  AND
+228404131119                            :lc-OrderByDir = "D" ) THEN
+228504131119                     CAST(trnp.Trade_Date          AS Char(15))
+228604131119                     END DESC,
+228704140220      * RFS 126759 - begin RM
+228804140220      *          CASE WHEN (:lc-OrderBy = "6"  AND
+228904140220      *                     :lc-OrderByDir = "A" ) THEN
+229004140220      *              CAST(DIGITS(cast(net_Amt * 1000  AS
+229104140220      *                     Decimal(15,0))) AS Char(15))
+229204140220      *              END ASC,
+229304140220      *          CASE WHEN (:lc-OrderBy = "6"  AND
+229404140220      *                     :lc-OrderByDir = "D" ) THEN
+229504140220      *               CAST(DIGITS(cast(net_Amt * 1000  AS
+229604140220      *                     Decimal(15,0))) AS Char(15))
+229704140220      *               END DESC
+229804140220                 CASE WHEN (:lc-OrderBy = "6"  AND
+229904140220                            :lc-OrderByDir = "A" ) THEN
+230004140220                     CAST(DIGITS(cast(Unit_price * 10000 AS
+230104140220                            Decimal(15,0))) AS Char(15))
+230204140220                     END ASC,
+230304140220                 CASE WHEN (:lc-OrderBy = "6"  AND
+230404140220                            :lc-OrderByDir = "D" ) THEN
+230504140220                      CAST(DIGITS(cast(Unit_Price * 10000 AS
+230604140220                            Decimal(15,0))) AS Char(15))
+230704140220                      END DESC,
+230804140220                 CASE WHEN (:lc-OrderBy = "7"  AND
+230904140220                            :lc-OrderByDir = "A" ) THEN
+231004140220                     CAST(DIGITS(cast(Unit_Amt * 1000 AS
+231104140220                            Decimal(15,0))) AS Char(15))
+231204140220                     END ASC,
+231304140220                 CASE WHEN (:lc-OrderBy = "7"  AND
+231404140220                            :lc-OrderByDir = "D" ) THEN
+231504140220                      CAST(DIGITS(cast(Unit_Amt * 1000 AS
+231604140220                            Decimal(15,0))) AS Char(15))
+231704140220                      END DESC,
+231804140220                 CASE WHEN (:lc-OrderBy = "8"  AND
+231904140220                            :lc-OrderByDir = "A" ) THEN
+232004140220                     CAST(DIGITS(cast(Gross_Amt * 100 AS
+232104140220                            Decimal(15,0))) AS Char(15))
+232204140220                     END ASC,
+232304140220                 CASE WHEN (:lc-OrderBy = "8"  AND
+232404140220                            :lc-OrderByDir = "D" ) THEN
+232504140220                      CAST(DIGITS(cast(Gross_Amt * 100 AS
+232604140220                            Decimal(15,0))) AS Char(15))
+232704140220                      END DESC,
+232804140220                 CASE WHEN (:lc-OrderBy = "9"  AND
+232904131119                            :lc-OrderByDir = "A" ) THEN
+233004140220                     CAST(DIGITS(cast(Deduction_Amt * 100 AS
+233104131119                            Decimal(15,0))) AS Char(15))
+233204131119                     END ASC,
+233304140220                 CASE WHEN (:lc-OrderBy = "9"  AND
+233404131119                            :lc-OrderByDir = "D" ) THEN
+233504140220                      CAST(DIGITS(cast(Deduction_Amt * 100 AS
+233604131119                            Decimal(15,0))) AS Char(15))
+233704140220                      END DESC,
+233804140220                 CASE WHEN (:lc-OrderBy = "10"  AND
+233904140220                            :lc-OrderByDir = "A" ) THEN
+234004140220                     CAST(DIGITS(cast(Net_Amt * 100 AS
+234104140220                            Decimal(15,0))) AS Char(15))
+234204140220                     END ASC,
+234304140220                 CASE WHEN (:lc-OrderBy = "10"  AND
+234404140220                            :lc-OrderByDir = "D" ) THEN
+234504140220                      CAST(DIGITS(cast(Net_Amt * 100 AS
+234604140220                            Decimal(15,0))) AS Char(15))
+234704140220                      END DESC
+234804140220      * RFS 126759 - end   RM
+234904131121      *New Code  - End                                                 *
+235004131121      *RFS126759 - End    ******************************************** *
+235104120504             ) AS numbRows
+235204120504             WHERE rownum BETWEEN :li-StrRow  AND :li-EndRow
+235304120504
+235404120504           END-EXEC.
+235504120504
+235604120504           EXEC SQL
+235704120504             OPEN Cur_BTranSum
+235804120504           END-EXEC.
+235904120504
+236004140206      * RFS 126759 - begin
+236104140206      *    EXEC SQL
+236204140206      *      SET RESULT SETS CURSOR Cur_BTranSum
+236304140206      *    END-EXEC.
+236404140206      * RFS 126759 - end
+236504120504      /
+236604150915      *RFS146397 Starts
+236704150915      * ---------------------------------
+236804150915       DeclareResultSetRowsX.
+236904150915      * ---------------------------------
+237004150915      * Row Number is not required by IAtrax, return as zero.
+237104150915           EXEC SQL
+237204150915             DECLARE Cur_BTranSumX CURSOR FOR
+237304150915                SELECT
+237404150915                 trnp.Placement_date,
+237504150915                 trnp.Trans_No,
+237604150915                 trnp.Account_No,
+237704150915                 trnp.Trans_Type_Code || " - " ||
+237804150915                 TRIM(COALESCE(trntdp.Trans_Type_Code_Descr, " ")),
+237904150915                 trnp.Trans_Status_Code,
+238004150915                 trnp.Trans_Origin_code,
+238104150915                 TRIM(invp.Industry_Fund_Code) || " - " ||
+238204150915                 TRIM(COALESCE(invnmp.Investment_Name_Long," ")),
+238304150915                 trnp.Trade_Date,
+238404150915                 trnp.Process_date,
+238504150915                 trnp.Gross_Amt,
+238604150915                 trnp.Unit_Price,
+238704150915                 trnp.Unit_Amt,
+238804150915                 trnp.net_Amt,
+238904150915                 CASE WHEN trnp.Avg_Unit_Cost > 0
+239004150915                       AND trnp.Gain_Or_Loss = :lncc-Y
+239104150915                       THEN
+239204150915                          (trnp.Unit_price -
+239304150915                           trnp.Avg_Unit_Cost) *
+239404161111162060                     trnp.Unit_Amt - trnp.CDSC_Deductions
+239504161110162060*                    trnp.Unit_Amt
+239604150915                       ELSE 0
+239704150915                 END,
+239804150915                 trnp.Dealer_Acct_No,
+239904150915                 COALESCE(actylp.Account_Type_Code_Lang," "),
+240004150915                 CASE WHEN (trnp.Gross_Amt = trnp.net_Amt)
+240104150915                       THEN 0
+240204150915                       ELSE trnp.Deduction_Amt
+240304150915                 END,
+240404150915                 0 AS rownum
+240504150915
+240604150915             FROM QTEMP/BTRANSUM  trnp
+240704150915                INNER JOIN Mfainvp invp ON
+240804150915                     trnp.Investment_Code = invp.Investment_Code
+240904150915                LEFT OUTER JOIN Mfainvnmp invnmp ON
+241004150915                     trnp.Investment_Code = invnmp.Investment_Code
+241104150915                 AND invnmp.Language_Code = :Comm-Lang-Code
+241204150915                LEFT OUTER JOIN Mfatrntdp trntdp ON
+241304150915                     trnp.Trans_Type_Code = trntdp.Trans_Type_Code
+241404150915                 AND trntdp.Language_Code = :Comm-Lang-Code
+241504150915                LEFT OUTER JOIN Mfaactylp actylp ON
+241604150915                     trnp.Account_Type_Code = actylp.Account_Type_Code
+241704150915                 AND actylp.Language_Code = :Comm-Lang-Code
+241804150915             ORDER BY
+241904150915                 CASE WHEN (:lc-OrderBy = :lc_OrderBy1 AND
+242004150915                            :lc-OrderByDir = "A" ) THEN
+242104150915                     CAST(DIGITS(cast(trnp.Account_No * 1 AS
+242204150915                         Decimal(15,0))) AS Char(15))
+242304150915                     END ASC,
+242404150915                 CASE WHEN (:lc-OrderBy = :lc_OrderBy1 AND
+242504150915                            :lc-OrderByDir = "D" ) THEN
+242604150915                     CAST(DIGITS(cast(trnp.Account_No * 1 AS
+242704150915                         Decimal(15,0))) AS Char(15))
+242804150915                     END DESC,
+242904150915                 CASE WHEN (:lc-OrderBy = :lc_OrderBy2 AND
+243004150915                            :lc-OrderByDir = "A" ) THEN
+243104150915                     CAST(trnp.Trans_Type_Code   AS Char(15))
+243204150915                     END ASC,
+243304150915                 CASE WHEN (:lc-OrderBy = :lc_OrderBy2 AND
+243404150915                            :lc-OrderByDir = "D" ) THEN
+243504150915                     CAST(trnp.Trans_Type_Code   AS Char(15))
+243604150915                     END DESC,
+243704150915                 CASE WHEN (:lc-OrderBy = :lc_OrderBy3 AND
+243804150915                            :lc-OrderByDir = "A" ) THEN
+243904150915                     CAST(invp.Industry_Fund_Code AS Char(15))
+244004150915                     END ASC,
+244104150915                 CASE WHEN (:lc-OrderBy = :lc_OrderBy3 AND
+244204150915                            :lc-OrderByDir = "D" ) THEN
+244304150915                     CAST(invp.Industry_Fund_Code  AS Char(15))
+244404150915                     END DESC,
+244504150915                 CASE WHEN (:lc-OrderBy = :lc_OrderBy4 AND
+244604150915                            :lc-OrderByDir = "A" ) THEN
+244704150915                     CAST(trnp.Trans_Status_Code  AS Char(15))
+244804150915                     END ASC,
+244904150915                 CASE WHEN (:lc-OrderBy = :lc_OrderBy4 AND
+245004150915                            :lc-OrderByDir = "D" ) THEN
+245104150915                     CAST(trnp.Trans_Status_Code   AS Char(15))
+245204150915                     END DESC,
+245304150915                 CASE WHEN (:lc-OrderBy = :lc_OrderBy5 AND
+245404150915                            :lc-OrderByDir = "A" ) THEN
+245504150915                     CAST(trnp.Trade_Date         AS Char(15))
+245604150915                     END ASC,
+245704150915                 CASE WHEN (:lc-OrderBy = :lc_OrderBy5 AND
+245804150915                            :lc-OrderByDir = "D" ) THEN
+245904150915                     CAST(trnp.Trade_Date         AS Char(15))
+246004150915                     END DESC,
+246104150915                 CASE WHEN (:lc-OrderBy = :lc_OrderBy6 AND
+246204150915                            :lc-OrderByDir = "A" ) THEN
+246304150915                     CAST(DIGITS(cast(Unit_price * 10000 AS
+246404150915                            Decimal(15,0))) AS Char(15))
+246504150915                     END ASC,
+246604150915                 CASE WHEN (:lc-OrderBy = :lc_OrderBy6 AND
+246704150915                            :lc-OrderByDir = "D" ) THEN
+246804150915                      CAST(DIGITS(cast(Unit_Price * 10000 AS
+246904150915                            Decimal(15,0))) AS Char(15))
+247004150915                      END DESC,
+247104150915                 CASE WHEN (:lc-OrderBy = :lc_OrderBy7 AND
+247204150915                            :lc-OrderByDir = "A" ) THEN
+247304150915                     CAST(DIGITS(cast(Unit_Amt * 1000 AS
+247404150915                            Decimal(15,0))) AS Char(15))
+247504150915                     END ASC,
+247604150915                 CASE WHEN (:lc-OrderBy = :lc_OrderBy7 AND
+247704150915                            :lc-OrderByDir = "D" ) THEN
+247804150915                      CAST(DIGITS(cast(Unit_Amt * 1000 AS
+247904150915                            Decimal(15,0))) AS Char(15))
+248004150915                      END DESC,
+248104150915                 CASE WHEN (:lc-OrderBy = :lc_OrderBy8 AND
+248204150915                            :lc-OrderByDir = "A" ) THEN
+248304150915                     CAST(DIGITS(cast(Gross_Amt * 100 AS
+248404150915                            Decimal(15,0))) AS Char(15))
+248504150915                     END ASC,
+248604150915                 CASE WHEN (:lc-OrderBy = :lc_OrderBy8 AND
+248704150915                            :lc-OrderByDir = "D" ) THEN
+248804150915                      CAST(DIGITS(cast(Gross_Amt * 100 AS
+248904150915                            Decimal(15,0))) AS Char(15))
+249004150915                      END DESC,
+249104150915                 CASE WHEN (:lc-OrderBy = :lc_OrderBy10 AND
+249204150915                            :lc-OrderByDir = "A" ) THEN
+249304150915                     CAST(DIGITS(cast(Net_Amt * 100 AS
+249404150915                            Decimal(15,0))) AS Char(15))
+249504150915                     END ASC,
+249604150915                 CASE WHEN (:lc-OrderBy = :lc_OrderBy10 AND
+249704150915                            :lc-OrderByDir = "D" ) THEN
+249804150915                      CAST(DIGITS(cast(Net_Amt * 100 AS
+249904150915                            Decimal(15,0))) AS Char(15))
+250004150915                      END DESC,
+250104150915                  trnp.Placement_date,
+250204150915                  trnp.Trans_No
+250304160208153652       FOR READ ONLY
+250404150915           END-EXEC.
+250504150915
+250604150915           EXEC SQL
+250704150915             OPEN Cur_BTranSumX
+250804150915           END-EXEC.
+250904150915      /
+251004160208      *RFS153652 Start -  uncomment out InsertTemptab, InsertTemptab2,
+251104160208      * comment out InsertTotGrossNet, InsertTotDeduction
+251204160208      * InsertTotGrossNetRVS, and InsertTotDeductionRVS paragrphs.
+251304150915      *RFS143347-begin
+251404150915      * ---------------------------------
+251504160208        InsertTemptab.
+251604160208
+251704160208            EXEC SQL
+251804160208              INSERT INTO QTEMP/BTRANSUM2
+251904160208              ( SELECT COALESCE(SUM
+252004160208                   (CASE WHEN trnp.Trans_Type_Code in(
+252104160208                              "BAJ","BFW","BUY","CPG","INC",
+252204160208                              "INT","MFR","SWI","TRI","SSU")
+252304160208                          AND  trnp.Trans_Status_Code in ("HSC", "HST")
+252404160208                         THEN (trnp.Gross_Amt)
+252504160208                         WHEN trnp.Trans_Type_Code in(
+252604160208                              "BAJ","BFW","BUY","CPG","INC",
+252704160208                              "INT","MFR","SWI","TRI","SSU")
+252804160208                          AND  trnp.Trans_Status_Code = "RVS"
+252904160208                         THEN (trnp.Gross_Amt * -1 )
+253004160208                         WHEN trnp.Trans_Type_Code IN(
+253104160208                              "CQD","FEE","SAJ","SEL","FEC",
+253204160208                              "CPL","SWO","TFE","TRO")
+253304160208                          AND trnp.Trans_Status_Code in ("HSC","HST")
+253404160208                         THEN (trnp.Gross_Amt * -1 )
+253504160208                         WHEN trnp.Trans_Type_Code IN(
+253604160208                              "CQD","FEE","SAJ","SEL","FEC",
+253704160208                              "CPL","SWO","TFE","TRO")
+253804160208                          AND  trnp.Trans_Status_Code = "RVS"
+253904160208                         THEN (trnp.Gross_Amt  ) END),0)
+254004160208                          AS GROSS_TOT
+254104160208               ,COALESCE(SUM
+254204160208                   (CASE WHEN trnp.Trans_Type_Code in(
+254304160208                              "BAJ","BFW","BUY","CPG","INC",
+254404160208                              "INT","MFR","SWI","TRI","SSU")
+254504160208                          AND  trnp.Trans_Status_Code in ("HSC","HST")
+254604160208                         THEN (trnp.Net_Amt)
+254704160208                         WHEN trnp.Trans_Type_Code in(
+254804160208                              "BAJ","BFW","BUY","CPG","INC",
+254904160208                              "INT","MFR","SWI","TRI","SSU")
+255004160208                          AND trnp.Trans_Status_Code = "RVS"
+255104160208                         THEN (trnp.Net_Amt   * -1 )
+255204160208                         WHEN trnp.Trans_Type_Code IN(
+255304160208                              "CQD","FEE","SAJ","SEL","FEC",
+255404160208                              "CPL","SWO","TFE","TRO")
+255504160208                          AND trnp.Trans_Status_Code in ("HSC","HST")
+255604160208                         THEN (trnp.Net_Amt * -1)
+255704160208                         WHEN trnp.Trans_Type_Code IN(
+255804160208                              "CQD","FEE","SAJ","SEL","FEC",
+255904160208                              "CPL","SWO","TFE","TRO")
+256004160208                          AND trnp.Trans_Status_Code = "RVS"
+256104160208                         THEN (trnp.Net_Amt ) END),0)
+256204160208                          AS NET_TOT
+256304150915      *RFS147345 Start.
+256404150915      *        ,COALESCE(SUM(trnp.Deduction_Amt),0)
+256504150915      *                   AS DEDUCTION_TOT
+256604160208               ,COALESCE(SUM
+256704160208                   (CASE WHEN trnp.Trans_Status_Code = "RVS"
+256804160208                         THEN (trnp.Deduction_Amt * -1)
+256904160208                         WHEN (trnp.Gross_Amt = trnp.net_Amt)
+257004160208                         THEN 0
+257104160208                         WHEN (trnp.Gross_Amt <>  trnp.net_Amt)
+257204160208                         THEN trnp.Deduction_Amt
+257304160208                    END), 0) AS DEDUCTION_TOT
+257404150915      *RFS147345 End.
+257504160208
+257604160208                FROM QTEMP/BTRANSUM  trnp
+257704160208153652        ) WITH NC
+257804160208153652*       )
+257904160208             END-EXEC.
+258004150915
+258104160208           MOVE SQLSTATE TO lc_sqlStates.
+258204160208           EVALUATE TRUE
+258304160208             WHEN lncc_sqlSuccessful
+258404160208                  CONTINUE
+258504160208             WHEN OTHER
+258604160208                  SET lncc-Err09  TO TRUE
+258704160208           END-EVALUATE.
+258804160208
+258904150915      * ---------------------------------
+259004160208        InsertTemptab2.
+259104160208
+259204160208            EXEC SQL
+259304160208              INSERT INTO QTEMP/BTRANSUM2
+259404160208              ( SELECT
+259504160208                  COALESCE(SUM(trnp.Gross_Amt),0)
+259604160208                 ,COALESCE(SUM(trnp.Net_Amt),0)
+259704150915      *RFS147345 Start.
+259804150915      *          ,COALESCE(SUM(trnp.Deduction_Amt),0)
+259904160208                 ,COALESCE(SUM
+260004160208                 (CASE WHEN (trnp.Gross_Amt = trnp.net_Amt)
+260104160208                       THEN 0
+260204160208                       WHEN (trnp.Gross_Amt <>  trnp.net_Amt)
+260304160208                       THEN trnp.Deduction_Amt
+260404160208                  END), 0)
+260504150915      *RFS147345 End.
+260604160208              FROM QTEMP/BTRANSUM  trnp
+260704160208153652        ) WITH NC
+260804160208153652*       )
+260904160208            END-EXEC.
+261004160208
+261104160208           MOVE SQLSTATE TO lc_sqlStates.
+261204160208           EVALUATE TRUE
+261304160208             WHEN lncc_sqlSuccessful
+261404160208                  CONTINUE
+261504160208             WHEN OTHER
+261604160208                  SET lncc-Err10  TO TRUE
+261704160208           END-EVALUATE.
+261804150915      *RFS143347--End
+261904150915      * ---------------------------------
+262004150915
+262104150915      * ---------------------------------
+262204160208      * InsertTotGrossNet.
+262304150915      * ---------------------------------
+262404150915      * Compute totals from DB.
+262504160208      *    EXEC SQL
+262604160208      *       INSERT INTO QTEMP/BTRANSUM2
+262704160208      *       (Gross_Total,
+262804160208      *        Net_Total)
+262904160208      *       ( SELECT COALESCE(SUM
+263004160208      *            (CASE WHEN trnp.Trans_Type_Code in(
+263104160208      *                       "BAJ","BFW","BUY","CPG","INC",
+263204160208      *                       "INT","MFR","SWI","TRI","SSU")
+263304160208      *                   AND  trnp.Trans_Status_Code in ("HSC", "HST")
+263404160208      *                  THEN (trnp.Gross_Amt)
+263504160208      *                  WHEN trnp.Trans_Type_Code in(
+263604160208      *                       "BAJ","BFW","BUY","CPG","INC",
+263704160208      *                       "INT","MFR","SWI","TRI","SSU")
+263804160208      *                   AND  trnp.Trans_Status_Code = "RVS"
+263904160208      *                  THEN (trnp.Gross_Amt * -1 )
+264004160208      *                  WHEN trnp.Trans_Type_Code IN(
+264104160208      *                       "CQD","FEE","SAJ","SEL","FEC",
+264204160208      *                       "CPL","SWO","TFE","TRO")
+264304160208      *                   AND trnp.Trans_Status_Code in ("HSC","HST")
+264404160208      *                  THEN (trnp.Gross_Amt * -1 )
+264504160208      *                  WHEN trnp.Trans_Type_Code IN(
+264604160208      *                       "CQD","FEE","SAJ","SEL","FEC",
+264704160208      *                       "CPL","SWO","TFE","TRO")
+264804160208      *                   AND  trnp.Trans_Status_Code = "RVS"
+264904160208      *                  THEN (trnp.Gross_Amt  ) END),0)
+265004160208      *                   AS GROSS_TOT
+265104160208      *        ,COALESCE(SUM
+265204160208      *            (CASE WHEN trnp.Trans_Type_Code in(
+265304160208      *                       "BAJ","BFW","BUY","CPG","INC",
+265404160208      *                       "INT","MFR","SWI","TRI","SSU")
+265504160208      *                   AND  trnp.Trans_Status_Code in ("HSC","HST")
+265604160208      *                  THEN (trnp.Net_Amt)
+265704160208      *                  WHEN trnp.Trans_Type_Code in(
+265804160208      *                       "BAJ","BFW","BUY","CPG","INC",
+265904160208      *                       "INT","MFR","SWI","TRI","SSU")
+266004160208      *                   AND trnp.Trans_Status_Code = "RVS"
+266104160208      *                  THEN (trnp.Net_Amt   * -1 )
+266204160208      *                  WHEN trnp.Trans_Type_Code IN(
+266304160208      *                       "CQD","FEE","SAJ","SEL","FEC",
+266404160208      *                       "CPL","SWO","TFE","TRO")
+266504160208      *                   AND trnp.Trans_Status_Code in ("HSC","HST")
+266604160208      *                  THEN (trnp.Net_Amt * -1)
+266704160208      *                  WHEN trnp.Trans_Type_Code IN(
+266804160208      *                       "CQD","FEE","SAJ","SEL","FEC",
+266904160208      *                       "CPL","SWO","TFE","TRO")
+267004160208      *                   AND trnp.Trans_Status_Code = "RVS"
+267104160208      *                  THEN (trnp.Net_Amt ) END),0)
+267204160208      *                   AS NET_TOT
+267304160208      *       FROM Mfatrnp trnp
+267404160208      *         INNER JOIN Mfaaccntp accntp ON
+267504160208      *               trnp.Account_No = accntp.Account_No
+267604160208      *           AND (accntp.Dealer_Account_No = :Comm-Dlracctno OR
+267704160208      *               :Comm-Dlracctno = "  ")
+267804160208      *       WHERE trnp.Trade_Date BETWEEN :li-FrmDate AND :li-ToDate
+267904160208      *         AND (trnp.Dealer_Code = :Comm-DlrCode OR
+268004160208      *              :Comm-DlrCode = :lncc-All)
+268104160208      *         AND (trnp.Dealer_Rep_Code = :Comm-RepCode OR
+268204160208      *              :Comm-RepCode = :lncc-All)
+268304160208      *         AND (trnp.Account_no = :li-AccountNo OR
+268404160208      *             :li-AccountNo  = 0)
+268504160208      *         AND (trnp.Trans_Type_code = :Comm-TrnType OR
+268604160208      *               :Comm-TrnType = :lncc-All)
+268704160208      *         AND (trnp.Trans_Status_Code = :Comm-TranStatus OR
+268804160208      *              :Comm-TranStatus = :lncc-All)
+268904160208      *         AND (trnp.Investment_Code = :Comm-Fund-Id OR
+269004160208      *              :Comm-Fund-Id   =  :lncc-All)
+269104160208      *         AND trnp.Hidden_Trans <> "Y"
+269204160208      *       )
+269304160208      *    END-EXEC.
+269404160208
+269504160208      *    MOVE SQLSTATE TO lc_sqlStates.
+269604160208      *    EVALUATE TRUE
+269704160208      *      WHEN lncc_sqlSuccessful
+269804160208      *           CONTINUE
+269904160208      *      WHEN OTHER
+270004160208      *           SET lncc-Err14  TO TRUE
+270104160208      *    END-EVALUATE.
+270204150915
+270304150915      * ---------------------------------
+270404160208      * InsertTotDeduction.
+270504150915      * ---------------------------------
+270604160208      *    EXEC SQL
+270704160208      *       INSERT INTO QTEMP/BTRANSUM2
+270804160208      *       (Deduction_Total)
+270904160208      *       ( SELECT COALESCE(SUM
+271004160208      *            (CASE WHEN trnp.Trans_Status_Code = :lncc_RVS
+271104160208      *                  THEN (trnchp.Charge * -1)
+271204160208      *                  WHEN (trnp.Gross_Amt = trnp.net_Amt)
+271304160208      *                  THEN 0
+271404160208      *                  WHEN (trnp.Gross_Amt <>  trnp.net_Amt)
+271504160208      *                  THEN trnchp.Charge
+271604160208      *             END), 0) AS DEDUCTION_TOT
+271704160208      *       FROM Mfatrnp trnp
+271804160208      *         INNER JOIN Mfaaccntp accntp ON
+271904160208      *               trnp.Account_No = accntp.Account_No
+272004160208      *           AND (accntp.Dealer_Account_No = :Comm-Dlracctno OR
+272104160208      *              :Comm-Dlracctno = "  ")
+272204160208      *         INNER JOIN Mfatrnchp trnchp ON
+272304160208      *               trnchp.Placement_date = trnp.Placement_date
+272404160208      *           AND trnchp.Trans_No       = trnp.Trans_No
+272504160208      *       WHERE trnp.Trade_Date BETWEEN :li-FrmDate AND :li-ToDate
+272604160208      *         AND (trnp.Dealer_Code = :Comm-DlrCode OR
+272704160208      *              :Comm-DlrCode = :lncc-All)
+272804160208      *         AND (trnp.Dealer_Rep_Code = :Comm-RepCode OR
+272904160208      *              :Comm-RepCode = :lncc-All)
+273004160208      *         AND (trnp.Account_no = :li-AccountNo OR
+273104160208      *             :li-AccountNo  = 0)
+273204160208      *         AND (trnp.Trans_Type_code = :Comm-TrnType OR
+273304160208      *               :Comm-TrnType = :lncc-All)
+273404160208      *         AND (trnp.Trans_Status_Code = :Comm-TranStatus OR
+273504160208      *              :Comm-TranStatus = :lncc-All)
+273604160208      *         AND (trnp.Investment_Code = :Comm-Fund-Id OR
+273704160208      *              :Comm-Fund-Id   =  :lncc-All)
+273804160208      *         AND trnp.Hidden_Trans <> "Y"
+273904160208      *       )
+274004160208      *    END-EXEC.
+274104160208      *    MOVE SQLSTATE TO lc_sqlStates.
+274204160208      *    EVALUATE TRUE
+274304160208      *      WHEN lncc_sqlSuccessful
+274404160208      *           CONTINUE
+274504160208      *      WHEN OTHER
+274604160208      *           SET lncc-Err15  TO TRUE
+274704160208      *    END-EVALUATE.
+274804150915
+274904150915      * ---------------------------------
+275004160208      * InsertTotGrossNetRVS.
+275104150915      * ---------------------------------
+275204150915      * Compute totals from DB.
+275304160208      *    EXEC SQL
+275404160208      *       INSERT INTO QTEMP/BTRANSUM2
+275504160208      *       (Gross_Total,
+275604160208      *        Net_Total)
+275704160208      *       ( SELECT
+275804160208      *           COALESCE(SUM(trnp.Gross_Amt),0)
+275904160208      *          ,COALESCE(SUM(trnp.Net_Amt),0)
+276004160208      *       FROM Mfatrnp trnp
+276104160208      *         INNER JOIN Mfaaccntp accntp ON
+276204160208      *              trnp.Account_No = accntp.Account_No
+276304160208      *         AND (accntp.Dealer_Account_No = :Comm-Dlracctno OR
+276404160208      *             :Comm-Dlracctno = "  ")
+276504160208      *
+276604160208      *       WHERE trnp.Trade_Date BETWEEN :li-FrmDate AND :li-ToDate
+276704160208      *         AND (trnp.Dealer_Code = :Comm-DlrCode OR
+276804160208      *              :Comm-DlrCode = :lncc-All)
+276904160208      *         AND (trnp.Dealer_Rep_Code = :Comm-RepCode OR
+277004160208      *              :Comm-RepCode = :lncc-All)
+277104160208      *         AND (trnp.Account_no = :li-AccountNo OR
+277204160208      *             :li-AccountNo  = 0)
+277304160208      *         AND (trnp.Trans_Type_code = :Comm-TrnType OR
+277404160208      *               :Comm-TrnType = :lncc-All)
+277504160208      *         AND trnp.Trans_Status_Code = :Comm-TranStatus
+277604160208      *         AND (trnp.Investment_Code = :Comm-Fund-Id OR
+277704160208      *              :Comm-Fund-Id   =  :lncc-All)
+277804160208      *         AND trnp.Hidden_Trans <> "Y"
+277904160208      *       )
+278004160208      *    END-EXEC.
+278104150915
+278204160208      *    MOVE SQLSTATE TO lc_sqlStates.
+278304160208      *    EVALUATE TRUE
+278404160208      *      WHEN lncc_sqlSuccessful
+278504160208      *           CONTINUE
+278604160208      *      WHEN OTHER
+278704160208      *           SET lncc-Err17  TO TRUE
+278804160208      *    END-EVALUATE.
+278904150915
+279004150915      * ---------------------------------
+279104160208      * InsertTotDeductionRVS.
+279204150915      * ---------------------------------
+279304160208      *    EXEC SQL
+279404160208      *       INSERT INTO QTEMP/BTRANSUM2
+279504160208      *       (Deduction_Total)
+279604160208      *       ( SELECT
+279704160208      *          COALESCE(SUM
+279804160208      *          (CASE WHEN (trnp.Gross_Amt = trnp.net_Amt)
+279904160208      *                THEN 0
+280004160208      *                WHEN (trnp.Gross_Amt <>  trnp.net_Amt)
+280104160208      *                THEN trnchp.Charge
+280204160208      *           END), 0)
+280304160208      *       FROM Mfatrnp trnp
+280404160208      *         INNER JOIN Mfaaccntp accntp ON
+280504160208      *               trnp.Account_No = accntp.Account_No
+280604160208      *           AND (accntp.Dealer_Account_No = :Comm-Dlracctno OR
+280704160208      *               :Comm-Dlracctno = "  ")
+280804160208      *         INNER JOIN Mfatrnchp trnchp ON
+280904160208      *               trnchp.Placement_date = trnp.Placement_date
+281004160208      *           AND trnchp.Trans_No       = trnp.Trans_No
+281104150915
+281204160208      *       WHERE trnp.Trade_Date BETWEEN :li-FrmDate AND :li-ToDate
+281304160208      *         AND (trnp.Dealer_Code = :Comm-DlrCode OR
+281404160208      *              :Comm-DlrCode = :lncc-All)
+281504160208      *         AND (trnp.Dealer_Rep_Code = :Comm-RepCode OR
+281604160208      *              :Comm-RepCode = :lncc-All)
+281704160208      *         AND (trnp.Account_no = :li-AccountNo OR
+281804160208      *             :li-AccountNo  = 0)
+281904160208      *         AND (trnp.Trans_Type_code = :Comm-TrnType OR
+282004160208      *               :Comm-TrnType = :lncc-All)
+282104160208      *         AND trnp.Trans_Status_Code = :Comm-TranStatus
+282204160208      *         AND (trnp.Investment_Code = :Comm-Fund-Id OR
+282304160208      *              :Comm-Fund-Id   =  :lncc-All)
+282404160208      *         AND trnp.Hidden_Trans <> "Y"
+282504160208      *       )
+282604160208      *     END-EXEC.
+282704150915
+282804160208      *    MOVE SQLSTATE TO lc_sqlStates.
+282904160208      *    EVALUATE TRUE
+283004160208      *      WHEN lncc_sqlSuccessful
+283104160208      *           CONTINUE
+283204160208      *      WHEN OTHER
+283304160208      *           SET lncc-Err18  TO TRUE
+283404160208      *    END-EVALUATE.
+283504160208      * RFS153652 end
+283604151002
+283704151002      * ---------------------------------
+283804150915      *RFS146397 End
+283904150203      * ---------------------------------
+284004140130      *RFS126759- begin RM
+284104140130      * ---------------------------------
+284204140130       SummaryResultSet.
+284304140130
+284404140130           EXEC SQL
+284504150915      * RFS146397 starts
+284604160208      * RFS153652 starts - uncomment out RFS143347
+284704160208143347       DECLARE SummTrans CURSOR FOR
+284804160208143347         SELECT
+284904160208143347               trnp.Gross_Total as Gross_Tot
+285004160208143347              ,trnp.Net_Total   as Net_Tot
+285104160208143347              ,trnp.Deduction_Total  as Deduct_Tot
+285204160208143347
+285304160208143347         FROM QTEMP/BTRANSUM2   trnp
+285404150915      * RFS146397 ends
+285504150302143347*        SELECT
+285604150302143347*          SUM(trnp.Gross_Amt) as Gross_Tot,
+285704150302143347*          SUM(Trnp.Net_Amt) as Net_Tot,
+285804150302143347*          SUM(trnp.Deduction_Amt) as Deduct_Tot
+285904150302143347*
+286004150302143347*      FROM QTEMP/BTRANSUM  trnp
+286104140130           END-EXEC.
+286204140130
+286304140130           EXEC SQL
+286404140130             OPEN SummTrans
+286504140130           END-EXEC.
+286604140130
+286704140206      * RFS 126759 - begin
+286804140206      *    EXEC SQL
+286904140206      *      SET RESULT SETS CURSOR SummTrans
+287004140206      *    END-EXEC.
+287104140206      * RFS 126759 - end
+287204160208      * RFS153652 Start
+287304160208      * ---------------------------------
+287404160208       SummaryResultSetX.
+287504160208      * ---------------------------------
+287604160208           INITIALIZE ln_TotGrossAmt, ln_TotNetAmt, ln_TotDeduct.
+287704160509158524     IF ncc_ProcessDate
+287804160509            EXEC SQL
+287904160208             SELECT b.GROSS_TOT, b.NET_TOT, B.DEDUCTION_TOT
+288004160509158524             ,b.TOT_COUNT
+288104160208                    INTO :ln_TotGrossAmt,
+288204160208                         :ln_TotNetAmt,
+288304160208                         :ln_TotDeduct
+288404160509158524                  ,:li-TotRow
+288504160208            FROM
+288604160208            (SELECT COALESCE(DEC(SUM(
+288704160208                    CASE WHEN ((trnp.Trans_Type_Code in(
+288804160208                         "BAJ","BFW","BUY","CPG","INC",
+288904160208                         "INT","MFR","SWI","TRI","SSU")
+289004160208                     AND  trnp.Trans_Status_Code in ("HSC", "HST"))
+289104160208                      OR (trnp.Trans_Type_Code IN(
+289204160208                         "CQD","FEE","SAJ","SEL","FEC",
+289304160208                         "CPL","SWO","TFE","TRO")
+289404160208                     AND  trnp.Trans_Status_Code = "RVS"))
+289504160208                    THEN (trnp.Gross_Amt)
+289604160208                    WHEN ((trnp.Trans_Type_Code in(
+289704160208                         "BAJ","BFW","BUY","CPG","INC",
+289804160208                         "INT","MFR","SWI","TRI","SSU")
+289904160208                     AND  trnp.Trans_Status_Code = "RVS" )
+290004160208                      OR (trnp.Trans_Type_Code IN(
+290104160208                         "CQD","FEE","SAJ","SEL","FEC",
+290204160208                         "CPL","SWO","TFE","TRO")
+290304160208                     AND trnp.Trans_Status_Code in ("HSC","HST")))
+290404160208                    THEN (trnp.Gross_Amt * -1 )
+290504160208                         END),15,2),0) AS GROSS_TOT
+290604160208             ,COALESCE(DEC(SUM(
+290704160208                    CASE WHEN ((trnp.Trans_Type_Code in(
+290804160208                         "BAJ","BFW","BUY","CPG","INC",
+290904160208                         "INT","MFR","SWI","TRI","SSU")
+291004160208                     AND  trnp.Trans_Status_Code in ("HSC","HST"))
+291104160208                      OR (trnp.Trans_Type_Code IN(
+291204160208                         "CQD","FEE","SAJ","SEL","FEC",
+291304160208                         "CPL","SWO","TFE","TRO")
+291404160208                     AND trnp.Trans_Status_Code = "RVS"))
+291504160208                    THEN (trnp.Net_Amt)
+291604160208                    WHEN ((trnp.Trans_Type_Code in(
+291704160208                         "BAJ","BFW","BUY","CPG","INC",
+291804160208                         "INT","MFR","SWI","TRI","SSU")
+291904160208                     AND trnp.Trans_Status_Code = "RVS")
+292004160208                      OR (trnp.Trans_Type_Code IN(
+292104160208                         "CQD","FEE","SAJ","SEL","FEC",
+292204160208                         "CPL","SWO","TFE","TRO")
+292304160208                     AND trnp.Trans_Status_Code in ("HSC","HST")))
+292404160208                    THEN (trnp.Net_Amt   * -1 )
+292504160208                          END),15,2),0) AS NET_TOT
+292604160208            ,COALESCE(DEC(SUM(trnp.DEDUCTION),15,2),0) AS DEDUCTION_TOT
+292704160509158524      ,COALESCE(DEC(COUNT(1),15,0),0) AS TOT_COUNT
+292804160208             FROM
+292904160208             (
+293004160208             SELECT MAX(x.Trans_Type_Code)  as Trans_Type_Code
+293104160208                   ,MAX(x.Trans_Status_Code) as Trans_Status_Code
+293204160208                   ,MAX(x.Gross_Amt) as Gross_Amt
+293304160208                   ,MAX(x.Net_Amt)   as Net_Amt
+293404160208             ,COALESCE(SUM(CASE WHEN (x.Trans_Status_Code = :lncc_RVS
+293504160208                       AND trnchp.Charge IS NOT NULL)
+293604160208                      THEN (trnchp.Charge * -1)
+293704160208                      WHEN (x.Gross_Amt = x.net_Amt)
+293804160208                      THEN 0
+293904160208                      WHEN (x.Gross_Amt <>  x.net_Amt
+294004160208                       AND trnchp.Charge IS NOT NULL)
+294104160208                      THEN trnchp.Charge
+294204160208                 END), 0) AS DEDUCTION
+294304160208             FROM Mfatrnp x
+294404160208             LEFT OUTER JOIN Mfaaccntp accntp ON
+294504160208                   x.Account_No = accntp.Account_No
+294604160208               AND ((accntp.Dealer_Account_No = :Comm-DlrAcctNo
+294704160208               AND :Comm-DlrAcctNo <>  "  ")
+294804160208                OR :Comm-DlrAcctNo  =  "  ")
+294904160208             LEFT OUTER JOIN Mfatrnchp trnchp ON
+295004160208                   trnchp.Placement_date = x.Placement_date
+295104160208               AND trnchp.Trans_No       = x.Trans_No
+295204160208             WHERE
+295304160315      *RFS154265 -  Start
+295404160315      *            (x.Trade_Date >= :li-FrmDate
+295504160315      *        AND  x.Trade_Date <= :li-ToDate )
+295604160509      *RFS158524 -  Start
+295704160509      *          (((x.Trade_Date >= :li-FrmDate
+295804160509      *        AND  x.Trade_Date <= :li-ToDate )
+295904160509      *        AND :COMM-DateTypeInd = "T")
+296004160509      *        OR ((x.Process_Date >= :li-FrmDate
+296104160509                   (x.Process_Date >= :li-FrmDate
+296204160315               AND  x.Process_Date <= :li-ToDate )
+296304160509      *        AND :COMM-DateTypeInd = "P"))
+296404160315      *RFS154265 -  End
+296504160509      *RFS158524 -  End
+296604160208               AND (x.Dealer_Code = :Comm-DlrCode
+296704160208                OR  :Comm-DlrCode =  :lncc-All)
+296804160208               AND (x.Dealer_Rep_Code = :Comm-RepCode
+296904160208                OR  :Comm-RepCode     = :lncc-All)
+297004160208               AND (x.Account_no = :li-AccountNo
+297104160208                OR  :li-AccountNo  =  0)
+297204160208               AND (x.Trans_Type_code = :Comm-TrnType
+297304160208                OR  :Comm-TrnType     = :lncc-All)
+297404160208               AND (x.Trans_Status_Code = :Comm-TranStatus
+297504160208                OR  :Comm-TranStatus    = :lncc-All)
+297604160208               AND (x.Investment_Code = :Comm-Fund-ID
+297704160208                OR  :Comm-Fund-ID     = :lncc-All)
+297804160208               AND x.Hidden_Trans <> "Y"
+297904160208             GROUP BY X.Placement_Date,
+298004160208                      X.Trans_No
+298104160208                 ) trnp ) b
+298204160509      *RFS158524 -  Start
+298304160509            END-EXEC
+298404160509           ELSE
+298504160509            EXEC SQL
+298604160509             SELECT b.GROSS_TOT, b.NET_TOT, B.DEDUCTION_TOT
+298704160509                   ,b.TOT_COUNT
+298804160509                    INTO :ln_TotGrossAmt,
+298904160509                         :ln_TotNetAmt,
+299004160509                         :ln_TotDeduct
+299104160509                        ,:li-TotRow
+299204160509            FROM
+299304160509            (SELECT COALESCE(DEC(SUM(
+299404160509                    CASE WHEN ((trnp.Trans_Type_Code in(
+299504160509                         "BAJ","BFW","BUY","CPG","INC",
+299604160509                         "INT","MFR","SWI","TRI","SSU")
+299704160509                     AND  trnp.Trans_Status_Code in ("HSC", "HST"))
+299804160509                      OR (trnp.Trans_Type_Code IN(
+299904160509                         "CQD","FEE","SAJ","SEL","FEC",
+300004160509                         "CPL","SWO","TFE","TRO")
+300104160509                     AND  trnp.Trans_Status_Code = "RVS"))
+300204160509                    THEN (trnp.Gross_Amt)
+300304160509                    WHEN ((trnp.Trans_Type_Code in(
+300404160509                         "BAJ","BFW","BUY","CPG","INC",
+300504160509                         "INT","MFR","SWI","TRI","SSU")
+300604160509                     AND  trnp.Trans_Status_Code = "RVS" )
+300704160509                      OR (trnp.Trans_Type_Code IN(
+300804160509                         "CQD","FEE","SAJ","SEL","FEC",
+300904160509                         "CPL","SWO","TFE","TRO")
+301004160509                     AND trnp.Trans_Status_Code in ("HSC","HST")))
+301104160509                    THEN (trnp.Gross_Amt * -1 )
+301204160509                         END),15,2),0) AS GROSS_TOT
+301304160509             ,COALESCE(DEC(SUM(
+301404160509                    CASE WHEN ((trnp.Trans_Type_Code in(
+301504160509                         "BAJ","BFW","BUY","CPG","INC",
+301604160509                         "INT","MFR","SWI","TRI","SSU")
+301704160509                     AND  trnp.Trans_Status_Code in ("HSC","HST"))
+301804160509                      OR (trnp.Trans_Type_Code IN(
+301904160509                         "CQD","FEE","SAJ","SEL","FEC",
+302004160509                         "CPL","SWO","TFE","TRO")
+302104160509                     AND trnp.Trans_Status_Code = "RVS"))
+302204160509                    THEN (trnp.Net_Amt)
+302304160509                    WHEN ((trnp.Trans_Type_Code in(
+302404160509                         "BAJ","BFW","BUY","CPG","INC",
+302504160509                         "INT","MFR","SWI","TRI","SSU")
+302604160509                     AND trnp.Trans_Status_Code = "RVS")
+302704160509                      OR (trnp.Trans_Type_Code IN(
+302804160509                         "CQD","FEE","SAJ","SEL","FEC",
+302904160509                         "CPL","SWO","TFE","TRO")
+303004160509                     AND trnp.Trans_Status_Code in ("HSC","HST")))
+303104160509                    THEN (trnp.Net_Amt   * -1 )
+303204160509                          END),15,2),0) AS NET_TOT
+303304160509            ,COALESCE(DEC(SUM(trnp.DEDUCTION),15,2),0) AS DEDUCTION_TOT
+303404160509            ,COALESCE(DEC(COUNT(1),15,0),0) AS TOT_COUNT
+303504160509             FROM
+303604160509             (
+303704160509             SELECT MAX(x.Trans_Type_Code)  as Trans_Type_Code
+303804160509                   ,MAX(x.Trans_Status_Code) as Trans_Status_Code
+303904160509                   ,MAX(x.Gross_Amt) as Gross_Amt
+304004160509                   ,MAX(x.Net_Amt)   as Net_Amt
+304104160509             ,COALESCE(SUM(CASE WHEN (x.Trans_Status_Code = :lncc_RVS
+304204160509                       AND trnchp.Charge IS NOT NULL)
+304304160509                      THEN (trnchp.Charge * -1)
+304404160509                      WHEN (x.Gross_Amt = x.net_Amt)
+304504160509                      THEN 0
+304604160509                      WHEN (x.Gross_Amt <>  x.net_Amt
+304704160509                       AND trnchp.Charge IS NOT NULL)
+304804160509                      THEN trnchp.Charge
+304904160509                 END), 0) AS DEDUCTION
+305004160509             FROM Mfatrnp x
+305104160509             LEFT OUTER JOIN Mfaaccntp accntp ON
+305204160509                   x.Account_No = accntp.Account_No
+305304160509               AND ((accntp.Dealer_Account_No = :Comm-DlrAcctNo
+305404160509               AND :Comm-DlrAcctNo <>  "  ")
+305504160509                OR :Comm-DlrAcctNo  =  "  ")
+305604160509             LEFT OUTER JOIN Mfatrnchp trnchp ON
+305704160509                   trnchp.Placement_date = x.Placement_date
+305804160509               AND trnchp.Trans_No       = x.Trans_No
+305904160509             WHERE
+306004160509                   (x.Trade_Date >= :li-FrmDate
+306104160509               AND  x.Trade_Date <= :li-ToDate )
+306204160509               AND (x.Dealer_Code = :Comm-DlrCode
+306304160509                OR  :Comm-DlrCode =  :lncc-All)
+306404160509               AND (x.Dealer_Rep_Code = :Comm-RepCode
+306504160509                OR  :Comm-RepCode     = :lncc-All)
+306604160509               AND (x.Account_no = :li-AccountNo
+306704160509                OR  :li-AccountNo  =  0)
+306804160509               AND (x.Trans_Type_code = :Comm-TrnType
+306904160509                OR  :Comm-TrnType     = :lncc-All)
+307004160509               AND (x.Trans_Status_Code = :Comm-TranStatus
+307104160509                OR  :Comm-TranStatus    = :lncc-All)
+307204160509               AND (x.Investment_Code = :Comm-Fund-ID
+307304160509                OR  :Comm-Fund-ID     = :lncc-All)
+307404160509               AND x.Hidden_Trans <> "Y"
+307504160509             GROUP BY X.Placement_Date,
+307604160509                      X.Trans_No
+307704160509                 ) trnp ) b
+307804160509            END-EXEC
+307904160509      *    END-EXEC.
+308004160509           END-IF.
+308104160509      *RFS158524 -  End
+308204160208           EXEC SQL
+308304160208             DECLARE SummTransX CURSOR FOR
+308404160208               SELECT
+308504160208                    :ln_TotGrossAmt AS GROSS_TOT,
+308604160208                    :ln_TotNetAmt   AS NET_TOT,
+308704160208                    :ln_TotDeduct   AS DEDUCTION_TOT
+308804160208               FROM SYSIBM.SYSDUMMY1
+308904160208           END-EXEC.
+309004160208           EXEC SQL
+309104160208             OPEN SummTransX
+309204160208           END-EXEC.
+309304160208      * RFS153652 Start
+309404160208
+309504140424      * ---------------------------------
+309604140424       DeductionSummaryResultSet.
+309704140424
+309804140424           EXEC SQL
+309904140424             DECLARE DedSummTrans CURSOR FOR
+310004140424               SELECT
+310104140904                 chp.Placement_Date As PlcDte,
+310204140904                 chp.Trans_No As TrnsNo,
+310304140904                 chp.Deduction_Code As DedCode,
+310404140904                 chp.Charge As DedCharge,
+310504140424                 max(dep.Deduction_Short_Descr) As ShrtDesc,
+310604140424                 max(dep.Deduction_Long_Descr) As LngDesc
+310704140424
+310804140424             FROM QTEMP/BTRANSUM  trn
+310904140904      *RFS139981 Start
+311004140904             INNER JOIN QTEMP/BDEDUSUM  dedu ON
+311104140904              dedu.Placement_Date = trn.Placement_Date AND
+311204140904              dedu.Trans_No = trn.Trans_No
+311304140904      *RFS139981 End
+311404140904             INNER JOIN MFATRNCHP CHP ON
+311504140904              chp.Placement_Date = trn.Placement_Date AND
+311604140904              chp.Trans_No = trn.Trans_No
+311704140424             LEFT OUTER JOIN MFATRNDEP DEP ON
+311804140904              dep.Deduction_Code = chp.Deduction_Code AND
+311904140424              dep.Language_Code = :Comm-Lang-Code
+312004140904             GROUP BY chp.Placement_Date,
+312104140904                      chp.Trans_No,
+312204140904                      chp.Deduction_Code,
+312304140904                      chp.Charge
+312404160208153652       FOR READ ONLY
+312504140424           END-EXEC.
+312604140424
+312704140424           EXEC SQL
+312804140424             OPEN DedSummTrans
+312904140424           END-EXEC.
+313004160208
+313104160208      *RFS153652 Starts
+313204160208      * ---------------------------------
+313304160208       DeductionSumResultSetX.
+313404160208           EXEC SQL
+313504160208             DECLARE DedSummTransX CURSOR FOR
+313604160208               SELECT
+313704160208                 chp.Placement_Date As PlcDte,
+313804160208                 chp.Trans_No As TrnsNo,
+313904160208                 chp.Deduction_Code As DedCode,
+314004160208                 chp.Charge As DedCharge,
+314104160208                 max(dep.Deduction_Short_Descr) As ShrtDesc,
+314204160208                 max(dep.Deduction_Long_Descr) As LngDesc
+314304160208
+314404160208             FROM QTEMP/TRANSTMP  trn
+314504160208             INNER JOIN MFATRNCHP CHP ON
+314604160208              chp.Placement_Date = trn.Placement_Date AND
+314704160208              chp.Trans_No = trn.Trans_No
+314804160208             LEFT OUTER JOIN MFATRNDEP DEP ON
+314904160208              dep.Deduction_Code = chp.Deduction_Code AND
+315004160208              dep.Language_Code = :Comm-Lang-Code
+315104160208             GROUP BY chp.Placement_Date,
+315204160208                      chp.Trans_No,
+315304160208                      chp.Deduction_Code,
+315404160208                      chp.Charge
+315504160208             FOR READ ONLY
+315604160208           END-EXEC.
+315704160208
+315804160208           EXEC SQL
+315904160208             OPEN DedSummTransX
+316004160208           END-EXEC.
+316104160208      *RFS153652 Ends
+316204160208
+316304140206      * ---------------------------------
+316404140206       PrepareResultSets.
+316504140130      * ---------------------------------
+316604160208      *RFS153652 Start  li-NumRow < 0 not in a use by IATrax
+316704160208      *    IF li-NumRow < 0
+316804160208      *    EXEC SQL
+316904160208      *      SET RESULT SETS CURSOR Cur_TranSumAll,
+317004160208      *                      CURSOR SummTrans,
+317104160208      *                      CURSOR DedSummTrans
+317204160208      *    END-EXEC
+317304160208      *    ELSE
+317404160208      *RFS153652 End
+317504150915146397       IF lc-OrderBy = lc_OrderBy9
+317604150915              EXEC SQL
+317704150915                SET RESULT SETS CURSOR Cur_BTranSum,
+317804150915                                CURSOR SummTrans,
+317904150915                                CURSOR DedSummTrans
+318004150915              END-EXEC
+318104150915      *RFS146397 starts
+318204150915             ELSE
+318304160208153652        IF ncc_ReturnAll
+318404150915                EXEC SQL
+318504150915                  SET RESULT SETS CURSOR Cur_BTranSumX,
+318604160208153652                            CURSOR SummTransX,
+318704160208153652                            CURSOR DedSummTransX
+318804160208153652*                           CURSOR SummTrans,
+318904160208153652*                           CURSOR DedSummTrans
+319004150915                END-EXEC
+319104160516              END-IF
+319204160208      *RFS153652 Start
+319304160208              IF ncc_ReturnTrans
+319404160208                EXEC SQL
+319504160208                  SET RESULT SETS CURSOR Cur_BTranSumX,
+319604160208                                  CURSOR DedSummTransX
+319704160208                END-EXEC
+319804160208              END-IF
+319904160208              IF ncc_ReturnSummary
+320004160208                EXEC SQL
+320104160208                  SET RESULT SETS CURSOR SummTransX
+320204160208                END-EXEC
+320304160208              END-IF
+320404160208      *      END-IF
+320504160208      *RFS153652 End
+320604150915      *RFS146397 ends
+320704140206           END-IF.
+320804140206      *RFS126759- end   RM
+320904160208      *RFS153652- Starts
+321004160208      * ---------------------------------
+321104160208       CheckObject.
+321204160208      * ---------------------------------
+321304160208           CALL "FXCHKOBJ" USING lc_objectName
+321404160208                                 lnc_libQtemp
+321504160208                                 lnc_objectTypeFile
+321604160208                                 lc_messageId.
+321704160208      *RFS153652- Ends
+321804140130      /
+321904120504      * ---------------------------------
+322004120504       EndOfProgram.
+322104120504      * ---------------------------------
+322204160208153652     ACCEPT ln_SystemTime8 FROM TIME.
+322304160208153652     DISPLAY "SPTXSUMATX ends: " ln_SystemTime8.
+322404160208
+322504120504           MOVE Ws-Err-Code TO Comm-Err-Code.
+322604120504           MOVE li-TotRow TO Comm-TotRows.
+322704120504           GOBACK.
+322804120504      /
+322904160208      *RFS153652 starts - compile option,CLOSQLCSR(*ENDMOD) is used
+323004160208      *CloseCursors.
+323104160208      *    EXEC SQL
+323204160208      *      CLOSE Cur_BTranSum
+323304160208      *    END-EXEC.
+323404160208      *    EXEC SQL
+323504160208      *      CLOSE Cur_TranSumAll
+323604160208      *    END-EXEC.
+323704160208      *RFS153652 ends
+323804150915      *RFS146397- starts - cursor is closed automatically after fetch
+323904140130      *RFS126759- begin RM
+324004150915      *    EXEC SQL
+324104150915      *      CLOSE SummTrans
+324204150915      *    END-EXEC.
+324304140130      *RFS126759- end   RM
+324404150915      *RFS146397- ends
+324504120504      /
+324604120504      * ---------------------------------
+324704120504      * DSP-ERROR and FORCE-MSGW Routines
+324804120504      * ---------------------------------
+324904120504          COPY CPYSQLRTN.
+325004120504      *

@@ -1,0 +1,453 @@
+000100101125       IDENTIFICATION DIVISION.
+000200101125       PROGRAM-ID.    EVASTATN.
+000300101125       AUTHOR.        TCS       .
+000400101125       INSTALLATION.  CITI GROUP.
+000500101125       DATE-WRITTEN.  November 25 2010.
+000600101125       DATE-COMPILED.
+000700101125
+000800101125      ************************************************************************
+000900101125      *                                                                      *
+001000101125      *           C H A N G E   H I S T O R Y                                *
+001100101125      *                                                                      *
+001200101125      ************************************************************************
+001300101125      ************************************************************************
+001400101125      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                    *
+001500101125      ************************************************************************
+001600101125      *   NAME     *  CCYY/MM/DD  * RFS NUMBERS PLUS DESCRIPTIONS            *
+001700101125      ************************************************************************
+001800101125      *  Gajen C   *  2010/11/25  * RFS 71446   New program.                 *
+001900101125      *            *                            Clone of EVASTAT program.    *
+002000101125      *            *                            This program process single  *
+002100101125      *            *                            batch code which is passed   *
+002200101125      *            *                            as parameter.                *
+002300101125      *            *  This program is used to re-calculate batch status      *
+002400101125      *            *  of the batch header file for particular batch          *
+002500101125      *            *  code and date.                                         *
+002600101125      *            *                                                         *
+002700101125      *            *   MEANING OF SWITCHES:                                  *
+002800101125      *            *   1 - PROCESSED/NOT PROCESSED SWITCH                    *
+002900101125      *            *   2 - PENDING UNITS BALANCE                             *
+003000101125      *            *   3 - PENDING DOLLARS BALANCE                           *
+003100101125      *            *   4 - TRANSACTIONS DOUBLE KEY BALANCED                  *
+003200101125      *            *   5 - PROCESSED UNITS BALANCE                           *
+003300101125      *            *   6 - PROCESS DOLLARS BALANCE                           *
+003400101125      *            *   7 - TRANSACTION PROCESSED COUNT BALANCES              *
+003500101125      *            *   8 - BATCH FORCED                                      *
+003600101125      *            *                                                         *
+003700110620      * Suresh K.  * 2011/06/20   * RFS 91783 - Recompile for MFABCHTYP
+003800101125      ************************************************************************
+003900101125      * PARAGRAPH NAMES:                                                     *
+004000101125      *                                                                      *
+004100101125      *            *  A000- MAINLINE ROUTINE                                 *
+004200101125      *            *  A100- INITIALIZATION                                   *
+004300101125      *            *  B200- MAIN PROCESSING                                  *
+004400101125      *            *  D100- OTHER ROUTINES                                   *
+004500101125      *            *  C100- FINISHED PROCESSING                              *
+004600101125      *            *                                                         *
+004700101125      *----------------------------------------------------------------------*
+004800101125      * FILES USED:                                                          *
+004900101125      *            Input/Output  - MFABCHHDP - Batch Header file             *
+005000101125      *            Input  - MFABCHTYP - Batch type Codes file                *
+005100101125      *                                                                      *
+005200101125      * PROGRAMMER NOTES:                                                    *
+005300101125      * ---------------------------------------------------------------------*
+005400101125      *                                                                      *
+005500101125      * PROGRAM CALLED BY:                                                   *
+005600101125      *                     - GRPBTGEN                                       *
+005700101125      *                                                                      *
+005800101125      *                     - IN CASE THERE ARE FILE CHANGES ON              *
+005900101125      *                       MFABCHHDP & MFABCHTYP , the fetch fields       *
+006000101125      *                       must be changed as well to conform with        *
+006100101125      *                       the new layout.                                *
+006200101125      *                                                                      *
+006300101125      *                     - Added a temporary unique index on              *
+006400101125      *                       MFABCHHDP in qtemp library. Drop the           *
+006500101125      *                       index after job finishes.                      *
+006600101125      *                       This is needed for performance enhancement     *
+006700101125      *                       when sql update is being used.                 *
+006800101125      *****************************************************************      *
+006900110617      * NAVEEN K     * 2011/06/16 * RFS 91783
+007000110617      *                           * recompile for MFABCHTYP.
+007001111212      * John O'Calla * 2011/12/12 * RFS103837  - fix the file expansion
+007100110617      ************************* *Last* ********************************
+007200101125      ************************************************************************
+007300101125       ENVIRONMENT DIVISION.
+007400101125       CONFIGURATION SECTION.
+007500101125       SOURCE-COMPUTER. IBM-AS400.
+007600101125       OBJECT-COMPUTER. IBM-AS400.
+007700101125       SPECIAL-NAMES. LOCAL-DATA IS WS-LOCAL.
+007800101125
+007900101125       INPUT-OUTPUT SECTION.
+008000101125       FILE-CONTROL.
+008100101125      *----------------------------------------------------------------------*
+008200101125      * File Control.
+008300101125      *-------------*
+008400101125      /
+008500101125       DATA DIVISION.
+008600101125
+008700101125      ************************************************************************
+008800101125      *                                                                      *
+008900101125      *    I N P U T   /   O U T P U T   S E C T I O N                       *
+009000101125      *                                                                      *
+009100101125      ************************************************************************
+009200101125       FILE SECTION.
+009300101125      /
+009400101125       WORKING-STORAGE SECTION.
+009500101125
+009600101125      ************************************************************************
+009700101125      *                                                                      *
+009800101125      *    W O R K I N G   S T O R A G E   S E C T I O N                     *
+009900101125      *                                                                      *
+010000101125      ************************************************************************
+010100101125
+010200101125       01  WS-FINISHED-PROCESSING      PIC X VALUE SPACES.
+010300101125           88 START-PROCESSING               VALUE "N".
+010400101125           88 FINISHED-PROCESSING            VALUE "Y".
+010500101125
+010600101125       01  WS-COUNTER                  PIC S9(8) VALUE 0.
+010700101125
+010800101125       01  WS-SWITCHES.
+010900101125           05 WS-SW1-BALANCE           PIC X.
+011000101125           05 WS-SW2-BALANCE           PIC X.
+011100101125           05 WS-SW3-BALANCE           PIC X.
+011200101125           05 WS-SW4-BALANCE           PIC X.
+011300101125           05 WS-SW5-BALANCE           PIC X.
+011400101125           05 WS-SW6-BALANCE           PIC X.
+011500101125           05 WS-SW7-BALANCE           PIC X.
+011600101125           05 WS-SW8-BALANCE           PIC X.
+011700101125           05 WS-BATCH-STATUS          PIC X(06).
+011800101125           05 WS-BALANCE-SWITCH        PIC X(07).
+011900101125           05 WS-SW-EMPTY              PIC X.
+012000101125
+012100101125       01  WS-WORKING-FETCH-FIELDS.
+012200101125           05 WS-FETCH-FIELDS.
+012300101125              10 WS-BATCH-DATE         PIC S9(9) COMP-3.
+012400101125              10 WS-BATCH-CODE         PIC X(4).
+012500101125              10 WS-BATCH-TYPE-CODE    PIC X(6).
+012600101125              10 WS-BATCH-DOLLAR-AMT   PIC S9(11)V9(2) COMP-3.
+012700101125              10 WS-BATCH-UNIT-AMT     PIC S9(10)V9(3) COMP-3.
+012800101125              10 WS-TRANS-DOLLAR-AMT   PIC S9(11)V9(2) COMP-3.
+012900101125              10 WS-TRANS-UNIT-AMT     PIC S9(10)V9(3) COMP-3.
+013000101125              10 WS-PROCESSED-DOLLAR-AMT
+013100101125                                       PIC S9(11)V9(2) COMP-3.
+013200101125              10 WS-PROCESSED-UNIT-AMT
+013300101125                                       PIC S9(10)V9(3) COMP-3.
+013400101125              10 WS-MATCH-TOTAL-TRANSACTIONS
+013500101125                                       PIC S9(7)       COMP-3.
+013600101125              10 WS-MATCH-MATCHED-TRANSACTIONS
+013700101125                                       PIC S9(7)       COMP-3.
+013800101125              10 WS-BATCH-CREATED-BY   PIC X(10).
+013900101125              10 WS-BATCH-STATUS-CHANGED-BY
+014000101125                                       PIC X(10).
+014100101125              10 WS-BATCH-STATUS-2     PIC X(4).
+014200101125              10 WS-BATCH-FORCE-FLAG   PIC X(1).
+014300101125              10 WS-CURRENCY-DDS       PIC X(3).
+014400101125              10 WS-PROCESSED-TRANSACTIONS
+014500101125                                       PIC S9(7)       COMP-3.
+014501111212103837        10 WS-ASSOCIATED-BATCH-CODE  PIC X(4).
+014600101125              10 WS-BATCH-TYPE-CODE-2  PIC X(6).
+014700101125              10 WS-BAL-SHARES         PIC X(1).
+014800101125              10 WS-BAL-DOLLARS        PIC X(1).
+014900101125              10 WS-BAL-HASH           PIC X(1).
+015000101125              10 WS-ALLOW-DOLLAR-ENTRY PIC X(1).
+015100101125              10 WS-ALLOW-UNIT-ENTRY   PIC X(1).
+015101111212103837        10 WS-BATCH-TOLERANCE    PIC S9(11)v99   COMP-3.
+015200101125
+015300101125       01  WS-LITERALS.
+015400101125           05 LT-YES                   PIC X(01) VALUE "Y".
+015500101125           05 LT-NO                    PIC X(01) VALUE "N".
+015600101125           05 LT-YYY                   PIC X(03) VALUE "YYY".
+015700101125           05 LT-PEND                  PIC X(04) VALUE "PEND".
+015800101125           05 LT-FPEN                  PIC X(04) VALUE "FPEN".
+015900101125           05 LT-OPEN                  PIC X(04) VALUE "OPEN".
+016000101125           05 LT-CLOSED                PIC X(04) VALUE "CLSD".
+016100101125           05 LT-SUSP                  PIC X(04) VALUE "SUSP".
+016200101125           05 LT-FCLO                  PIC X(04) VALUE "FCLO".
+016300101125
+016400101125       01 WS-LOCAL-DATA-AREA.
+016500101125          05 WS-LOCAL-X199               PIC X(200) VALUE SPACES.
+016600101125          05 WS-LOCAL-RUN                PIC X(10)  VALUE SPACES.
+016700101125
+016800101125           EXEC SQL
+016900101125              INCLUDE SQLCA
+017000101125           END-EXEC.
+017100101125
+017200101125       LINKAGE SECTION.
+017300101125
+017400101125          01 LN_BTCDTE                    PIC 9(8).
+017500101125          01 LN_BTCDT1 redefines LN_BTCDTE    PIC X(8).
+017600101125          01 Lc_BtcCde                    PIC X(4).
+017700101125
+017800101125
+017900101125      ************************************************************************
+018000101125      *                                                                      *
+018100101125      *    L I N K A G E   S E C T I O N                                     *
+018200101125      *                                                                      *
+018300101125      ************************************************************************
+018400101125       PROCEDURE DIVISION  USING LN_BTCDTE ,
+018500101125                                 Lc_BtcCde .
+018600101125      *--------------------------------------------------------------*
+018700101125       A000-MAINLINE.
+018800101125      *-------------*
+018900101125
+019000101125           ACCEPT WS-LOCAL-DATA-AREA FROM WS-LOCAL.
+019100101125
+019200101125           PERFORM A100-INITIAL-ROUTINE.
+019300101125
+019400101125           PERFORM B100-MAIN-PROCESSING UNTIL
+019500101125                             FINISHED-PROCESSING.
+019600101125
+019700101125           PERFORM C100-FINISHED-PROCESSING.
+019800101125
+019900101125      *--------------------------------------------------------------*
+020000101125       A100-INITIAL-ROUTINE.
+020100101125      *--------------------*
+020200101125      *
+020300101125      * Open , declared then select related records from Database files.
+020400101125      *
+020500101125
+020600101125           SET START-PROCESSING        TO TRUE.
+020700101125
+020800101125           INITIALIZE                  WS-WORKING-FETCH-FIELDS,
+020900101125                                       WS-SWITCHES.
+021000101125
+021100101125           DISPLAY "JOB: EVASTATN *** HAS STARTED ****".
+021200101125
+021300101125           MOVE LT-NO                  TO WS-SW1-BALANCE
+021400101125                                          WS-SW2-BALANCE
+021500101125                                          WS-SW3-BALANCE
+021600101125                                          WS-SW4-BALANCE
+021700101125                                          WS-SW5-BALANCE
+021800101125                                          WS-SW6-BALANCE
+021900101125                                          WS-SW7-BALANCE
+022000101125                                          WS-SW8-BALANCE
+022100101125                                          WS-SW-EMPTY.
+022200101125
+022300101125           EXEC SQL
+022400101125              CREATE UNIQUE INDEX QTEMP/batchidx ON MFABCHHDP
+022500101125              (BATCH_DATE ASC, BATCH_CODE ASC)
+022600101125           END-EXEC.
+022700101125
+022800101125           EXEC SQL
+022900101125           DECLARE C1 CURSOR FOR SELECT MFABCHHDP.*, MFABCHTYP.*
+023000111212103837*    FROM MFABCHHDP, MFABCHTYP
+023001111212103837     FROM MFABCHHDP cross join MFABCHTYP
+023100101125           WHERE
+023200101125           MFABCHHDP.BATCH_TYPE_CODE = MFABCHTYP.BATCH_TYPE_CODE
+023300101125           AND
+023400101125           MFABCHHDP.BATCH_STATUS <> "FCLO"
+023500101125           AND
+023600101125           MFABCHHDP.BATCH_STATUS <> "CLSD"
+023700101125           AND
+023800101125           MFABCHHDP.BATCH_DATE  =
+023900101125           TRANSLATE(CAST ( :LN_BTCDT1 AS NUMERIC(8,0)))
+024000101125           AND
+024100101125           MFABCHHDP.BATCH_CODE  = :Lc_BtcCde
+024200101125           ORDER BY
+024300101125           MFABCHHDP.BATCH_DATE ASC, MFABCHHDP.BATCH_CODE ASC
+024400101125           END-EXEC.
+024500101125
+024600101125           EXEC SQL
+024700101125              OPEN C1
+024800101125           END-EXEC.
+024900101125
+025000101125           EXEC SQL
+025100101125              WHENEVER SQLERROR  GOTO C105-STOPRUN
+025200101125           END-EXEC.
+025300101125
+025400101125      *----------------------------------------------------------------------*
+025500101125       B100-MAIN-PROCESSING.
+025600101125      *--------------------*
+025700101125
+025800101125           EXEC SQL
+025900101125           FETCH NEXT FROM C1 INTO :WS-FETCH-FIELDS
+026000101125           END-EXEC.
+026100101125
+026200101125           IF SQLCODE = 100
+026300101125              SET FINISHED-PROCESSING TO TRUE
+026400101125           ELSE
+026500101125              PERFORM D100-DETERMINE-SWITCH-BALANCES
+026600101125           END-IF.
+026700101125
+026800101125      *--------------------------------------------------------------*
+026900101125       C100-FINISHED-PROCESSING.
+027000101125      *------------------------*
+027100101125
+027200101125           DISPLAY "RECORDS SELECTED...: ", WS-COUNTER.
+027300101125
+027400101125           DISPLAY "JOB: EVASTATN *** HAS ENDED ******".
+027500101125           EXEC SQL
+027600101125              WHENEVER SQLERROR  CONTINUE
+027700101125           END-EXEC.
+027800101125
+027900101125           EXEC SQL
+028000101125              CLOSE C1
+028100101125           END-EXEC.
+028200101125
+028300101125           EXEC SQL
+028400101125              DROP INDEX QTEMP/batchidx
+028500101125           END-EXEC.
+028600101125           MOVE 'EVASTATN' TO WS-LOCAL-RUN
+028700101125           DISPLAY WS-LOCAL-DATA-AREA UPON WS-LOCAL
+028800101125
+028900101125           STOP RUN.
+029000101125
+029100101125      *--------------------------------------------------------------*
+029200101125       C105-STOPRUN.
+029300101125      *-------------*
+029400101125
+029500101125           DISPLAY "JOB: EVASTATN *** ENDED WITH ERRORS".
+029600101125
+029700101125           DISPLAY "SQLCODE = " SQLCODE, "SQLSTATE =" SQLSTATE.
+029800101125           EXEC SQL
+029900101125              WHENEVER SQLERROR  CONTINUE
+030000101125           END-EXEC.
+030100101125
+030200101125           EXEC SQL
+030300101125              CLOSE C1
+030400101125           END-EXEC.
+030500101125
+030600101125           EXEC SQL
+030700101125              DROP INDEX QTEMP/batchidx
+030800101125           END-EXEC.
+030900101125
+031000101125           STOP RUN.
+031100101125
+031200101125      *--------------------------------------------------------------*
+031300101125       D100-DETERMINE-SWITCH-BALANCES.
+031400101125      *------------------------------*
+031500101125
+031600101125           IF WS-PROCESSED-TRANSACTIONS NOT = 0
+031700101125              MOVE LT-YES              TO  WS-SW1-BALANCE
+031800101125           END-IF.
+031900101125
+032000101125           IF WS-BATCH-UNIT-AMT = WS-TRANS-UNIT-AMT  AND
+032100101125              WS-SW1-BALANCE    = LT-NO
+032200101125              MOVE LT-YES              TO  WS-SW2-BALANCE
+032300101125           END-IF.
+032400101125
+032500101125           IF WS-BATCH-DOLLAR-AMT = WS-TRANS-DOLLAR-AMT AND
+032600101125              WS-SW1-BALANCE    = LT-NO
+032700101125              MOVE LT-YES              TO  WS-SW3-BALANCE
+032800101125           END-IF.
+032900101125
+033000101125           IF WS-MATCH-TOTAL-TRANSACTIONS =
+033100101125               WS-MATCH-MATCHED-TRANSACTIONS AND
+033200101125              WS-SW1-BALANCE    = LT-NO
+033300101125              MOVE LT-YES              TO  WS-SW4-BALANCE
+033400101125           END-IF.
+033500101125
+033600101125           IF WS-BATCH-UNIT-AMT = WS-PROCESSED-UNIT-AMT
+033700101125              MOVE LT-YES              TO  WS-SW5-BALANCE
+033800101125           END-IF.
+033900101125
+034000101125           IF WS-BATCH-DOLLAR-AMT = WS-PROCESSED-DOLLAR-AMT
+034100101125              MOVE LT-YES              TO  WS-SW6-BALANCE
+034200101125           END-IF.
+034300101125
+034400101125           IF WS-PROCESSED-TRANSACTIONS = WS-MATCH-TOTAL-TRANSACTIONS
+034500101125              MOVE LT-YES              TO  WS-SW7-BALANCE
+034600101125           END-IF.
+034700101125
+034800101125           MOVE WS-BATCH-FORCE-FLAG    TO WS-SW8-BALANCE.
+034900101125
+035000101125           IF WS-BAL-SHARES = LT-NO
+035100101125              MOVE LT-YES              TO WS-SW2-BALANCE,
+035200101125                                          WS-SW5-BALANCE
+035300101125           END-IF.
+035400101125
+035500101125           IF WS-BAL-DOLLARS = LT-NO
+035600101125              MOVE LT-YES              TO WS-SW3-BALANCE,
+035700101125                                          WS-SW6-BALANCE
+035800101125           END-IF.
+035900101125
+036000101125           IF WS-BAL-HASH = LT-NO
+036100101125              MOVE LT-YES              TO WS-SW4-BALANCE
+036200101125           END-IF.
+036300101125
+036400101125           IF WS-BATCH-UNIT-AMT = 0 AND
+036500101125              WS-TRANS-UNIT-AMT = 0 AND
+036600101125              WS-BATCH-DOLLAR-AMT = 0 AND
+036700101125              WS-MATCH-TOTAL-TRANSACTIONS = 0 AND
+036800101125              WS-MATCH-MATCHED-TRANSACTIONS = 0
+036900101125              MOVE LT-YES              TO  WS-SW-EMPTY
+037000101125           END-IF.
+037100101125
+037200101125           IF WS-SW-EMPTY = LT-YES
+037300101125              MOVE LT-NO               TO WS-SW2-BALANCE,
+037400101125                                          WS-SW3-BALANCE,
+037500101125                                          WS-SW4-BALANCE
+037600101125           END-IF.
+037700101125
+037800101125           STRING WS-SW1-BALANCE,
+037900101125                  DELIMITED BY SIZE,
+038000101125                  WS-SW2-BALANCE,
+038100101125                  DELIMITED BY SIZE,
+038200101125                  WS-SW3-BALANCE,
+038300101125                  DELIMITED BY SIZE,
+038400101125                  WS-SW4-BALANCE,
+038500101125                  DELIMITED BY SIZE,
+038600101125                  WS-SW5-BALANCE,
+038700101125                  DELIMITED BY SIZE,
+038800101125                  WS-SW6-BALANCE,
+038900101125                  DELIMITED BY SIZE,
+039000101125                  WS-SW7-BALANCE,
+039100101125                  DELIMITED BY SIZE,
+039200101125                  INTO WS-BALANCE-SWITCH.
+039300101125
+039400101125           MOVE WS-BATCH-STATUS-2 TO WS-BATCH-STATUS.
+039500101125
+039600101125           IF WS-SW1-BALANCE = LT-NO AND
+039700101125              WS-BALANCE-SWITCH(2:3) = LT-YYY
+039800101125              MOVE LT-PEND             TO WS-BATCH-STATUS
+039900101125           ELSE
+040000101125           IF WS-SW1-BALANCE = LT-NO AND
+040100101125              WS-SW8-BALANCE = LT-YES
+040200101125              MOVE LT-FPEN             TO WS-BATCH-STATUS
+040300101125           ELSE
+040400101125           IF (WS-SW1-BALANCE = LT-YES AND
+040500101125              WS-BALANCE-SWITCH(5:3) = LT-YYY) OR
+040600101125              WS-SW-EMPTY  = LT-YES
+040700101125              MOVE LT-CLOSED           TO WS-BATCH-STATUS
+040800101125           ELSE
+040900101125           IF WS-SW1-BALANCE = LT-YES
+041000101125              MOVE LT-SUSP             TO WS-BATCH-STATUS
+041100101125           ELSE
+041200101125           IF WS-SW1-BALANCE = LT-NO
+041300101125              MOVE LT-OPEN             TO WS-BATCH-STATUS
+041400101125           END-IF
+041500101125           END-IF
+041600101125           END-IF
+041700101125           END-IF
+041800101125           END-IF.
+041900101125
+042000101125           IF WS-BATCH-STATUS NOT = LT-FPEN AND
+042100101125              WS-BATCH-STATUS NOT = LT-FCLO
+042200101125              MOVE LT-NO      TO WS-BATCH-FORCE-FLAG
+042300101125           END-IF.
+042400101125
+042500101125           EXEC SQL
+042600101125             UPDATE MFABCHHDP
+042700101125             SET
+042800101125             BATCH_STATUS = :WS-BATCH-STATUS,
+042900101125             BATCH_FORCE_FLAG = :WS-BATCH-FORCE-FLAG
+043000101125             WHERE
+043100101125             BATCH_DATE = :WS-BATCH-DATE AND
+043200101125             BATCH_CODE = :WS-BATCH-CODE
+043300101125           END-EXEC.
+043400101125
+043500101125           COMPUTE WS-COUNTER = WS-COUNTER + 1
+043600101125
+043700101125           MOVE LT-NO                  TO WS-SW1-BALANCE
+043800101125                                          WS-SW2-BALANCE
+043900101125                                          WS-SW3-BALANCE
+044000101125                                          WS-SW4-BALANCE
+044100101125                                          WS-SW5-BALANCE
+044200101125                                          WS-SW6-BALANCE
+044300101125                                          WS-SW7-BALANCE
+044400101125                                          WS-SW8-BALANCE
+044500101125                                          WS-SW-EMPTY.
+044600101125
+044700101125           MOVE SPACES                 TO WS-BATCH-STATUS,
+044800101125                                          WS-BALANCE-SWITCH.
+044900101125

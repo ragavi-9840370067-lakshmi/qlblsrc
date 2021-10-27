@@ -1,0 +1,118 @@
+000100000000       IDENTIFICATION DIVISION.
+000200000000       PROGRAM-ID.     CALCDUR.
+000300000000       INSTALLATION.   JEWELSTONE SYSTEMS INC.
+000400000000       AUTHOR.         REECE TAM.
+000500171114       DATE-WRITTEN.   MAR 2001.
+000600000000       DATE-COMPILED.
+000700000000      ******************************************************************
+000800000000      * Calculate duration between 2 dates                             *
+000900000000      * Return duration in years, months, and days.                    *
+001000000000      ******************************************************************
+001100000000      ******************************************************************
+001200000000      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE              *
+001300000000      ******************************************************************
+001400000000      *            * yyyy/mm/dd   *
+001500000000      *            *              *
+001501170830      * Joel Dsouza* 2017/08/21   * RFS170228 - Changing compilation   *
+001502171117      *            *              *             options                *
+001600000000      ******************************************************************
+001700000000      /
+001800000000       ENVIRONMENT DIVISION.
+001900000000       CONFIGURATION SECTION.
+002000000000       SOURCE-COMPUTER. IBM-AS400.
+002100000000       OBJECT-COMPUTER. IBM-AS400.
+002200000000       SPECIAL-NAMES.
+002300000000      /
+002400000000       INPUT-OUTPUT SECTION.
+002500000000       FILE-CONTROL.
+002600000000       DATA DIVISION.
+002700000000      /
+002800000000       FILE SECTION.
+002900000000      /
+003000000000       WORKING-STORAGE SECTION.
+003100000000       01  CURR-CONTROLS             PIC X.
+003200000000       01  PREV-CONTROLS             PIC X.
+003300000000       01  WS-START-DATE             FORMAT DATE "@Y%m%d".
+003400000000       01  WS-END-DATE               FORMAT DATE "@Y%m%d".
+003500000000       01  WS-YEARS                  PIC S9(8).
+003600000000       01  WS-MONTHS                 PIC S9(8).
+003700000000       01  WS-DAYS                   PIC S9(8).
+003800000000      /
+003900000000       LINKAGE SECTION.
+004000000000       01  COMM-AREA                      PIC X(100).
+004100000000       01  COMM-AREA-BUFFER REDEFINES COMM-AREA.
+004200000000           05 COMM-START-DATE             PIC 9(8).
+004300000000      *       start date in yyyymmdd format
+004400000000           05 COMM-END-DATE               PIC 9(8).
+004500000000      *       end date in yyyymmdd format
+004600000000           05 COMM-YEARS                  PIC S9(8).
+004700000000      *       return number of years
+004800000000      *       if start date > end date, returned value may be -ve.
+004900000000           05 COMM-MONTHS                 PIC S9(8).
+005000000000      *       return number of months
+005100000000      *       if start date > end date, returned value may be -ve.
+005200000000           05 COMM-DAYS                   PIC S9(8).
+005300000000      *       return number of days
+005400000000      *       if start date > end date, returned value may be -ve.
+005500000000           05 COMM-ERROR-CODE             PIC X(3).
+005600000000      /
+005700000000       PROCEDURE DIVISION USING COMM-AREA.
+005800000000       MAINLINE.
+005900000000           PERFORM INITIAL-LOGIC       THRU INL-EXIT.
+006000000000           IF CURR-CONTROLS IS EQUAL TO HIGH-VALUES
+006100000000              GO TO ML-1200.
+006200000000       ML-0010.
+006300000000           PERFORM GET-CURRENT-RECORD  THRU GCR-EXIT.
+006400000000       ML-0020.
+006500000000           IF PREV-CONTROLS IS EQUAL TO LOW-VALUES
+006600000000              GO TO ML-0040.
+006700000000       ML-0030.
+006800000000       ML-0040.
+006900000000           IF CURR-CONTROLS IS EQUAL TO HIGH-VALUES
+007000000000              GO TO ML-1200.
+007100000000       ML-0050.
+007200000000           MOVE CURR-CONTROLS          TO PREV-CONTROLS.
+007300000000       ML-1100.
+007400000000           PERFORM DETAIL-PROCESSING   THRU DPR-EXIT.
+007500000000           GO TO ML-0010.
+007600000000       ML-1200.
+007700000000           PERFORM END-JOB             THRU EOJ-EXIT.
+007800000000           GOBACK.
+007900000000      /
+008000000000       INITIAL-LOGIC.
+008100000000
+008200000000           MOVE ZEROS                  TO COMM-YEARS
+008300000000                                          COMM-MONTHS
+008400000000                                          COMM-DAYS.
+008500000000           MOVE SPACES                 TO COMM-ERROR-CODE.
+008600000000           MOVE COMM-START-DATE        TO WS-START-DATE.
+008700000000           MOVE COMM-END-DATE          TO WS-END-DATE.
+008800000000
+008900000000           COMPUTE WS-YEARS  =
+009000000000           FUNCTION FIND-DURATION (WS-START-DATE WS-END-DATE YEARS).
+009100000000           MOVE WS-YEARS               TO COMM-YEARS.
+009200000000
+009300000000           COMPUTE WS-MONTHS =
+009400000000           FUNCTION FIND-DURATION (WS-START-DATE WS-END-DATE MONTHS).
+009500000000           MOVE WS-MONTHS              TO COMM-MONTHS.
+009600000000
+009700000000           COMPUTE WS-DAYS   =
+009800000000           FUNCTION FIND-DURATION (WS-START-DATE WS-END-DATE DAYS).
+009900000000           MOVE WS-DAYS                TO COMM-DAYS.
+010000000000
+010100000000           MOVE HIGH-VALUES            TO CURR-CONTROLS.
+010200000000
+010300000000       INL-EXIT.
+010400000000           EXIT.
+010500000000      /
+010600000000       GET-CURRENT-RECORD.
+010700000000       GCR-EXIT.
+010800000000           EXIT.
+010900000000      /
+011000000000       DETAIL-PROCESSING.
+011100000000       DPR-EXIT.
+011200000000           EXIT.
+011300000000      /
+011400000000       END-JOB.
+011500000000       EOJ-EXIT.
+011600000000           EXIT.

@@ -1,0 +1,430 @@
+000100110720       IDENTIFICATION DIVISION.
+000200110720       PROGRAM-ID.    FXSRVUAI.
+000300110720       AUTHOR.        RajKumar A.
+000400111021       INSTALLATION.  L&T Financial Services Technology Inc.
+000500110720       DATE-WRITTEN.  July 20, 2011.
+000600110720       DATE-COMPILED.
+000700110720      ******************************************************************
+000800110720      * RFS-NUMBER    : RFS-64348.                                     *
+000900110720      * DESCRIPTION   : The Purpose of this program is to retrieve or  *
+001000110720      *                 update the units in MFAACISVP at the additional*
+001100110720      *                 level using effective date, lower limit days   *
+001200110720      *                 and original investment code.                  *
+001300110720      *
+001400110720      * CALLED BY     : SRVFDT; SRVFCN; SRVFDR                         *
+001500110720      * PARAMETERS    : IN-ACCOUNT-NO,
+001600110720      *                 IN-INVESTMENT-CODE,
+001700110720      *                 IN-OPTION, (G = Get Data ; P = Put Data)
+001800110720      *                 IO-RECORD-EXIST, (Y = Yes ; N = No)
+001900110720      *                 IO-HEADER-AC, (A = Add; C = Changes)
+002000111014      *                 OU-RETURN-CODE, ("  " = No error;
+002100111014      *                                  01  = Account Required;
+002200111014      *                                  02  = Investment is blank;
+002300111014      *                                  03  = Option is blank;
+002400111014      *                                  04  = Invalid Header-AC;
+002500111014      *                                  05  = No Record to Get;
+002600111014      *                                  10  = Cannot Add to MFAACIDUP;
+002700111014      *                                  11  = Cannot Update MFAACIDUP;
+002800111014      *                                  20  = Cannot Add to MFAACISVP;
+002900111014      *                                  21  = Cannot Update MFAACISVP;
+003000111014      *                                  99  = SQL Error)
+003100110720      *                 IO-PROCESS-DATE,
+003200110720      *                 IO-UNIT-VARIABLE,
+003300110720      *                 IO-DAYS,
+003400110720      *                 IO-ARRAY-50.
+003500110828      * LINKED MODULES: None.                                     *
+003600110720      ******************************************************************
+003700110720      *    C H A N G E   H I S T O R Y                                 *
+003800110720      ******************************************************************
+003900110826      * PROGRAMMER *  YYYY/MM/DD  * DESCRIPTION OF CHANGE              *
+004000110720      ******************************************************************
+004100110826      * Raj KumarA *  2011/08/26  * Program created for RFS64348
+004200110826      *****************************************************************
+004300110720       ENVIRONMENT DIVISION.
+004400110720       CONFIGURATION SECTION.
+004500110720       SOURCE-COMPUTER. IBM-AS400.
+004600110720       OBJECT-COMPUTER. IBM-AS400.
+004700110720       SPECIAL-NAMES.
+004800110720
+004900110720       INPUT-OUTPUT SECTION.
+005000110720       FILE-CONTROL.
+005100110720           SELECT  ACCOUNT-INV-DLY-SRV
+005200110720                   ASSIGN TO DATABASE-MFAACIDUP
+005300110720                   ORGANIZATION IS INDEXED
+005400110720                   ACCESS IS DYNAMIC
+005500111010                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+005600111010                   FILE STATUS IS lc_FileStatus.
+005700110720
+005800110720       DATA DIVISION.
+005900110720       FILE SECTION.
+006000110720       FD  ACCOUNT-INV-DLY-SRV
+006100110720           LABEL RECORDS ARE STANDARD.
+006200111201       01  ACCOUNT-INV-DLY-SRV-REC.  COPY DD-ALL-FORMATS OF MFAACIDUP.
+006300110720
+006400110720       WORKING-STORAGE SECTION.
+006500110720
+006600111201       01 lc_FileStatus                   PIC  X(02).
+006700111201       01 lc_Currentrecord.
+006800111201          03 li_LowerLimitDays            PIC S9(05).
+006900111201          03 li_Units                     PIC S9(10)V9(3).
+007000111201          03 lc_NY                        PIC  X(01).
+007100111201          03 lc_AC                        PIC  X(01).
+007200111201          03 ld_EffectiveDate             PIC S9(09).
+007300111201          03 lc_RateRule                  PIC  X(01).
+007400111201          03 lc_OrgInvCode                PIC  X(05).
+007500111201          03 lc_RateRule2                 PIC  X(01).
+007600110826
+007700110826       01 lc_MiscFields.
+007800111201          03 li_Cnt                       PIC S9(04).
+007900111201          03 lc_OpenFiles                 PIC  X(01).
+008000111201          03 ld_LkProccesDate             PIC S9(09).
+008100111201          03 li_LkAccountNo               PIC S9(09).
+008200111201          03 lc_LkInvestmentCode          PIC  X(05).
+008300111201          03 lc_LkArray50                 OCCURS 50 TIMES
+008400111201                                          INDEXED BY lx_LkCntr.
+008500111201            10 li_LkDays                  PIC S9(05).
+008600111201            10 li_LkUnitsVar              PIC S9(10)V9(3).
+008700111201            10 li_LkNY                    PIC  X(01).
+008800111201            10 li_LkAC                    PIC  X(01).
+008900111201            10 li_LkEffDate               PIC S9(09).
+009000111201            10 lc_LkRateRule              PIC  X(01).
+009100111201            10 lc_LkOrgInvCode            PIC  X(05).
+009200111201            10 lc_LkRateRule2             PIC  X(01).
+009300110828
+009400110826       01 lc_Constants.
+009500111201          03 lncc_Y                       PIC X(01) VALUE "Y".
+009600111201          03 lncc_N                       PIC X(01) VALUE "N".
+009700111201          03 lncc_A                       PIC X(01) VALUE "A".
+009800111201          03 lncc_C                       PIC X(01) VALUE "C".
+009900111201          03 lncc_2                       PIC X(01) VALUE "2".
+010000111201          03 lncc_01                      PIC X(03) VALUE "01".
+010100111201          03 lncc_02                      PIC X(03) VALUE "02".
+010200111201          03 lncc_03                      PIC X(03) VALUE "03".
+010300111201          03 lncc_99                      PIC X(02) VALUE "99".
+010400111201          03 lncc_20                      PIC X(02) VALUE "20".
+010500111201          03 lncc_21                      PIC X(02) VALUE "21".
+010600111201          03 lncc_10                      PIC X(02) VALUE "10".
+010700111201          03 lncc_11                      PIC X(02) VALUE "11".
+010800111201          03 lncc_ErrFetchingCursor       PIC X(80)
+010900110826              VALUE "Error while fetching cursor".
+011000111201          03 lncc_ErrOpeningCursor        PIC X(80)
+011100110826              VALUE "Error while Opening cursor ".
+011200110826
+011300110720      * SQL Error Handeling.
+011400110720          COPY CPYSQLFLD
+011500110826               REPLACING == "CURRENT_PROGRAM" == BY == "FXSRVUAI" ==.
+011600110720
+011700111201       01 lc_ErrCode                      PIC X(02) VALUE SPACES.
+011800111201          88 lb_ErrOK                     VALUE SPACES.
+011900111201          88 lb_Err01                     VALUE "10".
+012000111201          88 lb_Err02                     VALUE "11".
+012100110720
+012200111201       01  lc_SqlErrStatement            PIC  X(50) VALUE SPACES.
+012300111201           88 lb_Stmt01
+012400111201              VALUE "Err in OPEN CURSOR lcu_ACISVP ".
+012500111201           88 lb_Stmt02
+012600111201              VALUE "Err in FETCH NEXT  lcu_ACISVP ".
+012700111201
+012800111201       01  lc_SqlVariables.
+012900111201           03  lc_CallingProgram         PIC  X(10)  VALUE "FXSRVUAI".
+013000111201           03  lc_RoutineName            PIC  X(25).
+013100111201           03  lc_SqlErrData             PIC  X(1780) VALUE " ".
+013200111201           03  lc_SqlStats               PIC  X(1966) VALUE SPACES.
+013300111201           03  lc_SqlErrReply            PIC  X(01)   VALUE SPACES.
+013400111201           03  lc_Sqllog                 PIC  X(01)   VALUE "Y".
+013500111201           03  lc_Strsql                 PIC  X(1000) VALUE SPACES.
+013600111201           03  li_Sqlcode                PIC -Z(09).
+013700111201
+013800110720           EXEC SQL
+013900110828              INCLUDE SQLCA
+014000110720           END-EXEC.
+014100110720
+014200110828       LINKAGE SECTION.
+014300110828               COPY  CPYSRVUAI.
+014400110720
+014500110826       PROCEDURE DIVISION  USING   pi_AccountNo,
+014600110826                                   pc_InvestmentCode,
+014700110826                                   pc_Option,
+014800110826                                   pc_RecordExist,
+014900110826                                   pc_HeaderAc,
+015000110826                                   pc_ReturnCode,
+015100110826                                   pd_ProcessDate,
+015200111010                                   pi_TotUnits,
+015300110826                                   pi_TotDays,
+015400110826                                   pc_ReturnArray.
+015500110826      *-----------
+015600110720       MAINLINE.
+015700110826      *-----------
+015800110826           PERFORM Initial_Logic.
+015900110720
+016000110826           IF lb_PutOption
+016100110720              PERFORM Update_ACISVP
+016200110720           ELSE
+016300110826              PERFORM Check_Accinvdly
+016400110720           END-IF.
+016500110826           PERFORM EndOfProgram.
+016600110826
+016700110826      *---------------
+016800110826       Initial_Logic.
+016900110826      *---------------
+017000110720
+017100110720      * Initialize Working Variable.
+017200111201           SET lb_ErrOK            TO TRUE.
+017300111201           INITIALIZE                 pc_ReturnCode
+017400111201                                      pc_RecordExist.
+017500110720      * Validate the passing parameters.
+017600111201           IF pi_AccountNo      = ZEROS
+017700111014             MOVE lncc_01          TO pc_ReturnCode
+017800111201           ELSE
+017900111201           IF pc_InvestmentCode = SPACES
+018000111014             MOVE lncc_02          TO pc_ReturnCode
+018100111201           ELSE
+018200111201           IF NOT lb_ValidOptions
+018300111014             MOVE lncc_03          TO pc_ReturnCode
+018400110720           END-IF.
+018500110720
+018600110914           MOVE pi_AccountNo       TO li_LkAccountNo
+018700110914           MOVE pc_InvestmentCode  TO lc_LkInvestmentCode
+018800110914           MOVE pd_ProcessDate     TO ld_LkProccesDate
+018900110913
+019000110826            IF pc_ReturnCode NOT = SPACES
+019100110914               PERFORM EndOfProgram
+019200110720            ELSE
+019300110922               OPEN INPUT ACCOUNT-INV-DLY-SRV
+019400111010               IF lc_FileStatus NOT = ZEROES
+019500111010                 DISPLAY "ERR OPEN ACCOUNT-INV-DLY-SRV  " lc_FileStatus
+019600111010               END-IF
+019700110922               MOVE lncc_Y   TO  lc_OpenFiles
+019800110720
+019900110720              EXEC SQL
+020000111201                DECLARE lcu_acisvp CURSOR FOR
+020100110720                SELECT  Lower_Limit_Days,
+020200110720                        UNITS,
+020300110826                        :lncc_Y,
+020400110720                        " ",
+020500110720                        Effective_Date,
+020600110720                        Rate_Rule,
+020700110720                        Orig_Investment_Code,
+020800110720                        " "
+020900110720                FROM MFAACISVP
+021000110828                WHERE ACCOUNT_NO      = :li_LkAccountNo      AND
+021100110828                      INVESTMENT_CODE = :lc_LkInvestmentCode
+021200110720                ORDER BY Effective_Date,
+021300110720                         Lower_Limit_Days
+021400110720              END-EXEC
+021500110720            END-IF.
+021600110720
+021700111201      *------------------
+021800111201       Check_Accinvdly.
+021900111201      *------------------
+022000111201      * Retrieve Variable Unit Info and Load Them to Array
+022100111201           MOVE "Check_Accinvdly " TO lc_RoutineName.
+022200110826           MOVE pi_AccountNo
+022300110720             TO ACCOUNT-NO OF ACCOUNT-INV-DLY-SRV.
+022400110826           MOVE pc_InvestmentCode
+022500110720             TO INVESTMENT-CODE OF ACCOUNT-INV-DLY-SRV.
+022600110720           READ ACCOUNT-INV-DLY-SRV
+022700110720             INVALID KEY
+022800111201               MOVE lncc_N TO pc_RecordExist
+022900110720             NOT INVALID KEY
+023000110826               MOVE lncc_Y TO pc_RecordExist
+023100110720               MOVE PROCESS-DATE OF ACCOUNT-INV-DLY-SRV
+023200110914                                 TO pd_ProcessDate
+023300110720               PERFORM Get_ACISVP_Details
+023400110720           END-READ.
+023500111201
+023600111201      * -----------------
+023700110720       Get_ACISVP_Details.
+023800111201      * -----------------
+023900111201           MOVE "Get_ACISVP_Details " TO lc_RoutineName.
+024000111201           PERFORM OpenCur_Acisvp.
+024100111201           PERFORM FetchCur_Acisvp.
+024200111201           PERFORM CloseCur_Acisvp.
+024300110826
+024400111201      * -----------------
+024500110826       OpenCur_ACISVP.
+024600111201      * -----------------
+024700110720           EXEC SQL
+024800111201             OPEN lcu_acisvp
+024900110720           END-EXEC.
+025000110826
+025100110720           MOVE SQLSTATE TO lc_sqlStates.
+025200110720           IF Not lncc_sqlSuccessful
+025300111201             SET  lb_Err01        TO TRUE
+025400111201             SET  lb_Stmt01       TO TRUE
+025500111201             MOVE lncc_99         TO pc_ReturnCode
+025600111201             PERFORM SQL_ErrorRoutine
+025700110826           END-IF.
+025800110826
+025900110720      * Initialize working variable and array.
+026000110826            INITIALIZE               pc_ReturnArray ,
+026100111010                                     pi_TotUnits,
+026200110826                                     pi_TotDays.
+026300110826      *-----------------
+026400110826       FetchCur_ACISVP.
+026500110826      *-----------------
+026600110826
+026700110828            MOVE pi_AccountNo        TO   li_LkAccountNo
+026800110828            MOVE pc_InvestmentCode   TO   lc_LkInvestmentCode
+026900110828
+027000110720            EXEC SQL
+027100111201              FETCH NEXT FROM lcu_acisvp FOR 50 ROWS INTO :lc_LkArray50
+027200110720            END-EXEC
+027300110828
+027400110916            MOVE SQLSTATE TO lc_sqlStates.
+027500110826            EVALUATE TRUE
+027600110826              WHEN lncc_sqlSuccessful
+027700110826                MOVE SQLERRD (3) TO pi_TotDays
+027800110826              WHEN lncc_sqlEnd
+027900110826                CONTINUE
+028000110826              WHEN OTHER
+028100111201                SET  lb_Err02    TO TRUE
+028200111201                SET  lb_Stmt02   TO TRUE
+028300111201                MOVE lncc_99     TO pc_ReturnCode
+028400111201                PERFORM SQL_ErrorRoutine
+028500110826            END-EVALUATE.
+028600110826
+028700110914            PERFORM VARYING li_Cnt FROM 1 BY 1
+028800110914                                   UNTIL li_Cnt  > pi_TotDays
+028900110914                  MOVE lc_LkArray50(li_Cnt) TO pc_Array50(li_Cnt)
+029000110914            END-PERFORM.
+029100110826
+029200110826            PERFORM VARYING    px_Cntr FROM 1 BY 1
+029300110826                               UNTIL px_Cntr > pi_TotDays
+029400110914               IF pc_RateRule(px_Cntr)    =  lncc_2
+029500110914                  MOVE lncc_Y             TO pc_RateRule2(px_Cntr)
+029600111010                  COMPUTE pi_TotUnits  =  pi_TotUnits +
+029700111201                                          pi_Units(px_Cntr)
+029800110720               END-IF
+029900110826            END-PERFORM.
+030000110826
+030100110826      *-----------------
+030200110826       CloseCur_ACISVP.
+030300110826      *-----------------
+030400110720            EXEC SQL
+030500111201               CLOSE lcu_acisvp
+030600110826            END-EXEC.
+030700110720
+030800111201      *-----------------
+030900111201       Update_ACISVP.
+031000111201      *-----------------
+031100111201      * Update Variable Unit Information
+031200110720
+031300111201           MOVE "Get_ACISVP_Details " TO lc_RoutineName.
+031400110826           PERFORM VARYING px_Cntr FROM 1 BY 1
+031500110826                   UNTIL   px_Cntr > pi_TotDays
+031600110826             MOVE pc_Array50(px_Cntr) TO lc_Currentrecord
+031700110720
+031800110720      * Add to the Account-Inv-Dly-Srv-Var.
+031900110826            IF pi_AC(px_Cntr) =lncc_A  AND pi_NY(px_Cntr) NOT =lncc_Y
+032000110720               EXEC SQL
+032100110720                 INSERT INTO MFAACISVP
+032200110828                   VALUES (:li_LkAccountNo,
+032300110828                           :lc_LkInvestmentCode,
+032400110826                           :lc_OrgInvCode,
+032500110826                           :ld_EffectiveDate,
+032600110914                           :li_LowerLimitDays,
+032700110826                           :lc_RateRule,
+032800111010                           :li_Units )
+032900110720               END-EXEC
+033000110720               MOVE SQLSTATE TO lc_sqlStates
+033100110720               IF Not lncc_sqlSuccessful
+033200110914                 MOVE SQLCODE        TO li_SQLCODE
+033300110720                 DISPLAY "Error in Insert into MFAACISVP - "
+033400110914                         "SQLCODE:" li_SQLCODE
+033500110826                 DISPLAY "ACCOUNT = "    pi_AccountNo
+033600110826                 DISPLAY "INVESTMENT = " pc_InvestmentCode
+033700110826                 DISPLAY "EFF-DATE   = " ld_EffectiveDate
+033800110914                 DISPLAY "LOWER DAYS = " li_LowerLimitDays
+033900111010                 DISPLAY "UNITS      = " li_Units
+034000111201                 MOVE lncc_99        TO pc_ReturnCode
+034100110720               END-IF
+034200110720             END-IF
+034300110720
+034400110720      * Update to the Account-Inv-Dly-Srv-Var.
+034500110826             IF pi_AC(px_Cntr) =lncc_C AND pi_NY(px_Cntr) = lncc_Y
+034600110720               EXEC SQL
+034700110720                 UPDATE MFAACISVP
+034800111010                   SET UNITS     = :li_Units
+034900110828                 WHERE account_no           = :li_LkAccountNo   AND
+035000110828                       investment_code      = :lc_LkInvestmentCode AND
+035100110914                       lower_limit_days     = :li_LowerLimitDays  AND
+035200110826                       orig_investment_code = :lc_OrgInvCode      AND
+035300110826                       effective_date       = :ld_EffectiveDate
+035400110720               END-EXEC
+035500110826
+035600110720               MOVE SQLSTATE TO lc_sqlStates
+035700110720               IF Not lncc_sqlSuccessful
+035800110914                 MOVE SQLCODE        TO li_SQLCODE
+035900110720                 DISPLAY "Error in Update MFAACISVP - "
+036000110914                         "SQLCODE:" li_SQLCODE
+036100110826                 DISPLAY "ACCOUNT = "    pi_AccountNo
+036200110826                 DISPLAY "INVESTMENT = " pc_InvestmentCode
+036300110914                 DISPLAY "LOWER DAYS = " li_LowerLimitDays
+036400110826                 DISPLAY "EFF-DATE   = " ld_EffectiveDate
+036500111010                 DISPLAY "UNITS      = " li_Units
+036600111201                 MOVE lncc_99            TO pc_ReturnCode
+036700110720               END-IF
+036800110720             END-IF
+036900110720           END-PERFORM.
+037000110720
+037100110720      * Update Account-Inv-Dly-Srv.
+037200110826           IF pc_HeaderAc = lncc_A
+037300110720             EXEC SQL
+037400110720               INSERT INTO MFAACIDUP
+037500110828                 VALUES (:li_LkAccountNo,
+037600110828                         :lc_LkInvestmentCode,
+037700110828                         :ld_LkProccesDate)
+037800110720             END-EXEC
+037900110826
+038000110720             MOVE SQLSTATE TO lc_sqlStates
+038100110720             IF Not lncc_sqlSuccessful
+038200110914               MOVE SQLCODE        TO li_SQLCODE
+038300110720               DISPLAY "Error in Insert MFAACIDUP - "
+038400110914                       "SQLCODE:" li_SQLCODE
+038500110826               DISPLAY "ACCOUNT = "     pi_AccountNo
+038600110826               DISPLAY "INVESTMENT = "  pc_InvestmentCode
+038700110826               DISPLAY "PROCESS DATE= " pd_ProcessDate
+038800111201               MOVE lncc_99          TO pc_ReturnCode
+038900110720             END-IF
+039000110720           END-IF.
+039100110720
+039200110720      * Update to the Account-Inv-Dly-Srv-Var.
+039300110826           IF pc_HeaderAc = lncc_C
+039400110720             EXEC SQL
+039500110720               UPDATE MFAACIDUP
+039600110828                 SET process_date = :ld_LkProccesDate
+039700110828               WHERE account_no         = :li_LkAccountNo     AND
+039800110828                     investment_code    = :lc_LkInvestmentCode
+039900110720             END-EXEC
+040000110826
+040100110720             MOVE SQLSTATE TO lc_sqlStates
+040200110720             IF Not lncc_sqlSuccessful
+040300110914               MOVE SQLCODE        TO li_SQLCODE
+040400110720               DISPLAY "Error in Update MFAACIDUP - "
+040500110914                       "SQLCODE:" li_SQLCODE
+040600110826               DISPLAY "ACCOUNT = "     pi_AccountNo
+040700110826               DISPLAY "INVESTMENT = "  pc_InvestmentCode
+040800110826               DISPLAY "PROCESS DATE= " pd_ProcessDate
+040900111201               MOVE lncc_99             TO pc_ReturnCode
+041000110720             END-IF
+041100110720           END-IF.
+041200110720
+041300110720
+041400111201      *-----------------
+041500110826       EndOfProgram.
+041600111201      *-----------------
+041700110922           IF lc_OpenFiles = lncc_Y
+041800110922             CLOSE ACCOUNT-INV-DLY-SRV
+041900110922           END-IF.
+042000110720           GOBACK.
+042100110720
+042200111201      *----------------
+042300111201       SQL_ErrorRoutine.
+042400111201      *----------------
+042500111201           DISPLAY "FXSRVUAI - ENDED WITH ERROR".
+042600111201           DISPLAY "PROCEDURE: "  lc_RoutineName.
+042700111201           DISPLAY "STATEMENT: "  lc_SqlErrStatement.
+042800111201           DISPLAY "SQLCODE = "   SQLCODE, " SQLSTATE = " SQLSTATE.
+042900111201           DISPLAY "lc_ErrCode: " lc_ErrCode
+043000111201           PERFORM EndOfProgram.

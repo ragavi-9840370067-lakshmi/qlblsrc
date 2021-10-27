@@ -1,0 +1,626 @@
+000100171219      * %ATTR CLOSQLCSR(*ENDMOD)
+000102171219       IDENTIFICATION DIVISION.
+000200181101       PROGRAM-ID.    CRTRORRCD.
+000300060523       AUTHOR.        Claudio Lentini.
+000400060523       INSTALLATION.  Jewelstone Systems Inc.
+000500060523       DATE-WRITTEN.  January 09, 2002.
+000600060523       DATE-COMPILED.
+000700171208      ******************************************************************
+000800060523      *    RFS-NUMBER : RFS 12513                                      *
+000900060523      *                                                                *
+001000060523      *    DESCRIPTION: Create ROR records for Quiz report.            *
+001100060523      *                                                                *
+001200060523      *    CALLED BY:   JOBACCRORP                                     *
+001300060523      *               (Replaces JOBRORRPT, to be called                *
+001400060523      *                thru Adhoc job)                                 *
+001500060523      *                                                                *
+001600060523      *    PARAMETERS:  - Last month-end date                          *
+001700060523      *                 - Mode - I(Investor), A(Account), D(Dealer)
+001800060523      *                 - Investor number
+001900060523      *                 - Account number
+002000060523      *                 - Dealer code
+002100060523      *                 - Dealer Rep code
+002200060523      *                                                                *
+002300060523      *    COMPILE PGM: 1) Use option 15 to create module.             *
+002400060523      *                 2) CRTPGM prompt F4                            *
+002500060523      *                    program: CRTRORRCD                          *
+002600060523      *                    library: ie. MFADEVPKOJ                     *
+002700060523      *                    Module : CRTRORRCD                          *
+002800060523      *                    library: ie. MFADEVPKOJ                     *
+002900060523      *                    Prompt F10 (additional parameters)          *
+003000060523      *                    program entry...:CRTRORRCD                  *
+003100060523      *                    library: ie. MFADEVPKOJ                     *
+003200060523      ******************************************************************
+003300060523      *    C H A N G E   H I S T O R Y                                 *
+003400060523      ******************************************************************
+003500060523      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE              *
+003600060523      ******************************************************************
+003700060523      * Jane D     *  2002/08/12 *RFS 14075 - Modified selection       *
+003800060523      *            *             *criteria depending on the parameters *
+003900060523      *            *             *passed from the screen               *
+004000060523      *            *             *Can be for specific account, all     *
+004100060523      *            *             *accounts for an investor or can be   *
+004200060523      *            *             *all accounts for specific dlr.rep    *
+004300060523      * Reece Tam  *  2003/11/11 *RFS 18935 - Add Cons-Acct-Id to      *
+004400060523      *            *             *  call RORCALC.                      *
+004500060523      * Ali.A      *  2003/12/16 *RFS 18814 - Recompile.               *
+004600060524      * Lev O      *  2006/05/24 * RFS30797 - ROR redesign,
+004700060524      *            *             *  call new program to calculate ROR
+004800070924      * Emma.  Yala* 2007/09/24  * RFS40307 - Enhancement of GENROR
+004900070924      *            *             * Recompiled after setting new param
+005000070925      *            *             * of CPRORCLCSA to default values and
+005100070925      *            *             * changed '_' by '-' to match Copybook
+005200080208      * Ade.A      *  2008/01/22 *RFS 42749 - Recompile due to change  *
+005300080208      *            *             *to bound modules FXGETMVPD, GETACRIT
+005400090309      * Andy Chan  *  2009/03/09 *RFS 50549 - Recompile.               *
+005500090324      * Andy Chan  *  2009/02/10 *RFS 52734 - Recompile
+005600151105      * TamilSelvi *  2015/09/24 * RFS146035 Recompiled after setting
+005700151105      *            *             * new params in CPRORCLCSA.
+005800180316      * Lev O      *  2016/07/25 * RFS162063 - Recompile for RORPGM change.
+005801200904      * Suresh P   *  2020/07/21 * RFS178492 - Recompile.              *
+005802210410      * Gomathi S  *  2021/01/07 * RFS1101968- Recompile
+005900060523      ******************************************************************
+006000060523
+006100060523       ENVIRONMENT DIVISION.
+006200060523       CONFIGURATION SECTION.
+006300060523       SOURCE-COMPUTER. IBM-AS400.
+006400060523       OBJECT-COMPUTER. IBM-AS400.
+006500060523       SPECIAL-NAMES.
+006600060524            LINKAGE TYPE IS PROCEDURE FOR "RORCLCSAV".
+006700060523      /
+006800060523       INPUT-OUTPUT SECTION.
+006900060523       FILE-CONTROL.
+007000060523
+007100060523       DATA DIVISION.
+007200060523       FILE SECTION.
+007300060523
+007400060523***********************************************************************
+007500060523       WORKING-STORAGE SECTION.
+007600060523
+007700060523       01 ROR-RECORD.
+007800060523      *RFS 14075 - Start
+007900060523           05 ROR-INVESTOR-NO             PIC S9(9).
+008000060523           05 ROR-ACCOUNT-NO              PIC S9(9).
+008100060523           05 ROR-DEALER-CODE             PIC X(4).
+008200060523           05 ROR-DEALER-REP-CODE         PIC X(6).
+008300060523      *RFS 14075 - End
+008400060523           05 ROR-INVESTMENT-CODE         PIC X(5).
+008500060523           05 ROR-1-MONTH                 PIC S9(5)V99.
+008600060523           05 ROR-3-MONTH                 PIC S9(5)V99.
+008700060523           05 ROR-6-MONTH                 PIC S9(5)V99.
+008800060523           05 ROR-9-MONTH                 PIC S9(5)V99.
+008900060523           05 ROR-1-YEAR                  PIC S9(5)V99.
+009000060523           05 ROR-3-YEAR                  PIC S9(5)V99.
+009100060523           05 ROR-5-YEAR                  PIC S9(5)V99.
+009200060523           05 ROR-10-YEAR                 PIC S9(5)V99.
+009300060523           05 ROR-YEAR-TO-DATE            PIC S9(5)V99.
+009400060523           05 ROR-SINCE-INCEPTION         PIC S9(5)V99.
+009500060523
+009600060523       01 WS-FETCH.
+009700060523           05 WS-ACCOUNT-NO               PIC S9(9).
+009800060523           05 WS-INVESTMENT-CODE          PIC X(5).
+009900060523      *RFS 14075 - Start
+010000060523           05 WS-INVESTOR-NO              PIC S9(9).
+010100060523           05 WS-DEALER-CODE              PIC X(4).
+010200060523           05 WS-DEALER-REP-CODE          PIC X(6).
+010300060523      *RFS 14075 - End
+010400060523
+010500060523       01 WS-WORK-FIELDS.
+010600060523           05 EOF                         PIC X(1)  VALUE "N".
+010700060523           05 PREV-ACCOUNT                PIC S9(9) VALUE ZEROES.
+010800060523           05 WS-COUNTER                  PIC S9(2) VALUE ZEROES.
+010900060523           05 WS-RATE                     PIC S9(8)V9(5) VALUE ZEROES.
+011000060523           05 WS-PERIOD                   PIC X(5) VALUE SPACES.
+011100060523           05 WS-MONTHS                   PIC S9(3) VALUE ZEROES.
+011200060523      *RFS 14075 - Start
+011300060523           05 WS-PASS-INV-NO              PIC S9(9).
+011400060523           05 WS-PASS-ACC-NO              PIC S9(9).
+011500060523           05 WS-PASS-DLR-CODE            PIC X(4).
+011600060523           05 WS-PASS-DLR-REP-CODE        PIC X(6).
+011700060523           05 WS-CATEGORY                 PIC X.
+011800070924              88 INVESTOR                 VALUE "I".
+011900060523              88 ACCOUNT                  VALUE "A".
+012000060523              88 DEALER                   VALUE "D".
+012100060523      *RFS 14075 - End
+012200070924
+01230007092440307  01  lncc_No                 PIC X(01) VALUE "N".
+012400060523
+012500060523           COPY CPWRORCALC.
+012600060523
+012700060523           EXEC SQL
+012800060523             INCLUDE SQLCA
+012900060523           END-EXEC.
+013000060523
+013100060523           EXEC SQL
+013200060523             INCLUDE SQLDA
+013300060523            END-EXEC.
+013400060523
+013500060524
+013600060524      * ---------------------------------
+013700060524      * Copybooks - Start
+013800060524      * ---------------------------------
+013900060524       COPY Cprorclcsa.
+014000060524      * ---------------------------------
+014100060524      * Copybooks - End
+014200060524      * ---------------------------------
+014300060523***********************************************************************
+014400060523      *RFS 14075 - Start
+014500060523      * PARAMETERS FROM CALLING CL PROGRAM.
+014600060523       LINKAGE SECTION.
+014700060523       01  COMM-PARAMETERS.
+014800060523         05  COMM-LST-MTH-END              PIC S9(8).
+014900060523         05  COMM-MODE                     PIC X(01).
+015000060523         05  COMM-IVR-NO                   PIC S9(9).
+015100060523         05  COMM-ACC-NO                   PIC S9(9).
+015200060523         05  COMM-DLR-CODE                 PIC X(4).
+015300060523         05  COMM-REP-CODE                 PIC X(6).
+015400060523***********************************************************************
+015500060523       PROCEDURE DIVISION USING COMM-PARAMETERS.
+015600060523      *RFS 14075 - End
+015700060523***********************************************************************
+015800060523******* MAINLINE
+015900060523***********************************************************************
+016000060523       MAINLINE.
+016100060523           PERFORM INITIALIZATION.
+016200060523           PERFORM DETAIL-PROCESSING UNTIL EOF = "Y".
+016300060523           PERFORM TERMINATION.
+016400060523
+016500060523***********************************************************************
+016600060523******* INITIALIZATION
+016700060523***********************************************************************
+016800060523       INITIALIZATION.
+016900060523
+01700007092440307      MOVE lncc_No TO pc-extAccRorCalYrFlag pc-extAciRorCalYrFlag
+017100070924  |                        pc-extIstRorCalYrFlag pc-CalendarYearFlag
+017200070924  |                        pc-AddNewAccFlag.
+01730007092440307      MOVE ZEROES TO  pn-CalendarYearPeriods.
+017400070924
+017500070924
+017600060523      *RFS 14075 - Start
+017700060523           EXEC SQL
+017800060523           CREATE TABLE QTEMP/SFACCLST
+017900060523           (INVESTOR_NO DEC (9,0),
+018000060523            ACCOUNT_NO  DEC (9,0),
+018100060523            DEALER_CODE CHAR (4),
+018200060523            DEALER_REP_CODE CHAR (6))
+018300060523           END-EXEC.
+018400060523
+018500060523           MOVE COMM-MODE    TO WS-CATEGORY.
+018600060523
+018700060523           IF INVESTOR
+018800060523              MOVE COMM-IVR-NO  TO WS-PASS-INV-NO
+018900060523              PERFORM GET-INVESTOR-ACCOUNTS
+019000060523           END-IF.
+019100060523
+019200060523           IF DEALER
+019300060523              MOVE COMM-DLR-CODE TO WS-PASS-DLR-CODE
+019400060523              MOVE COMM-REP-CODE TO WS-PASS-DLR-REP-CODE
+019500060523              PERFORM GET-DEALER-ACCOUNTS
+019600060523           END-IF.
+019700060523
+019800060523           IF ACCOUNT
+019900060523             MOVE COMM-ACC-NO    TO WS-PASS-ACC-NO
+020000060523             PERFORM GET-ACCOUNT-DETAIL
+020100060523           END-IF.
+020200060523      *RFS 14075 - End
+020300060523
+020400060523           EXEC SQL
+020500060523           CREATE TABLE QTEMP/SFRORRPT
+020600060523      *RFS 14075 - Start
+020700060523           (INVESTOR_NO  DEC (9,0),
+020800060523            ACCOUNT_NO    DEC (9,0),
+020900060523            DEALER_CODE   CHAR (4),
+021000060523            DEALER_REP_CODE  CHAR (6),
+021100060523      *RFS 14075 - End
+021200060523             INVESTMENT_CODE CHAR (5),
+021300060523             MONTH_1    DEC (7,2),
+021400060523             MONTH_3    DEC (7,2),
+021500060523             MONTH_6    DEC (7,2),
+021600060523             MONTH_9    DEC (7,2),
+021700060523             YEAR_1     DEC (7,2),
+021800060523             YEAR_3     DEC (7,2),
+021900060523             YEAR_5     DEC (7,2),
+022000060523             YEAR_10    DEC (7,2),
+022100060523             YEAR_TO_DATE DEC (7,2),
+022200060523             SINCE_INCEPTION DEC(7,2))
+022300060523           END-EXEC.
+022400060523
+022500060523     ** DECLARE PROCESS CURSOR
+022600060523
+022700060523           EXEC SQL
+022800060523           DECLARE RORCR CURSOR FOR
+022900060523           SELECT A.*,
+023000060523           B.INVESTMENT_CODE
+023100060523           FROM
+023200060523      *RFS 14075 - Start
+023300060523      *    MFAACCNTP A, MFAACCIVP B
+023400060523           QTEMP/SFACCLST A, MFAACCIVP B
+023500060523      *RFS 14075 - End
+023600060523           WHERE
+023700060523           A.ACCOUNT_NO = B.ACCOUNT_NO  AND
+023800060523           B.CURR_UNIT_BAL > 0
+023900060523           ORDER BY
+024000060523      * RFS 14075 - Start
+024100060523      *   A.ACCOUNT_NO, B.INVESTMENT_CODE
+024200060523           A.INVESTOR_NO, A.ACCOUNT_NO, B.INVESTMENT_CODE
+024300060523      * RFS 14075 - End
+024400060523           END-EXEC.
+024500060523
+024600060523           EXEC SQL
+024700060523              OPEN RORCR
+024800060523           END-EXEC.
+024900060523
+025000060523
+025100060523           EXEC SQL
+025200060523             WHENEVER SQLERROR GOTO SQLERRORDISPLAY
+025300060523           END-EXEC.
+025400060523
+025500060523
+025600060523           INITIALIZE ROR-RECORD.
+025700060523           MOVE  ZEROES       TO  PREV-ACCOUNT.
+025800060523
+025900060523       SQLERRORDISPLAY.
+026000060523           IF SQLCODE NOT = 0  AND  SQLCODE NOT = 100
+026100060523              DISPLAY "PGM: CRTRORRCD, ",
+026200060523                      "ERROR: SQLSTATE=" SQLSTATE,
+026300060523                       " SQLCODE=" SQLCODE
+026400060523              STOP RUN
+026500060523           END-IF.
+026600060523
+026700060523***********************************************************************
+026800060523******* INPUT RECORD
+026900060523***********************************************************************
+027000060523       INPUT-RECORD.
+027100060523
+027200060523           EXEC SQL
+027300060523             FETCH NEXT FROM RORCR INTO
+027400060523      *RFS 14075 - Start
+027500060523             :WS-INVESTOR-NO,
+027600060523             :WS-ACCOUNT-NO,
+027700060523             :WS-DEALER-CODE,
+027800060523             :WS-DEALER-REP-CODE,
+027900060523      *RFS 14075 - End
+028000060523             :WS-INVESTMENT-CODE
+028100060523           END-EXEC.
+028200060523
+028300060523           INITIALIZE ROR-RECORD.
+028400060523
+028500060523           IF SQLCODE = 100
+028600060523              MOVE "Y" TO EOF
+028700060523           END-IF.
+028800060523
+028900060523***********************************************************************
+029000060523******* DETAIL PROCESSING
+029100060523***********************************************************************
+029200060523       DETAIL-PROCESSING.
+029300060523
+029400060523           PERFORM INPUT-RECORD.
+029500060523
+029600060523           IF EOF = "Y" AND PREV-ACCOUNT EQUAL ZEROES
+029700060523               PERFORM TERMINATION
+029800060523           ELSE
+029900060523           IF  PREV-ACCOUNT NOT = WS-ACCOUNT-NO
+030000060523               INITIALIZE                  CPWRORCALC-LINKAGE
+030100060523               MOVE WS-ACCOUNT-NO          TO  RR-ACCOUNT-NO
+030200060523               MOVE SPACES                 TO  RR-INVESTMENT-CODE
+030300060523      * rfs 18935 - start
+030400060523               MOVE SPACES                 TO  RR-CONS-ACCT-ID
+030500060523      * rfs 18935 - end
+030600060523               MOVE ZEROES                 TO  RR-INITIAL-DATE
+030700060523               MOVE ZEROES                 TO  RR-CALCULATE-DATE
+030800060523               MOVE COMM-LST-MTH-END       TO  RR-LAST-MONTH-END
+030900060523               PERFORM CALL-RORCALC-PROGRAM
+031000060523               MOVE WS-ACCOUNT-NO          TO PREV-ACCOUNT
+031100060523              END-IF
+031200060523           END-IF.
+031300060523
+031400060523           INITIALIZE                  CPWRORCALC-LINKAGE.
+031500060523           MOVE WS-ACCOUNT-NO          TO  RR-ACCOUNT-NO.
+031600060523           MOVE WS-INVESTMENT-CODE     TO  RR-INVESTMENT-CODE.
+031700060523      * rfs 18935 - start
+031800060523           MOVE SPACES                 TO  RR-CONS-ACCT-ID.
+031900060523      * rfs 18935 - end
+032000060523           MOVE ZEROES                 TO  RR-INITIAL-DATE.
+032100060523           MOVE ZEROES                 TO  RR-CALCULATE-DATE.
+032200060523           MOVE COMM-LST-MTH-END       TO  RR-LAST-MONTH-END.
+032300060523
+032400060523           PERFORM CALL-RORCALC-PROGRAM.
+032500060523
+032600060523***********************************************************************
+032700060523******* CALL RORCALC PROGRAM
+032800060523***********************************************************************
+032900060523       CALL-RORCALC-PROGRAM.
+033000060523
+033100060524      * -------------------------------------------------------------
+033200060524      * RFS30797 - Start
+033300060524      *
+033400060524      *    CALL "RORCALC"  USING
+033500060524      *                    RR-LAST-MONTH-END
+033600060524      *                    RR-CALCULATE-DATE
+033700060524      *                    RR-INITIAL-DATE
+033800060524      * rfs 18935 - start
+033900060524      *                    RR-CONS-ACCT-ID
+034000060524      * rfs 18935 - end
+034100060524      *                    RR-ACCOUNT-NO
+034200060524      *                    RR-INVESTMENT-CODE
+034300060524      *                    RR-PERIOD-CODE-1
+034400060524      *                    RR-PERIOD-ROR-1
+034500060524      *                    RR-PERIOD-CODE-2
+034600060524      *                    RR-PERIOD-ROR-2
+034700060524      *                    RR-PERIOD-CODE-3
+034800060524      *                    RR-PERIOD-ROR-3
+034900060524      *                    RR-PERIOD-CODE-4
+035000060524      *                    RR-PERIOD-ROR-4
+035100060524      *                    RR-PERIOD-CODE-5
+035200060524      *                    RR-PERIOD-ROR-5
+035300060524      *                    RR-PERIOD-CODE-6
+035400060524      *                    RR-PERIOD-ROR-6
+035500060524      *                    RR-PERIOD-CODE-7
+035600060524      *                    RR-PERIOD-ROR-7
+035700060524      *                    RR-PERIOD-CODE-8
+035800060524      *                    RR-PERIOD-ROR-8
+035900060524      *                    RR-PERIOD-CODE-9
+036000060524      *                    RR-PERIOD-ROR-9
+036100060524      *                    RR-PERIOD-CODE-10
+036200060524      *                    RR-PERIOD-ROR-10
+036300060524      *                    RR-PERIOD-ROR-APPL.
+036400060524      *
+036500060524      *    CANCEL  "RORCALC".
+036600060524      * -------------------------------------------------------------
+036700060524
+036800060524      * Parameter to drive level for ROR calculation:
+036900060524           IF RR-INVESTMENT-CODE NOT = SPACES
+037000070925             SET pncc-ClcACI     TO TRUE
+037100060524           ELSE
+037200070925             SET pncc-ClcACC     TO TRUE
+037300060524           END-IF
+037400060524
+037500070925           SET pncc-ClcOnly      TO TRUE
+037600060524
+037700070925           SET pncc-extAccRorPrcNo       TO TRUE
+037800070925           SET pncc-extAccRorMonthNo     TO TRUE
+037900060524
+038000070925           SET pncc-extAciRorPrcNo       TO TRUE
+038100070925           SET pncc-extAciRorMonthNo     TO TRUE
+038200060524
+038300070925           SET pncc-extIpsRorPrcNo       TO TRUE
+038400070925           SET pncc-extIpsRorMonthNo     TO TRUE
+038500060524
+038600070925           SET pncc-extIstRorPrcNo       TO TRUE
+038700070925           SET pncc-extIstRorMonthNo     TO TRUE
+038800060524
+038900070925           MOVE RR-ACCOUNT-NO          TO pi-AccountNo
+039000070925           MOVE RR-INVESTMENT-CODE     TO pc-InvestmentCode
+039100070925           INITIALIZE pc-IpsGroupID
+039200070925                      pc-InvestmentStructure
+039300070925                      pn-MonthEndInitDate
+039400060524
+039500070925           MOVE RR-LAST-MONTH-END      TO pn-PerformanceAt
+039600060524
+039700060524      * Initial passing array - parameters
+039800070925           PERFORM VARYING pi-IxPerRor
+039900070925             FROM 1 BY 1 UNTIL pi-IxPerRor > 10
+040000070925               INITIALIZE pc-PeriodCode   (pi-IxPerRor)
+040100070925                          pn-PeriodRor    (pi-IxPerRor)
+040200070925                          pc-PeriodRorSts (pi-IxPerRor)
+040300060524           END-PERFORM
+040400060524      * Call program to calculate and save ROR data
+040500060524           CALL "RORCLCSAV"
+040600060524             USING
+040700070925                   pc-RorclcsaParms
+040800070925                   ptb-RorArray
+040900070925                   pc-RorclcsaRetnParms
+041000060524      * -------------------------------
+041100060524      * Populate returned parameters .
+041200060524      * -------------------------------
+041300070925           MOVE pn-PerformanceAt    TO RR-LAST-MONTH-END
+041400060526                                       RR-CALCULATE-DATE
+041500070925           MOVE pn-MonthEndInitDate TO RR-INITIAL-DATE
+041600060524
+041700070925           SET pi-IxPerRor       TO 1
+041800070925           MOVE pc-PeriodCode   (pi-IxPerRor) TO RR-PERIOD-CODE-1
+041900070925           MOVE pn-PeriodRor    (pi-IxPerRor) TO RR-PERIOD-ROR-1
+042000070925           MOVE pc-PeriodRorSts (pi-IxPerRor) TO RR-PERIOD-ROR-STS-1
+042100060524
+042200070925           SET pi-IxPerRor       TO 2
+042300070925           MOVE pc-PeriodCode   (pi-IxPerRor) TO RR-PERIOD-CODE-2
+042400070925           MOVE pn-PeriodRor    (pi-IxPerRor) TO RR-PERIOD-ROR-2
+042500070925           MOVE pc-PeriodRorSts (pi-IxPerRor) TO RR-PERIOD-ROR-STS-2
+042600060524
+042700070925           SET pi-IxPerRor       TO 3
+042800070925           MOVE pc-PeriodCode   (pi-IxPerRor) TO RR-PERIOD-CODE-3
+042900070925           MOVE pn-PeriodRor    (pi-IxPerRor) TO RR-PERIOD-ROR-3
+043000070925           MOVE pc-PeriodRorSts (pi-IxPerRor) TO RR-PERIOD-ROR-STS-3
+043100060524
+043200060524
+043300070925           SET pi-IxPerRor       TO 4
+043400070925           MOVE pc-PeriodCode   (pi-IxPerRor) TO RR-PERIOD-CODE-4
+043500070925           MOVE pn-PeriodRor    (pi-IxPerRor) TO RR-PERIOD-ROR-4
+043600070925           MOVE pc-PeriodRorSts (pi-IxPerRor) TO RR-PERIOD-ROR-STS-4
+043700060524
+043800070925           SET pi-IxPerRor       TO 5
+043900070925           MOVE pc-PeriodCode   (pi-IxPerRor) TO RR-PERIOD-CODE-5
+044000070925           MOVE pn-PeriodRor    (pi-IxPerRor) TO RR-PERIOD-ROR-5
+044100070925           MOVE pc-PeriodRorSts (pi-IxPerRor) TO RR-PERIOD-ROR-STS-5
+044200060524
+044300060524
+044400070925           SET pi-IxPerRor       TO 6
+044500070925           MOVE pc-PeriodCode   (pi-IxPerRor) TO RR-PERIOD-CODE-6
+044600070925           MOVE pn-PeriodRor    (pi-IxPerRor) TO RR-PERIOD-ROR-6
+044700070925           MOVE pc-PeriodRorSts (pi-IxPerRor) TO RR-PERIOD-ROR-STS-6
+044800060524
+044900070925           SET pi-IxPerRor       TO 7
+045000070925           MOVE pc-PeriodCode   (pi-IxPerRor) TO RR-PERIOD-CODE-7
+045100070925           MOVE pn-PeriodRor    (pi-IxPerRor) TO RR-PERIOD-ROR-7
+045200070925           MOVE pc-PeriodRorSts (pi-IxPerRor) TO RR-PERIOD-ROR-STS-7
+045300060524
+045400060524
+045500070925           SET pi-IxPerRor       TO 8
+045600070925           MOVE pc-PeriodCode   (pi-IxPerRor) TO RR-PERIOD-CODE-8
+045700070925           MOVE pn-PeriodRor    (pi-IxPerRor) TO RR-PERIOD-ROR-8
+045800070925           MOVE pc-PeriodRorSts (pi-IxPerRor) TO RR-PERIOD-ROR-STS-8
+045900060524
+046000070925           SET pi-IxPerRor       TO 9
+046100070925           MOVE pc-PeriodCode   (pi-IxPerRor) TO RR-PERIOD-CODE-9
+046200070925           MOVE pn-PeriodRor    (pi-IxPerRor) TO RR-PERIOD-ROR-9
+046300070925           MOVE pc-PeriodRorSts (pi-IxPerRor) TO RR-PERIOD-ROR-STS-9
+046400060524
+046500060524
+046600070925           SET pi-IxPerRor       TO 10
+046700070925           MOVE pc-PeriodCode   (pi-IxPerRor) TO RR-PERIOD-CODE-10
+046800070925           MOVE pn-PeriodRor    (pi-IxPerRor) TO RR-PERIOD-ROR-10
+046900070925           MOVE pc-PeriodRorSts (pi-IxPerRor) TO RR-PERIOD-ROR-STS-10
+047000060524
+047100060524      * RFS30797 - End
+047200060523           COMPUTE WS-COUNTER = 0.
+047300060523
+047400060523      *RFS 14075 - Start
+047500060523           MOVE  WS-INVESTOR-NO      TO  ROR-INVESTOR-NO.
+047600060523           MOVE  WS-DEALER-CODE      TO  ROR-DEALER-CODE.
+047700060523           MOVE  WS-DEALER-REP-CODE  TO  ROR-DEALER-REP-CODE.
+047800060523      *RFS 14075 - End
+047900060523           MOVE  RR-ACCOUNT-NO       TO  ROR-ACCOUNT-NO.
+048000060523           MOVE  RR-INVESTMENT-CODE  TO  ROR-INVESTMENT-CODE.
+048100060523
+048200060523           PERFORM SET-FIELD-RATES UNTIL WS-COUNTER > 10.
+048300060523
+048400060523           EXEC SQL
+048500060523           INSERT
+048600060523           INTO QTEMP/SFRORRPT
+048700060523           VALUES
+048800060523           (:ROR-RECORD)
+048900060523           END-EXEC.
+049000060523
+049100060523***********************************************************************
+049200060523******* Set field rates for SFRORRPT by number of months.
+049300060523***********************************************************************
+049400060523       SET-FIELD-RATES.
+049500060523
+049600060523           COMPUTE WS-COUNTER = WS-COUNTER + 1.
+049700060523
+049800060523           MOVE   SPACES     TO WS-PERIOD.
+049900060523           MOVE   ZEROES     TO WS-RATE
+050000060523                                WS-MONTHS.
+050100060523
+050200060523           EVALUATE  WS-COUNTER
+050300060523             WHEN  1
+050400060523                   MOVE RR-PERIOD-CODE-1  TO  WS-PERIOD
+050500060523                   MOVE RR-PERIOD-ROR-1   TO  WS-RATE
+050600060523             WHEN  2
+050700060523                   MOVE RR-PERIOD-CODE-2  TO  WS-PERIOD
+050800060523                   MOVE RR-PERIOD-ROR-2   TO  WS-RATE
+050900060523             WHEN  3
+051000060523                   MOVE RR-PERIOD-CODE-3  TO  WS-PERIOD
+051100060523                   MOVE RR-PERIOD-ROR-3   TO  WS-RATE
+051200060523             WHEN  4
+051300060523                   MOVE RR-PERIOD-CODE-4  TO  WS-PERIOD
+051400060523                   MOVE RR-PERIOD-ROR-4   TO  WS-RATE
+051500060523             WHEN  5
+051600060523                   MOVE RR-PERIOD-CODE-5  TO  WS-PERIOD
+051700060523                   MOVE RR-PERIOD-ROR-5   TO  WS-RATE
+051800060523             WHEN  6
+051900060523                   MOVE RR-PERIOD-CODE-6  TO  WS-PERIOD
+052000060523                   MOVE RR-PERIOD-ROR-6   TO  WS-RATE
+052100060523             WHEN  7
+052200060523                   MOVE RR-PERIOD-CODE-7  TO  WS-PERIOD
+052300060523                   MOVE RR-PERIOD-ROR-7   TO  WS-RATE
+052400060523             WHEN  8
+052500060523                   MOVE RR-PERIOD-CODE-8  TO  WS-PERIOD
+052600060523                   MOVE RR-PERIOD-ROR-8   TO  WS-RATE
+052700060523             WHEN  9
+052800060523                   MOVE RR-PERIOD-CODE-9  TO  WS-PERIOD
+052900060523                   MOVE RR-PERIOD-ROR-9   TO  WS-RATE
+053000060523             WHEN  10
+053100060523                   MOVE RR-PERIOD-CODE-10 TO  WS-PERIOD
+053200060523                   MOVE RR-PERIOD-ROR-10  TO  WS-RATE
+053300060523           END-EVALUATE.
+053400060523
+053500060523           EXEC SQL
+053600060523           SELECT
+053700060523           NUMBER_OF_MONTHS
+053800060523           INTO :WS-MONTHS
+053900060523           FROM
+054000060523           MFARORPCP
+054100060523           WHERE
+054200060523           PERIOD_CODE = :WS-PERIOD
+054300060523           END-EXEC.
+054400060523
+054500060523           EVALUATE  WS-MONTHS
+054600060523             WHEN  1
+054700060523                   COMPUTE ROR-1-MONTH         ROUNDED = WS-RATE * 1
+054800060523             WHEN  3
+054900060523                   COMPUTE ROR-3-MONTH         ROUNDED = WS-RATE * 1
+055000060523             WHEN  6
+055100060523                   COMPUTE ROR-6-MONTH         ROUNDED = WS-RATE * 1
+055200060523             WHEN  9
+055300060523                   COMPUTE ROR-9-MONTH         ROUNDED = WS-RATE * 1
+055400060523             WHEN  12
+055500060523                   COMPUTE ROR-1-YEAR          ROUNDED = WS-RATE * 1
+055600060523             WHEN  36
+055700060523                   COMPUTE ROR-3-YEAR          ROUNDED = WS-RATE * 1
+055800060523             WHEN  60
+055900060523                   COMPUTE ROR-5-YEAR          ROUNDED = WS-RATE * 1
+056000060523             WHEN  120
+056100060523                   COMPUTE ROR-10-YEAR         ROUNDED = WS-RATE * 1
+056200060523             WHEN  0
+056300060523               IF WS-PERIOD = "INC"
+056400060523                   COMPUTE ROR-SINCE-INCEPTION ROUNDED = WS-RATE * 1
+056500060523               END-IF
+056600060523               IF WS-PERIOD = "YTD"
+056700060523                   COMPUTE ROR-YEAR-TO-DATE    ROUNDED = WS-RATE * 1
+056800060523               END-IF
+056900060523           END-EVALUATE.
+057000060523
+057100060523      *RFS 14075 - Start
+057200060523      * ---------------------------------
+057300060523       GET-INVESTOR-ACCOUNTS.
+057400060523      * ---------------------------------
+057500060523
+057600060523           EXEC SQL
+057700060523           INSERT INTO QTEMP/SFACCLST
+057800060523           SELECT INVESTOR_NO, ACCOUNT_NO, DEALER_CODE,
+057900060523                  DEALER_REP_CODE
+058000060523           FROM MFAACCNTP
+058100060523           WHERE INVESTOR_NO = :WS-PASS-INV-NO  AND
+058200060523                 ACCOUNT_STATUS = "A"
+058300060523           ORDER BY ACCOUNT_NO
+058400060523           END-EXEC.
+058500060523      * ---------------------------------
+058600060523       GET-DEALER-ACCOUNTS.
+058700060523      * ---------------------------------
+058800060523
+058900060523           EXEC SQL
+059000060523           INSERT INTO QTEMP/SFACCLST
+059100060523           SELECT INVESTOR_NO, ACCOUNT_NO, DEALER_CODE,
+059200060523                  DEALER_REP_CODE
+059300060523           FROM MFAACCNTP
+059400060523           WHERE DEALER_CODE = :WS-PASS-DLR-CODE  AND
+059500060523                 DEALER_REP_CODE = :WS-PASS-DLR-REP-CODE AND
+059600060523                 ACCOUNT_STATUS = "A"
+059700060523           ORDER BY INVESTOR_NO, ACCOUNT_NO
+059800060523           END-EXEC.
+059900060523      * ---------------------------------
+060000060523       GET-ACCOUNT-DETAIL.
+060100060523      * ---------------------------------
+060200060523
+060300060523           EXEC SQL
+060400060523           INSERT INTO QTEMP/SFACCLST
+060500060523           SELECT INVESTOR_NO, ACCOUNT_NO, DEALER_CODE,
+060600060523                  DEALER_REP_CODE
+060700060523           FROM MFAACCNTP
+060800060523           WHERE ACCOUNT_NO = :WS-PASS-ACC-NO  AND
+060900060523                 ACCOUNT_STATUS = "A"
+061000060523           ORDER BY ACCOUNT_NO
+061100060523           END-EXEC.
+061200060523      *RFS 14075 - End
+061300060523***********************************************************************
+061400060523******* TERMINATION
+061500060523***********************************************************************
+061600060523       TERMINATION.
+061700060523
+061800060523           EXEC SQL
+061900060523              CLOSE RORCR
+062000060523           END-EXEC.
+062100060523
+062200060523           STOP RUN.
+062300060523

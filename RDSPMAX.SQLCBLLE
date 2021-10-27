@@ -1,0 +1,1384 @@
+000100070306       IDENTIFICATION DIVISION.
+000200091124       PROGRAM-ID.    RDSPMAX.
+000300090723       AUTHOR.        Pawel Anielski.
+000400070306       INSTALLATION.  Citigroup Fund Services Canada.
+000500091124       DATE-WRITTEN.  November 24, 2009.
+000600070306       DATE-COMPILED.
+000700070306      *****************************************************************
+000800091124      **   RFS-NUMBER : RFS-73394                                      *
+000900070306      **                                                               *
+001000070306      **   DESCRIPTION: This program is used to select qualified       *
+001100091124      **                RDSP accounts and calculate LDAP maximum       *
+001200091124      **                amount.                                        *
+001300070306      **                                                               *
+001400091124      **   CALLED BY:   JOBRDSPMAX                                     *
+001500070306      **   PARAMETERS:  N/A                                            *
+001600070306      *****************************************************************
+001700070306      *****************************************************************
+001800070306      *    C H A N G E   H I S T O R Y
+001900070306      *****************************************************************
+002000070306      ******************************************************************
+002100070306      * PROGRAMMER  *DATE OF CHANGE* DESCRIPTION OF CHANGE             *
+002200070306      ******************************************************************
+002300100302      * Pawel A   * 2009/11/24 * RFS 73394 - New.                      *
+002400100302      * Richard S * 2010/03/02 * RFS 68035 - RDSP dev 4.1              *
+002500131015      * Daniel M. * 2010/03/02 * RFS 68035D - RDSP dev 4.1             *
+002600131015      * Kevin Shen* 2010/07/23 * 74620: Get LDAPMaxFactor from DTAARA  *
+002700131015      * Nasra F   * 2010/12/31 * 90840 Use as at year and beneficiary  *
+002800131015      *           *            * DOB year to get beneficiary age.      *
+002900131015      * Nasra F   * 2011/09/22 * RFS100978  - Implicit join            *
+003000131015      * Vinsfy J  * 2012/09/10 * RFS91272   - RECOMPILE                *
+003100131015      * Boopathy D* 2012/11/06 * RFS98866   - RECOMPILE                *
+003200130918      * Nagendra K* 2013/09/02 * RFS123925  - RDSP ITS 3.1-BUDGET 2012 *
+003300131212      * Thilaga K * 2013/08/28 * RFS127129- Recompile only             *
+003400131015      * Prabudha J* 2013/10/14 * RFS124157  - RDSP ITS 3.1-UPDATE PART2*
+003500140623      * Sushmita J * 2014/05/13* RFS136702 - Recompile for MFAACCDLP.  *
+003600140623      * Muthu      *           *                                       *
+003700140623      * lakshmi M  * 2014/05/15* RFS127070 - RDSP - ITS 3.1 Additional *
+003800140623      *            *           * enhancements.                         *
+003900140725      * Daniel M.  *           * RFS127070 - Def 38023                 *
+004000140725      *            *           * Beneficiary age was calc based on as- *
+004100140725      *            *           * at-year (formerly always prior year)  *
+004200140925      * Muthu      *           * RFS139851 - Pot Warranty: RFS127070
+004300140925      * lakshmi M  * 2014/09/10* PGAP max not calculated  correctly.
+004400141120      * Pooja K    * 2014/10/08* RFS 141048 - Properly define          *
+004500141120      *            *           * PGAP_Max_Percent                      *
+004600150407      *MUTHULAKSHMI*2015/04/07 * RFS145157 - RECOMPILE MFAACCBNP       *
+004700150602      *Amruta A    *2015/06/01 * RFS147923 - RECOMPILE MFATRNHDP       *
+004800190712      * Gomathi S  * 2019/07/03* RFS1014721- GUI ACCDSPIV screen should*
+004900190730      *            *           * DISPLY   LDAP Maximum   VALUE         *
+005000191217      * Suresh P   * 2019/17/12* RFS1020866 - Add the rollover values  *
+005100191217      *            *           * to the capital    component for the   *
+005200191217      *            *           * determination of PGAP                 *
+005300200513      * Suresh P   * 2020/13/05* RFS1100707 - Add the rollover values  *
+005400200513      *            *           * to the capital component for the      *
+005500200513      *            *           * determination of PGAP.                *
+005600210109      * Gomathi S  * 2021/01/07* RFS1101968-No Tax charged for RDSP    *
+005700210226      *            *           * closure account                       *
+005800210805      * Poojasri M * 2021/08/06* RFS1118141-Recompile of MFAADTNTP     *
+005900190712      ******************************************************************
+006000070306
+006100070306       ENVIRONMENT DIVISION.
+006200070306       CONFIGURATION SECTION.
+006300070306       SOURCE-COMPUTER. IBM-AS400.
+006400070306       OBJECT-COMPUTER. IBM-AS400.
+006500091125       SPECIAL-NAMES. LOCAL-DATA IS WS-LOCAL
+006600100415                      LINKAGE TYPE IS PROCEDURE FOR "FXREMPAY"
+006700091125                      DATA-AREA  IS WS-RDSP-SYSTEM-PARAMETERS.
+006800091125
+006900070306       INPUT-OUTPUT SECTION.
+007000070306       FILE-CONTROL.
+007100070306
+007200070306       DATA DIVISION.
+007300070312       FILE SECTION.
+007400070306
+007500070306       WORKING-STORAGE SECTION.
+007600070306      *
+007700070306           Copy Cpysqlfld
+007800091124               REPLACING == "CURRENT_PROGRAM" == BY == "RDSPMAX" ==.
+007900070306      *
+008000070306           EXEC SQL
+008100070306             INCLUDE SQLCA
+008200070306           END-EXEC.
+008300070306      *
+008400070306      * Error Codes, Uniquely Identify where the error happened
+008500070306       01  Ws-Err-Code                     PIC X(02) VALUE SPACES.
+008600070308           88  lncc_Err_Ok                           VALUE SPACES.
+008700070308           88  lncc_Err_10                           VALUE "10".
+008800070308           88  lncc_Err_11                           VALUE "11".
+008900070308           88  lncc_Err_12                           VALUE "12".
+009000070308           88  lncc_Err_13                           VALUE "13".
+009100091126           88  lncc_Err_14                           VALUE "14".
+009200091126           88  lncc_Err_15                           VALUE "15".
+009300091127           88  lncc_Err_16                           VALUE "16".
+009400100413           88  lncc_Err_20                           VALUE "20".
+009500100413           88  lncc_Err_21                           VALUE "21".
+009600100421           88  lncc_Err_22                           VALUE "22".
+009700130919123925     88  lncc_Err_23                           VALUE "23".
+009800140529127070     88  lncc_Err_24                           VALUE "24".
+009900140529127070     88  lncc_Err_25                           VALUE "25".
+010000140529127070     88  lncc_Err_26                           VALUE "26".
+010100070306
+010200070306       01  Flags.
+010300070308           03  lb_EndOfCursorFlag          PIC 1.
+010400070308               88  lb_EndOfCursorTrue      VALUE B"1".
+010500070308               88  lb_EndOfCursorFalse     VALUE B"0".
+010600100304R68035     03  lc_EndofFile                PIC X.
+010700100304  |            88 lnc_EndofFileYes         VALUE "Y".
+010800100304  |            88 lnc_EndofFileNo          VALUE "N".
+010900100413           03  lc_EndOfFetch              PIC X(1) VALUE Space.
+011000100413               88 lncc_EndOfFetchYes               VALUE "Y".
+011100100413               88 lncc_EndOfFetchNo                VALUE "N".
+011200100413           03  lc_EndOfProcess            PIC X(1) VALUE Space.
+011300100413               88 lncc_EndOfProcessYes             VALUE "Y".
+011400100413               88 lncc_EndOfProcessNo              VALUE "N".
+011500100413           03  lc_ArrayMaxReached         PIC X(1) VALUE Space.
+011600100413               88 lncc_ArrayMaxReachedYes          VALUE "Y".
+011700100413               88 lncc_ArrayMaxReachedNo           VALUE "N".
+011800100413           03  lc_NewRdspAwd              PIC X(1) VALUE Space.
+011900100413               88 lncc_NewRdspAwdYes               VALUE "Y".
+012000100413               88 lncc_NewRdspAwdNo                VALUE "N".
+012100130918      *RFS123925-Start
+012200130918           03  lb_PGAP_Account_Flag       PIC X(1).
+012300130918               88  PGAP_Account                    VALUE "Y".
+012400130919               88  PGAP_Account_Blank              VALUE SPACE.
+012500130918      *RFS123925-End
+012600100304R68035
+012700070306
+012800070306       01  Constants.
+012900091216           03  lnc_FirstDayOfTheYear PIC S9(09) COMP-3 VALUE 0101.
+013000091126           03  lncc_Yes                    PIC X(01) VALUE "Y".
+01310010032368035D     03  lncc_No                     PIC X(01) VALUE "N".
+013200091126           03  lncc_0                      PIC X(02) VALUE "0".
+013300091125           03  lnci_1                      PIC S9(1) VALUE 1.
+013400100304r68035     03  lnci_0                      PIC S9(1) VALUE 0.
+013500091126           03  lnci_3                      PIC S9(1) VALUE 3.
+013600100421           03  lnci_MaxFetchRec            PIC S9(03) VALUE 300.
+013700090728           03  lncc_A                      PIC X(01) VALUE "A".
+013800070409           03  lncc_Space                  PIC X(10) VALUE " ".
+013900100413           03  lncc_ProgramCode            PIC X(08) VALUE "ACCDSP".
+014000100413           03  lncc_ProgramAction          PIC X(10) VALUE "DEFAULT".
+014100100413           03  lncc_BaseCurrency           PIC X(03) VALUE "CAD".
+014200100413           03  lncc_Variable               PIC X(02) VALUE "VR".
+014300100413           03  lncc_Dollar                 PIC X(01) VALUE "$".
+014400100413           03  lncc_Percent                PIC X(01) VALUE "%".
+014500100413           03  lncc_Rdldap                 PIC X(06) VALUE "RDLDAP".
+014600100413           03  lncc_Specific               PIC X(01) VALUE "S".
+014700100421           03  lncc_Max                    PIC X(01) VALUE "X".
+014800210109      *RFS1101968 - Start *
+014900210109           03  lncc_C                      PIC X(01) VALUE "C".
+015000210109           03  Pc_GETMVMode                PIC X(01) VALUE " ".
+015100210109      *RFS1101968 - End *
+015200091126           03  lncc_ErrorOpeningCursor               PIC X(80)
+015300090820               VALUE "Error while opening cursor ".
+015400091126           03  lncc_ErrorFetchingCursor              PIC X(80)
+015500091126               VALUE "Error while fetching Cursor".
+015600091126           03  lncc_ErrorClosingCursor               PIC X(80)
+015700091126               VALUE "Error while closing Cursor".
+015800091126           03  lncc_ErrorUpdatingMFAACCDSP           PIC X(80)
+015900091126               VALUE "Error while updating MFAACCDSP".
+016000091126           03  lncc_ErrorGettingMFAPRGERP            PIC X(80)
+016100091126               VALUE "Error while getting Exchange Rate Type".
+016200091127           03  lncc_ErrorGettingMFAACCBNP            PIC X(80)
+016300091127               VALUE "Error while getting Beneficiary DOB".
+016400100304           03  lncc_ErrorInsertingMFAACCDLP          PIC X(80)
+016500100304               VALUE "Error while inserting into MFAACCDLP".
+016600100413           03  lncc_ErrorInsertingMFAACCAIP          PIC X(80)
+016700100413               VALUE "Error while inserting into MFAACCAIP".
+016800100421           03  lncc_ErrorClosingCursor2              PIC X(80)
+016900100421               VALUE "Error while closing Cursor c_RdspAwd".
+017000130919123925     03  lncc_ErrorGettingMFAACBFP             PIC X(80)
+017100130919123925         VALUE "Error while getting MFAACBFP ".
+017200091125
+017300140528127070     03  lncc_ErrorSelectingnotional           PIC X(80)
+017400140528127070         VALUE "Error while selecting notional details".
+017500140627127070     03  lncc_ErrorSelectingmfaadtnp           PIC X(80)
+017600140623127070         VALUE "Error while selecting mfaadtnp details".
+017700140627127070     03  lncc_ErrorSelectTRANSdetails          PIC X(80)
+017800140627127070         VALUE "Error while selecting TRANS details".
+017900091125       01 Lc-RDSP-System-Parameters.
+018000091215           05  lc_RDSP_SP_Filler           PIC X(70).
+018100091127           05  lc_RDSP_SP_Life_Exp         PIC X(03).
+018200091127           05  li_RDSP_SP_Life_Exp REDEFINES lc_RDSP_SP_Life_Exp
+018300091127                                           PIC 9(3).
+018400140515      * RFS127070 START
+018500140515           05  lc_SpecNumOfYr              PIC X(02).
+018600140515           05  li_SpecNumOfYr REDEFINES lc_SpecNumOfYr
+018700140515                                           PIC S9(02).
+01880014051574620 *    05  Filler                      PIC X(20).
+018900140515           05  Filler                      PIC X(18).
+019000140515      * RFS127070 END
+01910010091474620      05  lc_RDSP_SP_LDAPMaxFactor    PIC X(02).
+01920010091474620      05  li_RDSP_SP_LDAPMaxFactor
+01930010091474620          REDEFINES lc_RDSP_SP_LDAPMaxFactor
+01940010091474620                                      PIC 9(02).
+019500091126
+019600130829      * RFS123925 - Start
+019700130920           05  Filler                      PIC X(26).
+019800130829           05  lc_RDSP_SP_AHA_Factor       PIC X(05).
+019900141120      * RFS 141048 BEGINS.
+020000141120      *    05  lc_RDSP_SP_PGAP_Max_Percent PIC X(08).
+020100141120      *    05  ln_RDSP_SP_PGAP_Max_Percent
+020200141120      *        REDEFINES lc_RDSP_SP_PGAP_Max_Percent
+020300141120      *                                    PIC S9(3)V9(5).
+020400141120           05  lc_RDSP_SP_PGAP_Max_Percent PIC X(05).
+020500141120           05  ln_RDSP_SP_PGAP_Max_Percent
+020600141120               REDEFINES lc_RDSP_SP_PGAP_Max_Percent
+020700141120                                           PIC S9(3)V9(2).
+020800141120      * RFS 141048 ENDS .
+020900130829      * RFS123925 - End
+021000130828
+021100091126       01 ln_tmpCCYYMMDD                  PIC 9(08).
+021200091126       01 lc_tmpCCYYMMDDRed REDEFINES ln_tmpCCYYMMDD.
+021300091126         03 ln_tmpCCYY                    PIC 9(04).
+021400091126         03 ln_tmpMMDD                    PIC 9(04).
+021500070308
+021600070308       01  WorkingStorageFields.
+021700091124           03 lc_ProcessDate.
+021800091124              05 lc_AsAtDate           PIC X(08).
+021900091124              05 li_AsAtDate REDEFINES lc_AsAtDate
+022000091124                                       PIC S9(08).
+022100101231R90840        05 li_AsAtYYYYMMDD REDEFINES lc_AsAtDate.
+022200101231R90840           07  li_AsAtYearYYYY   PIC 9(04).
+022300110207R90840           07  li_AsAtMMDD       PIC 9(04).
+022400140515      * RFS127070 START
+022500140515              05 FILLER                PIC X(04).
+022600140515              05 lc_yearendflag        PIC X(01).
+022700140515      * RFS127070 END
+022800070308           03  li_Counter                  PIC S9(03) VALUE 0.
+022900100413           03  li_Cntr                     PIC S9(03) VALUE 0.
+023000100413           03  li_Cntr1                    PIC S9(03) VALUE 0.
+023100070309           03  li_NoOfRecordsFetched       PIC S9(09) VALUE 0.
+023200090818           03  li_NoOfRowsFetched          PIC S9(09) VALUE 0.
+023300070308           03  li_SaveAccountNo            PIC S9(09).
+023400100304R68035     03  li_SaveAccountNo2           PIC S9(09).
+023500091126           03  ln_SaveAccountMV            PIC S9(13)V9(02).
+023600091127           03  li_SaveBeneficiaryDOB       PIC S9(08).
+023700101231R90840     03  lc_BeneficiaryDOB  redefines li_SaveBeneficiaryDOB.
+023800101231R90840         05 li_BeneficiaryDOBYYYY    PIC S9(04).
+023900101231R90840         05 li_fillerMMDD            PIC S9(04).
+024000091216           03  li_NextYearDate             PIC S9(08).
+024100091127           03  li_BeneficiaryAge           PIC S9(03).
+024200091127           03  li_GreaterOfAge             PIC S9(03).
+024300091126           03  ln_LDAPMax                  PIC S9(13)V9(02).
+024400091126           03  lc_ExchangeRateType         PIC X(01).
+024500100415           03  lc_RestrictedYear           PIC X(01).
+024600100413           03  li_PrevAccountNo            PIC S9(09) VALUE 0.
+024700100413           03  li_TotalPayout              PIC S9(13)V9(02) VALUE 0.
+024800100413           03  li_AwdAmount                PIC S9(11)V9(02) VALUE 0.
+024900100413           03  li_PayPerAnnum              PIC S9(03) VALUE 0.
+025000100303r68035     03  li_LDAPYear                 PIC S9(04) VALUE 0.
+025100130828
+025200130829      * RFS123925 - Start
+025300130920           03  ln_AccountMV_PGAP           PIC S9(13)V9(2) VALUE 0.
+025400130920           03  ln_PGAPMax                  PIC S9(13)V9(2) VALUE 0.
+025500130919           03  li_Beneficiary_Seq          PIC S9(03).
+025600130919           03  lc_Contr_OR_Redem           PIC  X(01).
+025700130918           03  lc_Grand_Fathered           PIC  X(01).
+025800130829      * RFS123925 - End
+025900140516      * RFS127070 - START
+026000140721           03  li_AsAtDate3                PIC S9(08).
+026100140530           03  li_SpecYearEffDt.
+026200140520               05  li_SpecYearStartYr      PIC S9(04).
+026300140520               05  li_SpecYearStaMMDD      PIC S9(04).
+026400140519           03  li_TotalCapital             PIC S9(11)V99.
+026500140627           03  li_parm-accountno           PIC S9(09).
+026600140627           03  li_marketvalue              PIC S9(13)V9(02).
+026700140925139851     03  Li_notionalJan1FMV          PIC S9(13)V9(02).
+026800140519           03  lc_AcctTypeSubRule          PIC X(01).
+026900140516           03  li_SpecYearEndYr            PIC S9(04).
+027000140516           03  lb_SpecifiedYearFlag        PIC X(01).
+027100140516               88  lb_SpecifiedYearYes             VALUE "Y".
+027200140516               88  lb_SpecifiedYearNo              VALUE "N".
+027300140516           03  lb_SDSPFlag                 PIC X(01).
+027400140516               88  lb_SDSPYes                      VALUE "Y".
+027500140516               88  lb_SDSPNo                       VALUE "N".
+027600140516           03  li_SDSPTaxPortion           PIC S9(09)V99.
+027700140530           03  pi_GETMVTradeDate           PIC S9(08).
+027800140530           03  pi_GETMVPriceDate           PIC S9(08).
+027900140530           03  pi_GETMVAccountNo           PIC S9(09).
+028000140530           03  pc_GETMVInvestmentCode      PIC  X(05).
+028100140530           03  pn_GETMVMarketValue         PIC S9(13)V99.
+028200140617           03  Comm-Acct-No                PIC S9(09).
+028300140617           03  Comm-Trade-Date             PIC S9(8).
+028400140617           03  Comm-FMV-Amt                PIC S9(09)V99.
+028500140617           03  Comm-FMV-Amt1               PIC S9(13)V99.
+028600140617           03  Comm-Mode                   PIC X(1).
+028700140617           03  Comm-Contract-no            PIC S9(9).
+028800140617           03  Comm-Investment-code        PIC X(5).
+028900140617           03  Comm-Unit-amount            PIC S9(09)V9999.
+029000140516      * RFS127070 - END
+029100091124
+029200100413       01  ltb_FetchDtlRec.
+029300100421           03  ltb_DtlArray           OCCURS 300 TIMES.
+029400100413               05 li_DtlArrAccountNo       PIC S9(09).
+029500100413               05 lc_DtlArrPayTypeCode     PIC  X(01).
+029600100413               05 li_DtlArrSpecPayAmt      PIC S9(11)V9(02) COMP-3.
+029700100413               05 lc_DtlArrSplitOptCode    PIC  X(01).
+029800100413               05 lc_DtlArrFreqCode        PIC  X(02).
+029900100413               05 li_DtlArrStartDate       PIC S9(08).
+030000100413               05 li_DtlArrHoldUntilDate   PIC S9(08).
+030100100413               05 li_DtlArrLdapMaxAmt      PIC S9(11)V9(02) COMP-3.
+030200100413               05 li_DtlArrPayPerAnnum     PIC S9(03).
+030300100413               05 lc_DtlArrInvCode         PIC  X(05).
+030400100413               05 li_DtlArrAnnualAmt       PIC S9(11)V9(02) COMP-3.
+030500100413               05 lc_DtlArrGrossOrNet      PIC  X(01).
+030600100413               05 lc_DtlArrConfirm         PIC  X(01).
+030700100413               05 lc_DtlArrWaiveDsc        PIC  X(01).
+030800100413               05 lc_DtlArrWaiveReasonCode PIC  X(04).
+030900100413
+031000100413       01  ltb_DtlRecord.
+031100100413           03  ltb_DtlRec.
+031200100413               05 li_DtlAccountNo          PIC S9(09).
+031300100413               05 lc_DtlPayTypeCode        PIC  X(01).
+031400100413               05 li_DtlSpecPayAmt         PIC S9(11)V9(02) COMP-3.
+031500100413               05 lc_DtlSplitOptCode       PIC  X(01).
+031600100413               05 lc_DtlFreqCode           PIC  X(02).
+031700100413               05 li_DtlStartDate          PIC S9(08).
+031800100413               05 li_DtlHoldUntilDate      PIC S9(08).
+031900100413               05 li_DtlLdapMaxAmt         PIC S9(11)V9(02) COMP-3.
+032000100413               05 li_DtlPayPerAnnum        PIC S9(03).
+032100100413               05 lc_DtlInvCode            PIC  X(05).
+032200100413               05 li_DtlAnnualAmt          PIC S9(11)V9(02) COMP-3.
+032300100413               05 lc_DtlGrossOrNet         PIC  X(01).
+032400100413               05 lc_DtlConfirm            PIC  X(01).
+032500100413               05 lc_DtlWaiveDsc           PIC  X(01).
+032600100413               05 lc_DtlWaiveReasonCode    PIC  X(04).
+032700100413
+032800070308       01  Tables.
+032900091126           03  ltb_FetchRDSPAcctsTable.
+033000091126               05  ltb_FetchRDSPAccts OCCURS 300 TIMES.
+033100070314                   07  ltb_AccountNo        PIC S9(09).
+033200100304r68035             07  ltb_AccountNo2       PIC S9(09).
+033300091126                   07  ltb_AccountMV        PIC S9(13)V9(02).
+03340010032368035D             07  ltb_RestrictedYear   PIC  X(01).
+033500140516      * RFS127070 START
+033600140516                   07  ltb_SpecYearEffDt    PIC S9(08).
+033700140516                   07  ltb_TotalCapital     PIC S9(11)V99.
+033800140516                   07  ltb_AcctTypeSubRule  PIC X(01).
+033900140516      * RFS127070 END
+034000091127
+034100100413       01  lf_MfaaccaipRecord.
+034200100413           04 lf_MfaaccaipRec            OCCURS 600 TIMES.
+034300100413                              COPY DD-ALL-FORMATS OF Mfaaccaip.
+034400100413
+034500130829      * RFS123925 - Start
+034600130919       01 ln_LTD_Capital                   PIC S9(13)V9(2).
+034700130919       01 ln_LTD_GrantAmt                  PIC S9(13)V9(2).
+034800130919       01 ln_LTD_BondAmt                   PIC S9(13)V9(2).
+034900130918      * RFS123925 - End
+035000140626      * RFS127070 - START
+035100140626       01 ln_Net_Contrb                    PIC S9(13)V9(2).
+035200140626       01 ln_LTD_Capital1                  PIC S9(13)V9(2).
+035300140626       01 ln_LTD_GrantAmt1                 PIC S9(13)V9(2).
+035400140626       01 ln_LTD_BondAmt1                  PIC S9(13)V9(2).
+035500140626       01 ln_Net_Contrb1                   PIC S9(13)V9(2).
+035600140627       01 ln_LTD_Cap_IndNull               PIC S9(04) COMP-4.
+035700140627       01 ln_LTD_GrantIndNull              PIC S9(04) COMP-4.
+035800140627       01 ln_LTD_BondIndNull               PIC S9(04) COMP-4.
+035900140627       01 ln_Net_ContrIndNull              PIC S9(04) COMP-4.
+036000140630      * RFS127070 - END
+036100130829
+036200100413       COPY Cpyrempay.
+036300100413
+036400140520      * RFS127070 - START
+036500140520       LINKAGE SECTION.
+036600140529       01  pi_accountno1    PIC S9(09).
+036700140530      *PROCEDURE DIVISION.
+036800140530       PROCEDURE DIVISION USING pi_accountno1.
+036900140530      * RFS127070 - END
+037000091124
+037100071030       MAINLINE.
+037200090723           PERFORM InitialLogic.
+037300091126           PERFORM DetailProcess.
+037400090723           PERFORM EndOfProgram.
+037500090723
+037600070306      * ---------------------------------
+037700070306       InitialLogic.
+037800070306      * ---------------------------------
+037900140529127070     MOVE pi_accountno1 TO li_parm-accountno.
+038000070306           PERFORM InitializeWorkingStorage.
+038100091124           PERFORM GetAsAtDate.
+038200091126           PERFORM GetExchangeRateType.
+038300091125           PERFORM GetRDSPSystemParm.
+038400091126           PERFORM CreateCursor.
+038500070306
+038600070306      * ---------------------------------
+038700070306       InitializeWorkingStorage.
+038800070306      * ---------------------------------
+038900070313           EXEC SQL
+039000070313             WHENEVER SQLERROR CONTINUE
+039100070313           END-EXEC.
+039200070313
+039300070313           EXEC SQL
+039400070313             WHENEVER NOT FOUND CONTINUE
+039500070313           END-EXEC.
+039600090901
+039700091215           INITIALIZE li_AsAtDate.
+039800090817      * ---------------------------------
+039900091124       GetAsAtDate.
+040000090817      * ---------------------------------
+040100091124           CALL "RTVPRCDTP" USING lc_ProcessDate.
+040200091124           CANCEL "RTVPRCDTP".
+040300100303           MOVE li_AsAtDate          TO ln_tmpCCYYMMDD.
+040400140624      * RFS127070 - START
+040500140722           IF lc_yearendflag = "Y"
+040600140722             COMPUTE li_AsAtDate3 = ((ln_tmpCCYY) * 10000) + 1231
+040700140722           ELSE
+040800140722             COMPUTE li_AsAtDate3 = ((ln_tmpCCYY - 1) * 10000) + 1231
+040900140722           END-IF.
+041000140722           MOVE ln_tmpCCYY           TO li_LDAPYear.
+041100140516      * Removed the periods from below statements
+041200140721           IF (lc_yearendflag = "Y" AND li_parm-accountno = 0)
+041300140624      * RFS127070 - END
+041400140516           ADD  1                    TO ln_tmpCCYY
+041500140516r68035     MOVE ln_tmpCCYY           TO li_LDAPYear
+041600091126           INITIALIZE                ln_tmpMMDD,
+041700140516                                     li_NextYearDate
+041800091216           COMPUTE li_NextYearDate  = ln_tmpCCYYMMDD
+041900140516                                     + lnc_FirstDayOfTheYear
+042000140516127070     END-IF.
+042100091126
+042200091126      * ---------------------------------
+042300091126       GetExchangeRateType.
+042400091126      * ---------------------------------
+042500091126           INITIALIZE          lc_ExchangeRateType.
+042600091126           EXEC SQL
+042700091126                SELECT COALESCE(Exchange_Rate_Type, " ")
+042800091126                  INTO :lc_ExchangeRateType
+042900091126                  FROM Mfaprgerp
+043000091126                  WHERE Program_Code   = :lncc_ProgramCode
+043100091126                  AND Program_Action = :lncc_ProgramAction
+043200091126           END-EXEC.
+043300091126
+043400091126           MOVE SQLSTATE TO lc_sqlStates.
+043500091126           IF NOT lncc_sqlSuccessful and NOT lncc_sqlEnd
+043600091126              SET lncc_Err_13 TO TRUE
+043700091126              MOVE lncc_ErrorGettingMFAPRGERP TO lc_sqlErrShortDESCR
+043800091126              PERFORM SQLFailProcess
+043900091126           END-IF.
+044000091229
+044100091125      * ---------------------------------
+044200091125       GetRDSPSystemParm.
+044300091125      * ---------------------------------
+044400091125           ACCEPT Lc-RDSP-System-Parameters
+044500091125             FROM WS-RDSP-SYSTEM-PARAMETERS
+044600091126              FOR "MFARDSPSP"
+044700091126           END-ACCEPT.
+044800091126           If lc_RDSP_SP_Life_Exp = SPACES
+044900091126              Move ZEROES      TO li_RDSP_SP_Life_Exp
+045000091126           End-If.
+045100140519      * RFS127070 - START
+045200140519           IF lc_SpecNumOfYr = SPACES
+045300140519              MOVE ZEROES      TO li_SpecNumOfYr
+045400140519           END-IF.
+045500140519      * RFS127070 - END
+04560010091474620 * Begins
+045700100914           If lc_RDSP_SP_LDAPMaxFactor = SPACES
+045800100914              Move ZEROES      TO li_RDSP_SP_LDAPMaxFactor
+045900100914           End-If.
+04600010091474620 * Ends
+046100091215           If li_RDSP_SP_Life_Exp = 0
+046200091215             DISPLAY "RDSP Sys Parm: " Lc-RDSP-System-Parameters
+046300091215             PERFORM Termination
+046400091215           End-If.
+046500091215
+046600070306      * ---------------------------------
+046700090807       CreateCursor.
+046800070306      * ---------------------------------
+046900070306           EXEC SQL
+047000091126             DECLARE C_RDSPAccts    CURSOR FOR
+047100100303             SELECT Accdsp.Account_No,
+047200100304r68035              COALESCE(MAX(Accdlp.Account_no), 0),
+047300091126                   DECIMAL(SUM((CASE WHEN Invupp2.Unit_Price > 0
+047400091126                              AND Invp.Currency <> :lncc_BaseCurrency
+047500091126                             THEN DECIMAL(ROUND(Accivp.Curr_Unit_Bal *
+047600091126                                  Invupp2.Unit_Price /
+047700091126                                  COALESCE(Exrhmp.Exchange_Rate,1)
+047800091126                                  ,2),13,2)
+047900091126                             WHEN Invupp1.Unit_Price > 0
+048000091126                              AND Invp.Currency <> :lncc_BaseCurrency
+048100091126                             THEN DECIMAL(ROUND(Accivp.Curr_Unit_Bal *
+048200091126                                  Invupp1.Unit_Price /
+048300091126                                  COALESCE(Exrhmp.Exchange_Rate,1)
+048400091126                                  ,2),13,2)
+048500091126                             WHEN Invlpp.Unit_Price > 0
+048600091126                              AND Invp.Currency <> :lncc_BaseCurrency
+048700091126                             THEN DECIMAL(ROUND(Accivp.Curr_Unit_Bal *
+048800091126                                  Invlpp.Unit_Price /
+048900091126                                  COALESCE(Exrhmp.Exchange_Rate,1)
+049000091126                                  ,2),13,2)
+049100091126                             WHEN Invupp2.Unit_Price > 0
+049200091126                              AND Invp.Currency = :lncc_BaseCurrency
+049300091126                             THEN DECIMAL(ROUND(Accivp.Curr_Unit_Bal *
+049400091126                                  Invupp2.Unit_Price,2),13,2)
+049500091126                             WHEN Invupp1.Unit_Price > 0
+049600091126                              AND Invp.Currency = :lncc_BaseCurrency
+049700091126                             THEN DECIMAL(ROUND(Accivp.Curr_Unit_Bal *
+049800091126                                  Invupp1.Unit_Price,2),13,2)
+049900091126                             WHEN Invlpp.Unit_Price > 0
+050000091126                              AND Invp.Currency = :lncc_BaseCurrency
+050100091126                             THEN DECIMAL(ROUND(Accivp.Curr_Unit_Bal *
+050200091126                                  Invlpp.Unit_Price,2),13,2)
+050300091126                             ELSE 0
+05040010032368035D*                 END)),13,2) As AccMVTot
+050500100323  |                     END)),13,2) As AccMVTot,
+050600100323  |                     CHAR(
+050700100323  |                     MAX(
+050800100323  |                     CASE WHEN (Accdsp.Total_Grant +
+050900100323  |                                Accdsp.Total_Bond) >
+051000100323  |                                Accdsp.Total_Capital
+051100100323  |                          THEN :Lncc_Yes ELSE :Lncc_No END
+051200100323  |                        )
+051300140519      * RFS127070 - START
+05140014051968035D*                       ,1) as Restricted_Year
+051500140530                              ,1) as Restricted_Year,
+051600140625                 MAX(ZONED(Accdsp.Specified_Year_Effect_Date,8)),
+051700140625                 MAX(ZONED(Accdsp.Total_Capital,13,2)),
+051800140625                 MAX(CHAR(IFNULL(Accsrp.Account_Type_Sub_Rule,
+051900140625                             " ") ,1))
+052000140519      * RFS127070 - END
+052100090728              FROM
+052200110922r68035              Mfaaccdsp Accdsp
+052300110922      *RFS100978 Starts
+052400110922      *             Mfaaccntp Accntp,
+052500110922      *             Mfaacctyp Acctyp,
+052600110922      *             Mfaaccivp Accivp,
+052700110922      *             Mfainvp   Invp
+052800110922              INNER JOIN Mfaaccntp Accntp
+052900110922                     ON  Accdsp.Account_no  = Accntp.Account_no
+053000110922
+053100110922              INNER JOIN Mfaacctyp Acctyp
+053200110922                     ON  Accntp.Account_Type_Code =
+053300110922                         Acctyp.Account_Type_Code
+053400110922
+053500110922              INNER JOIN Mfaaccivp Accivp
+053600110922                     ON  Accntp.Account_No  = Accivp.Account_No
+053700110922
+053800110922              INNER JOIN Mfainvp   Invp
+053900110922                     ON  Invp.Investment_Code = Accivp.Investment_Code
+054000110922      *RFS100978 Ends
+054100110922
+054200091125              LEFT OUTER JOIN Mfainvupp Invupp1
+054300091126                     ON Invupp1.Trade_Date = :li_AsAtDate          AND
+054400091125                        Invupp1.Investment_Code =
+054500091214                        Accivp.Investment_Code                     AND
+054600091214                        Accivp.Account_No = Accntp.Account_no      AND
+054700091125                        Invupp1.Distribution_Flag = :lncc_Space
+054800091125              LEFT OUTER JOIN Mfainvupp Invupp2
+054900091126                     ON Invupp2.Trade_Date = :li_AsAtDate          AND
+055000091125                        Invupp2.Investment_Code =
+055100091214                        Accivp.Investment_Code                     AND
+055200091214                        Accivp.Account_No = Accntp.Account_no      AND
+055300091125                        Invupp2.Distribution_Flag = :lncc_Yes
+055400091125              LEFT OUTER JOIN Mfainvlpp Invlpp
+055500091125                     ON Invlpp.Investment_Code = Accivp.Investment_Code
+055600091125              LEFT OUTER JOIN Mfaexrhmp Exrhmp
+055700091125                     ON Exrhmp.Currency = Invp.Currency AND
+055800091126                        Exrhmp.Trade_Date = :li_AsAtDate           AND
+055900091125                        Exrhmp.Exchange_Rate_Type = :lc_ExchangeRateType
+056000100304r68035        LEFT OUTER JOIN Mfaaccdlp Accdlp
+056100100304r68035               ON Accdlp.Account_no = Accdsp.Account_no      AND
+056200100304r68035                  Accdlp.Year = :li_LDAPYear
+056300140519      * RFS127070 - START
+056400140519              LEFT OUTER JOIN MFAACCSRP Accsrp
+056500140519                     ON Accntp.Account_Type_code =
+056600140519                        Accsrp.Account_Type_code
+056700140519      * RFS127070 - END
+056800070308              WHERE
+056900110922r68035*100978     Accdsp.Account_no  = Accntp.Account_no           AND
+057000110922100978*           Accntp.Account_No  = Accivp.Account_No           AND
+057100110922100978*           Invp.Investment_Code = Accivp.Investment_Code    AND
+057200110922100978*           Accntp.Account_Type_Code
+057300110922100978*                              = Acctyp.Account_Type_Code    AND
+057400140724                  Acctyp.Account_Type_Rule = :lncc_0               AND
+057500140724                  Accntp.Account_Status = :lncc_A
+057600140724      * RFS127070 - START
+057700140724                  AND
+057800140724                  ((:li_parm-accountno = 0)
+057900140522                  OR
+058000140724                  (:li_parm-accountno <> 0 AND
+058100140724                   Accntp.Account_no = :li_parm-accountno))
+058200140522      * RFS127070 - END
+058300100304             GROUP BY Accdsp.Account_No
+058400140530             ORDER BY Accdsp.Account_No
+058500070306             FOR FETCH ONLY
+058600070306             OPTIMIZE FOR ALL ROWS
+058700070306           END-EXEC.
+058800070308
+058900070308           EXEC SQL
+059000091126             OPEN C_RDSPAccts
+059100070308           END-EXEC.
+059200070308
+059300070308           MOVE SQLSTATE TO lc_sqlStates.
+059400070308           IF NOT lncc_sqlSuccessful
+059500090729              SET lncc_Err_10 TO TRUE
+059600090820              MOVE lncc_ErrorOpeningCursor  TO lc_sqlErrShortDESCR
+059700070308              PERFORM SQLFailProcess
+059800070308           END-IF.
+059900070306
+060000070306      * ---------------------------------
+060100070306       DetailProcess.
+060200070306      * ---------------------------------
+060300070314           SET lb_EndOfCursorFalse TO TRUE.
+060400070308           PERFORM ProcessCursor
+060500070308             UNTIL lb_EndOfCursorTrue.
+060600070308
+060700100323           MOVE lncc_No TO lc_EndofFile.
+060800140630      * RFS127070 - START
+060900140630      *    PERFORM Recreate-Rdsp-Awd-Proc
+061000140630      *      UNTIL lnc_EndofFileYes.
+061100140630           IF li_parm-accountno = 0
+061200140630              PERFORM Recreate-Rdsp-Awd-Proc
+061300140630              UNTIL lnc_EndofFileYes
+061400140630           END-IF.
+061500140625      * RFS127070 - END
+061600070308      * ---------------------------------
+061700070308       ProcessCursor.
+061800070308      * ---------------------------------
+061900091126           INITIALIZE ltb_FetchRDSPAcctsTable.
+062000070308
+062100070308           EXEC SQL
+062200091126             FETCH NEXT FROM C_RDSPAccts
+062300070308               FOR :lnci_MaxFetchRec ROWS
+062400091126              INTO :ltb_FetchRDSPAccts
+062500070308           END-EXEC.
+062600070308
+062700070308           MOVE SQLSTATE TO lc_sqlStates.
+062800070308           EVALUATE TRUE
+062900070308               WHEN lncc_sqlSuccessful
+063000070308                    COMPUTE li_NoOfRowsFetched = SQLERRD(3)
+063100070308               WHEN lncc_sqlEnd
+063200070308                    SET lb_EndOfCursorTrue TO TRUE
+063300070308                    COMPUTE li_NoOfRowsFetched = SQLERRD(3)
+063400070308               WHEN OTHER
+063500091126                    SET lncc_Err_11 TO TRUE
+063600070308                    MOVE lncc_ErrorFetchingCursor
+063700070308                      TO lc_sqlErrShortDESCR
+063800070308                    PERFORM SQLFailProcess
+063900070308           END-EVALUATE.
+064000070308
+064100070308           COMPUTE li_Counter = 1.
+064200091126           PERFORM ProcessRDSPAccts   TEST BEFORE
+064300070308             UNTIL li_Counter > li_NoOfRowsFetched.
+064400070308
+064500070306      * ---------------------------------
+064600091126       ProcessRDSPAccts.
+064700070308      * ---------------------------------
+064800090807           PERFORM SaveArrayFields.
+064900091126           PERFORM CalculateLDAPMax.
+065000100304r68035     IF li_SaveAccountNo2 NOT = lnci_0
+065100100304  |           PERFORM UpdateLDAPMax
+065200100304  |        ELSE
+065300100304  |           PERFORM InsertLDAPMax
+065400100304r68035     END-IF.
+065500100304
+065600070309           COMPUTE li_Counter = li_Counter + 1.
+065700070308
+065800070308      * ---------------------------------
+065900070309       SaveArrayFields.
+066000070309      * ---------------------------------
+066100070607
+066200140602           MOVE ltb_AccountNo (li_Counter) TO li_SaveAccountNo.
+066300091126           MOVE ltb_AccountMV (li_Counter) TO ln_SaveAccountMV.
+066400100304R68035     MOVE ltb_AccountNo2(li_Counter) TO li_SaveAccountNo2.
+066500100415R68035     MOVE ltb_RestrictedYear(li_Counter) TO lc_RestrictedYear.
+066600140519      * RFS127070 - START
+066700140519           MOVE ltb_SpecYearEffDt(li_Counter) TO li_SpecYearEffDt.
+066800140519           MOVE ltb_TotalCapital(li_Counter)  TO li_TotalCapital.
+066900140519           MOVE ltb_AcctTypeSubRule(li_Counter) TO lc_AcctTypeSubRule.
+067000140519      * RFS127070 - END
+067100090807
+067200090807      * ---------------------------------
+067300091126       CalculateLDAPMax.
+067400090807      * ---------------------------------
+067500091126           INITIALIZE   ln_LDAPMax,
+067600091126                        li_BeneficiaryAge,
+067700140520      * RFS127070 - START
+067800140520      *                 li_GreaterOfAge.
+067900140520                        li_GreaterOfAge,
+068000140520                        ln_LTD_Capital,
+068100140520                        ln_LTD_GrantAmt,
+068200140520                        ln_LTD_BondAmt,
+068300140520                        li_SDSPTaxPortion.
+068400140520           SET lb_SpecifiedYearNo TO TRUE.
+068500140520           SET lb_SDSPNo          TO TRUE.
+068600140520           IF li_SpecYearEffDt NOT = 0
+068700140520              COMPUTE li_SpecYearEndYr =
+068800140520                      li_SpecYearStartYr + li_SpecNumOfYr
+068900140520           END-IF.
+069000140520           IF (li_LDAPYear >= li_SpecYearStartYr AND
+069100140520               li_LDAPYear <= li_SpecYearEndYr)
+069200140520              SET lb_SpecifiedYearYes TO TRUE
+069300140520           END-IF.
+069400140520           IF lc_AcctTypeSubRule NOT = SPACES
+069500140520              SET lb_SDSPYes  TO TRUE
+069600140520           END-IF.
+069700140520           IF li_parm-accountno = 0
+069800140722              PERFORM Get-LTD-Contr-Redem-Amount
+069900140721           ELSE
+070000140722              PERFORM Get-LTD-Notional-Alt
+070100140722              PERFORM Calculate-Trans-Level-Jan1FMV
+070200140722              COMPUTE ln_SaveAccountMV = li_marketvalue
+070300140630           END-IF
+070400140630      * RFS127070 - END
+070500130829      * RFS123925 - Start
+070600140630           PERFORM Determine-PGAP-Account.
+070700130829      * RFS123925 - End
+070800091127           PERFORM GetBeneficiaryDOB.
+070900091214           If li_SaveBeneficiaryDOB > 0
+071000101231R90840*        COMPUTE li_BeneficiaryAge =
+071100101231R90840*            (li_NextYearDate - li_SaveBeneficiaryDOB) / 10000
+071200140725      *        RFS 127070 - Def 38023 - Begins
+071300140725R90840*        COMPUTE li_BeneficiaryAge =
+071400140725R90840*            (li_AsAtYearYYYY - li_BeneficiaryDOBYYYY)
+071500140725               IF lc_yearendflag = Lncc_Yes
+071600140725                  COMPUTE li_BeneficiaryAge =
+071700140725                      (li_AsAtYearYYYY - li_BeneficiaryDOBYYYY)
+071800140725               ELSE
+071900140725                  COMPUTE li_BeneficiaryAge =
+072000140725                      (li_AsAtYearYYYY - li_BeneficiaryDOBYYYY - 1)
+072100140725               END-IF
+072200140725      *        RFS 127070 - Def 38023 - Ends
+072300091214           End-If.
+072400091106
+072500091214           If li_BeneficiaryAge > 0
+072600091214             If li_BeneficiaryAge >  li_RDSP_SP_Life_Exp
+072700091214                Move li_BeneficiaryAge     TO li_GreaterOfAge
+072800091214             Else
+072900091214                Move li_RDSP_SP_Life_Exp   TO li_GreaterOfAge
+073000091214             End-If
+073100091214           End-If.
+073200090807
+073300091126           If li_GreaterOfAge > 0
+073400091126              COMPUTE ln_LDAPMax = ln_SaveAccountMV /
+07350010082074620 *              (li_GreaterOfAge + lnci_3 - li_BeneficiaryAge)
+07360010082074620                (li_GreaterOfAge + li_RDSP_SP_LDAPMaxFactor -
+07370010082074620                 li_BeneficiaryAge)
+073800091126           End-If.
+073900140520      * RFS127070 - START
+074000140520           IF lb_SDSPYes
+074100140722              IF li_parm-accountno = 0
+074200140722                 COMPUTE li_TotalCapital = li_TotalCapital
+074300140722              ELSE
+074400140722                  COMPUTE li_TotalCapital = ln_Net_Contrb
+074500140722              END-IF
+074600140722              IF ln_SaveAccountMV NOT = 0
+074700140722                 COMPUTE li_SDSPTaxPortion =
+074800140627                    ln_LDAPMax * ((ln_SaveAccountMV - li_TotalCapital)
+074900140627                    / ln_SaveAccountMV)
+075000140722              END-IF
+075100140520           END-IF.
+075200140520           IF li_SDSPTaxPortion < 0
+075300140520              COMPUTE li_SDSPTaxPortion = 0
+075400140520           END-IF.
+075500140520      * RFS127070 - END
+075600130828      * RFS123925 - Start
+075700130828           INITIALIZE   ln_AccountMV_PGAP,
+075800130828                        ln_PGAPMax.
+075900130828           If PGAP_Account
+076000130828               Perform Calculate-PGAP-Maximum
+076100130828           ELSE
+076200130918               MOVE 0 TO ln_SaveAccountMV
+076300130918           END-IF.
+076400130828      * RFS123925 - End
+076500140529      * RFS127070 - Start
+076600140529      * ---------------------------------
+076700140529       Calculate-Trans-Level-Jan1FMV.
+076800140529      * ---------------------------------
+076900140925      * RFS139851 - START
+077000140925           INITIALIZE Li_notionalJan1FMV.
+077100140925      * RFS139851 - END
+077200140715           COMPUTE Comm-Acct-No = li_parm-accountno.
+077300140617           COMPUTE Comm-Trade-Date = li_AsAtDate3.
+077400140617           MOVE "P" TO Comm-Mode.
+077500140617           COMPUTE Comm-Contract-no = 0.
+077600140617           MOVE SPACES TO Comm-Investment-code
+077700140617           CALL "FXGETFMV" USING Comm-Acct-No
+077800140617                                 Comm-Trade-Date
+077900140617                                 Comm-FMV-Amt
+078000140617                                 Comm-Mode
+078100140617                                 Comm-Contract-no
+078200140617                                 Comm-Investment-code
+078300140617                                 Comm-Unit-amount.
+078400140617           MOVE Comm-FMV-Amt  TO Comm-FMV-Amt1,
+078500140617                                 li_marketvalue.
+078600140925139851*    IF li_marketvalue = 0
+078700140722              EXEC SQL
+078800140722                SELECT
+078900140722                  COALESCE(SUM(Market_Value), 0)
+079000140722                  INTO
+079100140925139851*           :li_marketvalue
+079200140925139851            :Li_notionalJan1FMV
+079300140722                FROM
+079400140722                 MFAADTNP
+079500140722                WHERE
+079600140715                 ACCOUNT_NO = :li_parm-accountno
+079700140529                 AND TRANSFER_STATUS = "C"
+079800140529                 AND TRANSFER_CONTR_OR_REDEM = "C"
+079900140925139851           AND ZONED(TRANSFER_DATE / 10000,4,0) = :li_LDAPYear
+080000140722              END-EXEC
+080100140722              MOVE SQLSTATE TO lc_sqlStates
+080200140722              IF NOT (lncc_sqlSuccessful OR
+080300140619                   lncc_sqlEnd)
+080400140529              SET lncc_Err_25 TO TRUE
+080500140529              MOVE lncc_ErrorSelectingmfaadtnp TO lc_sqlErrShortDESCR
+080600140529              PERFORM SQLFailProcess
+080700140925      * RFS139851 - START
+080800140925              ELSE
+080900140925                 COMPUTE li_marketvalue = li_marketvalue +
+081000140925                                          Li_notionalJan1FMV
+081100140925      * RFS139851 - END
+081200140722              END-IF
+081300140925139851*    END-IF.
+081400140529           INITIALIZE pi_GETMVTradeDate
+081500140529                      pi_GETMVPriceDate
+081600140529                      pi_GETMVAccountNo
+081700140529                      pc_GETMVInvestmentCode
+081800140529                      pn_GETMVMarketValue.
+081900140529           IF (li_marketvalue = 0)
+082000140530              COMPUTE pi_GETMVTradeDate  =  li_AsAtDate3
+082100140617              COMPUTE pi_GETMVPriceDate  =  li_AsAtDate3
+082200140715              COMPUTE pi_GETMVAccountNo  =  li_parm-accountno
+082300140529              MOVE SPACES TO pc_GETMVInvestmentCode
+082400210109      *RFS1101968 - Start *
+082500210109              MOVE lncc_C   TO Pc_GETMVMode
+082600210109      *RFS1101968 - ENd  *
+082700140529              CALL "FXGETMKVT" USING  pi_GETMVTradeDate
+082800140529                                      pi_GETMVPriceDate
+082900210109      *RFS1101968 - Start *
+083000210109                                      Pc_GETMVMode
+083100210109      *RFS1101968 - ENd  *
+083200140529                                      pi_GETMVAccountNo
+083300140529                                      pc_GETMVInvestmentCode
+083400140529                                      pn_GETMVMarketValue
+083500140722              MOVE pn_GETMVMarketValue  TO  li_marketvalue
+083600140529           END-IF.
+083700140528      * ---------------------------------
+083800191217       Get-LTD-Notional-Alt.
+083900140528      * ---------------------------------
+084000140626           EXEC SQL
+084100191217             SELECT
+084200191217      * RFS1020866 - Starts
+084300191217020866*        SUM(CASE WHEN CNTRRP.CONTR_REDEM_CODE_RULE = "1"
+084400200110020866         SUM(CASE
+084500200110020866             WHEN CNTRRP.CONTR_REDEM_CODE_RULE IN ("1","4","5")
+084600191217                   THEN TRNP.GROSS_AMT
+084700140626                   ELSE 0 END) as LTDCapital,
+084800140627               SUM(CASE WHEN CNTRRP.CONTR_REDEM_CODE_RULE = "2"
+084900140626                   THEN TRNP.GROSS_AMT
+085000200110020866                  WHEN CNTRRP.CONTR_REDEM_CODE_RULE = "16"
+085100191217020866             THEN IFNULL(TRNHDP.CDSP_GRANT_AMOUNT,0)
+085200140626                   ELSE 0 END) as LTDGrantAmt,
+085300140627               SUM(CASE WHEN CNTRRP.CONTR_REDEM_CODE_RULE = "3"
+085400140626                   THEN TRNP.GROSS_AMT
+085500200110020866                  WHEN CNTRRP.CONTR_REDEM_CODE_RULE = "16"
+085600191217020866             THEN IFNULL(TRNHDP.CDSP_BOND_AMOUNT,0)
+085700140626                   ELSE 0 END) as LTDBondAmt,
+085800191217      * RFS1020866 - Ends
+085900140627               SUM(CASE WHEN CNTRRP.CONTR_REDEM_CODE_RULE = "1"
+086000140626                   THEN TRNP.GROSS_AMT
+086100140627                   WHEN CNTRRP.CONTR_REDEM_CODE_RULE IN ("11","12")
+086200140626                   THEN IFNULL(TRNHDP.NON_TAXABLE_AMOUNT * -1,0)
+086300140626                   ELSE 0 END) as NetContrb
+086400140626                   INTO
+086500140709                       :ln_LTD_Capital :ln_LTD_Cap_IndNull,
+086600140709                       :ln_LTD_GrantAmt :ln_LTD_GrantIndNull,
+086700140709                       :ln_LTD_BondAmt :ln_LTD_BondIndNull,
+086800140709                       :ln_Net_Contrb :ln_Net_ContrIndNull
+086900140626               FROM MFATRNP TRNP
+087000140626               INNER JOIN MFAACCNTP ACCNTP ON
+087100140626               TRNP.ACCOUNT_NO = ACCNTP.ACCOUNT_NO
+087200140626               INNER JOIN MFACNTRRP CNTRRP ON
+087300140626               ACCNTP.ACCOUNT_TYPE_CODE = CNTRRP.ACCOUNT_TYPE_CODE
+087400140626               AND TRNP.CONTR_REDEM_CODE = CNTRRP.CONTR_REDEM_CODE
+087500140626               LEFT JOIN MFATRNHDP TRNHDP ON
+087600140627               CNTRRP.CONTR_REDEM_CODE <> "1"
+087700140626               AND TRNP.PLACEMENT_DATE = TRNHDP.PLACEMENT_DATE
+087800140627               AND TRNP.TRANS_NO = TRNHDP.TRANS_NO
+087900140627               WHERE TRNP.REVERSE <> "Y"
+088000140722                 AND TRNP.TRADE_DATE <= :li_AsAtDate3
+088100140626                 AND ACCNTP.ACCOUNT_NO = :li_parm-accountno
+088200140626              END-EXEC.
+088300140627             MOVE SQLSTATE TO lc_sqlStates.
+088400140627             IF NOT lncc_sqlSuccessful AND NOT lncc_sqlEnd
+088500140627               SET lncc_Err_26 TO TRUE
+088600140627               MOVE lncc_ErrorSelectTRANSdetails TO lc_sqlErrShortDESCR
+088700140627               PERFORM SQLFailProcess
+088800140627             END-IF.
+088900140709             IF (ln_LTD_Cap_IndNull >= 0 AND ln_LTD_GrantIndNull >= 0
+089000140709                 AND ln_LTD_BondIndNull >= 0
+089100140709                 AND ln_Net_ContrIndNull >= 0)
+089200140709              COMPUTE ln_LTD_Capital = ln_LTD_Capital
+089300140709              COMPUTE ln_LTD_GrantAmt = ln_LTD_GrantAmt
+089400140709              COMPUTE ln_LTD_BondAmt = ln_LTD_BondAmt
+089500140709              COMPUTE ln_Net_Contrb = ln_Net_Contrb
+089600140709             END-IF.
+089700140722             EXEC SQL
+089800200513              SELECT SUM(CASE
+089900200513      * RFS1100707 - Start
+090000200513      *          WHEN ADTNTP.CONTR_REDEM_CODE_RULE = "1"
+090100200513                 WHEN ADTNTP.CONTR_REDEM_CODE_RULE IN ("1","4","5")
+090200200513      * RFS1100707 - END
+090300140626                 THEN ADTNTP.TRANSACTION_AMT
+090400140626                 ELSE 0 END) as LTDCapital,
+090500140627                 SUM(CASE WHEN ADTNTP.CONTR_REDEM_CODE_RULE = "2"
+090600140626                 THEN ADTNTP.TRANSACTION_AMT
+090700140626                 ELSE 0 END) as LTDGrantAmt,
+090800140627                 SUM(CASE WHEN ADTNTP.CONTR_REDEM_CODE_RULE = "3"
+090900140626                 THEN ADTNTP.TRANSACTION_AMT
+091000140626                 ELSE 0 END) as LTDBondAmt,
+091100140627                 SUM(CASE WHEN ADTNTP.CONTR_REDEM_CODE_RULE = "1"
+091200140626                 THEN ADTNTP.TRANSACTION_AMT
+091300140627                 WHEN ADTNTP.CONTR_REDEM_CODE_RULE IN ("11","12")
+091400140626                 THEN ADTNTP.CAPITAL_AMT
+091500140626                 ELSE 0 END) as NetContrb
+091600140626                 INTO
+091700140627                      :ln_LTD_Capital1 :ln_LTD_Cap_IndNull,
+091800140627                      :ln_LTD_GrantAmt1 :ln_LTD_GrantIndNull,
+091900140627                      :ln_LTD_BondAmt1 :ln_LTD_BondIndNull,
+092000140627                      :ln_Net_Contrb1 :ln_Net_ContrIndNull
+092100140626                 FROM MFAADTNP ADTNP
+092200140626                 INNER JOIN MFAADTNTP ADTNTP ON
+092300140626                 ADTNP.ACCOUNT_NO = ADTNTP.ACCOUNT_NO
+092400140626                 AND ADTNP.TRANSFER_SEQ_NO = ADTNTP.TRANSFER_SEQ_NO
+092500140627                 WHERE ADTNP.TRANSFER_CONTR_OR_REDEM = "C"
+092600140627                   AND ADTNP.TRANSFER_STATUS = "C"
+092700140626                   AND ADTNP.ACCOUNT_NO = :li_parm-accountno
+092800140722                   AND ADTNTP.ACTIVITY_DATE <= :li_AsAtDate3
+092900140722             END-EXEC.
+093000140722             MOVE SQLSTATE TO lc_sqlStates.
+093100140722             IF NOT lncc_sqlSuccessful
+093200140722                SET lncc_Err_24 TO TRUE
+093300140722                MOVE lncc_ErrorSelectingnotional
+093400140722                           TO lc_sqlErrShortDESCR
+093500140722                PERFORM SQLFailProcess
+093600140722             END-IF.
+093700140722             IF (ln_LTD_Cap_IndNull >= 0
+093800140722                 AND ln_LTD_GrantIndNull >= 0
+093900140722                 AND ln_LTD_BondIndNull >= 0
+094000140722                 AND ln_Net_ContrIndNull >= 0)
+094100140722                 COMPUTE ln_LTD_Capital = ln_LTD_Capital
+094200140722                                       + ln_LTD_Capital1
+094300140722                 COMPUTE ln_LTD_GrantAmt = ln_LTD_GrantAmt
+094400140722                                       + ln_LTD_GrantAmt1
+094500140722                 COMPUTE ln_LTD_BondAmt = ln_LTD_BondAmt
+094600140722                                       + ln_LTD_BondAmt1
+094700140722                 COMPUTE ln_Net_Contrb = ln_Net_Contrb
+094800140722                                       + ln_Net_Contrb1
+094900140722             END-IF.
+095000140528      * RFS127070 - END
+095100130828      * RFS123925 - Start
+095200130828      * ---------------------------------
+095300130828       Calculate-PGAP-Maximum.
+095400130828      * ---------------------------------
+095500130919           COMPUTE ln_AccountMV_PGAP =
+095600130919                   ln_SaveAccountMV * ln_RDSP_SP_PGAP_Max_Percent / 100
+095700130919           END-COMPUTE
+095800130828           If ln_AccountMV_PGAP >= ln_LDAPMax
+095900130924              move ln_AccountMV_PGAP TO ln_PGAPMax
+096000130828           ELSE
+096100130924              move ln_LDAPMax TO  ln_PGAPMax
+096200130919           END-IF.
+096300130828      * RFS123925 - End
+096400130828
+096500090807      * ---------------------------------
+096600091126       UpdateLDAPMax.
+096700090807      * ---------------------------------
+096800091127
+096900091126           EXEC SQL
+097000100304              UPDATE Mfaaccdlp
+097100140521      * RFS127070 - START
+097200140722      *          SET LDAP_Maximum_Amount = :ln_LDAPMax
+097300140722                 SET LDAP_Maximum_Amount =
+097400140722 dm              CASE WHEN (:li_parm-accountno = 0)
+097500140722                      THEN :ln_LDAPMax
+097600140722 dm                   ELSE LDAP_Maximum_Amount
+097700140722                 END
+097800140722      * RFS127070 - END
+097900130919      * RFS123925 - Start
+098000130919                , MARKET_VALUE = :ln_SaveAccountMV
+098100130919                , PGAP_MAXIMUM_AMOUNT = :ln_PGAPMax
+098200130919                , PGAP_MAXIMUM_PERCENT = :ln_RDSP_SP_PGAP_Max_Percent
+098300140520127070          , SDSP_TAXABLE_PORTION = :li_SDSPTaxPortion
+098400130919      * RFS123925 - End
+098500100304                 WHERE Account_No        = :li_SaveAccountNo AND
+098600130919                       YEAR              = :li_LDAPYear
+098700091127           END-EXEC.
+098800090807
+098900100128      *    MOVE SQLSTATE TO lc_sqlStates.
+099000100128      *    IF NOT lncc_sqlSuccessful
+099100100128      *       SET lncc_Err_12 TO TRUE
+099200100128      *       MOVE lncc_ErrorUpdatingMFAACCDSP TO lc_sqlErrShortDESCR
+099300100128      *       PERFORM SQLFailProcess
+099400100128      *    END-IF.
+099500091127
+099600100304r68035 InsertLDAPMax.
+099700100304  |   * ---------------------------------
+099800100304  |
+099900100304  |        EXEC SQL
+100000100304  |           INSERT INTO Mfaaccdlp
+100100100304  |           VALUES (:li_SaveAccountNo,
+100200100304  |                   :li_LDAPYear,
+100300100304  |                   :ln_LDAPMax,
+100400130919      * RFS123925 - Start
+100500130919      *               :lc_RestrictedYear)
+100600130828                      :lc_RestrictedYear,
+100700130828                      :ln_SaveAccountMV,
+100800130828                      :ln_PGAPMax,
+100900140520      * RFS127070 - START
+101000140520      *               :ln_RDSP_SP_PGAP_Max_Percent)
+101100140520                      :ln_RDSP_SP_PGAP_Max_Percent,
+101200140520                      :li_SDSPTaxPortion)
+101300140520      * RFS127070 - END
+101400130828      * RFS123925 - End
+101500100304  |        END-EXEC.
+101600100304  |
+101700100304  |        MOVE SQLSTATE TO lc_sqlStates.
+101800100304  |        IF NOT lncc_sqlSuccessful
+101900100304  |           SET lncc_Err_16 TO TRUE
+102000100304  |           MOVE lncc_ErrorInsertingMFAACCDLP TO lc_sqlErrShortDESCR
+102100100304  |           PERFORM SQLFailProcess
+102200100304  |        END-IF.
+102300100304r68035
+102400130828
+102500100304      * ---------------------------------
+102600091127       GetBeneficiaryDOB.
+102700091127      * ---------------------------------
+102800091127           INITIALIZE   li_SaveBeneficiaryDOB.
+102900091127
+103000091127           EXEC SQL
+103100091127              SELECT COALESCE(Date_Of_Birth, 0)
+103200091127                INTO :li_SaveBeneficiaryDOB
+103300091127                FROM Mfaaccbnp
+103400091127                 WHERE Account_No         = :li_SaveAccountNo  AND
+103500091127                       Beneficiary_Seq_No = :lnci_1
+103600091127              END-EXEC
+103700091127
+103800091127           MOVE SQLSTATE TO lc_sqlStates.
+103900091127           IF NOT lncc_sqlSuccessful and NOT lncc_sqlEnd
+104000091127              SET lncc_Err_15 TO TRUE
+104100091127              MOVE lncc_ErrorGettingMFAACCBNP TO lc_sqlErrShortDESCR
+104200091127              PERFORM SQLFailProcess
+104300091127           END-IF.
+104400100304
+104500100304       Recreate-Rdsp-Awd-Proc.
+104600100413           MOVE lncc_No TO lc_EndOfFetch.
+104700100421           MOVE ZEROES  TO li_PrevAccountNo.
+104800100304           PERFORM Declare-Rdsp-Awd-Cursor.
+104900100413           PERFORM Fetch-Rdsp-Inv-Dtls
+105000100413             UNTIL lncc_EndofFetchYes.
+105100090813
+105200100304       Declare-Rdsp-Awd-Cursor.
+105300100412           Exec Sql
+105400100412                DECLARE c_RdspAwd CURSOR FOR
+105500100412                 SELECT Accdsp.Account_no,
+105600100412                        Accdsp.Payment_type_code,
+105700100412                        Accdsp.Specified_payment_amt,
+105800100412                        Accdsp.Split_option_code,
+105900100412                        Accawp.Frequency_code,
+106000100412                        Accawp.Start_date,
+106100100412                        Accawp.Hold_until_date,
+106200130919      * RFS123925 - Start
+106300190703      *RFS1014721- Starts
+106400190703                        Coalesce(Accdlp.Ldap_maximum_amount, 0),
+106500190703      *                 CASE WHEN
+106600190703      *                   Coalesce(Accdlp.PGAP_MAXIMUM_AMOUNT, 0) <> 0
+106700190703      *                   THEN Coalesce(Accdlp.PGAP_MAXIMUM_AMOUNT, 0)
+106800190703      *                   ELSE Coalesce(Accdlp.LDAP_MAXIMUM_AMOUNT, 0)
+106900190703      *                 END,
+107000130828      * RFS123925 - End
+107100190703      *RFS1014721- Starts
+107200100413                        Coalesce(Frecdp.Payments_per_annum, 0),
+107300100413                        Acdivp.Investment_code,
+107400100413                        Acdivp.Annual_amount,
+107500100413                        Acdivp.Gross_or_net,
+107600100413                        Acdivp.Confirm,
+107700100413                        Acdivp.Waive_dsc,
+107800100413                        Acdivp.Dsc_waive_reason_code
+107900100413                   FROM Mfaaccdsp Accdsp
+108000100413                        JOIN Mfaaccawp Accawp ON
+108100100413                        Accawp.Account_no = Accdsp.Account_no AND
+108200100413                        Accawp.Awd_seq_no = :lnci_1
+108300100413                        JOIN Mfaacdivp Acdivp ON
+108400100413                        Acdivp.Account_no = Accdsp.Account_no
+108500100413                        JOIN Mfaaccntp Accntp ON
+108600100415                        Accntp.Account_no = Accdsp.Account_no
+108700100413                        LEFT OUTER JOIN Mfaaccdlp Accdlp ON
+108800100413                        Accdlp.Account_no = Accdsp.Account_no AND
+108900100413                        Accdlp.Year = :li_LDAPYear
+109000100413                        LEFT OUTER JOIN Mfafrecdp Frecdp ON
+109100100413                        Frecdp.Frequency_code = Accawp.Frequency_code
+109200140625                  WHERE Accntp.Account_status = :lncc_A
+109300140625                    AND Accdsp.Payment_type_code = :lncc_Max
+109400130828                  ORDER BY Accdsp.Account_no
+109500100413                  FOR FETCH ONLY OPTIMIZE FOR ALL ROWS
+109600100412           End-exec.
+109700100304
+109800100413           Exec Sql
+109900100413                OPEN c_RdspAwd
+110000100413           End-exec.
+110100100413
+110200100413           MOVE SQLSTATE TO lc_sqlStates.
+110300100413           IF NOT lncc_sqlSuccessful
+110400100413              SET lncc_Err_20 TO TRUE
+110500100413              MOVE lncc_ErrorOpeningCursor  TO lc_sqlErrShortDESCR
+110600100413              PERFORM SQLFailProcess
+110700100413           END-IF.
+110800100413
+110900100413       Fetch-Rdsp-Inv-Dtls.
+111000100413           Exec Sql
+111100100421                FETCH c_RdspAwd FOR :lnci_MaxFetchRec ROWS
+111200100413                 INTO :ltb_DtlArray
+111300100413           End-exec.
+111400100413
+111500100413           MOVE SQLSTATE TO Ws-Sql-States.
+111600100413           If lncc_sqlEnd
+111700100413              MOVE lncc_Yes TO lc_EndofFetch
+111800100413                               lc_EndofProcess
+111900100416                               lc_EndofFile
+112000100413           Else
+112100100413              COMPUTE li_NoOfRowsFetched = SQLERRD(3)
+112200100413           End-If.
+112300100413
+112400100421           MOVE ZEROES TO li_Cntr li_Cntr1.
+112500100413           MOVE lncc_No TO lc_ArrayMaxReached.
+112600100413           INITIALIZE ltb_DtlRecord lf_MfaaccaipRecord.
+112700100413
+112800100413           If lncc_EndofFetchNo
+112900100413              PERFORM Process-Rdsp-Inv-Details
+113000100413                UNTIL lncc_ArrayMaxReachedYes
+113100100413
+113200100416              If lncc_ArrayMaxReachedYes
+113300100416                 PERFORM Insert-Acc-Awd-Inv
+113400100416              End-if
+113500100416           End-if.
+113600100413
+113700100413       Process-Rdsp-Inv-Details.
+113800100413           COMPUTE li_Cntr = li_Cntr + 1.
+113900100413
+114000100413           MOVE ltb_DtlArray(li_Cntr) TO ltb_DtlRecord.
+114100100413
+114200100413           If li_DtlAccountNo NOT = li_PrevAccountNo
+114300100413              PERFORM Get-Payments-Per-Annum
+114400100413           End-if.
+114500100413
+114600100413           If lc_DtlPayTypeCode = lncc_Specific
+114700100413              MOVE li_DtlSpecPayAmt TO li_TotalPayout
+114800100413           Else
+114900100413              MOVE li_DtlLdapMaxAmt TO li_TotalPayout
+115000100413           End-if.
+115100100413
+115200100413           MOVE lnci_0 TO li_AwdAmount.
+115300100415           If li_PayPerAnnum > 0 AND li_TotalPayout > 0
+115400100413              If lc_DtlSplitOptCode = lncc_Dollar
+115500100413                 COMPUTE li_AwdAmount ROUNDED =
+115600100413                         li_DtlAnnualAmt / li_PayPerAnnum
+115700100413              End-if
+115800100413
+115900100413              If lc_DtlSplitOptCode = lncc_Percent
+116000100413                 COMPUTE li_AwdAmount ROUNDED =
+116100100413                         li_TotalPayout / li_PayPerAnnum *
+116200100413                         li_DtlAnnualAmt / 100
+116300100413              End-if
+116400100413           End-if.
+116500100413
+116600100413           PERFORM Setup-Acc-Awd-Inv.
+116700100413
+116800100413           MOVE li_DtlAccountNo TO li_PrevAccountNo
+116900100413
+117000100413           If li_NoOfRowsFetched = li_Cntr
+117100100413              MOVE lncc_Yes TO lc_ArrayMaxReached
+117200100413           End-if.
+117300100413
+117400100413       Get-Payments-Per-Annum.
+117500100413
+117600100413      *    MOVE li_DtlStartDate TO li_StartDate.
+117700100413      *    MOVE li_AsAtDate TO li_ProcessDate.
+117800100413
+117900100413      * No need to get no of payments if it's an old awd
+118000100413           MOVE lncc_No TO lc_NewRdspAwd.
+118100100413           If li_DtlStartDate >= li_NextYearDate OR
+118200100413              li_DtlHoldUntilDate >= li_NextYearDate
+118300100413              MOVE lncc_Yes TO lc_NewRdspAwd
+118400100413           End-if.
+118500100413
+118600100413           If lncc_NewRdspAwdYes OR lc_DtlFreqCode = lncc_Variable
+118700100413              If li_DtlHoldUntilDate NOT = 0 AND
+118800100413                 li_DtlHoldUntilDate > li_DtlStartDate AND
+118900100413                 li_DtlHoldUntilDate >= li_NextYearDate
+119000100413                 MOVE li_DtlHoldUntilDate TO pi_StartPayDate
+119100100413              Else
+119200100413                 If li_DtlStartDate NOT = 0
+119300100413                    MOVE li_DtlStartDate TO pi_StartPayDate
+119400100413                 End-if
+119500100413              End-if
+119600100413
+119700100413              If lc_DtlFreqCode = lncc_Variable
+119800100413                 MOVE li_DtlAccountNo TO pi_AccountNo
+119900100413              Else
+120000100413                 MOVE Zeroes TO pi_AccountNo
+120100100413              End-if
+120200100413              MOVE lc_DtlFreqCode TO pc_Frequency
+120300100413
+120400100413              MOVE ZEROES to pi_PayPerAnnum
+120500100413              CALL "FXREMPAY" USING pi_StartPayDate,
+120600100413                                    pi_AccountNo,
+120700100413                                    pc_Frequency,
+120800100413                                    pi_PayPerAnnum
+120900100413           End-if.
+121000100413
+121100100413           If lncc_NewRdspAwdNo AND lc_DtlFreqCode NOT = lncc_Variable
+121200100413              MOVE li_DtlPayPerAnnum TO pi_PayPerAnnum
+121300100413           End-if.
+121400100413
+121500100413           MOVE pi_PayPerAnnum TO li_PayPerAnnum.
+121600100413
+121700100413       Setup-Acc-Awd-Inv.
+121800100413           If li_DtlAccountNo NOT = li_PrevAccountNo
+121900100413              Exec Sql
+122000100413                   DELETE FROM Mfaaccaip
+122100100413                    WHERE Account_no = :li_DtlAccountNo
+122200100413                      AND Awd_seq_no = :lnci_1
+122300100413              End-exec
+122400100413           End-if.
+122500100413
+122600100413           COMPUTE li_Cntr1 = li_Cntr1 + 1.
+122700100413
+122800100413           MOVE li_DtlAccountNo TO Account-No
+122900100413                                OF lf_MfaaccaipRec(li_Cntr1).
+123000100413           MOVE lnci_1          TO Awd-Seq-No
+123100100413                                OF lf_MfaaccaipRec(li_Cntr1).
+123200100413           MOVE lc_DtlInvCode   TO Investment-Code
+123300100413                                OF lf_MfaaccaipRec(li_Cntr1).
+123400100413           MOVE lncc_dollar     TO Split-Option-Code
+123500100413                                OF lf_MfaaccaipRec(li_Cntr1).
+123600100413           MOVE lc_DtlConfirm   TO Confirm
+123700100413                                OF lf_MfaaccaipRec(li_Cntr1).
+123800100413           MOVE lc_DtlGrossOrNet TO Gross-Or-Net
+123900100413                                OF lf_MfaaccaipRec(li_Cntr1).
+124000100413           MOVE li_AwdAmount    TO Awd-Amount
+124100100413                                OF lf_MfaaccaipRec(li_Cntr1).
+124200100413           MOVE lncc_Rdldap     TO Contr-Redem-Code
+124300100413                                OF lf_MfaaccaipRec(li_Cntr1).
+124400100413           MOVE lc_DtlWaiveDsc  TO Waive-Dsc
+124500100413                                OF lf_MfaaccaipRec(li_Cntr1).
+124600100413           MOVE lc_DtlWaiveReasonCode TO Dsc-Waive-Reason-Code
+124700100413                                OF lf_MfaaccaipRec(li_Cntr1).
+124800100413           MOVE lnci_0 TO Awd-Percent OF lf_MfaaccaipRec(li_Cntr1)
+124900100413                          Awd-Units   OF lf_MfaaccaipRec(li_Cntr1).
+125000100413
+125100100413       Insert-Acc-Awd-Inv.
+125200100413           If li_Cntr1 > 0
+125300100413              Exec Sql
+125400100413                   INSERT INTO Mfaaccaip :li_Cntr1 ROWS
+125500100413                   VALUES (:Mfaaccaip)
+125600100413              End-exec
+125700100413           End-if.
+125800100413
+125900100413           MOVE SQLSTATE TO Ws-Sql-States.
+126000100413           If NOT lncc_sqlSuccessful
+126100100413              SET lncc_Err_21 TO TRUE
+126200100413              MOVE lncc_ErrorInsertingMFAACCAIP TO lc_sqlErrShortDESCR
+126300100413              PERFORM SqlFailProcess
+126400100413           End-if.
+126500130828
+126600130828      * RFS123925 - Start
+126700130828      * ---------------------------------
+126800130828       Determine-PGAP-Account.
+126900130828      * ---------------------------------
+127000130919           SET PGAP_Account_Blank TO TRUE
+127100140520      * RFS127070 - START
+127200140520      *    PERFORM Get-LTD-Contr-Redem-Amount.
+127300130828
+127400140520      *    IF (ln_LTD_GrantAmt + ln_LTD_BondAmt) > ln_LTD_Capital
+127500140520           IF (((ln_LTD_GrantAmt + ln_LTD_BondAmt) > ln_LTD_Capital)
+127600140520              AND NOT lb_SDSPYes
+127700140520              AND NOT lb_SpecifiedYearYes)
+127800140520      * RFS127070 - END
+127900130919              SET PGAP_Account TO TRUE
+128000130918           END-IF.
+128100130828
+128200130828      * ---------------------------------
+128300130828       Get-LTD-Contr-Redem-Amount.
+128400130828      * ---------------------------------
+128500130918           MOVE 1 to li_Beneficiary_Seq.
+128600130919           MOVE "C" to lc_Contr_OR_Redem.
+128700130918           MOVE "N" to lc_Grand_Fathered.
+128800130828           EXEC SQL
+128900130919              SELECT
+129000130919                COALESCE(SUM(CASE WHEN A.CONTR_REDEM_CODE_RULE
+129100131021      * RFS124157 - Start
+129200131021      *                      IN("1", "4")
+129300131021                             IN("1", "4","5")
+129400131021      * RFS124157 - End
+129500130919                         THEN A.LTD_CONTR_DEDUCT_AMT ELSE 0
+129600130919                         END), 0),
+129700191217      * RFS1020866 - Start
+129800191218020866*         COALESCE(SUM(CASE WHEN A.CONTR_REDEM_CODE_RULE = "2"
+129900200110020866          COALESCE(SUM(CASE WHEN
+130000200110020866                   A.CONTR_REDEM_CODE_RULE IN ("2","16")
+130100191217      * RFS1020866 - End
+130200191217                         THEN A.LTD_CONTR_DEDUCT_AMT ELSE 0
+130300130919                         END), 0),
+130400130919                COALESCE(SUM(CASE WHEN A.CONTR_REDEM_CODE_RULE = "3"
+130500130919                         THEN A.LTD_CONTR_DEDUCT_AMT ELSE 0
+130600130919                         END), 0)
+130700130919              INTO :ln_LTD_Capital,
+130800130919                   :ln_LTD_GrantAmt,
+130900130919                   :ln_LTD_BondAmt
+131000130828                FROM MFAACBFP A
+131100130828                INNER JOIN MFAACCDSP B ON
+131200130828                A.ACCOUNT_NO = B.ACCOUNT_NO
+131300130828                WHERE
+131400130828                A.ACCOUNT_NO = :li_SaveAccountNo
+131500130918                AND BENEFICIARY_SEQ_NO = :li_Beneficiary_Seq
+131600130919                AND CONTR_OR_REDEMEMPTION = :lc_Contr_OR_Redem
+131700131021      * RFS124157 - Start
+131800131021      *         AND CONTR_REDEM_CODE_RULE IN("1", "2", "3", "4")
+131900191217      * RFS1020866 - Start
+132000191217020866*         AND CONTR_REDEM_CODE_RULE IN("1", "2", "3", "4","5")
+132100191217020866          AND CONTR_REDEM_CODE_RULE IN("1","2","3","4","5","16")
+132200191217      * RFS1020866 - End
+132300131021      * RFS124157 - End
+132400130918                AND GRANDFATHERED = :lc_Grand_Fathered
+132500130828           END-EXEC.
+132600130828
+132700130828           MOVE SQLSTATE TO lc_sqlStates.
+132800130828           IF NOT lncc_sqlSuccessful and NOT lncc_sqlEnd
+132900130919              SET lncc_Err_23 TO TRUE
+133000130919              MOVE lncc_ErrorGettingMFAACBFP  TO lc_sqlErrShortDESCR
+133100130828              PERFORM SQLFailProcess
+133200130828           END-IF.
+133300130828      * RFS123925 - End
+133400130828
+133500070308      * ---------------------------------
+133600070306       SQLFailProcess.
+133700070306      * ---------------------------------
+133800070306           PERFORM Dsp-Error.
+133900070306           PERFORM Force-Msgw.
+134000070306
+134100070306      * ---------------------------------
+134200070306       EndOfProgram.
+134300070306      * ---------------------------------
+134400091126           PERFORM CloseCursor.
+134500070306           PERFORM Termination.
+134600070314
+134700070314      * ---------------------------------
+134800070315       CloseCursor.
+134900070314      * ---------------------------------
+135000070314      *Close cursor.
+135100070314           EXEC SQL
+135200091126             CLOSE C_RDSPAccts
+135300070314           END-EXEC.
+135400070314
+135500070323           MOVE SQLSTATE TO lc_sqlStates.
+135600070314           IF NOT lncc_sqlSuccessful
+135700091126              SET lncc_Err_14 TO TRUE
+135800091127              MOVE lncc_ErrorClosingCursor TO lc_sqlErrShortDESCR
+135900070314              PERFORM SQLFailProcess
+136000070314           END-IF.
+136100070306
+136200140627      * RFS127070 - START
+136300140627      * Added IF condition since removing the dots below
+136400140627           IF li_parm-accountno = 0
+136500140627      * RFS127070 - END
+136600100421           EXEC SQL
+136700100421             CLOSE c_RdspAwd
+136800140627           END-EXEC
+136900100421
+137000140627           MOVE SQLSTATE TO lc_sqlStates
+137100140722              IF NOT lncc_sqlSuccessful
+137200140722                 SET lncc_Err_22 TO TRUE
+137300140722                 MOVE lncc_ErrorClosingCursor2 TO lc_sqlErrShortDESCR
+137400140722                 PERFORM SQLFailProcess
+137500140722              END-IF
+137600140627127070     END-IF.
+137700100421
+137800070306      * ---------------------------------
+137900070306       Termination.
+138000070306      * ---------------------------------
+138100070306           GOBACK.
+138200070306
+138300070306      * DSP-ERROR and FORCE-MSGW Routines
+138400070306          COPY CPYSQLRTN.

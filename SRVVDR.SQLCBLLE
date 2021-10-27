@@ -1,0 +1,3894 @@
+000001170313      * %ATTR DBGVIEW(*SOURCE)
+000101000000       IDENTIFICATION DIVISION.
+000201000000       PROGRAM-ID.    SRVVDR.
+000301000000       INSTALLATION.  UNISEN INC.
+000401000000       AUTHOR.        REECE TAM.
+000501171005       DATE-WRITTEN.  JUN 2004.
+000601000000       DATE-COMPILED.
+000701000000      *****************************************************************
+000801000000      * SPECIAL NOTE: create program - use opt 14                     *
+000901000000      *****************************************************************
+001001000000      *****************************************************************
+001101000000      * Purpose  : Variable units daily roll-up of aging units        *
+001201000000      *            by account investment                              *
+001301000000      *                                                               *
+001401000000      * Called by: SRVVDT                                             *
+001501000000      *                                                               *
+001601000000      * Parms:     COMM-OPTION, X(3)                                  *
+001701000000      *              'ALL' - all accounts of the investment, input    *
+001801000000      *                      account no is not required.              *
+001901000000      *              'ONE' - One account of the investment, input     *
+002001000000      *                      account no is required.                  *
+002101000000      *                                                               *
+002201000000      *            COMM-PROCESS-DATE, S9(8)                           *
+002301000000      *              - current service fee process date, may not be   *
+002401000000      *                the same as the AS-AT-DATE of MFAPRCDTP.       *
+002501000000      *                                                               *
+002601000000      *            COMM-INVESTMENT-CODE, X(5)                         *
+002701000000      *                                                               *
+002801070604      *            Comm-Account-No-NO, S9(9)                             *
+002901000000      *              - set to zeros if COMM-OPTION is 'ALL', set the  *
+003001000000      *                required account no. otherwise.                *
+003101000000      *                                                               *
+003201000000      *            COMM-RETURN-CODE, X(3)                             *
+003301000000      *              " "   - Blank indicates no error, error occurred *
+003401000000      *                      otherwise.                               *
+003501000000      *              "01"  - Special authorization is required        *
+003601000000      *              "02"  - Invalid option                           *
+003701000000      *              "03"  - Process date is required                 *
+003801000000      *              "04"  - Account no. is required for              *
+003901000000      *                      COMM-OPTION 'ONE'.                       *
+004001000000      *              "05"  - Investment code is required              *
+004101000000      *              "06"  - Investment not found for var rate        *
+004201000000      *              "07"  - Error returned from FXVARUAI for Get     *
+004301000000      *              "08"  - Error returned from FXVARUAI for Put     *
+004401000000      *              "09"  - Day range of the current record was      *
+004501000000      *                      not found in VR-RATE-ARRAY               *
+004601000000      *              "99"  - SQL error encounted.                     *
+004701000000      *                                                               *
+004801000000      *              Warning codes below are for internal tracking,   *
+004901000000      *              will not be returned to the calling program.     *
+005001000000      *                                                               *
+005101000000      *              "101" - Negative roll-up unit, it will be set    *
+005201000000      *                      to zeros.                                *
+005301000000      *              "102" - Roll-up unit > current, it will be set   *
+005401000000      *                      to the current unit instead.             *
+005501000000      *              "103" - CPP RVS target not found in MFATRNGTP,   *
+005601000000      *                      trans is treated as reversed, purchased  *
+005701000000      *                      unit has no effect.                      *
+005801000000      *              "104" - RDP RVS target not found in MFATRNGTP    *
+005901000000      *                      trans is treated as reversed, redeemed   *
+006001000000      *                      unit has no effect.                      *
+006101000000      *              "105" - Next higher day range is undefined in    *
+006201000000      *                      the table, roll-up action is declined,   *
+006301000000      *                      roll-up units stay in the current range. *
+006401000000      *                                                               *
+006501000000      *****************************************************************
+006601000000      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE             *
+006701000000      *****************************************************************
+006801041019      * Reece Tam  *  2004/06/14  * RFS19162 - Create new program.    *
+006901041025      * Truong L.  * 2004/10/19   * RFS 24407 - Recomplile due to file
+007001041025      *            *              *  MFATRSCVP expand.
+007101041104      * Daisy Ly   *  2004/11/04  * RFS19162 - use native read to get *
+007201041104      *            *              *  original trans for reversal
+007301070607      * Kahkashan P*  2007/01/08  * RFS37142 - Change the logic to
+007401070607      *            *              *  roll-up of the units to next tier
+007501070607      *            *              *  per account investment or all acct
+007601070607      *            *              * of an investment.
+007701070607      * Ade A      *  2007/03/01  *  RFS37142 - Fixed the logic
+007801070607      *            *              *  for cursor SRVVDRC3
+007901070607      * Ade A      *  2007/05/25  * Fixed defect 37142.12, 13
+008001070607      * Ade A      *  2007/05/30  * Fixed defect 37142.14,15,16
+008101070608      * Ade A      *  2007/06/07  * Fixed defect 37142.18
+008201070608      *            *              * In the absence of an older the
+008301070608      *            *              * age og theoldest CPG/INC should be
+008401070608      *            *              *  used
+008501070614      * Ade A      *  2007/05/30  * Fixed defect 37142.17,19
+008601070810      * Ade  A     *  2007/08/10  * Rfs 43561 - Performance Enhancement
+008701070820      * Ade  A     *  2007/08/10  * Rfs 43561.1 defect
+008801080205      * Lev O      * 2008/02/05   * RFS47712 - Recompile for MFATRNCPP
+008901080211      * Marek T    *  2008/02/11  * RFS 40800 - Create Module and
+009001080211      *            *              * change Program to No Source obj.
+009101080211      *            *              * Optimize SRVVDRC3 and SRVVDRC31
+009201080211      *            *              * cursor as per techspec requirements
+009301081219      * Daniel M   * 2008/12/19   * RFS59781 - Recompile for MFATRNCPP
+009401090312      * Meynard B  * 2009/03/12   * RFS64527 - Convert Investment array
+009501090312      *            *              * to variable size array up to 20000.
+009601090312      *            *              * Fetch array remains at 800.
+009701090505      * Meynard B  * 2009/05/05   * RFS50475 - Tiered Service Fee for
+009801090505      *            *              * E Dealers.
+009901090722      * Meynard B  * 2009/07/22   * RFS71776 - Replace sql SUM() with
+010001090722      *            *              * native code.
+010101090818      * Meynard B  * 2009/08/18   * RFS72459 - Correct SRVVDRC4A cursor
+010201090818      *            *              * declaration.
+010301091209      * Abdi H.    * 2009/12/08 * RFS67590 - Add logic for End-Date
+010401091209      *            *            * of MFAINVTVP to either or not
+010501110315      * Pawel A.   * 2011/03/13 * RFS91951 - Introduce new index for
+010601110315      *            *            * MFATRNPUP with no OMIT clause.
+010701120625      * Lev O      * 2012/06/25 * RFS111348 - recompile for MFATRNPUP
+010801120625      *            *            *  & MFATRNRUP change
+010901120716      * Pawel A.   * 2012/07/03 * RFS108942 - Program selected to
+011001120716      *            *            *  recompile. No changes for this RFS
+011101120716      *            *            *  as Native code is preffered over SQL
+011201120716      *            *            *  introduced with 91091
+011301130515      * Uma C      * 2013/05/15 * RFS121657 - recompiles for MFATRNPUP
+011401140606      * Kamal T    * 2014/06/02   * RFS136335 - Fix for SQL 1004 error
+011501141014      * Banupriya V* 2014/10/14   * RFS141507 - Recompile for MFATRNCPP
+011502181126      * Sachin Soman * 2018/11/23 * RFS180293 - Recompile for MFATRNPUP  \
+011503181126      *                                         and MFATRNRUP
+011504200723      * Mayilsamy D  * 2020/07/13 * RFS185175 -Modified to exclude the
+011505200718      *              *            * trailer fee instruction records
+011506200718      *              *            * which are linked with opening
+011507200718      *              *            * unit balance month end trailer fee
+011508200718      *              *            * calculation.
+011509181123      *****************************************************************
+011701000000
+011801000000       ENVIRONMENT DIVISION.
+011901000000       CONFIGURATION SECTION.
+012001000000       SOURCE-COMPUTER. IBM-AS400.
+012101000000       OBJECT-COMPUTER. IBM-AS400.
+012201000000       SPECIAL-NAMES.
+012301080211      *RFS40800 - Start
+012401080211           LINKAGE TYPE IS PROCEDURE FOR "FXVARUAI"
+012501080211      *RFS40800 - End
+012601000000                      DATA-AREA  IS WS-DATA-AREA-1
+012701000000                      LOCAL-DATA IS WS-LOCAL.
+012801000000      /
+012901000000       INPUT-OUTPUT SECTION.
+013001000000       FILE-CONTROL.
+013101041104D19162     SELECT  TRANS
+013201041104  ¦                ASSIGN TO DATABASE-MFATRNP
+013301041104  ¦                ORGANIZATION IS INDEXED
+013401041104  ¦                ACCESS IS DYNAMIC
+013501041104  ¦                RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+013601041104  ¦                FILE STATUS IS WS-FILE-STATUS.
+013701041104
+013801041104D19162     SELECT  TRANS-TARGET
+013901041105  ¦                ASSIGN TO DATABASE-MFATRNTGLB
+014001041104  ¦                ORGANIZATION IS INDEXED
+014101041104  ¦                ACCESS IS DYNAMIC
+014201041104  ¦                RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+014301041123  ¦                WITH DUPLICATES
+014401041104  ¦                FILE STATUS IS WS-FILE-STATUS.
+014501041104  ¦
+014601041104  ¦        SELECT  TRANS-TARGET-2
+014701041105  ¦                ASSIGN TO DATABASE-MFATRNTGLC
+014801041104  ¦                ORGANIZATION IS INDEXED
+014901041104  ¦                ACCESS IS DYNAMIC
+015001041104  ¦                RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+015101041123  ¦                WITH DUPLICATES
+015201041104D19162             FILE STATUS IS WS-FILE-STATUS.
+015301000000      /
+015401070810
+015501070810      * Rfs 43561 Begins
+015601070810           SELECT  TRANS-CDSC-PURCHASE
+015701070810                   ASSIGN TO DATABASE-MFATRNCPLA
+015801070810                   ORGANIZATION IS INDEXED
+015901070810                   ACCESS IS DYNAMIC
+016001070810                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+016101070810                   DUPLICATES
+016201070810                   FILE STATUS IS WS-FILE-STATUS.
+016301070810      * Rfs 43561 Ends
+016401070810
+016501090505      *RFS50475 Add - Begin
+016601090505           SELECT  TRANS-PURCHASE-UNITS
+016701110314                   ASSIGN TO DATABASE-MFATRNPUL1
+016801090505                   ORGANIZATION IS INDEXED
+016901090505                   ACCESS IS DYNAMIC
+017001090505                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+017101090505                   DUPLICATES
+017201090505                   FILE STATUS IS WS-FILE-STATUS.
+017301090505      *RFS50475 Add - End
+017401110314
+017501110314      *RFS91951 Add - Begin
+017601110314           SELECT  TRANS-PURCHASE-UNITS-2
+017701110314                   ASSIGN TO DATABASE-MFATRNPUL2
+017801110314                   ORGANIZATION IS INDEXED
+017901110314                   ACCESS IS DYNAMIC
+018001110314                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+018101110315                   WITH DUPLICATES
+018201110314                   FILE STATUS IS WS-FILE-STATUS.
+018301110314      *RFS91951 Add - End
+018401090505
+018501070810
+018601000000       DATA DIVISION.
+018701000000       FILE SECTION.
+018801041104D19162 FD  TRANS
+018901041104  ¦        LABEL RECORDS ARE STANDARD.
+019001041104  ¦    01  TRANS-REC.             COPY DD-ALL-FORMATS OF MFATRNP.
+019101041104  ¦
+019201041104D19162 FD  TRANS-TARGET
+019301041104  ¦        LABEL RECORDS ARE STANDARD.
+019401041105  ¦    01  TRANS-TARGET-REC.      COPY DD-ALL-FORMATS OF MFATRNTGLB.
+019501041104  ¦
+019601041104  ¦    FD  TRANS-TARGET-2
+019701041104  ¦        LABEL RECORDS ARE STANDARD.
+019801041105D19162 01  TRANS-TARGET-REC-2.    COPY DD-ALL-FORMATS OF MFATRNTGLC.
+019901000000      /
+020001070810      * Rfs43561 Begins
+020101070810       FD  TRANS-CDSC-PURCHASE
+020201070810           LABEL RECORDS ARE STANDARD.
+020301070810       01  TRANS-CDSC-PURCHASE-REC.
+020401070810                           COPY DD-ALL-FORMATS OF MFATRNCPLA.
+020501070810      *Rfs 43561 ends
+020601070810
+020701090505      *RFS50475 Add - Begin
+020801090505       FD  TRANS-PURCHASE-UNITS
+020901090505           LABEL RECORDS ARE STANDARD.
+021001090505       01  TRANS-PURCHASE-UNITS-REC.
+021101110314                           COPY DDR-ALL-FORMATS OF MFATRNPUL1.
+021201090505      *RFS50475 Add - End
+021301110314
+021401110314      *RFS91951 Add - Begin
+021501110314       FD  TRANS-PURCHASE-UNITS-2
+021601110314           LABEL RECORDS ARE STANDARD.
+021701110314       01  TRANS-PURCHASE-UNITS-2-REC.
+021801110314                           COPY DDR-ALL-FORMATS OF MFATRNPUL2.
+021901110314      *RFS91951 Add - End
+022001090505
+022101000000       WORKING-STORAGE SECTION.
+022201000000
+022301000000
+022401000000           EXEC SQL
+022501000000             INCLUDE SQLCA
+022601000000           END-EXEC.
+022701000000
+022801000000      *    EXEC SQL
+022901000000      *      INCLUDE SQLDA
+023001000000      *     END-EXEC.
+023101000000
+023201000000
+023301000000       01  CURR-CONTROLS.
+023401000000           03 CURR-LEVEL1.
+023501000000             04 CURR-LEVEL2.
+023601000000                05 CURR-INVESTMENT      PIC X(5).
+023701000000             04 CURR-ACCOUNT-NO         PIC S9(9).
+023801000000
+023901000000       01  PREV-CONTROLS.
+024001000000           03 PREV-LEVEL1.
+024101000000             04 PREV-LEVEL2.
+024201000000                05 PREV-INVESTMENT      PIC X(5).
+024301000000             04 PREV-ACCOUNT-NO         PIC S9(9).
+024401000000
+024501041104
+024601041104D19162 01  WS-FILE-STATUS               PIC XX.
+024701000000       01  WS-MODULE-ID                 PIC X(10).
+024801000000       01  WS-AUTHORIZED                PIC X(1).
+024901000000       01  WS-MODULE-CHECKED            PIC X(1)  VALUE "N".
+025001000000       01  WS-SRVVAR-MODULE             PIC X(10) VALUE "SRVVAR".
+025101000000       01  WS-SRVVAR-AUTHORIZED         PIC X(1).
+025201000000
+025301000000       01  WS-LOG-ERROR                 PIC X(1).
+025401000000           88 LOG-ERROR-ON              VALUE "Y".
+025501000000           88 LOG-ERROR-OFF             VALUE "N" " ".
+025601000000
+025701000000       01  WS-LOG-STATS                 PIC X(1).
+025801000000           88 LOG-STATS-ON              VALUE "Y".
+025901000000           88 LOG-STATS-OFF             VALUE "N" " ".
+026001000000
+026101070604      * Rfs 37142
+026201070604       01  lnc-Screen-Edit-Codes.
+026301070604           05 lnc-Screen-Code           PIC X(08) VALUE  "SRVCALC".
+026401070604           05 lnc-Edit-Code             PIC X(06) VALUE  "DSTVAR".
+026501070604           05 lnc-Level-Code            PIC X(01) VALUE  "T".
+026601070604           05 lnc-Edit-Alw-Flag         PIC X(01) VALUE  "N".
+026701070604      * Rfs 37142
+026801070604
+026901090505      *RFS50475 Add - Beg
+027001090505       01  lc_ScreenAllowed_ALDTTF.
+027101090505           05 lc_ALDTTF_ScreenCode        PIC X(8) VALUE "ACCCDTL "    .
+027201090505           05 lc_ALDTTF_EditCode          PIC X(6) VALUE "ALDTTF".
+027301090505           05 lc_ALDTTF_EditLevel         PIC X(1) VALUE "A".
+027401090505           05 lc_ALDTTF_RtnFlag           PIC X.
+027501090505              88 lb_ALDTTF_EditYes           Value "Y".
+027601090505              88 lb_ALDTTF_EditNo            Value "N".
+027701090512       01  lncc_Constants.
+027801090512           05 lncc_FIFO                   PIC X(5) VALUE "FIFO ".
+027901090505      *RFS50475 Add - End
+028001090505
+028101000000       01  WS-WORK-FIELDS.
+028201000000           05 WS-INVESTMENT-CODE        PIC X(5).
+028301000000           05 WS-ACCOUNT-NO             PIC S9(9).
+028401000000
+028501000000           05 WS-EFFECTIVE-DATE         PIC S9(9) COMP-3.
+028601000000           05 WS-END-DATE               PIC S9(9) COMP-3.
+028701000000           05 WS-REQUIRE-DATE           PIC S9(9) COMP-3.
+028801000000
+028901000000           05 WS-PLACEMENT-DATE         PIC S9(9) COMP-3.
+029001000000           05 WS-TRANS-NO               PIC S9(9) COMP-3.
+029101000000           05 WS-RVS-PLACEMENT-DATE     PIC S9(9) COMP-3.
+029201000000           05 WS-RVS-TRANS-NO           PIC S9(9) COMP-3.
+029301000000           05 WS-RVS-PROCESS-DATE       PIC S9(9) COMP-3.
+029401000000           05 WS-RVS-FOUND              PIC X(1).
+029501000000
+029601000000           05 WS-REC-CNT                PIC S9(7) COMP-3.
+029701000000           05 WS-TOT-UNITS              PIC S9(10)V9(3) COMP-3.
+029801000000           05 WS-UNIT-BAL               PIC S9(10)V9(3) COMP-3.
+029901000000
+030001000000           05 WS-CPP-PLACEMENT-DATE     PIC S9(9) COMP-3.
+030101000000           05 WS-CPP-TRANS-NO           PIC S9(9) COMP-3.
+03020108121959781 *    05 WS-CPP-CDSC-SEQ-NO        PIC S9(5) COMP-3.
+03030108121959781      05 WS-CPP-CDSC-SEQ-NO        PIC S9(9) COMP-3.
+030401000000           05 WS-CPP-ORIG-UNIT-BAL      PIC S9(10)V9(3) COMP-3.
+030501000000           05 WS-CPP-AGE-DATE           PIC S9(9) COMP-3.
+030601000000           05 WS-CPP-PROCESS-DATE       PIC S9(9) COMP-3.
+030701000000           05 WS-CPP-ACCOUNT-NO         PIC S9(9).
+030801000000           05 WS-CPP-INVESTMENT-CODE    PIC X(5).
+030901000000           05 WS-CPP-TRANS-PROC-SEQ     PIC S9(3) COMP-3.
+031001000000           05 WS-CPP-REVERSE            PIC X(1).
+031101000000           05 WS-CPP-RVS-NOT-FOUND      PIC X(1).
+031201000000           05 WS-CPP-PRV-PLACE-DATE     PIC S9(9) COMP-3.
+031301000000           05 WS-CPP-PRV-TRANS-NO       PIC S9(9) COMP-3.
+031401000000           05 WS-CPP-PRV-RVS-FOUND      PIC X(1).
+031501000000           05 WS-CPP-PRV-RVS-PROCESS    PIC S9(9) COMP-3.
+031601000000
+031701000000           05 WS-RDP-PLACEMENT-DATE     PIC S9(9) COMP-3.
+031801000000           05 WS-RDP-TRANS-NO           PIC S9(9) COMP-3.
+03190108121959781 *    05 WS-RDP-CDSC-SEQ-NO        PIC S9(5) COMP-3.
+03200108121959781      05 WS-RDP-CDSC-SEQ-NO        PIC S9(9) COMP-3.
+032101000000           05 WS-RDP-FREE-UNITS-TAKEN   PIC S9(10)V9(3) COMP-3.
+032201000000           05 WS-RDP-CHRG-UNITS-TAKEN   PIC S9(10)V9(3) COMP-3.
+032301000000           05 WS-RDP-PROCESS-DATE       PIC S9(9) COMP-3.
+032401000000           05 WS-RDP-ACCOUNT-NO         PIC S9(9).
+032501000000           05 WS-RDP-INVESTMENT-CODE    PIC X(5).
+032601000000           05 WS-RDP-TRANS-PROC-SEQ     PIC S9(3) COMP-3.
+032701000000           05 WS-RDP-REVERSE            PIC X(1).
+032801000000           05 WS-RDP-RVS-NOT-FOUND      PIC X(1).
+032901000000           05 WS-RDP-PRV-PLACE-DATE     PIC S9(9) COMP-3.
+033001000000           05 WS-RDP-PRV-TRANS-NO       PIC S9(9) COMP-3.
+033101000000           05 WS-RDP-PRV-RVS-FOUND      PIC X(1).
+033201000000           05 WS-RDP-PRV-RVS-PROCESS    PIC S9(9) COMP-3.
+033301000000
+033401000000           05 WS-END-REC                PIC X(1).
+033501000000           05 WS-ERROR-CODE             PIC X(3).
+033601000000           05 WS-WARNING-CODE           PIC X(3).
+033701000000           05 WS-UPD-REQUIRED           PIC X(1).
+033801000000           05 WS-DAYS                   PIC S9(7).
+033901000000           05 WS-AI-DAYS-EXIST          PIC X(1).
+034001000000           05 WS-FVG-DAYS-EXIST         PIC X(1).
+034101000000           05 WS-ROLL-UP-UNIT           PIC S9(10)V9(3) COMP-3.
+034201000000           05 WS-ROLL-UP-UNIT-NET       PIC S9(10)V9(3) COMP-3.
+034301000000
+034401000000           05 WS-DAYS-D1                PIC Z(6)9(1)-.
+034501000000           05 WS-DAYS-D2                PIC Z(6)9(1)-.
+034601000000           05 WS-UNIT-D1                PIC Z(9)9(1).9(3)-.
+034701000000           05 WS-UNIT-D2                PIC Z(9)9(1).9(3)-.
+034801000000           05 WS-SYSDATE                PIC S9(8).
+034901000000           05 WS-SYSTIME                PIC S9(8).
+035001000000
+035101000000           05 WS-TIME-BEGIN.
+035201000000              07 WS-TB-HH               PIC 9(2).
+035301000000              07 WS-TB-MM               PIC 9(2).
+035401000000              07 WS-TB-SS               PIC 9(2).
+035501000000              07 WS-TB-TT               PIC 9(2).
+035601000000
+035701000000           05 WS-TIME-END.
+035801000000              07 WS-TE-HH               PIC 9(2).
+035901000000              07 WS-TE-MM               PIC 9(2).
+036001000000              07 WS-TE-SS               PIC 9(2).
+036101000000              07 WS-TE-TT               PIC 9(2).
+036201000000
+036301000000           05 WS-TIME-USED.
+036401000000              07 WS-TU-HH               PIC 9(2).
+036501000000              07 FILLER                 PIC X(1) VALUE ":".
+036601000000              07 WS-TU-MM               PIC 9(2).
+036701000000              07 FILLER                 PIC X(1) VALUE ":".
+036801000000              07 WS-TU-SS               PIC 9(2).
+036901000000              07 FILLER                 PIC X(1) VALUE ":".
+037001000000              07 WS-TU-TT               PIC 9(2).
+037101000000
+037201000000           05 WS-STATS-EVENT            PIC X(1).
+037301000000           05 WS-LOG-PROGRAM-CALLED     PIC X(10).
+03740107060437142      05 li_DistUnits              PIC S9(10)V9(3) COMP-3.
+03750107060437142      05 li_LowerLimitDays         PIC S9(7) COMP-3.
+03760107061437142      05 li_PreviousDistUnits      PIC S9(10)V9(3).
+03770107061437142      05 li_PreviousVarUnits       PIC S9(10)V9(3).
+03780107061437142      05 li_PreviousLowerDays      PIC S9(07).
+03790107061437142      05 li_CurrentDistUnits       PIC S9(10)V9(3).
+03800107061437142      05 li_CurrentVarUnits        PIC S9(10)V9(3).
+03810107061437142      05 li_CurrentLowerDays       PIC S9(07).
+03820107061437142      05 li_AICount                PIC S9(05) Comp-3.
+03830107061437142      05 li_LowerDay               PIC S9(07).
+03840107061437142      05 li_Nooftimes              PIC S9(04) Value 0.
+03850107061437142      05 li_FirstTime              PIC S9(04) Value 0.
+03860107061437142      05 li_EarliestPurAgeDate     PIC S9(8) Value 0.
+03870107061437142      05 li_CountDistUnits         PIC S9(8) Value 0.
+03880107061437142      05 lb_NextLimitExist         PIC X(1) Value "N".
+03890107061437142      05 li_AgeStartDate           FORMAT DATE "@Y%m%d".
+03900107081337142      05 li_AgeEndDate             FORMAT DATE "@Y%m%d".
+039101070813
+03920107081343561      05 lc_EofCdscRec             PIC  X Value "N".
+039301070813  ¦        05 li_PlacementDate          PIC S9(9) COMP-3.
+039401070813  ¦        05 li_TransNo                PIC S9(9) COMP-3.
+03950107081343561      05 ln_GrossAmt               PIC S9(13)V9(2).
+039601000000
+039701000000
+039801000000       01 WS-FORMAT-DATE-IN             FORMAT DATE "@Y%m%d".
+039901000000       01 WS-FORMAT-DATE-OUT            FORMAT DATE "@Y%m%d".
+040001000000
+040101000000        77 IND1                         PIC S9(4) BINARY.
+040201000000        77 IND2                         PIC S9(4) BINARY.
+040301000000        77 IND3                         PIC S9(4) BINARY.
+040401000000        77 IND4                         PIC S9(4) BINARY.
+040501000000        77 IND5                         PIC S9(4) BINARY.
+040601000000        77 IND6                         PIC S9(4) BINARY.
+040701000000        77 IND7                         PIC S9(4) BINARY.
+040801000000        77 IND8                         PIC S9(4) BINARY.
+040901000000        77 IND9                         PIC S9(4) BINARY.
+041001000000        77 IND10                        PIC S9(4) BINARY.
+041101000000        77 IND11                        PIC S9(4) BINARY.
+041201000000        77 IND12                        PIC S9(4) BINARY.
+041301000000
+041401000000      *********************
+041501000000      ** SQL DEFINE AREA **
+041601000000      *********************
+041701000000
+041801000000       01  WS-CALLING-PROGRAM           PIC X(10)   VALUE "SRVVDR".
+041901000000       01  WS-SQLERR-STATEMENT          PIC X(25)   VALUE SPACES.
+042001000000       01  WS-SQLERR-DATA               PIC X(1780) VALUE SPACES.
+042101000000       01  WS-SQL-STATS                 PIC X(1966) VALUE SPACES.
+042201000000       01  WS-SQLERR-REPLY              PIC X(1)    VALUE SPACES.
+042301000000       01  WS-SQLLOG                    PIC X(1)    VALUE "Y".
+042401000000       01  WS-STRSQL                    PIC X(1000) VALUE SPACES.
+042501000000
+042601000000       01  WS-MESSAGE-LINE              PIC X(80).
+042701000000       01  WS-SQLCODE                   PIC -9(9).
+042801000000
+042901000000
+043001000000      * C1 tables for cursor SRVVDRC1 (33 bytes long, 10 fields)
+043101000000
+043201000000       01  C1-CNT                       PIC S9(5) COMP-3.
+043301000000       01  C1-CURSOR-OPENED             PIC X(1).
+043401000000       01  C1-MAX-ROWS                  PIC S9(5) BINARY
+043501000000                                        VALUES 990.
+043601000000       01  C1-LAST-ROW-FETCHED          PIC X(1).
+043701000000       01  C1-CURSOR-CLOSED             PIC X(1).
+043801000000       01  C1-NO-OF-ROWS-FETCHED        PIC S9(5) BINARY.
+043901000000
+044001000000       01  C1-FETCH-TBL.
+044101000000         05 C1-FETCH-ARRAY OCCURS 990  TIMES.
+044201000000           07 C1-INVESTMENT-CODE        PIC X(5).
+044301000000           07 C1-TRAILER-SCHEDULE-CODE  PIC X(4).
+044401000000           07 C1-ALLOW-CHANGES          PIC X(1).
+044501000000           07 C1-EFFECT-DATE            PIC S9(9) BINARY.
+044601000000           07 C1-START-DATE             PIC S9(9) COMP-3.
+044701000000           07 C1-DATE-PREPARED          PIC S9(9) COMP-3.
+044801000000           07 C1-EXISTING-DSC-FLAG      PIC X(1).
+044901000000           07 C1-TRAILER-RATE-TYPE      PIC X(1).
+045001000000           07 C1-LOWER-LIMIT-DAYS       PIC S9(5)       COMP-3.
+045101000000           07 C1-TRAILER-RATE-VAR       PIC S9(3)V9(4)  COMP-3.
+045201091209      *Rfs67590 - Start
+045301091209           07 C1-End-Date               PIC S9(9).
+045401091209      *Rfs67590 - Start
+045501000000
+045601000000       01  C1-IND-TBL.
+045701000000         05 C1-IND-ARRAY OCCURS 990  TIMES.
+045801000000           07 C1-IND                    PIC S9(4) BINARY
+045901091209R67590                                  OCCURS 11 TIMES.
+046001000000
+046101000000
+046201000000      * C2 tables for cursor SRVVDRC2 (14 bytes long, 2 fields)
+046301000000
+046401000000       01  C2-CNT                       PIC S9(5) COMP-3.
+046501000000       01  C2-CURSOR-OPENED             PIC X(1).
+046601000000       01  C2-MAX-ROWS                  PIC S9(5) BINARY
+046701000000                                        VALUES 2340.
+046801000000       01  C2-LAST-ROW-FETCHED          PIC X(1).
+046901000000       01  C2-CURSOR-CLOSED             PIC X(1).
+047001000000       01  C2-NO-OF-ROWS-FETCHED        PIC S9(5) BINARY.
+047101000000
+047201000000       01  C2-FETCH-TBL.
+047301000000          05 C2-FETCH-ARRAY OCCURS 2340 TIMES.
+047401000000             07 C2-ACCOUNT-NO           PIC S9(9).
+047501000000             07 C2-INVESTMENT-CODE      PIC X(5).
+047601000000
+047701000000       01  C2-IND-TBL.
+047801000000          05 C2-IND-ARRAY OCCURS 2340 TIMES.
+047901000000             07 C2-IND                  PIC S9(4) BINARY
+048001000000                                        OCCURS 2 TIMES.
+048101000000
+048201000000
+048301000000      * C3 tables for cursor SRVVDRC3 (47 bytes long, 10 fields)
+048401000000
+048501000000       01  C3-CNT                       PIC S9(5) COMP-3.
+048601000000       01  C3-CURSOR-OPENED             PIC X(1).
+048701000000       01  C3-MAX-ROWS                  PIC S9(5) BINARY
+048801000000                                        VALUES 695.
+048901000000       01  C3-LAST-ROW-FETCHED          PIC X(1).
+049001000000       01  C3-CURSOR-CLOSED             PIC X(1).
+049101000000       01  C3-NO-OF-ROWS-FETCHED        PIC S9(5) BINARY.
+049201000000
+049301000000       01  C3-FETCH-TBL.
+049401000000          05 C3-FETCH-ARRAY OCCURS 695  TIMES.
+049501000000             07 C3-CPP-PLACEMENT-DATE   PIC S9(9) COMP-3.
+049601000000             07 C3-CPP-TRANS-NO         PIC S9(9) COMP-3.
+04970108121959781 *      07 C3-CPP-CDSC-SEQ-NO      PIC S9(5) COMP-3.
+04980108121959781        07 C3-CPP-CDSC-SEQ-NO      PIC S9(9) COMP-3.
+049901000000             07 C3-CPP-ORIG-UNIT-BAL    PIC S9(10)V9(3) COMP-3.
+050001000000             07 C3-CPP-AGE-DATE         PIC S9(9) COMP-3.
+050101000000             07 C3-CPP-PROCESS-DATE     PIC S9(9) COMP-3.
+050201000000             07 C3-CPP-ACCOUNT-NO       PIC S9(9).
+050301000000             07 C3-CPP-INVESTMENT-CODE  PIC X(5).
+050401000000             07 C3-CPP-TRANS-PROC-SEQ   PIC S9(3) COMP-3.
+050501000000             07 C3-CPP-REVERSE          PIC X(1).
+050601000000
+050701000000       01  C3-IND-TBL.
+050801000000          05 C3-IND-ARRAY OCCURS 695  TIMES.
+050901000000             07 C3-IND                  PIC S9(4) BINARY
+051001000000                                        OCCURS 10 TIMES.
+051101000000
+051201000000
+051301000000      * C4 tables for cursor SRVVDRC4 (49 bytes long, 10 fields)
+051401000000
+051501000000       01  C4-CNT                       PIC S9(5) COMP-3.
+051601000000       01  C4-CURSOR-OPENED             PIC X(1).
+051701000000       01  C4-MAX-ROWS                  PIC S9(5) BINARY
+051801000000                                        VALUES 665.
+051901000000       01  C4-LAST-ROW-FETCHED          PIC X(1).
+052001000000       01  C4-CURSOR-CLOSED             PIC X(1).
+052101000000       01  C4-NO-OF-ROWS-FETCHED        PIC S9(5) BINARY.
+052201000000
+052301000000       01  C4-FETCH-TBL.
+052401000000          05 C4-FETCH-ARRAY OCCURS 665  TIMES.
+052501000000             07 C4-RDP-PLACEMENT-DATE   PIC S9(9) COMP-3.
+052601000000             07 C4-RDP-TRANS-NO         PIC S9(9) COMP-3.
+05270108121959781 *      07 C4-RDP-CDSC-SEQ-NO      PIC S9(5) COMP-3.
+05280108121959781        07 C4-RDP-CDSC-SEQ-NO      PIC S9(9) COMP-3.
+052901000000             07 C4-RDP-FREE-UNITS-TAKEN PIC S9(10)V9(3) COMP-3.
+053001000000             07 C4-RDP-CHRG-UNITS-TAKEN PIC S9(10)V9(3) COMP-3.
+053101000000             07 C4-RDP-PROCESS-DATE     PIC S9(9) COMP-3.
+053201000000             07 C4-RDP-ACCOUNT-NO       PIC S9(9).
+053301000000             07 C4-RDP-INVESTMENT-CODE  PIC X(5).
+053401000000             07 C4-RDP-TRANS-PROC-SEQ   PIC S9(3) COMP-3.
+053501000000             07 C4-RDP-REVERSE          PIC X(1).
+053601000000
+053701000000       01  C4-IND-TBL.
+053801000000          05 C4-IND-ARRAY OCCURS 665  TIMES.
+053901000000             07 C4-IND                  PIC S9(4) BINARY
+054001000000                                        OCCURS 10 TIMES.
+054101000000
+054201000000
+054301000000      * Variable rate table is two-dimensional and set for
+054401000000      * binary search capability. Sort by investment first, and
+054501000000      * then by lower limit days.
+054601000000      *
+054701000000      * Be caution when moving VIX1 and VIX2 indexes - its postion
+054801000000      * is dependent by subsequent logic.
+054901000000
+055001000000       01  VR-TBL-LOADED                PIC X(1)    VALUE "N".
+055101000000       01  VR-PRV-INVESTMENT-CODE       PIC X(5).
+055201000000       01  VR-INV-FOUND                 PIC X(1).
+055301000000       01  VR-RATE-FOUND                PIC X(1).
+055401000000
+055501000000      * Index control at investment level
+055601000000
+055701000000       01  VR-IX1                       PIC S9(5) COMP-3.
+055801000000
+055901000000      * Index control at lower limit days level
+056001000000
+056101000000       01  VR-IX2                       PIC S9(5) COMP-3.
+056201000000
+056301090312R64527 01  ARYSIZ1                      PIC S9(9).
+056401000000       01  VR-TBL.
+056501090312R64527*   05 VR-INV-ARRAY               OCCURS 1000
+056601090312R64527    05 VR-INV-ARRAY               OCCURS 1 TO 20000
+056701090312R64527                                  DEPENDING ON ARYSIZ1
+056801000000                                        ASCENDING KEY IS
+056901000000                                        VR-INVESTMENT-CODE
+057001000000                                        INDEXED BY VIX1.
+057101000000
+057201000000            07 VR-INVESTMENT-CODE       PIC X(5) VALUE HIGH-VALUES.
+057301000000            07 VR-TRAILER-SCHEDULE-CODE PIC X(4) VALUE SPACES.
+057401000000            07 VR-ALLOW-CHANGES         PIC X(1) VALUE SPACES.
+057501000000            07 VR-EFFECT-DATE           PIC S9(9) BINARY VALUE ZEROS.
+057601000000            07 VR-START-DATE            PIC S9(9) COMP-3 VALUE ZEROS.
+057701000000            07 VR-DATE-PREPARED         PIC S9(9) COMP-3 VALUE ZEROS.
+057801000000            07 VR-EXISTING-DSC-FLAG     PIC X(1) VALUE SPACES.
+057901000000            07 VR-TRAILER-RATE-TYPE     PIC X(1) VALUE SPACES.
+058001000000            07 VR-CNT                   PIC S9(5) COMP-3 VALUE ZEROS.
+058101091209      *Rfs67590 - Start
+058201091209            07 VR-End-Date              PIC S9(9) COMP-3 VALUE ZEROS.
+058301091209      *Rfs67590 - End
+058401000000
+058501000000            07 VR-RATE-ARRAY            OCCURS 50
+058601000000                                        ASCENDING KEY IS
+058701000000                                        VR-LOWER-LIMIT-DAYS
+058801000000                                        INDEXED BY VIX2.
+058901000000
+059001000000               09 VR-LOWER-LIMIT-DAYS PIC S9(7)      COMP-3
+059101000000                                        VALUE 9999999.
+059201000000               09 VR-TRAILER-RATE-VAR PIC S9(3)V9(4) COMP-3
+059301000000                                        VALUE ZEROS.
+059401000000
+059501000000
+059601000000      * Roll-up require table, two dimensiona, creation is based on
+059701000000      * VR-INV-ARRAY, VR-INV-ARRAY, and COMM-PROCESS-DATE.
+059801000000
+059901000000       01  RQ-IX1                       PIC S9(5) COMP-3.
+060001000000       01  RQ-IX2                       PIC S9(5) COMP-3.
+060101000000
+060201000000       01  RQ-TBL.
+060301090312R64527*   05 RQ-INV-ARRAY               OCCURS 1000
+060401090312R64527    05 RQ-INV-ARRAY               OCCURS 1 TO 20000
+060501090312R64527                                  DEPENDING ON ARYSIZ1
+060601000000                                        INDEXED BY RIX1.
+060701000000
+060801000000            07 RQ-INVESTMENT-CODE       PIC X(5)         VALUE SPACES.
+060901000000            07 RQ-PROCESS-DATE          PIC S9(8)        VALUE ZEROS.
+061001000000            07 RQ-ROLL-UP-ARRAY         OCCURS 50
+061101000000                                        INDEXED BY RIX2.
+061201000000
+061301000000             09 RQ-REQUIRE-DATE         PIC S9(9) COMP-3 VALUE ZEROS.
+061401000000             09 RQ-ROLL-UP-FLAG         PIC X(1)         VALUE SPACES.
+061501000000                88 RQ-ROLL-UP-YES       VALUE "Y".
+061601000000                88 RQ-ROLL-UP-NO        VALUE "N" " ".
+061701000000
+061801000000
+061901000000      * Account Investment variable units table for roll-up effect
+062001000000      * for the current account investment process.
+062101000000
+062201000000       01  AI-CNT                       PIC S9(5) COMP-3.
+062301000000       01  AI-IX-LOC                    PIC S9(5) COMP-3.
+062401000000       01  AI-IX                        PIC S9(5) COMP-3.
+062501000000
+062601000000       01  AI-TBL.
+062701000000          05 AI-ARRAY                   OCCURS 50
+062801000000                                        INDEXED BY AIX.
+062901000000              07 AI-LOWER-LIMIT-DAYS    PIC S9(5)       COMP-3.
+063001000000              07 AI-UNITS-VAR           PIC S9(10)V9(3) COMP-3.
+063101000000              07 AI-DTL-EXIST           PIC X(1).
+063201000000              07 AI-DTL-OPT             PIC X(1).
+06330107060437142         07 AI-DIST-UNITS-VAR      PIC S9(10)V9(3) COMP-3.
+063401000000
+063501000000
+063601000000      * Function FXVARUAI area - GET buffer definition
+063701000000
+063801000000       01  FVG-IX-LOC                   PIC S9(5) COMP-3.
+063901000000       01  FVG-IX                       PIC S9(5) COMP-3.
+064001000000
+064101000000       01  FVG-GET-BUFFER.
+064201000000         05  FVG-ACCOUNT-NO             PIC S9(9).
+064301000000         05  FVG-INVESTMENT-CODE        PIC X(5).
+064401000000         05  FVG-OPTION                 PIC X(1).
+064501000000         05  FVG-RECORD-EXIST           PIC X(1).
+064601000000      *      'Y' - header record exists, 'N' or ' ' - otherwise
+064701000000
+064801000000         05  FVG-HEADER-OPT             PIC X(1).
+064901000000         05  FVG-RETURN-CODE            PIC X(2).
+065001000000         05  FVG-PROCESS-DATE           PIC S9(9).
+065101000000         05  FVG-UNITS-VAR-TOTAL        PIC S9(10)V9(3).
+065201000000         05  FVG-CNT                    PIC S9(5).
+065301000000
+065401000000         05  FVG-TBL.
+065501000000           07 FVG-ARRAY                 OCCURS 50
+065601000000                                        INDEXED BY FVGIX.
+065701000000              09 FVG-LOWER-LIMIT-DAYS   PIC S9(5).
+065801000000              09 FVG-UNITS-VAR          PIC S9(10)V9(3).
+065901000000              09 FVG-DTL-EXIST          PIC X(1).
+066001000000      *      'Y' - detail record exists, 'N' or ' ' - otherwise
+066101000000
+066201000000              09 FVG-DTL-OPT            PIC X(1).
+06630107060437142         09 FVG-DIST-UNITS-VAR     PIC S9(10)V9(3).
+066401000000
+066501000000
+066601000000      * Function FXVARUAI area - PUT buffer definition
+066701000000
+066801000000       01  FVP-IX-LOC                   PIC S9(5) COMP-3.
+066901000000       01  FVP-IX                       PIC S9(5) COMP-3.
+067001000000
+067101000000       01  FVP-PUT-BUFFER.
+067201000000         05  FVP-ACCOUNT-NO             PIC S9(9).
+067301000000         05  FVP-INVESTMENT-CODE        PIC X(5).
+067401000000         05  FVP-OPTION                 PIC X(1).
+067501000000         05  FVP-RECORD-EXIST           PIC X(1).
+067601000000         05  FVP-HEADER-OPT             PIC X(1).
+067701000000      *      'A' - Add header record
+067801000000      *      'C' - Change header record
+067901000000      *      ' ' - no update option for header record
+068001000000
+068101000000         05  FVP-RETURN-CODE            PIC X(2).
+068201000000         05  FVP-PROCESS-DATE           PIC S9(9).
+068301000000         05  FVP-UNITS-VAR-TOTAL        PIC S9(10)V9(3).
+068401000000         05  FVP-CNT                    PIC S9(5).
+068501000000
+068601000000         05  FVP-TBL.
+068701000000           07 FVP-ARRAY                 OCCURS 50
+068801000000                                        INDEXED BY FVPIX.
+068901000000              09 FVP-LOWER-LIMIT-DAYS   PIC S9(5).
+069001000000              09 FVP-UNITS-VAR          PIC S9(10)V9(3).
+069101000000              09 FVP-DTL-EXIST          PIC X(1).
+069201000000              09 FVP-DTL-OPT            PIC X(1).
+069301000000      *      'A' - Add detail record
+069401000000      *      'C' - Change detail record
+069501000000      *      ' ' - no update option for detail record
+06960107060437142         09 FVP-DIST-UNITS-VAR     PIC S9(10)V9(3).
+069701000000
+069801000000
+069901000000      * Error and Statistics log record
+070001000000
+070101000000       01 WS-LOG-REC.
+070201000000          COPY DD-ALL-FORMATS OF MFASRVLOGP.
+070301000000
+070401000000
+070501000000      * Data area MFASRVCTL  - Service Fee Process Control
+070601000000
+070701000000       COPY CPYSRVCTL.
+070801070608      * Rfs 37142
+070901070608      * Copy SQLSTATE working variables
+071001070608        COPY CPYSQLFLD.
+071101000000
+071201000000      /
+071301000000       LINKAGE SECTION.
+071401000000
+071501000000       01  COMM-OPTION                  PIC X(3).
+071601000000           88  OPTION-ALL-ACCOUNT       VALUE "ALL".
+071701000000           88  OPTION-ONE-ACCOUNT       VALUE "ONE".
+071801000000
+071901000000       01  COMM-PROCESS-DATE            PIC S9(8).
+072001000000
+072101000000       01  COMM-INVESTMENT-CODE         PIC X(5).
+072201000000
+072301070604       01  COMM-ACCOUNT-NO              PIC S9(9).
+072401000000
+072501000000       01  COMM-RETURN-CODE             PIC X(3).
+072601000000
+072701000000      /
+072801000000       PROCEDURE DIVISION USING COMM-OPTION
+072901000000                                COMM-PROCESS-DATE
+073001000000                                COMM-INVESTMENT-CODE
+073101070604                                COMM-ACCOUNT-NO
+073201000000                                COMM-RETURN-CODE.
+073301000000
+073401000000      *****************************************************************
+073501000000       MAINLINE.
+073601000000      *****************************************************************
+073701000000
+073801000000           PERFORM INITIAL-LOGIC THRU INL-EXIT.
+073901000000           IF CURR-CONTROLS IS EQUAL TO HIGH-VALUES
+074001000000              GO TO ML-1200.
+074101000000
+074201000000       ML-0010.
+074301000000           PERFORM GET-CURRENT-RECORD THRU GCR-EXIT.
+074401000000
+074501000000       ML-0020.
+074601000000           IF PREV-LEVEL1 IS EQUAL TO CURR-LEVEL1
+074701000000              GO TO ML-1100.
+074801000000           IF PREV-CONTROLS IS EQUAL TO LOW-VALUES
+074901000000              GO TO ML-0040.
+075001000000
+075101000000       ML-0030.
+075201000000           PERFORM LEVEL-SUMMARY-1 THRU LS1-EXIT.
+075301000000           IF PREV-LEVEL2 IS EQUAL TO CURR-LEVEL2
+075401000000              GO TO ML-0100.
+075501000000           PERFORM LEVEL-SUMMARY-2 THRU LS2-EXIT.
+075601000000
+075701000000       ML-0040.
+075801000000           IF CURR-CONTROLS IS EQUAL TO HIGH-VALUES
+075901000000              GO TO ML-1200.
+076001000000           PERFORM LEVEL-REINIT-2 THRU LR2-EXIT.
+076101000000
+076201000000       ML-0100.
+076301000000           PERFORM LEVEL-REINIT-1 THRU LR1-EXIT.
+076401000000           MOVE CURR-CONTROLS TO PREV-CONTROLS.
+076501000000
+076601000000       ML-1100.
+076701000000           PERFORM DETAIL-PROCESSING THRU DPR-EXIT.
+076801000000           GO TO ML-0010.
+076901000000
+077001000000       ML-1200.
+077101000000           PERFORM END-JOB THRU EOJ-EXIT.
+077201000000           GOBACK.
+077301000000      /
+077401000000      *****************************************************************
+077501000000       INITIAL-LOGIC.
+077601000000      *****************************************************************
+077701000000
+077801070608           EXEC SQL
+077901070608            WHENEVER SQLERROR GOTO SQLLOG
+078001070608           END-EXEC.
+078101000000
+078201070604           CALL "FXSCEDTAL1" USING lnc-Screen-Code
+078301070604                                   lnc-Edit-Code
+078401070604                                   lnc-Level-Code
+078501070604                                   lnc-Edit-Alw-Flag
+078601070604           CANCEL "FXSCEDTAL1"
+078701070604      * Rfs37142
+078801070604
+078901090505      *RFS50475 Add - Beg
+079001090505           Initialize lc_ALDTTF_RtnFlag.
+079101090505           CALL "FXSCEDTAL1" USING lc_ALDTTF_ScreenCode
+079201090505                                   lc_ALDTTF_EditCode
+079301090505                                   lc_ALDTTF_EditLevel
+079401090505                                   lc_ALDTTF_RtnFlag.
+079501090505           CANCEL "FXSCEDTAL1".
+079601090505      *RFS50475 Add - End
+079701090505
+079801000000           MOVE LOW-VALUES   TO CURR-CONTROLS
+079901000000                                PREV-CONTROLS.
+080001000000
+080101000000
+080201000000      * Set error and statistics log flag
+080301000000
+080401000000           ACCEPT WS-MFASRVCTL-DTAARA
+080501000000             FROM WS-DATA-AREA-1 FOR "MFASRVCTL".
+080601000000
+080701000000           IF WS-SV-ERROR-OPT-ALL    = "Y" OR
+080801000000              WS-SV-ERROR-OPT-SRVVDR = "Y"
+080901000000              MOVE "Y"       TO WS-LOG-ERROR
+081001000000           ELSE
+081101000000              MOVE "N"       TO WS-LOG-ERROR
+081201000000           END-IF.
+081301000000
+081401000000           IF WS-SV-STATS-OPT-ALL    = "Y" OR
+081501000000              WS-SV-STATS-OPT-SRVVDR = "Y"
+081601000000              MOVE "Y"       TO WS-LOG-STATS
+081701000000           ELSE
+081801000000              MOVE "N"       TO WS-LOG-STATS
+081901000000           END-IF.
+082001000000
+082101000000
+082201000000      * Check special module authorization
+082301000000
+082401000000           IF WS-MODULE-CHECKED = "Y"
+082501000000              GO TO INL-0010
+082601000000           END-IF.
+082701000000
+082801000000           MOVE WS-SRVVAR-MODULE
+082901000000                             TO WS-MODULE-ID.
+083001000000           MOVE SPACES       TO WS-AUTHORIZED.
+083101000000
+083201000000           CALL "JOBCHKAUT" USING WS-MODULE-ID
+083301000000                                  WS-AUTHORIZED.
+083401000000
+083501000000           MOVE WS-AUTHORIZED
+083601000000                             TO WS-SRVVAR-AUTHORIZED.
+083701000000           MOVE "Y"          TO WS-MODULE-CHECKED.
+083801000000
+083901000000       INL-0010.
+084001000000
+084101000000           IF WS-SRVVAR-AUTHORIZED NOT = "Y"
+084201000000              MOVE "01"   TO COMM-RETURN-CODE
+084301000000              GO TO INL-ERROR
+084401000000           END-IF.
+084501000000
+084601000000
+084701000000           MOVE SPACES       TO COMM-RETURN-CODE.
+084801000000           INITIALIZE           WS-WORK-FIELDS.
+084901000000
+085001000000
+085101000000      * Edit input parameters
+085201000000
+085301000000           IF COMM-OPTION NOT = "ALL" AND
+085401000000                                "ONE"
+085501000000              MOVE "02"   TO COMM-RETURN-CODE
+085601000000              GO TO INL-ERROR
+085701000000           END-IF
+085801000000
+085901000000           IF COMM-PROCESS-DATE IS NOT NUMERIC OR
+086001000000              COMM-PROCESS-DATE = ZEROS
+086101000000              MOVE "03"   TO COMM-RETURN-CODE
+086201000000              GO TO INL-ERROR
+086301000000           END-IF
+086401000000
+086501000000           IF OPTION-ONE-ACCOUNT
+086601070604              IF COMM-ACCOUNT-NO IS NOT NUMERIC OR
+086701070604                 COMM-ACCOUNT-NO = ZEROS
+086801000000                 MOVE "04"   TO COMM-RETURN-CODE
+086901000000                 GO TO INL-ERROR
+087001000000              END-IF
+087101000000           END-IF.
+087201000000
+087301000000           IF COMM-INVESTMENT-CODE = SPACES
+087401000000              MOVE "05"   TO COMM-RETURN-CODE
+087501000000              GO TO INL-ERROR
+087601000000           END-IF
+087701000000
+087801000000      * Load VR-TBL only once, plus other misc loadings if needed
+087901000000
+088001000000           IF VR-TBL-LOADED = "Y"
+088101000000              GO TO INL-0020
+088201000000           END-IF.
+088301000000
+088401041104D19162     OPEN INPUT TRANS
+088501041104D19162                TRANS-TARGET
+088601070810D19162                TRANS-TARGET-2
+08870109050750475                 TRANS-PURCHASE-UNITS
+08880111031491951                 TRANS-PURCHASE-UNITS-2
+08890107081043561                 TRANS-CDSC-PURCHASE.
+089001041104
+089101000000           PERFORM LOAD-VR-TABLE THRU LVT-EXIT.
+089201000000
+089301000000       INL-0020.
+089401000000
+089501000000           SEARCH ALL VR-INV-ARRAY
+089601000000           AT END
+089701000000              MOVE "N"       TO VR-INV-FOUND
+089801000000           WHEN VR-INVESTMENT-CODE (VIX1) = COMM-INVESTMENT-CODE
+089901000000              MOVE "Y"       TO VR-INV-FOUND
+090001000000           END-SEARCH.
+090101000000
+090201000000
+090301000000           IF VR-INV-FOUND = "N"
+090401000000              MOVE "06"      TO COMM-RETURN-CODE
+090501000000              GO TO INL-ERROR
+090601000000           END-IF.
+090701000000
+090801000000
+090901000000           MOVE VR-EFFECT-DATE (VIX1)
+091001000000                             TO WS-EFFECTIVE-DATE.
+091101000000
+091201000000           MOVE COMM-PROCESS-DATE
+091301000000                             TO WS-FORMAT-DATE-IN.
+091401000000           MOVE FUNCTION SUBTRACT-DURATION
+091501000000                (WS-FORMAT-DATE-IN DAYS 1)
+091601000000                             TO WS-FORMAT-DATE-OUT.
+091701000000           MOVE WS-FORMAT-DATE-OUT
+091801000000                             TO WS-END-DATE.
+091901000000
+092001000000
+092101000000      * For ALL option process, initialize cursor flags is required
+092201000000
+092301000000           IF COMM-OPTION = "ALL"
+092401000000              MOVE SPACES    TO C2-CURSOR-OPENED
+092501000000                                C2-CURSOR-CLOSED
+092601000000           END-IF.
+092701000000
+092801000000           GO TO INL-EXIT.
+092901000000
+093001000000       INL-ERROR.
+093101000000
+093201000000           MOVE HIGH-VALUES  TO CURR-CONTROLS.
+093301000000
+093401000000       INL-EXIT.
+093501000000           EXIT.
+093601000000      /
+093701000000      ******************************************************************
+093801000000       SQL-DECLARES.
+093901000000      ******************************************************************
+094001000000
+094101000000************************************************************************
+094201000000******* CURSOR: SRVVDRC1
+094301000000************************************************************************
+094401000000******* ALIAS      FILENAME                       OpenName
+094501000000************************************************************************
+094601000000******* INVTSP     INVESTMENT-TRAILER-VAR-SCHED   MFAINVTVP
+094701000000******* TRSCDP     TRAILER-RATE-SCHEDULE          MFATRSCDP
+094801000000******* TRSCVP     TRAILER-RATE-VAR-CHEDULE       MFATRSCVP
+094901000000************************************************************************
+095001000000
+095101000000      * For variable rate table loading
+095201000000
+095301000000           EXEC SQL
+095401000000             DECLARE SRVVDRC1 CURSOR FOR
+095501000000
+095601000000             SELECT
+095701000000               INVTVP.INVESTMENT_CODE,
+095801000000               INVTVP.TRAILER_SCHEDULE_CODE,
+095901000000               INVTVP.ALLOW_CHANGES,
+096001000000               INVTVP.EFFECT_DATE,
+096101000000               INVTVP.START_DATE,
+096201000000               INVTVP.DATE_PREPARED,
+096301000000               INVTVP.EXISTING_DSC_FLAG,
+096401000000               TRSCDP.TRAILER_RATE_TYPE,
+096501000000               TRSCVP.LOWER_LIMIT_DAYS,
+096601091209               TRSCVP.TRAILER_RATE_VAR,
+096701091209R67590         INVTVP.END_DATE
+096801000000
+096901000000             FROM
+097001000000               MFAINVTVP INVTVP
+097101000000               INNER JOIN MFATRSCDP TRSCDP
+097201000000               ON INVTVP.TRAILER_SCHEDULE_CODE =
+097301000000                  TRSCDP.TRAILER_SCHEDULE_CODE
+097401000000               INNER JOIN MFATRSCVP TRSCVP
+097501000000               ON TRSCDP.TRAILER_SCHEDULE_CODE =
+097601000000                  TRSCVP.TRAILER_SCHEDULE_CODE
+097701000000
+097801000000             WHERE
+097901000000               INVTVP.EXISTING_DSC_FLAG = "Y"  AND
+098001000000               TRSCDP.TRAILER_RATE_TYPE = "V"
+098002200720      *RFS185175-Starts
+098003200720               AND TRSCDP.ASSETS_RULE = "0"
+098004200720      *RFS185175-Ends
+098101000000
+098201000000             ORDER BY
+098301000000               INVTVP.INVESTMENT_CODE,
+098401000000               TRSCVP.LOWER_LIMIT_DAYS
+098501000000
+098601000000             FOR READ ONLY
+098701000000           END-EXEC.
+098801000000
+098901000000
+099001000000************************************************************************
+099101000000******* CURSOR: SRVVDRC2
+099201000000************************************************************************
+099301000000******* ALIAS      FILENAME                       OpenName
+099401000000************************************************************************
+099501000000******* ACIDUP     ACCOUNT-INV-DLY-SRV            MFAACIDUP
+099601000000************************************************************************
+099701000000
+099801000000      * For All accounts option,
+099901000000      * it will be more efficient to include prior day only.
+100001000000
+100101000000           EXEC SQL
+100201000000             DECLARE SRVVDRC2 CURSOR FOR
+100301000000
+100401000000             SELECT
+100501000000               ACCOUNT_NO,
+100601000000               INVESTMENT_CODE
+100701000000
+100801000000             FROM
+100901000000               MFAACIDUP
+101001000000
+101101000000             WHERE
+101201000000               INVESTMENT_CODE = :COMM-INVESTMENT-CODE AND
+101301000000               PROCESS_DATE    = :WS-END-DATE
+101401000000
+101501000000             ORDER BY
+101601000000               INVESTMENT_CODE,
+101701000000               ACCOUNT_NO
+101801000000
+101901000000             FOR READ ONLY
+102001000000           END-EXEC.
+102101000000
+102201000000
+102301000000************************************************************************
+102401000000******* CURSOR: SRVVDRC3
+102501000000************************************************************************
+102601000000******* ALIAS      FILENAME                       OpenName
+102701000000************************************************************************
+102801000000******* TRNCPP     TRANS-CDSC-PURCHASE            MFATRNCPP
+102901000000******* TRNP       TRANS                          MFATRNP
+103001000000************************************************************************
+103101000000
+103201000000      * Potential CPP records for the account investment that has
+103301000000      * age date = require date for roll-up of aging units, including
+103401000000      * negative unit balance but not zero unit balance.
+103501000000
+103601000000      * For perfomance, CDSC-SEQ-NO is excluded from the Order By.
+103701000000
+103801000000
+103901000000           EXEC SQL
+104001000000             DECLARE SRVVDRC3 CURSOR FOR
+104101000000
+104201000000             SELECT
+104301000000               TRNCPP.PLACEMENT_DATE,
+104401000000               TRNCPP.TRANS_NO,
+104501000000               TRNCPP.CDSC_SEQ_NO,
+104601000000               TRNCPP.ORIG_UNIT_BAL,
+104701000000               TRNCPP.AGE_DATE,
+104801000000               TRNP.PROCESS_DATE,
+104901000000               TRNP.ACCOUNT_NO,
+105001000000               TRNP.INVESTMENT_CODE,
+105101000000               TRNP.TRANS_PROC_SEQ_NO,
+105201000000               TRNP.REVERSE
+105301000000
+105401080211      **** RFS40800 - Start
+105501000000             FROM
+105601080211               MFATRNP   TRNP
+105701080211               INNER JOIN
+105801080211               (Select CPP0.Placement_Date,
+105901080211                       CPP0.Trans_No,
+106001080211                       CPP0.CDSC_Seq_No,
+106101080211                       CPP0.Orig_Unit_Bal,
+106201080211                       CPP0.Age_Date,
+106301080211                       CPP0.ACCOUNT_NO,
+106401080211                       CPP0.INVESTMENT_CODE,
+106501080211                       CPP0.ALL_UNITS_FREE,
+106601080211                       CPP0.REINVEST_DISTR_AS
+106701080211
+106801080211               FROM MFATRNCPP CPP0
+106901080211               WHERE
+107001080211                  CPP0.Account_no = :WS-ACCOUNT-NO              AND
+107101080211                  CPP0.Investment_Code = :WS-INVESTMENT-CODE    AND
+107201080211                  CPP0.Age_Date        = :WS-REQUIRE-DATE       AND
+107301080211                  CPP0.Orig_Unit_Bal  <> 0) TRNCPP
+107401080211               ON TRNCPP.PLACEMENT_DATE =
+107501080211                  TRNP.PLACEMENT_DATE      AND
+107601080211                  TRNCPP.TRANS_NO       =
+107701080211                  TRNP.TRANS_NO
+107801080211      **** RFS40800 - End
+107901000000
+108001000000             WHERE
+108101080211               TRNP.ACCOUNT_NO        = TRNCPP.ACCOUNT_NO      AND
+108201080211               TRNP.INVESTMENT_CODE   = TRNCPP.INVESTMENT_CODE AND
+108301000000               TRNP.PROCESS_DATE     >= :WS-EFFECTIVE-DATE     AND
+108401000000               TRNP.PROCESS_DATE     <= :WS-END-DATE           AND
+108501000000               TRNP.TRANS_STATUS_CODE IN ("HST", "HSC")
+108601000000
+108701000000             ORDER BY
+108801000000               TRNP.ACCOUNT_NO,
+108901000000               TRNP.INVESTMENT_CODE,
+109001000000               TRNP.PROCESS_DATE,
+109101000000               TRNP.TRANS_PROC_SEQ_NO
+109201000000excl  *        TRNCPP.CDSC_SEQ_NO
+109301000000
+109401000000             FOR READ ONLY
+109501000000           END-EXEC.
+109601000000
+109701070604      * Rfs 37142  Begins
+109801070604      * This is an alternate cursor in case the DSTVAR is set on
+109901070604      * so that it omits distribution records
+110001070604
+110101070604
+110201070604           EXEC SQL
+110301070604             DECLARE SRVVDRC31 CURSOR FOR
+110401070604             SELECT
+110501070604               TRNCPP.PLACEMENT_DATE,
+110601070604               TRNCPP.TRANS_NO,
+110701070604               TRNCPP.CDSC_SEQ_NO,
+110801070604               TRNCPP.ORIG_UNIT_BAL,
+110901070604               TRNCPP.AGE_DATE,
+111001070604               TRNP.PROCESS_DATE,
+111101070604               TRNP.ACCOUNT_NO,
+111201070604               TRNP.INVESTMENT_CODE,
+111301070604               TRNP.TRANS_PROC_SEQ_NO,
+111401070604               TRNP.REVERSE
+111501070604             FROM
+111601080211      **** RFS40800 - Start
+111701080211               MFATRNP TRNP
+111801080211               INNER JOIN
+111901080211               (Select CPP0.Placement_Date,
+112001080211                       CPP0.Trans_No,
+112101080211                       CPP0.CDSC_Seq_No,
+112201080211                       CPP0.Orig_Unit_Bal,
+112301080211                       CPP0.Age_Date,
+112401080211                       CPP0.ACCOUNT_NO,
+112501080211                       CPP0.INVESTMENT_CODE,
+112601080211                       CPP0.ALL_UNITS_FREE,
+112701080211                       CPP0.REINVEST_DISTR_AS
+112801080211               FROM MFATRNCPP CPP0
+112901080211               WHERE
+113001080211                  Account_no = :WS-ACCOUNT-NO              AND
+113101080211                  Investment_Code = :WS-INVESTMENT-CODE    AND
+113201080211                  Age_Date        = :WS-REQUIRE-DATE       AND
+113301080211                  Orig_Unit_Bal  <> 0) TRNCPP
+113401080211               ON TRNCPP.PLACEMENT_DATE =
+113501070604                  TRNP.PLACEMENT_DATE      AND
+113601080211                  TRNCPP.TRANS_NO       =
+113701070604                  TRNP.TRANS_NO
+113801070604             WHERE
+113901080211      **** RFS40800 - End
+114001070604               TRNP.ACCOUNT_NO        = TRNCPP.ACCOUNT_NO      AND
+114101070604               TRNP.INVESTMENT_CODE   = TRNCPP.INVESTMENT_CODE AND
+114201070604               TRNP.PROCESS_DATE     >= :WS-EFFECTIVE-DATE     AND
+114301070604               TRNP.PROCESS_DATE     <= :WS-END-DATE           AND
+114401070604               TRNP.TRANS_STATUS_CODE IN ("HST", "HSC")   AND
+114501070604               NOT (TRNCPP.ALL_UNITS_FREE ="Y"            AND
+114601070604                    TRNCPP.REINVEST_DISTR_AS = "F"            )
+114701070604             ORDER BY
+114801070604               TRNP.ACCOUNT_NO,
+114901070604               TRNP.INVESTMENT_CODE,
+115001070604               TRNP.PROCESS_DATE,
+115101070604               TRNP.TRANS_PROC_SEQ_NO
+115201070604             FOR READ ONLY
+115301070604           END-EXEC.
+115401070604      * Rfs 37142  ends
+115501000000
+115601090505************************************************************************
+115701090505******* CURSOR: SRVVDRC3A
+115801090505************************************************************************
+115901090505******* ALIAS      FILENAME                       OpenName
+116001090505************************************************************************
+116101090505******* TRNPUP     TRANS-PURCHASE-UNITS           MFATRNPUP
+116201090505******* TRNP       TRANS                          MFATRNP
+116301090505************************************************************************
+116401090505
+116501090505      * Potential PUP records for the account investment that has
+116601090505      * age date = require date for roll-up of aging units, including
+116701090505      * negative unit balance but not zero unit balance.
+116801090505
+116901090505
+117001090505
+117101090505           EXEC SQL
+117201090505             DECLARE SRVVDRC3A CURSOR FOR
+117301090505
+117401090505             SELECT
+117501090505               TRNPUP.PLACEMENT_DATE,
+117601090505               TRNPUP.TRANS_NO,
+117701090505               TRNPUP.PURCH_SEQ_NO,
+117801090505               TRNPUP.PURCH_ORIG_UNIT_BAL,
+117901090505               TRNPUP.PURCH_AGE_DATE,
+118001090505               TRNP.PROCESS_DATE,
+118101090505               TRNP.ACCOUNT_NO,
+118201090505               TRNP.INVESTMENT_CODE,
+118301090505               TRNP.TRANS_PROC_SEQ_NO,
+118401090505               TRNP.REVERSE
+118501090505
+118601090505             FROM
+118701090505               MFATRNP   TRNP
+118801090505               INNER JOIN
+118901090505               (Select PUP0.Placement_Date,
+119001090505                       PUP0.Trans_No,
+119101090505                       PUP0.Purch_Seq_No,
+119201090505                       PUP0.Purch_Orig_Unit_Bal,
+119301090505                       PUP0.Purch_Age_Date,
+119401090505                       PUP0.ACCOUNT_NO,
+119501090505                       PUP0.INVESTMENT_CODE
+119601090505
+119701090505               FROM MFATRNPUP PUP0
+119801090505               WHERE
+119901090512                  PUP0.Unit_Monitor_Type = :lncc_FIFO           AND
+120001090505                  PUP0.Account_no = :WS-ACCOUNT-NO              AND
+120101090505                  PUP0.Investment_Code = :WS-INVESTMENT-CODE    AND
+120201090505                  PUP0.Purch_Age_Date  = :WS-REQUIRE-DATE       AND
+120301090505                  PUP0.Purch_Orig_Unit_Bal  <> 0) TRNPUP
+120401090505               ON TRNPUP.PLACEMENT_DATE =
+120501090505                  TRNP.PLACEMENT_DATE      AND
+120601090505                  TRNPUP.TRANS_NO       =
+120701090505                  TRNP.TRANS_NO
+120801090505
+120901090505             WHERE
+121001090505               TRNP.ACCOUNT_NO        = TRNPUP.ACCOUNT_NO      AND
+121101090505               TRNP.INVESTMENT_CODE   = TRNPUP.INVESTMENT_CODE AND
+121201090505               TRNP.PROCESS_DATE     >= :WS-EFFECTIVE-DATE     AND
+121301090505               TRNP.PROCESS_DATE     <= :WS-END-DATE           AND
+121401090505               TRNP.TRANS_STATUS_CODE IN ("HST", "HSC")
+121501090505
+121601090505             ORDER BY
+121701090505               TRNP.ACCOUNT_NO,
+121801090505               TRNP.INVESTMENT_CODE,
+121901090505               TRNP.PROCESS_DATE,
+122001090505               TRNP.TRANS_PROC_SEQ_NO
+122101090505
+122201090505             FOR READ ONLY
+122301090505           END-EXEC.
+122401090505
+122501000000************************************************************************
+122601000000******* CURSOR: SRVVDRC4
+122701000000************************************************************************
+122801000000******* ALIAS      FILENAME                       OpenName
+122901000000************************************************************************
+123001000000******* TRNRDP     TRANS-CDSC-PURCH-REDUCTION     MFATRNRDP
+123101000000******* TRNP       TRANS                          MFATRNP
+123201000000************************************************************************
+123301000000
+123401000000      * Corresponding RDP reduction records related to a CPP record,
+123501000000      * including negative taken down units but not zero taken down
+123601000000      * unit.
+123701000000
+123801000000      * For perfomance, CDSC-SEQ-NO is excluded from the Order By.
+123901000000
+124001000000
+124101000000           EXEC SQL
+124201000000             DECLARE SRVVDRC4 CURSOR FOR
+124301000000
+124401000000             SELECT
+124501000000               TRNRDP.PLACEMENT_DATE,
+124601000000               TRNRDP.TRANS_NO,
+124701000000               TRNRDP.CDSC_SEQ_NO,
+124801000000               TRNRDP.FREE_UNITS_TAKEN_DOWN,
+124901000000               TRNRDP.CHRG_UNITS_TAKEN_DOWN,
+125001000000               TRNP.PROCESS_DATE,
+125101000000               TRNP.ACCOUNT_NO,
+125201000000               TRNP.INVESTMENT_CODE,
+125301000000               TRNP.TRANS_PROC_SEQ_NO,
+125401000000               TRNP.REVERSE
+125501000000
+125601000000             FROM
+125701000000               MFATRNRDP TRNRDP
+125801000000               INNER JOIN MFATRNP TRNP
+125901000000               ON TRNRDP.PLACEMENT_DATE =
+126001000000                  TRNP.PLACEMENT_DATE      AND
+126101000000                  TRNRDP.TRANS_NO       =
+126201000000                  TRNP.TRANS_NO
+126301000000
+126401000000             WHERE
+126501000000               TRNRDP.PLACEMENT_DATE_2 = :WS-CPP-PLACEMENT-DATE AND
+126601000000               TRNRDP.TRANS_NO_2       = :WS-CPP-TRANS-NO       AND
+126701000000               TRNRDP.CDSC_SEQ_NO_2    = :WS-CPP-CDSC-SEQ-NO    AND
+126801000000              (TRNRDP.FREE_UNITS_TAKEN_DOWN
+126901000000                                      <> 0                      OR
+127001000000               TRNRDP.CHRG_UNITS_TAKEN_DOWN
+127101000000                                      <> 0)                     AND
+127201000000               TRNP.ACCOUNT_NO         = :WS-ACCOUNT-NO         AND
+127301000000               TRNP.INVESTMENT_CODE    = :WS-INVESTMENT-CODE    AND
+127401000000               TRNP.PROCESS_DATE      >= :WS-EFFECTIVE-DATE     AND
+127501000000               TRNP.PROCESS_DATE      <= :WS-END-DATE           AND
+127601000000               TRNP.TRANS_STATUS_CODE  IN ("HST", "HSC")
+127701000000
+127801000000             ORDER BY
+127901000000               TRNP.ACCOUNT_NO,
+128001000000               TRNP.INVESTMENT_CODE,
+128101000000               TRNP.PROCESS_DATE,
+128201000000               TRNP.TRANS_PROC_SEQ_NO
+128301000000excl  *        TRNRDP.CDSC_SEQ_NO
+128401000000
+128501000000             FOR READ ONLY
+128601000000           END-EXEC.
+128701000000
+128801090505************************************************************************
+128901090505******* CURSOR: SRVVDRC4A
+129001090505************************************************************************
+129101090505******* ALIAS      FILENAME                       OpenName
+129201090505************************************************************************
+129301090505******* TRNRUP     TRANS-REDUCTION-UNITS          MFATRNRUP
+129401090505******* TRNP       TRANS                          MFATRNP
+129501090505************************************************************************
+129601090505
+129701090505      * Corresponding RUP reduction records related to a PUP record,
+129801090505      * including negative taken down units but not zero taken down
+129901090505      * unit.
+130001090505
+130101090505           EXEC SQL
+130201090505             DECLARE SRVVDRC4A CURSOR FOR
+130301090505
+130401090505             SELECT
+130501090505               TRNRUP.PLACEMENT_DATE,
+130601090505               TRNRUP.TRANS_NO,
+130701090505               TRNRUP.REDUC_SEQ_NO,
+130801090818R72459         0,
+130901090505               TRNRUP.UNITS_TAKEN_DOWN,
+131001090505               TRNP.PROCESS_DATE,
+131101090505               TRNP.ACCOUNT_NO,
+131201090505               TRNP.INVESTMENT_CODE,
+131301090505               TRNP.TRANS_PROC_SEQ_NO,
+131401090505               TRNP.REVERSE
+131501090505
+131601090505             FROM
+131701090505               MFATRNRUP TRNRUP
+131801090505               INNER JOIN MFATRNP TRNP
+131901090505               ON TRNRUP.PLACEMENT_DATE =
+132001090505                  TRNP.PLACEMENT_DATE      AND
+132101090505                  TRNRUP.TRANS_NO       =
+132201090505                  TRNP.TRANS_NO
+132301090505
+132401090505             WHERE
+132501090505               TRNRUP.PLACEMENT_DATE_2 = :WS-CPP-PLACEMENT-DATE AND
+132601090505               TRNRUP.TRANS_NO_2       = :WS-CPP-TRANS-NO       AND
+132701090505               TRNRUP.PURCH_SEQ_NO_2   = :WS-CPP-CDSC-SEQ-NO    AND
+132801090505               TRNRUP.UNITS_TAKEN_DOWN <> 0                     AND
+132901090505               TRNP.ACCOUNT_NO         = :WS-ACCOUNT-NO         AND
+133001090505               TRNP.INVESTMENT_CODE    = :WS-INVESTMENT-CODE    AND
+133101090505               TRNP.PROCESS_DATE      >= :WS-EFFECTIVE-DATE     AND
+133201090505               TRNP.PROCESS_DATE      <= :WS-END-DATE           AND
+133301090505               TRNP.TRANS_STATUS_CODE  IN ("HST", "HSC")
+133401090505
+133501090505             ORDER BY
+133601090505               TRNP.ACCOUNT_NO,
+133701090505               TRNP.INVESTMENT_CODE,
+133801090505               TRNP.PROCESS_DATE,
+133901090505               TRNP.TRANS_PROC_SEQ_NO
+134001090505
+134101090505             FOR READ ONLY
+134201090505           END-EXEC.
+134301090505
+134401000000       SQL-EXIT.
+134501000000           EXIT.
+134601000000      /
+134701000000      *****************************************************************
+134801000000       LOAD-VR-TABLE.
+134901000000      *****************************************************************
+135001000000
+135101000000      * For efficiency, this table should be loaded only once.
+135201000000
+135301000000           MOVE "OPEN CURSOR SRVVDRC1     "
+135401000000                             TO WS-SQLERR-STATEMENT.
+135501000000
+135601090825R64527     MOVE 10           TO ARYSIZ1.
+135701000000           EXEC SQL
+135801000000             OPEN SRVVDRC1
+135901000000           END-EXEC.
+136001000000
+136101000000           MOVE SPACES       TO C1-LAST-ROW-FETCHED.
+136201000000           MOVE ZEROS        TO C1-NO-OF-ROWS-FETCHED
+136301000000                                C1-CNT.
+136401000000
+136501000000           MOVE ZEROS        TO VR-IX1
+136601000000                                VR-IX2.
+136701000000           MOVE LOW-VALUES   TO VR-PRV-INVESTMENT-CODE.
+136801000000
+136901000000       LVT-0010.
+137001000000
+137101000000           IF C1-CNT = ZEROS OR
+137201000000              C1-CNT > C1-MAX-ROWS
+137301000000              GO TO LVT-0020
+137401000000           END-IF.
+137501000000
+137601000000           IF C1-LAST-ROW-FETCHED = "Y"  AND
+137701000000              C1-CNT              > C1-NO-OF-ROWS-FETCHED
+137801000000              GO TO LVT-END
+137901000000           END-IF.
+138001000000
+138101000000           GO TO LVT-0030.
+138201000000
+138301000000       LVT-0020.
+138401000000
+138501000000           INITIALIZE C1-FETCH-TBL.
+138601000000
+138701000000           MOVE "FETCH NEXT FROM SRVVDRC1 "
+138801000000                             TO WS-SQLERR-STATEMENT.
+138901000000
+139001000000           EXEC SQL
+139101000000             FETCH SRVVDRC1 FOR :C1-MAX-ROWS ROWS
+139201000000                   INTO :C1-FETCH-ARRAY :C1-IND-ARRAY
+139301000000           END-EXEC.
+139401000000
+139501000000           IF SQLCODE = 100
+139601000000              GO TO LVT-END
+139701000000           END-IF.
+139801000000
+139901000000      * SWLERRD(3) contains the number of rows retrieved.
+140001000000      * SQLERRD(5) contains +100 if the last row was fetched.
+140101000000
+140201000000           IF SQLERRD (5) = 100
+140301000000              MOVE "Y"       TO C1-LAST-ROW-FETCHED
+140401000000              MOVE SQLERRD (3)
+140501000000                             TO C1-NO-OF-ROWS-FETCHED
+140601000000           END-IF.
+140701000000
+140801000000           MOVE 1            TO C1-CNT.
+140901000000
+141001000000       LVT-0030.
+141101000000
+141201000000           IF C1-INVESTMENT-CODE (C1-CNT) = VR-PRV-INVESTMENT-CODE
+141301000000              GO TO LVT-0040
+141401000000           END-IF.
+141501000000
+141601000000           ADD 1             TO VR-IX1.
+141701090312R64527     IF VR-IX1 >= ARYSIZ1
+141801090825R64527        COMPUTE ARYSIZ1 = ARYSIZ1 + 500
+141901090312R64527     END-IF.
+142001000000           MOVE ZEROS        TO VR-IX2.
+142101000000
+142201000000      * For binary search, DO NOT initialize the VR-TBL!
+142301000000      *    INITIALIZE           VR-INV-ARRAY (VR-IX1).
+142401000000
+142501000000           MOVE ZEROS        TO VR-CNT       (VR-IX1).
+142601000000
+142701000000           MOVE C1-INVESTMENT-CODE       (C1-CNT)
+142801000000                             TO VR-PRV-INVESTMENT-CODE
+142901000000                                VR-INVESTMENT-CODE       (VR-IX1).
+143001000000           MOVE C1-TRAILER-SCHEDULE-CODE (C1-CNT)
+143101000000                             TO VR-TRAILER-SCHEDULE-CODE (VR-IX1).
+143201000000           MOVE C1-ALLOW-CHANGES         (C1-CNT)
+143301000000                             TO VR-ALLOW-CHANGES         (VR-IX1).
+143401000000           MOVE C1-EFFECT-DATE           (C1-CNT)
+143501000000                             TO VR-EFFECT-DATE           (VR-IX1).
+143601000000
+143701000000           MOVE C1-START-DATE            (C1-CNT)
+143801000000                             TO VR-START-DATE            (VR-IX1).
+143901000000           MOVE C1-DATE-PREPARED         (C1-CNT)
+144001000000                             TO VR-DATE-PREPARED         (VR-IX1).
+144101000000           MOVE C1-EXISTING-DSC-FLAG     (C1-CNT)
+144201000000                             TO VR-EXISTING-DSC-FLAG     (VR-IX1).
+144301000000           MOVE C1-TRAILER-RATE-TYPE     (C1-CNT)
+144401000000                             TO VR-TRAILER-RATE-TYPE     (VR-IX1).
+144501091209      *rfs67590 - Start
+144601091209           MOVE C1-End-Date              (C1-Cnt)
+144701091209                             TO VR-End-Date              (VR-IX1).
+144801091209      *rfs67590 - Start
+144901091209
+145001000000       LVT-0040.
+145101000000
+145201000000           ADD 1             TO VR-IX2.
+145301000000           ADD 1             TO VR-CNT (VR-IX1).
+145401000000
+145501000000           MOVE C1-LOWER-LIMIT-DAYS (C1-CNT)
+145601000000                             TO VR-LOWER-LIMIT-DAYS (VR-IX1, VR-IX2).
+145701000000           MOVE C1-TRAILER-RATE-VAR (C1-CNT)
+145801000000                             TO VR-TRAILER-RATE-VAR (VR-IX1, VR-IX2).
+145901000000
+146001000000           ADD  1            TO C1-CNT.
+146101000000           GO TO LVT-0010.
+146201000000
+146301000000       LVT-END.
+146401000000
+146501000000           MOVE "CLOSE CURSOR SRVVDRC1    "
+146601000000                             TO WS-SQLERR-STATEMENT.
+146701000000
+146801000000           EXEC SQL
+146901000000             CLOSE SRVVDRC1
+147001000000           END-EXEC.
+147101000000
+147201000000           MOVE "Y"          TO VR-TBL-LOADED.
+147301000000
+147401000000       LVT-EXIT.
+147501000000           EXIT.
+147601000000      /
+147701000000      *****************************************************************
+147801000000       GET-CURRENT-RECORD.
+147901000000      *****************************************************************
+148001000000
+148101000000       GCR-0010.
+148201000000
+148301000000           IF WS-END-REC = "Y"
+148401000000              GO TO GCR-END
+148501000000           END-IF.
+148601000000
+148701000000           IF OPTION-ONE-ACCOUNT
+148801000000              MOVE COMM-INVESTMENT-CODE
+148901000000                             TO WS-INVESTMENT-CODE
+149001070604              MOVE COMM-ACCOUNT-NO
+149101000000                             TO WS-ACCOUNT-NO
+149201000000              MOVE "Y"       TO WS-END-REC
+149301000000              GO TO GCR-0020
+149401000000           END-IF.
+149501000000
+149601000000           IF OPTION-ALL-ACCOUNT
+149701000000              PERFORM GET-ALL-RECORD THRU GAR-EXIT
+149801000000              IF WS-END-REC = "Y"
+149901000000                 GO TO GCR-END
+150001000000              ELSE
+150101000000                 GO TO GCR-0020
+150201000000              END-IF
+150301000000           END-IF.
+150401000000
+150501000000      * Invalid option
+150601000000
+150701000000           GO TO GCR-END.
+150801000000
+150901000000
+151001000000       GCR-0020.
+151101000000
+151201000000           PERFORM GET-VAR-RECORD THRU GVR-EXIT.
+151301000000
+151401000000           IF FVG-RETURN-CODE NOT = SPACES
+151501000000              GO TO GCR-0010
+151601000000           END-IF.
+151701000000
+151801000000           IF FVG-RECORD-EXIST NOT = "Y"
+151901000000              GO TO GCR-0010
+152001000000           END-IF.
+152101000000
+152201000000      * Process date of the header record must be yesterday
+152301000000
+152401000000           IF FVG-PROCESS-DATE NOT = WS-END-DATE
+152501000000              GO TO GCR-0010
+152601000000           END-IF.
+152701000000
+152801000000      * Is there any unit or detail records? Skip if no.
+152901000000
+153001000000           IF FVG-CNT             = ZEROS  OR
+153101000000              FVG-UNITS-VAR-TOTAL = ZEROS
+153201000000              GO TO GCR-0010
+153301000000           END-IF.
+153401000000
+153501000000           MOVE WS-INVESTMENT-CODE
+153601000000                             TO CURR-INVESTMENT.
+153701000000           MOVE WS-ACCOUNT-NO
+153801000000                             TO CURR-ACCOUNT-NO.
+153901000000
+154001000000           GO TO GCR-EXIT.
+154101000000
+154201000000       GCR-END.
+154301000000
+154401000000           MOVE HIGH-VALUES  TO CURR-CONTROLS.
+154501000000
+154601000000       GCR-EXIT.
+154701000000           EXIT.
+154801000000      /
+154901000000      *****************************************************************
+155001000000       GET-VAR-RECORD.
+155101000000      *****************************************************************
+155201000000
+155301000000           IF LOG-STATS-ON OR LOG-ERROR-ON
+155401000000              MOVE "FXVARUAI"
+155501000000                             TO WS-LOG-PROGRAM-CALLED
+155601000000           END-IF.
+155701000000
+155801000000           INITIALIZE FVG-GET-BUFFER.
+155901000000
+156001000000           MOVE SPACES       TO FVG-RECORD-EXIST
+156101000000                                FVG-RETURN-CODE
+156201000000           MOVE ZEROS        TO FVG-PROCESS-DATE
+156301000000                                FVG-UNITS-VAR-TOTAL
+156401000000                                FVG-CNT.
+156501000000
+156601000000           MOVE WS-ACCOUNT-NO
+156701000000                             TO FVG-ACCOUNT-NO.
+156801000000           MOVE WS-INVESTMENT-CODE
+156901000000                             TO FVG-INVESTMENT-CODE.
+157001000000           MOVE "G"          TO FVG-OPTION.
+157101000000
+157201000000           IF LOG-STATS-ON
+157301000000              MOVE "S"       TO WS-STATS-EVENT
+157401000000              PERFORM LOG-STATS-ROUTINE THRU LSR-EXIT
+157501000000           END-IF.
+157601000000
+157701000000           CALL "FXVARUAI" USING FVG-ACCOUNT-NO
+157801000000                                 FVG-INVESTMENT-CODE
+157901000000                                 FVG-OPTION
+158001000000                                 FVG-RECORD-EXIST
+158101000000                                 FVG-HEADER-OPT
+158201000000                                 FVG-RETURN-CODE
+158301000000                                 FVG-PROCESS-DATE
+158401000000                                 FVG-UNITS-VAR-TOTAL
+158501000000                                 FVG-CNT
+158601000000                                 FVG-TBL.
+158701000000
+158801000000           IF LOG-STATS-ON
+158901000000              MOVE "E"       TO WS-STATS-EVENT
+159001000000              PERFORM LOG-STATS-ROUTINE THRU LSR-EXIT
+159101000000           END-IF.
+159201000000
+159301000000           IF FVG-RETURN-CODE NOT = SPACES
+159401000000              MOVE "07"      TO WS-ERROR-CODE
+159501000000
+159601000000              IF COMM-RETURN-CODE = SPACES
+159701000000                 MOVE WS-ERROR-CODE
+159801000000                             TO COMM-RETURN-CODE
+159901000000              END-IF
+160001000000
+160101000000              IF LOG-ERROR-ON
+160201000000                 PERFORM LOG-ERROR-ROUTINE THRU LER-EXIT
+160301000000              END-IF
+160401000000           END-IF.
+160501000000
+160601000000       GVR-EXIT.
+160701000000           EXIT.
+160801000000      /
+160901000000      *****************************************************************
+161001000000       GET-ALL-RECORD.
+161101000000      *****************************************************************
+161201000000
+161301000000           IF C2-CURSOR-OPENED = "Y"
+161401000000              GO TO GAR-0010
+161501000000           END-IF.
+161601000000
+161701000000           MOVE "OPEN CURSOR SRVVDRC2     "
+161801000000                             TO WS-SQLERR-STATEMENT.
+161901000000
+162001000000           EXEC SQL
+162101000000             OPEN SRVVDRC2
+162201000000           END-EXEC.
+162301000000
+162401000000           MOVE SPACES       TO C2-LAST-ROW-FETCHED
+162501000000                                C2-CURSOR-CLOSED.
+162601000000           MOVE ZEROS        TO C2-NO-OF-ROWS-FETCHED
+162701000000                                C2-CNT.
+162801000000           MOVE "Y"          TO C2-CURSOR-OPENED.
+162901000000
+163001000000       GAR-0010.
+163101000000
+163201000000           IF C2-CNT = ZEROS OR
+163301000000              C2-CNT > C2-MAX-ROWS
+163401000000              GO TO GAR-0020
+163501000000           END-IF.
+163601000000
+163701000000           IF C2-LAST-ROW-FETCHED = "Y"  AND
+163801000000              C2-CNT              > C2-NO-OF-ROWS-FETCHED
+163901000000              GO TO GAR-END
+164001000000           END-IF.
+164101000000
+164201000000           GO TO GAR-0030.
+164301000000
+164401000000       GAR-0020.
+164501000000
+164601000000           INITIALIZE C2-FETCH-TBL.
+164701000000
+164801000000           MOVE "FETCH NEXT FROM SRVVDRC2 "
+164901000000                             TO WS-SQLERR-STATEMENT.
+165001000000
+165101000000           EXEC SQL
+165201000000             FETCH SRVVDRC2 FOR :C2-MAX-ROWS ROWS
+165301000000                   INTO :C2-FETCH-ARRAY :C2-IND-ARRAY
+165401000000           END-EXEC.
+165501000000
+165601000000           IF SQLCODE = 100
+165701000000              GO TO GAR-END
+165801000000           END-IF.
+165901000000
+166001000000      * SWLERRD(3) contains the number of rows retrieved.
+166101000000      * SQLERRD(5) contains +100 if the last row was fetched.
+166201000000
+166301000000           IF SQLERRD (5) = 100
+166401000000              MOVE "Y"       TO C2-LAST-ROW-FETCHED
+166501000000              MOVE SQLERRD (3)
+166601000000                             TO C2-NO-OF-ROWS-FETCHED
+166701000000           END-IF.
+166801000000
+166901000000           MOVE 1            TO C2-CNT.
+167001000000
+167101000000       GAR-0030.
+167201000000
+167301000000           MOVE C2-ACCOUNT-NO      (C2-CNT)
+167401000000                             TO WS-ACCOUNT-NO.
+167501000000           MOVE C2-INVESTMENT-CODE (C2-CNT)
+167601000000                             TO WS-INVESTMENT-CODE.
+167701000000
+167801000000           ADD 1             TO C2-CNT.
+167901000000
+168001000000           GO TO GAR-EXIT.
+168101000000
+168201000000       GAR-END.
+168301000000
+168401000000           MOVE "CLOSE CURSOR SRVVDRC2    "
+168501000000                             TO WS-SQLERR-STATEMENT.
+168601000000
+168701000000           EXEC SQL
+168801000000             CLOSE SRVVDRC2
+168901000000           END-EXEC.
+169001000000
+169101000000           MOVE "Y"          TO C2-CURSOR-CLOSED
+169201000000                                WS-END-REC.
+169301000000
+169401000000       GAR-EXIT.
+169501000000           EXIT.
+169601000000      /
+169701000000      *****************************************************************
+169801000000       DETAIL-PROCESSING.
+169901000000      *****************************************************************
+170001000000
+170101000000      * Assume the lower limit days of the retrieved account investment
+170201000000      * record exists in the table, i.e. all day ranges in the FVG-TBL
+170301000000      * exist in the VR-TBL of the investment. Each day range of the
+170401000000      * current record will be examined if roll-up is required or not.
+170501000000
+170601000000           INITIALIZE AI-TBL.
+170701000000
+170801000000           MOVE SPACES       TO WS-ERROR-CODE
+170901000000                                WS-UPD-REQUIRED.
+171001000000           MOVE ZEROS        TO FVG-IX
+171101000000                                AI-CNT
+171201000000                                AI-IX.
+171301000000
+171401000000       DPR-0010.
+171501000000
+171601000000           ADD 1             TO FVG-IX.
+171701000000           IF FVG-IX > FVG-CNT
+171801000000              GO TO DPR-END
+171901000000           END-IF.
+172001000000
+172101000000           SEARCH ALL VR-RATE-ARRAY (VIX1)
+172201000000           AT END
+172301000000              MOVE "N"       TO VR-RATE-FOUND
+172401000000           WHEN VR-LOWER-LIMIT-DAYS (VIX1, VIX2) =
+172501000000                FVG-LOWER-LIMIT-DAYS (FVG-IX)
+172601000000              MOVE "Y"       TO VR-RATE-FOUND
+172701000000           END-SEARCH.
+172801000000
+172901000000
+173001000000      * Skip record if day range is not found in the schedule table
+173101000000      * and has no variable unit.
+173201000000
+173301000000           IF VR-RATE-FOUND      NOT = "Y"   AND
+173401000000              FVG-UNITS-VAR (FVG-IX) = ZEROS
+173501000000              GO TO DPR-0010
+173601000000           END-IF.
+173701000000
+173801000000      * Return error "09" only if the day range is not found in the
+173901000000      * schedule table and has non-zero variable units.
+174001000000
+174101000000           IF VR-RATE-FOUND      NOT = "Y"
+174201000000              MOVE "09"      TO WS-ERROR-CODE
+174301000000
+174401000000              IF COMM-RETURN-CODE = SPACES
+174501000000                 MOVE WS-ERROR-CODE
+174601000000                             TO COMM-RETURN-CODE
+174701000000              END-IF
+174801000000
+174901000000              IF LOG-ERROR-ON
+175001000000                 PERFORM LOG-ERROR-ROUTINE THRU LER-EXIT
+175101000000              END-IF
+175201000000
+175301000000              GO TO DPR-EXIT
+175401000000           END-IF.
+175501000000
+175601000000           MOVE FVG-LOWER-LIMIT-DAYS (FVG-IX)
+175701000000                             TO WS-DAYS.
+175801000000
+175901000000           PERFORM CHECK-DAYS-AI-TBL THRU CDA-EXIT.
+176001000000
+176101000000           IF WS-AI-DAYS-EXIST = "Y"
+176201000000              MOVE AI-IX-LOC TO AI-IX
+176301000000           ELSE
+176401000000              ADD 1          TO AI-CNT
+176501000000              MOVE AI-CNT    TO AI-IX
+176601000000              MOVE FVG-LOWER-LIMIT-DAYS (FVG-IX)
+176701000000                             TO AI-LOWER-LIMIT-DAYS (AI-IX)
+176801000000              MOVE FVG-DTL-EXIST        (FVG-IX)
+176901000000                             TO AI-DTL-EXIST        (AI-IX)
+177001000000           END-IF.
+177101000000
+177201000000           IF FVG-UNITS-VAR (FVG-IX) = ZEROS
+177301000000              GO TO DPR-0010
+177401000000           END-IF.
+177501000000
+177601000000           ADD  FVG-UNITS-VAR (FVG-IX)
+177701000000                             TO AI-UNITS-VAR (AI-IX).
+177801000000
+177901000000      * Is roll-up required at the current day range?
+178001000000
+178101000000           SET RIX1          TO VIX1.
+178201000000           SET RIX2          TO VIX2.
+178301000000
+178401000000           IF RQ-ROLL-UP-FLAG (RIX1, RIX2) NOT = "Y"
+178501000000              GO TO DPR-0010
+178601000000           END-IF.
+178701000000
+178801000000           IF RQ-REQUIRE-DATE (RIX1, RIX2) = ZEROS
+178901000000              GO TO DPR-0010
+179001000000           END-IF.
+179101000000
+179201000000           MOVE RQ-REQUIRE-DATE (RIX1, RIX2)
+179301000000                             TO WS-REQUIRE-DATE.
+179401000000
+179501090511      *RFS50475 - Begin
+179601090511      *    PERFORM CHECK-CPP-ON-REQ-DATE THRU CPD-EXIT.
+179701090511           IF lb_ALDTTF_EditYes
+179801090511              PERFORM CHECK-PUP-ON-REQ-DATE THRU CUD-EXIT
+179901090511           ELSE
+180001090511              PERFORM CHECK-CPP-ON-REQ-DATE THRU CPD-EXIT
+180101090511           END-IF.
+180201090511      *RFS50475 - End
+180301090511
+180401000000           IF WS-REC-CNT   = ZEROS OR
+180501000000              WS-TOT-UNITS = ZEROS
+180601000000              GO TO DPR-0010
+180701000000           END-IF.
+180801000000
+180901090511      *RFS50475 - Begin
+181001090511      *    PERFORM CALC-ROLL-UP-UNIT THRU CRU-EXIT.
+181101090511           IF lb_ALDTTF_EditYes
+181201090511              PERFORM CALC-ROLL-UP-UNIT1 THRU CRU1-EXIT
+181301090511           ELSE
+181401090511              PERFORM CALC-ROLL-UP-UNIT THRU CRU-EXIT
+181501090511           END-IF.
+181601090511      *RFS50475 - End
+181701090511
+181801000000           IF WS-ROLL-UP-UNIT = ZEROS
+181901000000              GO TO DPR-0010
+182001000000           END-IF.
+182101000000
+182201000000           PERFORM UPDATE-ROLL-UP-UNIT THRU URU-EXIT.
+182301000000
+182401000000           GO TO DPR-0010.
+182501000000
+182601000000       DPR-END.
+182701070810      *Rfs43561 Begins comment out old codes and replace with new ones
+182801070810           If lnc-Edit-Alw-Flag  = "Y" Then
+182901070810               Perform  Getlowerlimit
+183001070810           End-If.
+183101070614      *Defect 37142.17,19
+183201070614      *    IF WS-UPD-REQUIRED NOT = "Y"
+183301070810      *    Perform  Getlowerlimit
+183401070810           IF WS-UPD-REQUIRED NOT = "Y" And li_CountDistUnits = 0
+183501070614      *Defect 37142.17,19
+183601000000              GO TO DPR-EXIT
+183701000000           END-IF.
+183801070810
+183901000000      * Update is required for at least one roll-up action performed.
+184001000000
+184101000000           PERFORM UPD-ACCOUNT-INVESTMENT-VAR THRU UAI-EXIT.
+184201000000
+184301000000       DPR-EXIT.
+184401000000           EXIT.
+184501000000      /
+184601000000      ******************************************************************
+184701000000       CHECK-CPP-ON-REQ-DATE.
+184801000000      ******************************************************************
+184901000000
+185001000000           MOVE ZEROS        TO WS-REC-CNT
+185101000000                                WS-TOT-UNITS.
+185201000000
+185301090722      *RFS71776 Begin
+185401090722      *    MOVE "SELECT INTO WS-REC-CNT   "                             del
+185501090722      *                      TO WS-SQLERR-STATEMENT.                     |
+185601090722                                                                         |
+185701090722      *    EXEC SQL                                                      |
+185801090722      *      SELECT COUNT(*), SUM(ABS(ORIG_UNIT_BAL))                    |
+185901090722      *        INTO :WS-REC-CNT    :IND1,                                |
+186001090722      *             :WS-TOT-UNITS  :IND2                                 |
+186101090722                                                                         |
+186201090722      *      FROM                                                        |
+186301090722      *        MFATRNCPP TRNCPP                                          |
+186401090722                                                                         |
+186501090722      *      WHERE                                                       |
+186601090722      *        ACCOUNT_NO      = :WS-ACCOUNT-NO      AND                 |
+186701090722      *        INVESTMENT_CODE = :WS-INVESTMENT-CODE AND                 |
+186801090722      *        AGE_DATE        = :WS-REQUIRE-DATE                        |
+186901090722      *    END-EXEC.                                                    del
+187001090722
+187101090722           INITIALIZE TRANS-CDSC-PURCHASE-REC.                          add
+187201090722           MOVE WS-ACCOUNT-NO TO                                         |
+187301090722                ACCOUNT-NO      OF TRANS-CDSC-PURCHASE-REC.              |
+187401090722           MOVE WS-INVESTMENT-CODE TO                                    |
+187501090722                INVESTMENT-CODE OF TRANS-CDSC-PURCHASE-REC.              |
+187601090722           MOVE WS-REQUIRE-DATE    TO                                    |
+187701090722                AGE-DATE        OF TRANS-CDSC-PURCHASE-REC.              |
+187801090722           MOVE ZEROS              TO                                    |
+187901090722                PLACEMENT-DATE  OF TRANS-CDSC-PURCHASE-REC.              |
+188001090722           MOVE ZEROS              TO                                    |
+188101090722                TRANS-NO        OF TRANS-CDSC-PURCHASE-REC.              |
+188201090722                                                                         |
+188301090722           START TRANS-CDSC-PURCHASE                                     |
+188401090731              KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY              |
+188501090731             INVALID KEY                                                 |
+188601090731              CONTINUE
+188701090731             NOT INVALID KEY
+188801090731              READ TRANS-CDSC-PURCHASE NEXT RECORD                       |
+188901090731               NOT AT END                                                |
+189001090722                 PERFORM SUM-CPP-ON-REQ-DATE UNTIL                       |
+189101090722                     WS-ACCOUNT-NO NOT EQUAL                             |
+189201090722                        ACCOUNT-NO OF TRANS-CDSC-PURCHASE-REC OR         |
+189301090722                     WS-INVESTMENT-CODE NOT EQUAL                        |
+189401090722                        INVESTMENT-CODE OF TRANS-CDSC-PURCHASE-REC OR    |
+189501090722                     WS-REQUIRE-DATE    NOT EQUAL                        |
+189601090722                        AGE-DATE        OF TRANS-CDSC-PURCHASE-REC       |
+189701090731              END-READ
+189801090731           END-START.                                                   add
+189901090722      *RFS71776 End
+190001090722
+190101000000       CPD-EXIT.
+190201000000           EXIT.
+190301090722
+190401090722      *RFS71776 Add - Begin
+190501090722       SUM-CPP-ON-REQ-DATE.
+190601090722           ADD 1 TO WS-REC-CNT.
+190701090722           IF ORIG-UNIT-BAL OF TRANS-CDSC-PURCHASE-REC > 0
+190801090722              COMPUTE WS-TOT-UNITS = WS-TOT-UNITS +
+190901090722                ORIG-UNIT-BAL OF TRANS-CDSC-PURCHASE-REC
+191001090722           ELSE
+191101090722              COMPUTE WS-TOT-UNITS = WS-TOT-UNITS -
+191201090722                ORIG-UNIT-BAL OF TRANS-CDSC-PURCHASE-REC.
+191301090722           READ TRANS-CDSC-PURCHASE NEXT RECORD
+191401090722              AT END
+191501090722                 MOVE ZEROS TO
+191601090722                    ACCOUNT-NO OF TRANS-CDSC-PURCHASE-REC
+191701090722                 MOVE SPACES TO
+191801090722                    INVESTMENT-CODE OF TRANS-CDSC-PURCHASE-REC
+191901090722                 MOVE ZEROS TO
+192001090722                    AGE-DATE   OF TRANS-CDSC-PURCHASE-REC
+192101090722           END-READ.
+192201090722
+192301090722       SUM-PUP-ON-REQ-DATE.
+192401090722           ADD 1 TO WS-REC-CNT.
+19250111031491951      IF PURCH-ORIG-UNIT-BAL OF TRANS-PURCHASE-UNITS-2-REC > 0
+192601090722              COMPUTE WS-TOT-UNITS = WS-TOT-UNITS +
+19270111031491951           PURCH-ORIG-UNIT-BAL OF TRANS-PURCHASE-UNITS-2-REC
+192801090722           ELSE
+192901090722              COMPUTE WS-TOT-UNITS = WS-TOT-UNITS -
+19300111031491951           PURCH-ORIG-UNIT-BAL OF TRANS-PURCHASE-UNITS-2-REC.
+19310111031491951      READ TRANS-PURCHASE-UNITS-2 NEXT RECORD
+193201090722              AT END
+193301090722                 MOVE ZEROS TO
+19340111031491951               ACCOUNT-NO OF TRANS-PURCHASE-UNITS-2-REC
+193501090722                 MOVE SPACES TO
+19360111031491951               INVESTMENT-CODE OF TRANS-PURCHASE-UNITS-2-REC
+193701090722                 MOVE ZEROS TO
+19380111031491951               PURCH-AGE-DATE OF TRANS-PURCHASE-UNITS-2-REC
+193901090722           END-READ.
+194001090722      *RFS71776 Add - End
+194101090722
+194201090511      *RFS50475 Add - Begin
+194301090511      ******************************************************************
+194401090511       CHECK-PUP-ON-REQ-DATE.
+194501090511      ******************************************************************
+194601090511
+194701090511           MOVE ZEROS        TO WS-REC-CNT
+194801090511                                WS-TOT-UNITS.
+194901090511
+195001090722      *RFS71776 Begin
+195101090722      *    MOVE "SELECT INTO WS-REC-CNT   "                             del
+195201090722      *                      TO WS-SQLERR-STATEMENT.                     |
+195301090722                                                                         |
+195401090722      *    EXEC SQL                                                      |
+195501090722      *      SELECT COUNT(*), SUM(ABS(PURCH_ORIG_UNIT_BAL))              |
+195601090722      *        INTO :WS-REC-CNT    :IND1,                                |
+195701090722      *             :WS-TOT-UNITS  :IND2                                 |
+195801090722                                                                         |
+195901090722      *      FROM                                                        |
+196001090722      *        MFATRNPUP TRNPUP                                          |
+196101090722                                                                         |
+196201090722      *      WHERE                                                       |
+196301090722      *        UNIT_MONITOR_TYPE = :lncc_FIFO          AND               |
+196401090722      *        ACCOUNT_NO        = :WS-ACCOUNT-NO      AND               |
+196501090722      *        INVESTMENT_CODE   = :WS-INVESTMENT-CODE AND               |
+196601090722      *        PURCH_AGE_DATE    = :WS-REQUIRE-DATE                      |
+196701090722      *    END-EXEC.                                                    del
+196801090722
+19690111031591951      INITIALIZE MFATRNPUP OF TRANS-PURCHASE-UNITS-2-REC.            add
+197001090722           MOVE lncc_FIFO     TO                                         |
+19710111031491951           UNIT-MONITOR-TYPE OF TRANS-PURCHASE-UNITS-2-REC.         |
+197201090722           MOVE WS-ACCOUNT-NO TO                                         |
+19730111031491951           ACCOUNT-NO      OF TRANS-PURCHASE-UNITS-2-REC.           |
+197401090722           MOVE WS-INVESTMENT-CODE TO                                    |
+19750111031491951           INVESTMENT-CODE OF TRANS-PURCHASE-UNITS-2-REC.           |
+197601090722           MOVE WS-REQUIRE-DATE    TO                                    |
+19770111031491951           PURCH-AGE-DATE  OF TRANS-PURCHASE-UNITS-2-REC.           |
+197801090722           MOVE ZEROS              TO                                    |
+19790111031491951           PLACEMENT-DATE  OF TRANS-PURCHASE-UNITS-2-REC.           |
+198001090722           MOVE ZEROS              TO                                    |
+19810111031491951           TRANS-NO        OF TRANS-PURCHASE-UNITS-2-REC.           |
+198201090722                                                                         |
+19830111031491951      START TRANS-PURCHASE-UNITS-2                                  |
+198401090731              KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY              |
+198501090731            INVALID KEY                                                  |
+198601090731              CONTINUE
+198701090731            NOT INVALID KEY
+19880111031491951         READ TRANS-PURCHASE-UNITS-2 NEXT RECORD                    |
+198901090731                NOT AT END                                               |
+199001090722                 PERFORM SUM-PUP-ON-REQ-DATE UNTIL                       |
+199101090722                     lncc_FIFO     NOT EQUAL                             |
+19920111031491951                 UNIT-MONITOR-TYPE OF TRANS-PURCHASE-UNITS-2-REC OR |
+199301090722                     WS-ACCOUNT-NO NOT EQUAL                             |
+19940111031491951                 ACCOUNT-NO OF TRANS-PURCHASE-UNITS-2-REC OR        |
+199501090722                     WS-INVESTMENT-CODE NOT EQUAL                        |
+19960111031491951                 INVESTMENT-CODE OF TRANS-PURCHASE-UNITS-2-REC OR   |
+199701090722                     WS-REQUIRE-DATE    NOT EQUAL                        |
+19980111031491951                 PURCH-AGE-DATE  OF TRANS-PURCHASE-UNITS-2-REC      |
+199901090731               END-READ
+200001090731           END-START.                                                   add
+200101090722      *RFS71776 End
+200201090511
+200301090511       CUD-EXIT.
+200401090511           EXIT.
+200501090511      *RFS50475 Add - End
+200601000000      /
+200701000000      ******************************************************************
+200801000000       CALC-ROLL-UP-UNIT.
+200901000000      ******************************************************************
+201001000000
+201101000000           MOVE ZEROS        TO WS-ROLL-UP-UNIT
+201201000000                                WS-CPP-PRV-PLACE-DATE
+201301000000                                WS-CPP-PRV-TRANS-NO
+201401000000                                WS-CPP-PRV-RVS-PROCESS.
+201501000000
+201601000000           MOVE SPACES       TO WS-CPP-PRV-RVS-FOUND
+201701000000                                WS-CPP-RVS-NOT-FOUND.
+201801000000
+201901000000           MOVE "OPEN CURSOR SRVVDRC3     "
+202001000000                             TO WS-SQLERR-STATEMENT.
+202101000000
+202201070604      *Rfs 37142 Begins
+202301070604      *    EXEC SQL
+202401070604      *      OPEN SRVVDRC3
+202501070604      *    END-EXEC.
+202601070604           IF  lnc-Edit-Alw-Flag = "Y"   Then
+202701070604  |               EXEC SQL
+202801070604  |                   OPEN SRVVDRC31
+202901070604  |               END-EXEC
+203001070604  |           ELSE
+203101070604  |               EXEC SQL
+203201070604  |                   OPEN SRVVDRC3
+203301070604  |               END-EXEC
+203401070604           END-IF.
+203501000000
+203601000000           MOVE SPACES       TO C3-LAST-ROW-FETCHED.
+203701000000           MOVE ZEROS        TO C3-NO-OF-ROWS-FETCHED
+203801000000                                C3-CNT.
+203901000000
+204001000000       CRU-0010.
+204101000000
+204201000000           IF C3-CNT = ZEROS OR
+204301000000              C3-CNT > C3-MAX-ROWS
+204401000000              GO TO CRU-0020
+204501000000           END-IF.
+204601000000
+204701000000           IF C3-LAST-ROW-FETCHED = "Y"  AND
+204801000000              C3-CNT              > C3-NO-OF-ROWS-FETCHED
+204901000000              GO TO CRU-END
+205001000000           END-IF.
+205101000000
+205201000000           GO TO CRU-0030.
+205301000000
+205401000000       CRU-0020.
+205501000000
+205601000000           INITIALIZE C3-FETCH-TBL.
+205701000000
+205801000000           MOVE "FETCH NEXT FROM SRVVDRC3 "
+205901000000                             TO WS-SQLERR-STATEMENT.
+206001000000
+206101070604      * Rfs 37142 begins
+206201070604      *    EXEC SQL
+206301070604      *      FETCH SRVVDRC3 FOR :C3-MAX-ROWS ROWS
+206401070604      *            INTO :C3-FETCH-ARRAY :C3-IND-ARRAY
+206501070604      *    END-EXEC.
+206601000000
+206701070604            IF  lnc-Edit-Alw-Flag = "Y"   Then
+206801070604               EXEC SQL
+206901070604                  FETCH SRVVDRC31 FOR :C3-MAX-ROWS ROWS
+207001070604                     INTO :C3-FETCH-ARRAY :C3-IND-ARRAY
+207101070604               END-EXEC
+207201070604            ELSE
+207301070604               EXEC SQL
+207401070604                  FETCH SRVVDRC3 FOR :C3-MAX-ROWS ROWS
+207501070604                     INTO :C3-FETCH-ARRAY :C3-IND-ARRAY
+207601070604               END-EXEC
+207701070604            END-IF.
+207801070604      *  Rfs 37142 Ends
+207901070604
+208001000000           IF SQLCODE = 100
+208101000000              GO TO CRU-END
+208201000000           END-IF.
+208301000000
+208401000000      * SWLERRD(3) contains the number of rows retrieved.
+208501000000      * SQLERRD(5) contains +100 if the last row was fetched.
+208601000000
+208701000000           IF SQLERRD (5) = 100
+208801000000              MOVE "Y"       TO C3-LAST-ROW-FETCHED
+208901000000              MOVE SQLERRD (3)
+209001000000                             TO C3-NO-OF-ROWS-FETCHED
+209101000000           END-IF.
+209201000000
+209301000000           MOVE 1            TO C3-CNT.
+209401000000
+209501000000       CRU-0030.
+209601000000
+209701000000           MOVE C3-CPP-PLACEMENT-DATE  (C3-CNT)
+209801000000                             TO WS-CPP-PLACEMENT-DATE.
+209901000000           MOVE C3-CPP-TRANS-NO        (C3-CNT)
+210001000000                             TO WS-CPP-TRANS-NO.
+210101000000           MOVE C3-CPP-CDSC-SEQ-NO     (C3-CNT)
+210201000000                             TO WS-CPP-CDSC-SEQ-NO.
+210301000000           MOVE C3-CPP-ORIG-UNIT-BAL   (C3-CNT)
+210401000000                             TO WS-CPP-ORIG-UNIT-BAL.
+210501000000           MOVE C3-CPP-AGE-DATE        (C3-CNT)
+210601000000                             TO WS-CPP-AGE-DATE.
+210701000000
+210801000000           MOVE C3-CPP-PROCESS-DATE    (C3-CNT)
+210901000000                             TO WS-CPP-PROCESS-DATE.
+211001000000           MOVE C3-CPP-ACCOUNT-NO      (C3-CNT)
+211101000000                             TO WS-CPP-ACCOUNT-NO.
+211201000000           MOVE C3-CPP-INVESTMENT-CODE (C3-CNT)
+211301000000                             TO WS-CPP-INVESTMENT-CODE.
+211401000000           MOVE C3-CPP-TRANS-PROC-SEQ  (C3-CNT)
+211501000000                             TO WS-CPP-TRANS-PROC-SEQ.
+211601000000           MOVE C3-CPP-REVERSE         (C3-CNT)
+211701000000                             TO WS-CPP-REVERSE.
+211801000000
+211901000000           ADD  1            TO C3-CNT.
+212001000000
+212101000000
+212201000000           IF WS-CPP-REVERSE NOT = "Y"
+212301000000              GO TO CRU-0050
+212401000000           END-IF.
+212501000000
+212601000000           IF WS-CPP-PLACEMENT-DATE = WS-CPP-PRV-PLACE-DATE AND
+212701000000              WS-CPP-TRANS-NO       = WS-CPP-PRV-TRANS-NO
+212801000000              IF WS-CPP-PRV-RVS-FOUND = "Y"
+212901000000                 MOVE WS-CPP-PRV-RVS-PROCESS
+213001000000                             TO WS-RVS-PROCESS-DATE
+213101000000                 GO TO CRU-0040
+213201000000              ELSE
+213301000000                 GO TO CRU-0010
+213401000000              END-IF
+213501000000           END-IF.
+213601000000
+213701000000           MOVE WS-CPP-PLACEMENT-DATE
+213801000000                             TO WS-PLACEMENT-DATE
+213901000000                                WS-CPP-PRV-PLACE-DATE.
+214001000000           MOVE WS-CPP-TRANS-NO
+214101000000                             TO WS-TRANS-NO
+214201000000                                WS-CPP-PRV-TRANS-NO.
+214301000000
+214401000000           PERFORM GET-RVS-TRANS THRU GRT-EXIT.
+214501000000
+214601000000           MOVE WS-RVS-FOUND TO WS-CPP-PRV-RVS-FOUND.
+214701000000           MOVE WS-RVS-PROCESS-DATE
+214801000000                             TO WS-CPP-PRV-RVS-PROCESS.
+214901000000
+215001000000           IF WS-RVS-FOUND NOT = "Y"
+215101000000              MOVE "Y"       TO WS-CPP-RVS-NOT-FOUND
+215201000000              MOVE "103"     TO WS-WARNING-CODE
+215301000000
+215401000000              IF LOG-ERROR-ON
+215501000000                 PERFORM LOG-WARNING-ROUTINE THRU LWR-EXIT
+215601000000              END-IF
+215701000000
+215801000000              GO TO CRU-0010
+215901000000           END-IF.
+216001000000
+216101000000       CRU-0040.
+216201000000
+216301000000      * If CPP Transaction was reversed within the period, the units
+216401000000      * will be considered as no effect.
+216501000000
+216601000000           IF WS-RVS-PROCESS-DATE >= WS-EFFECTIVE-DATE AND
+216701000000              WS-RVS-PROCESS-DATE <= WS-END-DATE
+216801000000              GO TO CRU-0010
+216901000000           END-IF.
+217001000000
+217101000000       CRU-0050.
+217201000000
+217301000000incl  *    IF WS-CPP-ORIG-UNIT-BAL <= 0
+217401000000-ve   *       GO TO CRU-0010
+217501000000      *    END-IF.
+217601000000
+217701000000           MOVE WS-CPP-ORIG-UNIT-BAL
+217801000000                             TO WS-UNIT-BAL.
+217901000000
+218001000000      * Any redemption to reduce the unit balance of this CPP record?
+218101000000           PERFORM PROCESS-REDUCTION-UNIT THRU PRU-EXIT.
+218201000000
+218301000000      * Accumulate reduced unit of CPP for roll up process later
+218401000000
+218501000000           ADD WS-UNIT-BAL   TO WS-ROLL-UP-UNIT.
+218601000000
+218701000000           GO TO CRU-0010.
+218801000000
+218901000000       CRU-END.
+219001000000
+219101000000           MOVE "CLOSE CURSOR SRVVDRC3    "
+219201000000                             TO WS-SQLERR-STATEMENT.
+219301000000
+219401070604      * Rfs 37142 begins
+219501070604      *    EXEC SQL
+219601070604      *      CLOSE SRVVDRC3
+219701070604      *    END-EXEC.
+219801070604             IF  lnc-Edit-Alw-Flag = "Y"   Then
+219901070604                 EXEC SQL
+220001070604                    CLOSE SRVVDRC31
+220101070604                 END-EXEC
+220201070604             ELSE
+220301070604                 EXEC SQL
+220401070604                    CLOSE SRVVDRC3
+220501070604                 END-EXEC
+220601070604             END-IF.
+220701070604      *  Rfs 37142
+220801000000
+220901000000      * Negative roll-up unit for the account investment on the
+221001000000      * require date will not be rolled up.
+221101000000
+221201000000           IF WS-ROLL-UP-UNIT < 0
+221301000000              MOVE "101"     TO WS-WARNING-CODE
+221401000000
+221501000000              IF LOG-ERROR-ON
+221601000000                 PERFORM LOG-WARNING-ROUTINE THRU LWR-EXIT
+221701000000              END-IF
+221801000000
+221901000000              MOVE ZEROS     TO WS-ROLL-UP-UNIT
+222001000000           END-IF.
+222101000000
+222201000000       CRU-EXIT.
+222301000000           EXIT.
+222401090523      *RFS50475 Add - Begin
+222501090511      ******************************************************************
+222601090511       CALC-ROLL-UP-UNIT1.
+222701090511      ******************************************************************
+222801090511
+222901090511           MOVE ZEROS        TO WS-ROLL-UP-UNIT
+223001090511                                WS-CPP-PRV-PLACE-DATE
+223101090511                                WS-CPP-PRV-TRANS-NO
+223201090511                                WS-CPP-PRV-RVS-PROCESS.
+223301090511
+223401090511           MOVE SPACES       TO WS-CPP-PRV-RVS-FOUND
+223501090511                                WS-CPP-RVS-NOT-FOUND.
+223601090511
+223701090511           MOVE "OPEN CURSOR SRVVDRC3A    "
+223801090511                             TO WS-SQLERR-STATEMENT.
+223901090511
+224001090511           EXEC SQL
+224101090511             OPEN SRVVDRC3A
+224201090511           END-EXEC.
+224301090511
+224401090511           MOVE SPACES       TO C3-LAST-ROW-FETCHED.
+224501090511           MOVE ZEROS        TO C3-NO-OF-ROWS-FETCHED
+224601090511                                C3-CNT.
+224701090511
+224801090511       CRU1-0010.
+224901090511
+225001090511           IF C3-CNT = ZEROS OR
+225101090511              C3-CNT > C3-MAX-ROWS
+225201090511              GO TO CRU1-0020
+225301090511           END-IF.
+225401090511
+225501090511           IF C3-LAST-ROW-FETCHED = "Y"  AND
+225601090511              C3-CNT              > C3-NO-OF-ROWS-FETCHED
+225701090511              GO TO CRU1-END
+225801090511           END-IF.
+225901090511
+226001090511           GO TO CRU1-0030.
+226101090511
+226201090511       CRU1-0020.
+226301090511
+226401090511           INITIALIZE C3-FETCH-TBL.
+226501090511
+226601090511           MOVE "FETCH NEXT FROM SRVVDRC3A"
+226701090511                             TO WS-SQLERR-STATEMENT.
+226801090511
+226901090511           EXEC SQL
+227001090511             FETCH SRVVDRC3A FOR :C3-MAX-ROWS ROWS
+227101090511                   INTO :C3-FETCH-ARRAY :C3-IND-ARRAY
+227201090511           END-EXEC.
+227301090511
+227401090511
+227501090511           IF SQLCODE = 100
+227601090511              GO TO CRU1-END
+227701090511           END-IF.
+227801090511
+227901090511      * SWLERRD(3) contains the number of rows retrieved.
+228001090511      * SQLERRD(5) contains +100 if the last row was fetched.
+228101090511
+228201090511           IF SQLERRD (5) = 100
+228301090511              MOVE "Y"       TO C3-LAST-ROW-FETCHED
+228401090511              MOVE SQLERRD (3)
+228501090511                             TO C3-NO-OF-ROWS-FETCHED
+228601090511           END-IF.
+228701090511
+228801090511           MOVE 1            TO C3-CNT.
+228901090511
+229001090511       CRU1-0030.
+229101090511
+229201090511           MOVE C3-CPP-PLACEMENT-DATE  (C3-CNT)
+229301090511                             TO WS-CPP-PLACEMENT-DATE.
+229401090511           MOVE C3-CPP-TRANS-NO        (C3-CNT)
+229501090511                             TO WS-CPP-TRANS-NO.
+229601090511           MOVE C3-CPP-CDSC-SEQ-NO     (C3-CNT)
+229701090511                             TO WS-CPP-CDSC-SEQ-NO.
+229801090511           MOVE C3-CPP-ORIG-UNIT-BAL   (C3-CNT)
+229901090511                             TO WS-CPP-ORIG-UNIT-BAL.
+230001090511           MOVE C3-CPP-AGE-DATE        (C3-CNT)
+230101090511                             TO WS-CPP-AGE-DATE.
+230201090511
+230301090511           MOVE C3-CPP-PROCESS-DATE    (C3-CNT)
+230401090511                             TO WS-CPP-PROCESS-DATE.
+230501090511           MOVE C3-CPP-ACCOUNT-NO      (C3-CNT)
+230601090511                             TO WS-CPP-ACCOUNT-NO.
+230701090511           MOVE C3-CPP-INVESTMENT-CODE (C3-CNT)
+230801090511                             TO WS-CPP-INVESTMENT-CODE.
+230901090511           MOVE C3-CPP-TRANS-PROC-SEQ  (C3-CNT)
+231001090511                             TO WS-CPP-TRANS-PROC-SEQ.
+231101090511           MOVE C3-CPP-REVERSE         (C3-CNT)
+231201090511                             TO WS-CPP-REVERSE.
+231301090511
+231401090511           ADD  1            TO C3-CNT.
+231501090511
+231601090511
+231701090511           IF WS-CPP-REVERSE NOT = "Y"
+231801090511              GO TO CRU1-0050
+231901090511           END-IF.
+232001090511
+232101090511           IF WS-CPP-PLACEMENT-DATE = WS-CPP-PRV-PLACE-DATE AND
+232201090511              WS-CPP-TRANS-NO       = WS-CPP-PRV-TRANS-NO
+232301090511              IF WS-CPP-PRV-RVS-FOUND = "Y"
+232401090511                 MOVE WS-CPP-PRV-RVS-PROCESS
+232501090511                             TO WS-RVS-PROCESS-DATE
+232601090511                 GO TO CRU1-0040
+232701090511              ELSE
+232801090511                 GO TO CRU1-0010
+232901090511              END-IF
+233001090511           END-IF.
+233101090511
+233201090511           MOVE WS-CPP-PLACEMENT-DATE
+233301090511                             TO WS-PLACEMENT-DATE
+233401090511                                WS-CPP-PRV-PLACE-DATE.
+233501090511           MOVE WS-CPP-TRANS-NO
+233601090511                             TO WS-TRANS-NO
+233701090511                                WS-CPP-PRV-TRANS-NO.
+233801090511
+233901090511           PERFORM GET-RVS-TRANS THRU GRT-EXIT.
+234001090511
+234101090511           MOVE WS-RVS-FOUND TO WS-CPP-PRV-RVS-FOUND.
+234201090511           MOVE WS-RVS-PROCESS-DATE
+234301090511                             TO WS-CPP-PRV-RVS-PROCESS.
+234401090511
+234501090511           IF WS-RVS-FOUND NOT = "Y"
+234601090511              MOVE "Y"       TO WS-CPP-RVS-NOT-FOUND
+234701090511              MOVE "103"     TO WS-WARNING-CODE
+234801090511
+234901090511              IF LOG-ERROR-ON
+235001090511                 PERFORM LOG-WARNING-ROUTINE THRU LWR-EXIT
+235101090511              END-IF
+235201090511
+235301090511              GO TO CRU1-0010
+235401090511           END-IF.
+235501090511
+235601090511       CRU1-0040.
+235701090511
+235801090523      * If PUP Transaction was reversed within the period, the units
+235901090511      * will be considered as no effect.
+236001090511
+236101090511           IF WS-RVS-PROCESS-DATE >= WS-EFFECTIVE-DATE AND
+236201090511              WS-RVS-PROCESS-DATE <= WS-END-DATE
+236301090523              GO TO CRU1-0010
+236401090511           END-IF.
+236501090511
+236601090511       CRU1-0050.
+236701090511
+236801090511           MOVE WS-CPP-ORIG-UNIT-BAL
+236901090511                             TO WS-UNIT-BAL.
+237001090511
+237101090523      * Any redemption to reduce the unit balance of this PUP record?
+237201090511           PERFORM PROCESS-REDUCTION-UNIT1 THRU PRU1-EXIT.
+237301090511
+237401090523      * Accumulate reduced unit of PUP for roll up process later
+237501090511
+237601090511           ADD WS-UNIT-BAL   TO WS-ROLL-UP-UNIT.
+237701090511
+237801090523           GO TO CRU1-0010.
+237901090511
+238001090511       CRU1-END.
+238101090511
+238201090511           MOVE "CLOSE CURSOR SRVVDRC3A   "
+238301090511                             TO WS-SQLERR-STATEMENT.
+238401090511
+238501090511           EXEC SQL
+238601090511             CLOSE SRVVDRC3A
+238701090511           END-EXEC.
+238801090511
+238901090511      * Negative roll-up unit for the account investment on the
+239001090511      * require date will not be rolled up.
+239101090511
+239201090511           IF WS-ROLL-UP-UNIT < 0
+239301090511              MOVE "101"     TO WS-WARNING-CODE
+239401090511
+239501090511              IF LOG-ERROR-ON
+239601090511                 PERFORM LOG-WARNING-ROUTINE THRU LWR-EXIT
+239701090511              END-IF
+239801090511
+239901090511              MOVE ZEROS     TO WS-ROLL-UP-UNIT
+240001090511           END-IF.
+240101090511
+240201090511       CRU1-EXIT.
+240301090511           EXIT.
+240401090523      *RFS50475 Add - End
+240501000000      /
+240601000000      ******************************************************************
+240701000000       UPDATE-ROLL-UP-UNIT.
+240801000000      ******************************************************************
+240901000000
+241001000000      * Do not roll up more than it currently has!
+241101000000
+241201000000           IF WS-ROLL-UP-UNIT > FVG-UNITS-VAR (FVG-IX)
+241301000000              MOVE "102"     TO WS-WARNING-CODE
+241401000000
+241501000000              IF LOG-ERROR-ON
+241601000000                 PERFORM LOG-WARNING-ROUTINE THRU LWR-EXIT
+241701000000              END-IF
+241801000000
+241901000000              MOVE FVG-UNITS-VAR (FVG-IX)
+242001000000                             TO WS-ROLL-UP-UNIT-NET
+242101000000           ELSE
+242201000000              MOVE WS-ROLL-UP-UNIT
+242301000000                             TO WS-ROLL-UP-UNIT-NET
+242401000000           END-IF.
+242501000000
+242601000000
+242701000000      * Is the next higher range defined in the table? If not exist,
+242801000000      * roll-up action will not be performed, unit stays as is.
+242901000000
+243001000000           MOVE VR-LOWER-LIMIT-DAYS (VIX1, VIX2 + 1)
+243101000000                             TO WS-DAYS.
+243201000000
+243301000000           IF WS-DAYS = 9999999
+243401000000              MOVE "105"     TO WS-WARNING-CODE
+243501000000
+243601000000              IF LOG-ERROR-ON
+243701000000                 PERFORM LOG-WARNING-ROUTINE THRU LWR-EXIT
+243801000000              END-IF
+243901000000
+244001000000              GO TO URU-EXIT
+244101000000           END-IF.
+244201000000
+244301000000
+244401000000           MOVE "Y"          TO WS-UPD-REQUIRED.
+244501000000
+244601000000      * Check if the next higher day range exist or not in two tables.
+244701000000      * Increment AI-CNT only if a new one is going to be added.
+244801000000
+244901000000           PERFORM CHECK-DAYS-FVG-TBL THRU CDF-EXIT.
+245001000000
+245101000000           PERFORM CHECK-DAYS-AI-TBL   THRU CDA-EXIT.
+245201000000
+245301000000
+245401000000      * Case 1: Record is not found in FVG-TBL and AI-TBL
+245501000000      * -------------------------------------------------
+245601000000      * Create new one in AI-TBL, move roll-up units to the new one,
+245701000000      * and reduce units from the old one. Request 'A' to add the
+245801000000      * detail record if new, or 'C' to change if it exists.
+245901000000
+246001000000           IF WS-FVG-DAYS-EXIST NOT = "Y" AND
+246101000000              WS-AI-DAYS-EXIST  NOT = "Y"
+246201000000              ADD 1          TO AI-CNT
+246301000000              MOVE VR-LOWER-LIMIT-DAYS (VIX1, VIX2 + 1)
+246401000000                             TO AI-LOWER-LIMIT-DAYS (AI-CNT)
+246501000000              MOVE WS-ROLL-UP-UNIT-NET
+246601000000                             TO AI-UNITS-VAR        (AI-CNT)
+246701000000              MOVE "A"       TO AI-DTL-OPT          (AI-CNT)
+246801000000
+246901000000              SUBTRACT WS-ROLL-UP-UNIT-NET
+247001000000                  FROM AI-UNITS-VAR (AI-IX)
+247101000000
+247201000000              IF AI-DTL-EXIST (AI-IX) = "Y"
+247301000000                 MOVE "C"    TO AI-DTL-OPT (AI-IX)
+247401000000              ELSE
+247501000000                 IF AI-DTL-EXIST (AI-IX) = SPACES
+247601000000                    MOVE "A" TO AI-DTL-OPT (AI-IX)
+247701000000                 END-IF
+247801000000              END-IF
+247901000000
+248001000000      * Case 2: Record is found in FVG-TBL but not in AI-TBL
+248101000000      * ----------------------------------------------------
+248201000000      * Create new one in AI-TBL from FVG-TBL, add roll-up units to
+248301000000      * the new one, and reduce units from the old one. Request 'A'
+248401000000      * to add the detail record if new, or 'C' to change if it exists.
+248501000000
+248601000000           ELSE IF WS-AI-DAYS-EXIST  NOT = "Y"
+248701000000              ADD 1          TO AI-CNT
+248801000000              MOVE FVG-LOWER-LIMIT-DAYS (FVG-IX-LOC)
+248901000000                             TO AI-LOWER-LIMIT-DAYS (AI-CNT)
+249001000000              MOVE FVG-DTL-EXIST (FVG-IX-LOC)
+249101000000                             TO AI-DTL-EXIST        (AI-CNT)
+249201000000              MOVE WS-ROLL-UP-UNIT-NET
+249301000000                             TO AI-UNITS-VAR        (AI-CNT)
+249401000000              MOVE "C"       TO AI-DTL-OPT          (AI-CNT)
+249501000000
+249601000000              SUBTRACT WS-ROLL-UP-UNIT-NET
+249701000000                  FROM AI-UNITS-VAR (AI-IX)
+249801000000
+249901000000              IF AI-DTL-EXIST (AI-IX) = "Y"
+250001000000                 MOVE "C"    TO AI-DTL-OPT (AI-IX)
+250101000000              ELSE
+250201000000                 IF AI-DTL-EXIST (AI-IX) = SPACES
+250301000000                    MOVE "A" TO AI-DTL-OPT (AI-IX)
+250401000000                 END-IF
+250501000000              END-IF
+250601000000
+250701000000      * Case 3: Record is found in AI-TBL
+250801000000      * ---------------------------------
+250901000000      * Add roll-up units to the one found and reduce units from the
+251001000000      * old one. Request 'A' to add the detail record if new, or
+251101000000      * 'C' to change if it exists.
+251201000000
+251301000000           ELSE IF WS-AI-DAYS-EXIST = "Y"
+251401000000              ADD  WS-ROLL-UP-UNIT-NET
+251501000000                             TO AI-UNITS-VAR (AI-IX-LOC)
+251601000000
+251701000000              IF AI-DTL-EXIST (AI-IX-LOC) = "Y"
+251801000000                 IF AI-DTL-EXIST (AI-IX-LOC) = SPACES
+251901000000                    MOVE "C" TO AI-DTL-OPT (AI-IX)
+252001000000                 END-IF
+252101000000              ELSE
+252201000000                 IF AI-DTL-EXIST (AI-IX-LOC) = SPACES
+252301000000                    MOVE "A" TO AI-DTL-OPT (AI-IX)
+252401000000                 END-IF
+252501000000              END-IF
+252601000000
+252701000000              SUBTRACT WS-ROLL-UP-UNIT-NET
+252801000000                  FROM AI-UNITS-VAR (AI-IX)
+252901000000
+253001000000              IF AI-DTL-EXIST (AI-IX) = "Y"
+253101000000                 MOVE "C"    TO AI-DTL-OPT (AI-IX)
+253201000000              ELSE
+253301000000                 IF AI-DTL-EXIST (AI-IX) = SPACES
+253401000000                    MOVE "A" TO AI-DTL-OPT (AI-IX)
+253501000000                 END-IF
+253601000000              END-IF
+253701000000
+253801000000case 3       END-IF
+253901000000case 2      END-IF
+254001000000case 1     END-IF.
+254101000000
+254201000000       URU-EXIT.
+254301000000           EXIT.
+254401000000      /
+254501000000      ******************************************************************
+254601000000       CHECK-DAYS-FVG-TBL.
+254701000000      ******************************************************************
+254801000000
+254901000000           MOVE SPACES       TO WS-FVG-DAYS-EXIST.
+255001000000           MOVE ZEROS        TO FVG-IX-LOC.
+255101000000
+255201000000      * Does the day range exist currently in the FVG-TBL?
+255301000000
+255401000000           SET FVGIX         TO 1.
+255501000000
+255601000000           SEARCH FVG-ARRAY VARYING FVGIX
+255701000000           AT END
+255801000000              MOVE "N"       TO WS-FVG-DAYS-EXIST
+255901000000           WHEN FVGIX > FVG-CNT
+256001000000              MOVE "N"       TO WS-FVG-DAYS-EXIST
+256101000000           WHEN FVG-LOWER-LIMIT-DAYS (FVGIX) = WS-DAYS
+256201000000              MOVE "Y"       TO WS-FVG-DAYS-EXIST
+256301000000              MOVE FVGIX     TO FVG-IX-LOC
+256401000000           END-SEARCH.
+256501000000
+256601000000       CDF-EXIT.
+256701000000           EXIT.
+256801000000      /
+256901000000      ******************************************************************
+257001000000       CHECK-DAYS-AI-TBL.
+257101000000      ******************************************************************
+257201000000
+257301000000           MOVE SPACES       TO WS-AI-DAYS-EXIST.
+257401000000           MOVE ZEROS        TO AI-IX-LOC.
+257501000000
+257601000000      * Does the day range exist currently in the AI-TBL?
+257701000000
+257801000000           SET AIX           TO 1.
+257901000000
+258001000000           SEARCH AI-ARRAY VARYING AIX
+258101000000           AT END
+258201000000              MOVE "N"       TO WS-AI-DAYS-EXIST
+258301000000           WHEN AIX > AI-CNT
+258401000000              MOVE "N"       TO WS-AI-DAYS-EXIST
+258501000000           WHEN AI-LOWER-LIMIT-DAYS (AIX) = WS-DAYS
+258601000000              MOVE "Y"       TO WS-AI-DAYS-EXIST
+258701000000              MOVE AIX       TO AI-IX-LOC
+258801000000           END-SEARCH.
+258901000000
+259001000000       CDA-EXIT.
+259101000000           EXIT.
+259201000000      /
+259301000000      ******************************************************************
+259401000000       GET-RVS-TRANS.
+259501000000      ******************************************************************
+259601000000
+259701000000           MOVE "N"          TO WS-RVS-FOUND.
+259801000000           MOVE ZEROS        TO WS-RVS-PROCESS-DATE
+259901000000                                WS-RVS-PLACEMENT-DATE
+260001000000                                WS-RVS-TRANS-NO.
+260101000000
+260201041104D19162*    MOVE "SELECT INTO WS-RVS-KEY-1 "
+260301041104D19162*                      TO WS-SQLERR-STATEMENT.
+260401041104  ¦   *
+260501041104  ¦   *    EXEC SQL
+260601041104  ¦   *      SELECT PLACEMENT_DATE_2,
+260701041104  ¦   *             TRANS_NO_2
+260801041104  ¦   *        INTO :WS-RVS-PLACEMENT-DATE :IND1,
+260901041104  ¦   *             :WS-RVS-TRANS-NO       :IND2
+261001041104  ¦   *
+261101041104  ¦   *      FROM
+261201041104  ¦   *        MFATRNTGP
+261301041104  ¦   *
+261401041104  ¦   *      WHERE
+261501041104  ¦   *        PLACEMENT_DATE    = :WS-PLACEMENT-DATE  AND
+261601041104  ¦   *        TRANS_NO          = :WS-TRANS-NO        AND
+261701041104  ¦   *        RELATIONSHIP_TYPE = "RVS"
+261801041104D19162*    END-EXEC.
+261901041104D19162*
+262001041104  ¦   *    IF SQLCODE = 100
+262101041104  ¦   *       GO TO GRT-0010
+262201041104  ¦   *    END-IF.
+262301041104D19162*
+262401041105  ¦        INITIALIZE MFATRNTGP OF TRANS-TARGET-REC.
+262501041104  ¦        MOVE WS-PLACEMENT-DATE
+262601041104  ¦          TO PLACEMENT-DATE OF TRANS-TARGET.
+262701041104  ¦        MOVE WS-TRANS-NO
+262801041104  ¦          TO TRANS-NO OF TRANS-TARGET.
+262901041117  ¦   *    MOVE "RVS"
+263001041117  ¦   *      TO RELATIONSHIP-TYPE OF TRANS-TARGET.
+263101041105
+263201041105           START TRANS-TARGET
+263301041105              KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+263401041105              INVALID KEY
+263501041105              GO TO GRT-0010
+263601041105           END-START.
+263701041105
+263801041105       GRT-0005.
+263901041117           READ TRANS-TARGET NEXT
+264001041105             AT END
+264101041105                GO TO GRT-0010
+264201041105           END-READ.
+264301041105
+264401041105           IF PLACEMENT-DATE   OF TRANS-TARGET NOT = WS-PLACEMENT-DATE
+264501041105              OR  TRANS-NO         OF TRANS-TARGET NOT = WS-TRANS-NO
+264601041105                GO TO GRT-0010.
+264701041105
+264801041105           IF RELATIONSHIP-TYPE OF TRANS-TARGET NOT = "RVS"
+264901041105                GO TO GRT-0005.
+265001041105
+265101041105           IF PLACEMENT-DATE   OF TRANS-TARGET   = WS-PLACEMENT-DATE
+265201041105              AND  TRANS-NO         OF TRANS-TARGET   = WS-TRANS-NO
+265301041105              AND  RELATIONSHIP-TYPE OF TRANS-TARGET = "RVS"
+265401041105                MOVE PLACEMENT-DATE-2 OF TRANS-TARGET
+265501041105                  TO WS-RVS-PLACEMENT-DATE
+265601041105                MOVE TRANS-NO-2 OF TRANS-TARGET
+265701041105                  TO WS-RVS-TRANS-NO
+265801041105                GO TO GRT-0020
+265901041105           END-IF.
+266001041104  ¦
+266101000000
+266201000000       GRT-0010.
+266301000000
+266401041104D19162*    MOVE "SELECT INTO WS-RVS-KEY-2 "
+266501041104  ¦   *                      TO WS-SQLERR-STATEMENT.
+266601041104  ¦   *
+266701041104  ¦   *    EXEC SQL
+266801041104  ¦   *      SELECT PLACEMENT_DATE,
+266901041104  ¦   *             TRANS_NO
+267001041104  ¦   *        INTO :WS-RVS-PLACEMENT-DATE :IND1,
+267101041104  ¦   *             :WS-RVS-TRANS-NO       :IND2
+267201041104  ¦   *
+267301041104  ¦   *      FROM
+267401041104  ¦   *        MFATRNTGP
+267501041104  ¦   *
+267601041104  ¦   *      WHERE
+267701041104  ¦   *        PLACEMENT_DATE_2  = :WS-PLACEMENT-DATE  AND
+267801041104  ¦   *        TRANS_NO_2        = :WS-TRANS-NO        AND
+267901041104  ¦   *        RELATIONSHIP_TYPE = "RVS"
+268001041104  ¦   *    END-EXEC.
+268101041104  ¦   *
+268201041104  ¦   *    IF SQLCODE = 100
+268301041104  ¦   *       GO TO GRT-EXIT
+268401041104D19162*    END-IF.
+268501041104
+268601041105  ¦        INITIALIZE MFATRNTGP OF TRANS-TARGET-REC-2.
+268701041104  ¦        MOVE WS-PLACEMENT-DATE
+268801041104  ¦          TO PLACEMENT-DATE-2 OF TRANS-TARGET-2.
+268901041104  ¦        MOVE WS-TRANS-NO
+269001041104  ¦          TO TRANS-NO-2 OF TRANS-TARGET-2.
+269101041117  ¦   *    MOVE "RVS"
+269201041117  ¦   *      TO RELATIONSHIP-TYPE OF TRANS-TARGET-2.
+269301041104  ¦
+269401041105           START TRANS-TARGET-2
+269501041105              KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+269601041105              INVALID KEY
+269701041105              GO TO GRT-EXIT
+269801041105           END-START.
+269901041105
+270001041105       GRT-0015.
+270101041117           READ TRANS-TARGET-2 NEXT
+270201041105             AT END
+270301041105                GO TO GRT-EXIT
+270401041105           END-READ.
+270501041105
+270601041123           IF PLACEMENT-DATE-2 OF TRANS-TARGET-2 NOT =
+270701041123                   WS-PLACEMENT-DATE
+270801041123              OR  TRANS-NO-2       OF TRANS-TARGET-2 NOT = WS-TRANS-NO
+270901041123                GO TO GRT-EXIT.
+271001041105
+271101041123           IF RELATIONSHIP-TYPE OF TRANS-TARGET-2 NOT = "RVS"
+271201041105                GO TO GRT-0015.
+271301041105
+271401041105           IF PLACEMENT-DATE-2 OF TRANS-TARGET-2 = WS-PLACEMENT-DATE
+271501041105              AND  TRANS-NO-2       OF TRANS-TARGET-2 = WS-TRANS-NO
+271601041105              AND  RELATIONSHIP-TYPE OF TRANS-TARGET-2 =  "RVS"
+271701041105                MOVE PLACEMENT-DATE   OF TRANS-TARGET-2
+271801041105                  TO WS-RVS-PLACEMENT-DATE
+271901041105                MOVE TRANS-NO   OF TRANS-TARGET-2
+272001041105                  TO WS-RVS-TRANS-NO
+272101041105           END-IF.
+272201000000
+272301000000       GRT-0020.
+272401000000
+272501041104D19162*    MOVE "SELECT INTO WS-RVS-TRANS "
+272601041104  ¦   *                      TO WS-SQLERR-STATEMENT.
+272701041104  ¦   *
+272801041104  ¦   *    EXEC SQL
+272901041104  ¦   *      SELECT PROCESS_DATE
+273001041104  ¦   *        INTO :WS-RVS-PROCESS-DATE   :IND1
+273101041104  ¦   *
+273201041104  ¦   *      FROM
+273301041104  ¦   *        MFATRNP
+273401041104  ¦   *
+273501041104  ¦   *      WHERE
+273601041104  ¦   *        PLACEMENT_DATE = :WS-RVS-PLACEMENT-DATE  AND
+273701041104  ¦   *        TRANS_NO       = :WS-RVS-TRANS-NO
+273801041104  ¦   *    END-EXEC.
+273901041104  ¦   *
+274001041104  ¦   *    IF SQLCODE = 100
+274101041104  ¦   *       GO TO GRT-EXIT
+274201041104  ¦   *    END-IF.
+274301041104D19162
+274401041104  ¦        INITIALIZE MFATRNP   OF TRANS-REC.
+274501041104  ¦        MOVE WS-RVS-PLACEMENT-DATE
+274601041104  ¦          TO PLACEMENT-DATE OF TRANS.
+274701041104  ¦        MOVE WS-RVS-TRANS-NO
+274801041104  ¦          TO TRANS-NO OF TRANS.
+274901041104  ¦
+275001041104  ¦        READ TRANS
+275101041104  ¦          INVALID KEY
+275201041104  ¦            GO TO GRT-EXIT
+275301041104  ¦        END-READ.
+275401041104  ¦        MOVE PROCESS-DATE OF TRANS
+275501041104D19162       TO WS-RVS-PROCESS-DATE.
+275601000000           MOVE "Y"          TO WS-RVS-FOUND.
+275701000000
+275801000000       GRT-EXIT.
+275901000000           EXIT.
+276001000000      /
+276101000000      ******************************************************************
+276201000000       PROCESS-REDUCTION-UNIT.
+276301000000      ******************************************************************
+276401000000
+276501000000           MOVE ZEROS        TO WS-RDP-PRV-PLACE-DATE
+276601000000                                WS-RDP-PRV-TRANS-NO
+276701000000                                WS-RDP-PRV-RVS-PROCESS.
+276801000000
+276901000000           MOVE SPACES       TO WS-RDP-PRV-RVS-FOUND
+277001000000                                WS-RDP-RVS-NOT-FOUND.
+277101000000
+277201000000           MOVE "OPEN CURSOR SRVVDRC4     "
+277301000000                             TO WS-SQLERR-STATEMENT.
+277401000000
+277501000000           EXEC SQL
+277601000000             OPEN SRVVDRC4
+277701000000           END-EXEC.
+277801000000
+277901000000           MOVE SPACES       TO C4-LAST-ROW-FETCHED.
+278001000000           MOVE ZEROS        TO C4-NO-OF-ROWS-FETCHED
+278101000000                                C4-CNT.
+278201000000
+278301000000       PRU-0010.
+278401000000
+278501000000           IF C4-CNT = ZEROS OR
+278601000000              C4-CNT > C4-MAX-ROWS
+278701000000              GO TO PRU-0020
+278801000000           END-IF.
+278901000000
+279001000000           IF C4-LAST-ROW-FETCHED = "Y"  AND
+279101000000              C4-CNT              > C4-NO-OF-ROWS-FETCHED
+279201000000              GO TO PRU-END
+279301000000           END-IF.
+279401000000
+279501000000           GO TO PRU-0030.
+279601000000
+279701000000       PRU-0020.
+279801000000
+279901000000           INITIALIZE C4-FETCH-TBL.
+280001000000
+280101000000           MOVE "FETCH NEXT FROM SRVVDRC4 "
+280201000000                             TO WS-SQLERR-STATEMENT.
+280301000000
+280401000000           EXEC SQL
+280501000000             FETCH SRVVDRC4 FOR :C4-MAX-ROWS ROWS
+280601000000                   INTO :C4-FETCH-ARRAY :C4-IND-ARRAY
+280701000000           END-EXEC.
+280801000000
+280901000000           IF SQLCODE = 100
+281001000000              GO TO PRU-END
+281101000000           END-IF.
+281201000000
+281301000000      * SWLERRD(3) contains the number of rows retrieved.
+281401000000      * SQLERRD(5) contains +100 if the last row was fetched.
+281501000000
+281601000000           IF SQLERRD (5) = 100
+281701000000              MOVE "Y"       TO C4-LAST-ROW-FETCHED
+281801000000              MOVE SQLERRD (3)
+281901000000                             TO C4-NO-OF-ROWS-FETCHED
+282001000000           END-IF.
+282101000000
+282201000000           MOVE 1            TO C4-CNT.
+282301000000
+282401000000       PRU-0030.
+282501000000
+282601000000           MOVE C4-RDP-PLACEMENT-DATE   (C4-CNT)
+282701000000                             TO WS-RDP-PLACEMENT-DATE.
+282801000000           MOVE C4-RDP-TRANS-NO         (C4-CNT)
+282901000000                             TO WS-RDP-TRANS-NO.
+283001000000           MOVE C4-RDP-CDSC-SEQ-NO      (C4-CNT)
+283101000000                             TO WS-RDP-CDSC-SEQ-NO.
+283201000000           MOVE C4-RDP-FREE-UNITS-TAKEN (C4-CNT)
+283301000000                             TO WS-RDP-FREE-UNITS-TAKEN.
+283401000000           MOVE C4-RDP-CHRG-UNITS-TAKEN (C4-CNT)
+283501000000                             TO WS-RDP-CHRG-UNITS-TAKEN.
+283601000000
+283701000000           MOVE C4-RDP-PROCESS-DATE     (C4-CNT)
+283801000000                             TO WS-RDP-PROCESS-DATE.
+283901000000           MOVE C4-RDP-ACCOUNT-NO       (C4-CNT)
+284001000000                             TO WS-RDP-ACCOUNT-NO.
+284101000000           MOVE C4-RDP-INVESTMENT-CODE  (C4-CNT)
+284201000000                             TO WS-RDP-INVESTMENT-CODE.
+284301000000           MOVE C4-RDP-TRANS-PROC-SEQ   (C4-CNT)
+284401000000                             TO WS-RDP-TRANS-PROC-SEQ.
+284501000000           MOVE C4-RDP-REVERSE          (C4-CNT)
+284601000000                             TO WS-RDP-REVERSE.
+284701000000
+284801000000           ADD  1            TO C4-CNT.
+284901000000
+285001000000           IF WS-RDP-REVERSE NOT = "Y"
+285101000000              GO TO PRU-0050
+285201000000           END-IF.
+285301000000
+285401000000      * For efficiency, the previously saved reversal may be used
+285501000000
+285601000000           IF WS-RDP-PLACEMENT-DATE = WS-RDP-PRV-PLACE-DATE AND
+285701000000              WS-RDP-TRANS-NO       = WS-RDP-PRV-TRANS-NO
+285801000000              IF WS-RDP-PRV-RVS-FOUND = "Y"
+285901000000                 MOVE WS-RDP-PRV-RVS-PROCESS
+286001000000                             TO WS-RVS-PROCESS-DATE
+286101000000                 GO TO PRU-0040
+286201000000              ELSE
+286301000000                 GO TO PRU-0050
+286401000000              END-IF
+286501000000           END-IF.
+286601000000
+286701000000           MOVE WS-RDP-PLACEMENT-DATE
+286801000000                             TO WS-PLACEMENT-DATE
+286901000000                                WS-RDP-PRV-PLACE-DATE.
+287001000000           MOVE WS-RDP-TRANS-NO
+287101000000                             TO WS-TRANS-NO
+287201000000                                WS-RDP-PRV-TRANS-NO.
+287301000000
+287401000000           PERFORM GET-RVS-TRANS THRU GRT-EXIT.
+287501000000
+287601000000           MOVE WS-RVS-FOUND TO WS-RDP-PRV-RVS-FOUND.
+287701000000           MOVE WS-RVS-PROCESS-DATE
+287801000000                             TO WS-RDP-PRV-RVS-PROCESS.
+287901000000
+288001000000           IF WS-RVS-FOUND NOT = "Y"
+288101000000              MOVE "Y"       TO WS-RDP-RVS-NOT-FOUND
+288201000000              MOVE "104"     TO WS-WARNING-CODE
+288301000000
+288401000000              IF LOG-ERROR-ON
+288501000000                 PERFORM LOG-WARNING-ROUTINE THRU LWR-EXIT
+288601000000              END-IF
+288701000000
+288801000000              GO TO PRU-0010
+288901000000           END-IF.
+289001000000
+289101000000       PRU-0040.
+289201000000
+289301000000      * If RDP Transaction was reversed within the period, the units
+289401000000      * will be considered as no effect.
+289501000000
+289601000000           IF WS-RVS-PROCESS-DATE >= WS-EFFECTIVE-DATE AND
+289701000000              WS-RVS-PROCESS-DATE <= WS-END-DATE
+289801000000              GO TO PRU-0010
+289901000000           END-IF.
+290001000000
+290101000000       PRU-0050.
+290201000000
+290301000000 incl *    IF WS-RDP-FREE-UNITS-TAKEN > 0
+290401000000 -ve  *       SUBTRACT WS-RDP-FREE-UNITS-TAKEN
+290501000000      *          FROM WS-UNIT-BAL
+290601000000      *    END-IF.
+290701000000
+290801000000           SUBTRACT WS-RDP-FREE-UNITS-TAKEN
+290901000000              FROM WS-UNIT-BAL.
+291001000000
+291101000000 incl *    IF WS-RDP-CHRG-UNITS-TAKEN > 0
+291201000000 -ve  *       SUBTRACT WS-RDP-CHRG-UNITS-TAKEN
+291301000000      *           FROM WS-UNIT-BAL
+291401000000      *    END-IF.
+291501000000
+291601000000           SUBTRACT WS-RDP-CHRG-UNITS-TAKEN
+291701000000               FROM WS-UNIT-BAL.
+291801000000
+291901000000           GO TO PRU-0010.
+292001000000
+292101000000       PRU-END.
+292201000000
+292301000000           MOVE "CLOSE CURSOR SRVVDRC4    "
+292401000000                             TO WS-SQLERR-STATEMENT.
+292501000000
+292601000000           EXEC SQL
+292701000000             CLOSE SRVVDRC4
+292801000000           END-EXEC.
+292901000000
+293001000000      * Negative reduced unit balance is not allowed
+293101000000
+293201000000incl  *    IF WS-UNIT-BAL < 0
+293301000000-ve   *       MOVE ZEROS     TO WS-UNIT-BAL
+293401000000      *    END-IF.
+293501000000
+293601000000       PRU-EXIT.
+293701000000           EXIT.
+293801090523      *RFS50475 Add - Begin
+293901090507      ******************************************************************
+294001090507       PROCESS-REDUCTION-UNIT1.
+294101090507      ******************************************************************
+294201090507
+294301090507           MOVE ZEROS        TO WS-RDP-PRV-PLACE-DATE
+294401090507                                WS-RDP-PRV-TRANS-NO
+294501090507                                WS-RDP-PRV-RVS-PROCESS.
+294601090507
+294701090507           MOVE SPACES       TO WS-RDP-PRV-RVS-FOUND
+294801090507                                WS-RDP-RVS-NOT-FOUND.
+294901090507
+295001090507           MOVE "OPEN CURSOR SRVVDRC4A    "
+295101090507                             TO WS-SQLERR-STATEMENT.
+295201090507
+295301090507           EXEC SQL
+295401090507             OPEN SRVVDRC4A
+295501090507           END-EXEC.
+295601090507
+295701090507           MOVE SPACES       TO C4-LAST-ROW-FETCHED.
+295801090507           MOVE ZEROS        TO C4-NO-OF-ROWS-FETCHED
+295901090507                                C4-CNT.
+296001090507
+296101090507       PRU1-0010.
+296201090507
+296301090507           IF C4-CNT = ZEROS OR
+296401090507              C4-CNT > C4-MAX-ROWS
+296501090507              GO TO PRU1-0020
+296601090507           END-IF.
+296701090507
+296801090507           IF C4-LAST-ROW-FETCHED = "Y"  AND
+296901090507              C4-CNT              > C4-NO-OF-ROWS-FETCHED
+297001090507              GO TO PRU1-END
+297101090507           END-IF.
+297201090507
+297301090507           GO TO PRU1-0030.
+297401090507
+297501090507       PRU1-0020.
+297601090507
+297701090507           INITIALIZE C4-FETCH-TBL.
+297801090507
+297901090507           MOVE "FETCH NEXT FROM SRVVDRC4A"
+298001090507                             TO WS-SQLERR-STATEMENT.
+298101090507
+298201090507           EXEC SQL
+298301090507             FETCH SRVVDRC4A FOR :C4-MAX-ROWS ROWS
+298401090507                   INTO :C4-FETCH-ARRAY :C4-IND-ARRAY
+298501090507           END-EXEC.
+298601090507
+298701090507           IF SQLCODE = 100
+298801090507              GO TO PRU1-END
+298901090507           END-IF.
+299001090507
+299101090507      * SWLERRD(3) contains the number of rows retrieved.
+299201090507      * SQLERRD(5) contains +100 if the last row was fetched.
+299301090507
+299401090507           IF SQLERRD (5) = 100
+299501090507              MOVE "Y"       TO C4-LAST-ROW-FETCHED
+299601090507              MOVE SQLERRD (3)
+299701090507                             TO C4-NO-OF-ROWS-FETCHED
+299801090507           END-IF.
+299901090507
+300001090507           MOVE 1            TO C4-CNT.
+300101090507
+300201090507       PRU1-0030.
+300301090507
+300401090507           MOVE C4-RDP-PLACEMENT-DATE   (C4-CNT)
+300501090507                             TO WS-RDP-PLACEMENT-DATE.
+300601090507           MOVE C4-RDP-TRANS-NO         (C4-CNT)
+300701090507                             TO WS-RDP-TRANS-NO.
+300801090507           MOVE C4-RDP-CDSC-SEQ-NO      (C4-CNT)
+300901090507                             TO WS-RDP-CDSC-SEQ-NO.
+301001090507           MOVE C4-RDP-FREE-UNITS-TAKEN (C4-CNT)
+301101090507                             TO WS-RDP-FREE-UNITS-TAKEN.
+301201090507           MOVE C4-RDP-CHRG-UNITS-TAKEN (C4-CNT)
+301301090507                             TO WS-RDP-CHRG-UNITS-TAKEN.
+301401090507
+301501090507           MOVE C4-RDP-PROCESS-DATE     (C4-CNT)
+301601090507                             TO WS-RDP-PROCESS-DATE.
+301701090507           MOVE C4-RDP-ACCOUNT-NO       (C4-CNT)
+301801090507                             TO WS-RDP-ACCOUNT-NO.
+301901090507           MOVE C4-RDP-INVESTMENT-CODE  (C4-CNT)
+302001090507                             TO WS-RDP-INVESTMENT-CODE.
+302101090507           MOVE C4-RDP-TRANS-PROC-SEQ   (C4-CNT)
+302201090507                             TO WS-RDP-TRANS-PROC-SEQ.
+302301090507           MOVE C4-RDP-REVERSE          (C4-CNT)
+302401090507                             TO WS-RDP-REVERSE.
+302501090507
+302601090507           ADD  1            TO C4-CNT.
+302701090507
+302801090507           IF WS-RDP-REVERSE NOT = "Y"
+302901090507              GO TO PRU1-0050
+303001090507           END-IF.
+303101090507
+303201090507      * For efficiency, the previously saved reversal may be used
+303301090507
+303401090507           IF WS-RDP-PLACEMENT-DATE = WS-RDP-PRV-PLACE-DATE AND
+303501090507              WS-RDP-TRANS-NO       = WS-RDP-PRV-TRANS-NO
+303601090507              IF WS-RDP-PRV-RVS-FOUND = "Y"
+303701090507                 MOVE WS-RDP-PRV-RVS-PROCESS
+303801090507                             TO WS-RVS-PROCESS-DATE
+303901090507                 GO TO PRU1-0040
+304001090507              ELSE
+304101090507                 GO TO PRU1-0050
+304201090507              END-IF
+304301090507           END-IF.
+304401090507
+304501090507           MOVE WS-RDP-PLACEMENT-DATE
+304601090507                             TO WS-PLACEMENT-DATE
+304701090507                                WS-RDP-PRV-PLACE-DATE.
+304801090507           MOVE WS-RDP-TRANS-NO
+304901090507                             TO WS-TRANS-NO
+305001090507                                WS-RDP-PRV-TRANS-NO.
+305101090507
+305201090507           PERFORM GET-RVS-TRANS THRU GRT-EXIT.
+305301090507
+305401090507           MOVE WS-RVS-FOUND TO WS-RDP-PRV-RVS-FOUND.
+305501090507           MOVE WS-RVS-PROCESS-DATE
+305601090507                             TO WS-RDP-PRV-RVS-PROCESS.
+305701090507
+305801090507           IF WS-RVS-FOUND NOT = "Y"
+305901090507              MOVE "Y"       TO WS-RDP-RVS-NOT-FOUND
+306001090507              MOVE "104"     TO WS-WARNING-CODE
+306101090507
+306201090507              IF LOG-ERROR-ON
+306301090507                 PERFORM LOG-WARNING-ROUTINE THRU LWR-EXIT
+306401090507              END-IF
+306501090507
+306601090507              GO TO PRU1-0010
+306701090507           END-IF.
+306801090507
+306901090507       PRU1-0040.
+307001090507
+307101090523      * If RUP Transaction was reversed within the period, the units
+307201090507      * will be considered as no effect.
+307301090507
+307401090507           IF WS-RVS-PROCESS-DATE >= WS-EFFECTIVE-DATE AND
+307501090507              WS-RVS-PROCESS-DATE <= WS-END-DATE
+307601090507              GO TO PRU1-0010
+307701090507           END-IF.
+307801090507
+307901090507       PRU1-0050.
+308001090507
+308101090507           SUBTRACT WS-RDP-FREE-UNITS-TAKEN
+308201090507              FROM WS-UNIT-BAL.
+308301090507
+308401090507           SUBTRACT WS-RDP-CHRG-UNITS-TAKEN
+308501090507               FROM WS-UNIT-BAL.
+308601090507
+308701090507           GO TO PRU1-0010.
+308801090507
+308901090507       PRU1-END.
+309001090507
+309101090507           MOVE "CLOSE CURSOR SRVVDRC4A   "
+309201090507                             TO WS-SQLERR-STATEMENT.
+309301090507
+309401090507           EXEC SQL
+309501090507             CLOSE SRVVDRC4A
+309601090507           END-EXEC.
+309701090507
+309801090507       PRU1-EXIT.
+309901090507           EXIT.
+310001090523      *RFS50475 Add - End
+310101000000      /
+310201000000      ******************************************************************
+310301000000       UPD-ACCOUNT-INVESTMENT-VAR.
+310401000000      ******************************************************************
+310501000000
+310601000000      * Physical update of the roll-up units to the
+310701000000      * account investment on file
+310801000000
+310901070604      * Rfs 37142 Begins
+311001070604           Move Zeroes To  li_PreviouslowerDays,
+311101070604                           li_PreviousDistUnits,
+311201070604                           li_PreviousVarUnits.
+311301070604           IF  lnc-Edit-Alw-Flag = "Y"  Then
+311401070604                Exec Sql
+311501070604                   Select Lower_limit_days,
+311601070604                        Dist_Units_var,
+311701070604                        Units_var
+311801070604                   Into  :li_PreviousLowerDays,
+311901070604                         :li_PreviousDistUnits,
+312001070604                         :li_PreviousVarUnits
+312101070604                   From  MFAACIDVP
+312201070604                   Where  Account_No = :Comm-Account-No And
+312301070604                     Investment_Code = :Comm-Investment-code
+312401070604                   Order by Lower_limit_days desc
+312501070604                   Fetch First Row Only
+312601070604                End-Exec
+312701070605                Perform  AdjustDistUnits
+312801070604             End-if.
+312901070604      * Rfs37142
+313001070604
+313101000000           IF LOG-STATS-ON OR LOG-ERROR-ON
+313201000000              MOVE "FXVARUAI"
+313301000000                             TO WS-LOG-PROGRAM-CALLED
+313401000000           END-IF.
+313501000000
+313601000000           MOVE FVG-GET-BUFFER
+313701000000                             TO FVP-PUT-BUFFER.
+313801000000
+313901000000           INITIALIZE FVP-TBL.
+314001000000           MOVE ZEROS        TO FVP-CNT
+314101000000                                AI-IX.
+314201000000
+314301000000       UAI-0010.
+314401000000
+314501000000           ADD 1             TO AI-IX.
+314601000000           IF AI-IX > AI-CNT
+314701000000              GO TO UAI-0020
+314801000000           END-IF.
+314901000000
+315001070604      *  Rfs 37142
+315101070605           IF lnc-Edit-Alw-Flag = "Y" AND AI-UNITS-VAR (AI-IX) <=0
+315201070605              Move 0 To AI-UNITS-VAR (AI-IX)
+315301070605              Move 0 To AI-DIST-UNITS-VAR (AI-IX).
+315401070604      *  Rfs 37142
+315501070604
+315601000000           ADD 1             TO FVP-CNT.
+315701000000
+315801000000           MOVE AI-LOWER-LIMIT-DAYS (AI-IX)
+315901000000                             TO FVP-LOWER-LIMIT-DAYS (FVP-CNT).
+316001000000           MOVE AI-UNITS-VAR        (AI-IX)
+316101000000                             TO FVP-UNITS-VAR        (FVP-CNT).
+316201000000           MOVE AI-DTL-EXIST        (AI-IX)
+316301000000                             TO FVP-DTL-EXIST        (FVP-CNT).
+316401000000           MOVE AI-DTL-OPT          (AI-IX)
+316501000000                             TO FVP-DTL-OPT          (FVP-CNT).
+316601070605      *Rfs37142 begins
+316701070605           MOVE AI-DIST-UNITS-VAR        (AI-IX)
+316801070605                             TO FVP-DIST-UNITS-VAR   (FVP-CNT).
+316901070605      *Rfs37142 begins
+317001000000
+317101000000           GO TO UAI-0010.
+317201000000
+317301000000       UAI-0020.
+317401000000
+317501000000           MOVE "P"          TO FVP-OPTION.
+317601000000           MOVE SPACES       TO FVP-RETURN-CODE.
+317701000000
+317801000000           IF LOG-STATS-ON
+317901000000              MOVE "S"       TO WS-STATS-EVENT
+318001000000              PERFORM LOG-STATS-ROUTINE THRU LSR-EXIT
+318101000000           END-IF.
+318201000000
+318301000000           CALL "FXVARUAI" USING FVP-ACCOUNT-NO
+318401000000                                 FVP-INVESTMENT-CODE
+318501000000                                 FVP-OPTION
+318601000000                                 FVP-RECORD-EXIST
+318701000000                                 FVP-HEADER-OPT
+318801000000                                 FVP-RETURN-CODE
+318901000000                                 FVP-PROCESS-DATE
+319001000000                                 FVP-UNITS-VAR-TOTAL
+319101000000                                 FVP-CNT
+319201000000                                 FVP-TBL.
+319301000000
+319401000000           IF LOG-STATS-ON
+319501000000              MOVE "E"       TO WS-STATS-EVENT
+319601000000              PERFORM LOG-STATS-ROUTINE THRU LSR-EXIT
+319701000000           END-IF.
+319801000000
+319901000000           IF FVP-RETURN-CODE NOT = SPACES
+320001000000              MOVE "08"      TO WS-ERROR-CODE
+320101000000
+320201000000              IF COMM-RETURN-CODE = SPACES
+320301000000                 MOVE WS-ERROR-CODE
+320401000000                             TO COMM-RETURN-CODE
+320501000000              END-IF
+320601000000
+320701000000              IF LOG-ERROR-ON
+320801000000                 PERFORM LOG-ERROR-ROUTINE THRU LER-EXIT
+320901000000              END-IF
+321001000000           END-IF.
+321101000000
+321201070604
+321301070604      * Rfs 37142 begins
+321401070604      *  Update the account investment with the distribution units
+321501070604      *    First get the new rolled over tiers
+321601070604      *
+321701070605      *    IF  lnc-Edit-Alw-Flag = "Y"  Then
+321801070605      *        Perform  MovetoNextTier
+321901070605      *    End-if.
+322001070604
+322101000000       UAI-EXIT.
+322201000000           EXIT.
+322301000000      /
+322401000000      ******************************************************************
+322501000000       LEVEL-SUMMARY-1.
+322601000000      ******************************************************************
+322701000000      * Summary for Account no.
+322801000000       LS1-EXIT.
+322901000000           EXIT.
+323001000000      /
+323101000000      ******************************************************************
+323201000000       LEVEL-SUMMARY-2.
+323301000000      ******************************************************************
+323401000000      * Summary for Investment
+323501000000       LS2-EXIT.
+323601000000           EXIT.
+323701000000      /
+323801000000      ******************************************************************
+323901000000       LEVEL-REINIT-1.
+324001000000      ******************************************************************
+324101000000      * Initialization for Account no.
+324201000000       LR1-EXIT.
+324301000000           EXIT.
+324401000000      /
+324501000000      ******************************************************************
+324601000000       LEVEL-REINIT-2.
+324701000000      ******************************************************************
+324801070608      * 37142.18
+324901070608           MOVE 0        TO li_EarliestPurAgeDate
+325001070614           MOVE 0        TO li_CountDistunits
+325101070608           MOVE 0        TO li_LowerLimitDays
+325201070614           MOVE 0        TO li_Nooftimes
+325301070614           MOVE "N"      TO lb_NextLimitExist
+325401070608           MOVE 0        TO li_LowerDay.
+325501070608      * 37142.18
+325601000000      * Initialization for Investment
+325701000000
+325801000000           IF VR-INV-FOUND = "Y"
+325901000000              GO TO LR2-0010
+326001000000           END-IF.
+326101000000
+326201000000      * Calculate the require dates for roll-up of aging units
+326301000000      * based on the current table definition
+326401000000
+326501000000           SEARCH ALL VR-INV-ARRAY
+326601000000           AT END
+326701000000              MOVE "N"       TO VR-INV-FOUND
+326801000000           WHEN VR-INVESTMENT-CODE (VIX1) = COMM-INVESTMENT-CODE
+326901000000              MOVE "Y"       TO VR-INV-FOUND
+327001000000           END-SEARCH.
+327101000000
+327201000000
+327301000000           IF VR-INV-FOUND NOT = "Y"
+327401000000              MOVE "06"      TO COMM-RETURN-CODE
+327501000000              MOVE HIGH-VALUES
+327601000000                             TO CURR-CONTROLS
+327701000000              GO TO LR2-EXIT
+327801000000           END-IF.
+327901000000
+328001000000       LR2-0010.
+328101000000
+328201000000      * For efficiency, set up if on different process date and
+328301000000      * investment
+328401000000
+328501000000           MOVE VR-EFFECT-DATE (VIX1)
+328601000000                             TO WS-EFFECTIVE-DATE.
+328701000000
+328801000000           SET RIX1          TO VIX1.
+328901000000
+329001000000           IF COMM-PROCESS-DATE         = RQ-PROCESS-DATE    (RIX1) AND
+329101000000              VR-INVESTMENT-CODE (VIX1) = RQ-INVESTMENT-CODE (RIX1)
+329201000000              GO TO LR2-EXIT
+329301000000           END-IF.
+329401000000
+329501000000           INITIALIZE RQ-INV-ARRAY (RIX1).
+329601000000           MOVE COMM-PROCESS-DATE
+329701000000                             TO RQ-PROCESS-DATE    (RIX1).
+329801000000           MOVE VR-INVESTMENT-CODE (VIX1)
+329901000000                             TO RQ-INVESTMENT-CODE (RIX1).
+330001000000
+330101000000           MOVE ZEROS        TO RQ-IX2.
+330201000000
+330301000000       LR2-0020.
+330401000000
+330501000000           ADD 1             TO RQ-IX2.
+330601000000           IF RQ-IX2 > VR-CNT (VIX1)
+330701000000              GO TO LR2-EXIT
+330801000000           END-IF.
+330901000000
+331001000000           MOVE COMM-PROCESS-DATE
+331101000000                             TO WS-FORMAT-DATE-IN.
+331201000000           MOVE VR-LOWER-LIMIT-DAYS (VIX1, RQ-IX2)
+331301000000                             TO WS-DAYS.
+331401000000
+331501000000           MOVE FUNCTION SUBTRACT-DURATION
+331601000000                (WS-FORMAT-DATE-IN DAYS WS-DAYS)
+331701000000                             TO WS-FORMAT-DATE-OUT.
+331801000000
+331901000000           MOVE WS-FORMAT-DATE-OUT
+332001000000                             TO RQ-REQUIRE-DATE (RIX1, RQ-IX2).
+332101000000
+332201000000           IF RQ-REQUIRE-DATE (RIX1, RQ-IX2) < VR-EFFECT-DATE (VIX1)
+332301000000              MOVE "N"       TO RQ-ROLL-UP-FLAG (RIX1, RQ-IX2)
+332401000000           ELSE
+332501000000              MOVE "Y"       TO RQ-ROLL-UP-FLAG (RIX1, RQ-IX2)
+332601000000           END-IF.
+332701091209      *Rfs67590 - Start
+332801091209           IF VR-End-Date(VIX1) > ZEROES
+332901091209              IF RQ-REQUIRE-DATE (RIX1, RQ-IX2) >= VR-End-Date (VIX1)
+333001091209                 MOVE "N" TO RQ-ROLL-UP-FLAG (RIX1, RQ-IX2)
+333101091209              END-IF
+333201091209           END-IF.
+333301091209      *Rfs67590 - End
+333401000000
+333501000000           GO TO LR2-0020.
+333601000000
+333701000000       LR2-EXIT.
+333801000000           EXIT.
+333901000000      /
+334001000000      *****************************************************************
+334101000000       END-JOB.
+334201070810      * Rfs43561 Begins
+334301070810            If  lnc-Edit-Alw-Flag = "Y" Then
+334401070605      *Rfs 37142 begins
+334501070605             Exec Sql
+334601070605                 Delete from MFAACIDVP
+334701070605                   Where  Account_No = :Comm-Account-No And
+334801070605                     Investment_Code = :Comm-Investment-code and
+334901070605                     Units_Var = 0
+335001070810             End-Exec
+335101070810            End-if.
+335201070810      * Rfs43561 Ends
+335301000000      *****************************************************************
+335401000000       EOJ-EXIT.
+335501000000           EXIT.
+335601000000      /
+335701000000      *****************************************************************
+335801000000       LOG-ERROR-ROUTINE.
+335901000000      *****************************************************************
+336001000000
+336101000000      * Log error information
+336201000000
+336301000000           PERFORM SET-BASIC-LOG-INFO THRU SBL-EXIT.
+336401000000
+336501000000           MOVE "E"          TO LOG-TYPE OF WS-LOG-REC.
+336601000000           MOVE COMM-PROCESS-DATE
+336701000000                             TO PROCESS-DATE OF WS-LOG-REC.
+336801000000           MOVE WS-INVESTMENT-CODE
+336901000000                             TO INVESTMENT-CODE OF WS-LOG-REC.
+337001000000           MOVE WS-ACCOUNT-NO
+337101000000                             TO ACCOUNT-NO OF WS-LOG-REC.
+337201000000
+337301000000           MOVE WS-ERROR-CODE
+337401000000                             TO LOG-CODE OF WS-LOG-REC.
+337501000000
+337601000000           EVALUATE WS-ERROR-CODE
+337701000000             WHEN "07"
+337801000000               MOVE WS-LOG-PROGRAM-CALLED
+337901000000                             TO PROGRAM-CALLED OF WS-LOG-REC
+338001000000               MOVE FVG-RETURN-CODE
+338101000000                             TO PROGRAM-RETCDE OF WS-LOG-REC
+338201000000               MOVE "FXVARUAI get error                      "
+338301000000                             TO  ADDL-DTL      OF WS-LOG-REC
+338401000000
+338501000000             WHEN "08"
+338601000000               MOVE WS-LOG-PROGRAM-CALLED
+338701000000                             TO PROGRAM-CALLED OF WS-LOG-REC
+338801000000               MOVE FVP-RETURN-CODE
+338901000000                             TO PROGRAM-RETCDE OF WS-LOG-REC
+339001000000               MOVE "FXVARUAI put error                      "
+339101000000                             TO  ADDL-DTL      OF WS-LOG-REC
+339201000000
+339301000000             WHEN "09"
+339401000000               MOVE FVG-LOWER-LIMIT-DAYS (FVG-IX)
+339501000000                             TO WS-DAYS-D1
+339601000000               STRING "Days not in tbl:"             DELIMITED BY SIZE
+339701000000                       WS-DAYS-D1                    DELIMITED BY SIZE
+339801000000                 INTO  ADDL-DTL OF WS-LOG-REC
+339901000000
+340001000000           END-EVALUATE.
+340101000000
+340201000000
+340301000000           MOVE "INSERT MFASRVLOGP - ERROR"
+340401000000                             TO WS-SQLERR-STATEMENT.
+340501000000
+340601000000           EXEC SQL
+340701000000             INSERT INTO MFASRVLOGP VALUES (:MFASRVLOGP)
+340801000000           END-EXEC.
+340901000000
+341001000000       LER-EXIT.
+341101000000           EXIT.
+341201000000      /
+341301000000      *****************************************************************
+341401000000       LOG-WARNING-ROUTINE.
+341501000000      *****************************************************************
+341601000000
+341701000000      * Log warning information
+341801000000
+341901000000           PERFORM SET-BASIC-LOG-INFO THRU SBL-EXIT.
+342001000000
+342101000000           MOVE "W"          TO LOG-TYPE OF WS-LOG-REC.
+342201000000           MOVE COMM-PROCESS-DATE
+342301000000                             TO PROCESS-DATE OF WS-LOG-REC.
+342401000000           MOVE WS-INVESTMENT-CODE
+342501000000                             TO INVESTMENT-CODE OF WS-LOG-REC.
+342601000000           MOVE WS-ACCOUNT-NO
+342701000000                             TO ACCOUNT-NO OF WS-LOG-REC.
+342801000000
+342901000000           MOVE WS-WARNING-CODE
+343001000000                             TO LOG-CODE OF WS-LOG-REC.
+343101000000
+343201000000           EVALUATE WS-WARNING-CODE
+343301000000             WHEN "101"
+343401000000               MOVE WS-ROLL-UP-UNIT
+343501000000                             TO WS-UNIT-D1
+343601000000               STRING "Negative roll-up unit:"       DELIMITED BY SIZE
+343701000000                       WS-UNIT-D1                    DELIMITED BY SIZE
+343801000000                 INTO  ADDL-DTL OF WS-LOG-REC
+343901000000
+344001000000             WHEN "102"
+344101000000               MOVE WS-ROLL-UP-UNIT
+344201000000                             TO WS-UNIT-D1
+344301000000               MOVE FVG-LOWER-LIMIT-DAYS (FVG-IX)
+344401000000                             TO WS-DAYS-D2
+344501000000               MOVE FVG-UNITS-VAR        (FVG-IX)
+344601000000                             TO WS-UNIT-D2
+344701000000               STRING "Roll-up unit:"                DELIMITED BY SIZE
+344801000000                       WS-UNIT-D1                    DELIMITED BY SIZE
+344901000000                      " > current in "               DELIMITED BY SIZE
+345001000000                       WS-DAYS-D2                    DELIMITED BY SIZE
+345101000000                      ":"                            DELIMITED BY SIZE
+345201000000                       WS-UNIT-D2                    DELIMITED BY SIZE
+345301000000                 INTO  ADDL-DTL OF WS-LOG-REC
+345401000000
+345501000000             WHEN "103"
+345601000000               MOVE WS-PLACEMENT-DATE
+345701000000                             TO PLACEMENT-DATE OF WS-LOG-REC
+345801000000               MOVE WS-TRANS-NO
+345901000000                             TO TRANS-NO       OF WS-LOG-REC
+346001000000               MOVE WS-CPP-CDSC-SEQ-NO
+346101000000                             TO CDSC-SEQ-NO    OF WS-LOG-REC
+346201000000               MOVE "CPP RVS target not found, treated as rvs"
+346301000000                             TO  ADDL-DTL      OF WS-LOG-REC
+346401000000
+346501070604             WHEN "104"
+346601000000               MOVE WS-PLACEMENT-DATE
+346701000000                             TO PLACEMENT-DATE OF WS-LOG-REC
+346801000000               MOVE WS-TRANS-NO
+346901000000                             TO TRANS-NO       OF WS-LOG-REC
+347001000000               MOVE WS-RDP-CDSC-SEQ-NO
+347101000000                             TO TRANS-NO       OF WS-LOG-REC
+347201000000               MOVE "RDP RVS target not found, treated as rvs"
+347301000000                             TO  ADDL-DTL      OF WS-LOG-REC
+347401000000
+347501000000             WHEN "105"
+347601000000               MOVE WS-ROLL-UP-UNIT-NET
+347701000000                             TO WS-UNIT-D1
+347801000000               MOVE FVG-LOWER-LIMIT-DAYS (FVG-IX)
+347901000000                             TO WS-DAYS-D1
+348001000000               STRING "Roll-up unit:"                DELIMITED BY SIZE
+348101000000                       WS-UNIT-D1                    DELIMITED BY SIZE
+348201000000                      " stays in:"                   DELIMITED BY SIZE
+348301000000                       WS-DAYS-D1                    DELIMITED BY SIZE
+348401000000                 INTO  ADDL-DTL OF WS-LOG-REC
+348501000000
+348601000000           END-EVALUATE.
+348701000000
+348801000000
+348901000000           MOVE "INSERT MFASRVLOGP - WARN "
+349001000000                             TO WS-SQLERR-STATEMENT.
+349101000000
+349201000000           EXEC SQL
+349301000000             INSERT INTO MFASRVLOGP VALUES (:MFASRVLOGP)
+349401000000           END-EXEC.
+349501000000
+349601000000       LWR-EXIT.
+349701000000           EXIT.
+349801000000      /
+349901000000      *****************************************************************
+350001000000       LOG-STATS-ROUTINE.
+350101000000      *****************************************************************
+350201000000
+350301000000      * Log statistics information
+350401000000
+350501000000           PERFORM SET-BASIC-LOG-INFO THRU SBL-EXIT.
+350601000000
+350701000000           MOVE "S"          TO LOG-TYPE OF WS-LOG-REC.
+350801000000           MOVE COMM-PROCESS-DATE
+350901000000                             TO PROCESS-DATE OF WS-LOG-REC.
+351001000000           MOVE WS-INVESTMENT-CODE
+351101000000                             TO INVESTMENT-CODE OF WS-LOG-REC.
+351201000000           MOVE WS-ACCOUNT-NO
+351301000000                             TO ACCOUNT-NO OF WS-LOG-REC.
+351401000000
+351501000000           MOVE WS-LOG-PROGRAM-CALLED
+351601000000                             TO PROGRAM-CALLED OF WS-LOG-REC
+351701000000
+351801000000           EVALUATE WS-STATS-EVENT
+351901000000             WHEN "S"
+352001000000               MOVE WS-SYSTIME
+352101000000                             TO WS-TIME-BEGIN
+352201000000               MOVE "START"  TO ADDL-DTL OF WS-LOG-REC
+352301000000
+352401000000             WHEN "E"
+352501000000               MOVE WS-SYSTIME
+352601000000                             TO WS-TIME-END
+352701000000               PERFORM CALC-USED-TIME THRU CUT-EXIT
+352801000000               STRING "END - ELAPSED "               DELIMITED BY SIZE
+352901000000                       WS-TIME-USED                  DELIMITED BY SIZE
+353001000000                 INTO  ADDL-DTL OF WS-LOG-REC
+353101000000
+353201000000           END-EVALUATE.
+353301000000
+353401000000
+353501000000           MOVE "INSERT MFASRVLOGP - STATS"
+353601000000                             TO WS-SQLERR-STATEMENT.
+353701000000
+353801000000           EXEC SQL
+353901000000             INSERT INTO MFASRVLOGP VALUES (:MFASRVLOGP)
+354001000000           END-EXEC.
+354101000000
+354201000000       LSR-EXIT.
+354301000000           EXIT.
+354401000000      /
+354501000000      *****************************************************************
+354601000000       SET-BASIC-LOG-INFO.
+354701000000      *****************************************************************
+354801000000
+354901000000      * Set basic log information
+355001000000
+355101000000           INITIALIZE MFASRVLOGP OF WS-LOG-REC.
+355201000000
+355301000000           ACCEPT WS-SYSDATE FROM DATE YYYYMMDD.
+355401000000           ACCEPT WS-SYSTIME FROM TIME.
+355501000000
+355601000000           MOVE WS-SYSDATE   TO LOG-DATE OF WS-LOG-REC.
+355701000000           MOVE WS-SYSTIME   TO LOG-TIME OF WS-LOG-REC.
+355801000000           MOVE WS-CALLING-PROGRAM
+355901000000                             TO PROGRAM-CODE OF WS-LOG-REC.
+356001000000       SBL-EXIT.
+356101000000           EXIT.
+356201000000      /
+356301000000      *****************************************************************
+356401000000       CALC-USED-TIME.
+356501000000      *****************************************************************
+356601000000
+356701000000      * Calculate elapsed time used in HH:MM:SS:TT
+356801000000
+356901000000           IF WS-TE-TT >= WS-TB-TT
+357001000000              SUBTRACT WS-TB-TT FROM WS-TE-TT GIVING WS-TU-TT
+357101000000           ELSE
+357201000000              COMPUTE WS-TU-TT = WS-TE-TT + 100 - WS-TB-TT
+357301000000              SUBTRACT 1 FROM WS-TE-SS
+357401000000           END-IF.
+357501000000
+357601000000           IF WS-TE-SS >= WS-TB-SS
+357701000000              SUBTRACT WS-TB-SS FROM WS-TE-SS GIVING WS-TU-SS
+357801000000           ELSE
+357901000000              COMPUTE WS-TU-SS = WS-TE-SS + 60 - WS-TB-SS
+358001000000              SUBTRACT 1 FROM WS-TE-MM
+358101000000           END-IF.
+358201000000
+358301000000           IF WS-TE-MM >= WS-TB-MM
+358401000000              SUBTRACT WS-TB-MM FROM WS-TE-MM GIVING WS-TU-MM
+358501000000           ELSE
+358601000000              COMPUTE WS-TU-MM = WS-TE-MM + 60 - WS-TB-MM
+358701000000              SUBTRACT 1 FROM WS-TE-HH
+358801000000           END-IF.
+358901000000
+359001000000           IF WS-TE-HH >= WS-TB-HH
+359101000000              SUBTRACT WS-TB-HH FROM WS-TE-HH GIVING WS-TU-HH
+359201000000           ELSE
+359301000000              COMPUTE WS-TU-HH = WS-TE-HH + 24 - WS-TB-HH
+359401000000           END-IF.
+359501000000
+359601000000       CUT-EXIT.
+359701000000           EXIT.
+359801070604
+359901070608       GetLowerLimit.
+360001070810      *    EXEC SQL
+360101070810      *       SELECT MIN(TRNCPP.AGE_DATE),
+360201070810      *              Count("X")
+360301070810      *         INTO :li_EarliestPurAgeDate :IND1 ,
+360401070810      *              :li_CountDistunits     :IND2
+360501070810      *         FROM MFATRNCPP TRNCPP, MFATRNP TRNP
+360601070810      *        WHERE TRNCPP.PLACEMENT_DATE = TRNP.PLACEMENT_DATE
+360701070810      *          AND TRNCPP.TRANS_NO = TRNP.TRANS_NO
+360801070810      *          AND TRNP.ACCOUNT_NO = :COMM-ACCOUNT-NO
+360901070810      *          AND TRNP.INVESTMENT_CODE = :COMM-INVESTMENT-CODE
+361001070810      *          AND TRNP.PROCESS_DATE >= :WS-EFFECTIVE-DATE
+361101070810      *          AND TRNP.PROCESS_DATE <= :WS-END-DATE
+361201070810      *          AND TRNP.TRANS_STATUS_CODE IN ("HST","HSC")
+361301070810      *          AND TRNP.TRANS_TYPE_CODE IN ("INC","CPG","INT")
+361401070810      *          AND TRNP.REVERSE <> "Y"
+361501070810      *    END-EXEC
+361601070810      *    IF SQLSTATE =  WS-SQL-SUCCESSFUL  AND
+361701070810      *          li_EarliestPurAgeDate Not = 0  then
+361801070810      *          MOVE li_EarliestPurAgeDate TO li_AgeStartDate
+361901070810      *          MOVE WS-END-DATE           TO li_AgeEndDate
+362001070810      *          COMPUTE li_LowerLimitDays = FUNCTION FIND-DURATION
+362101070810      *          (li_AgeStartDate li_AgeEndDate DAYS)
+362201070810      *          ADD 1 TO li_LowerLimitDays
+362301070810      *       Else
+362401070810      *          Compute li_LowerLimitDays = li_LowerLimitDays + 1
+362501070810      *      End-if.
+362601070614
+362701070614      *defect 37142.17,19
+362801070614            IF  lnc-Edit-Alw-Flag Not = "Y"  Then
+362901070614                Move 0  to li_CountDistUnits
+363001070614            End-if
+363101070614      *defect 37142.17,19
+363201070810
+363301090507      *RFS50475 Add - Begin
+363401090507           IF lb_ALDTTF_EditYes
+363501110314             Initialize MFATRNPUL1-Record of Trans-Purchase-Units
+363601090507             Move lncc_FIFO to Unit-Monitor-type of Trans-Purchase-Units
+363701090507             Move COMM-ACCOUNT-NO  to Account-No of Trans-Purchase-Units
+363801090507             Move COMM-INVESTMENT-CODE to Investment-Code of
+363901090507                                       Trans-Purchase-Units
+364001090507             Move WS-EFFECTIVE-DATE to Purch-Age-Date of
+364101090507                                    Trans-Purchase-Units
+364201090507             MOVE ZEROS          TO Placement-Date of
+364301090507                                    Trans-Purchase-Units
+364401090507                                    Trans-No       of
+364501090507                                    Trans-Purchase-Units
+364601090507                                    Purch-Seq-No   of
+364701090507                                    Trans-Purchase-Units
+364801090507             Move "N" to lc_EofCdscRec
+364901090507
+365001090507             Start Trans-Purchase-Units
+365101090507                 Key is not less than Externally-Described-Key
+365201090507                 Invalid Key
+365301090507                   Compute li_LowerLimitDays = li_LowerLimitDays + 1
+365401090507                 Not Invalid Key
+365501090507                   Perform GetFirstCdscRecord1 Until lc_EofCdscRec = "Y"
+365601090507             End-Start
+365701090507           ELSE
+365801090507      *RFS50475 Add - End
+365901070810           Initialize MFATRNCPLA-RECORD of Trans-Cdsc-Purchase
+366001070810           Move COMM-ACCOUNT-NO  To Account-No of Trans-Cdsc-Purchase
+366101070810           Move COMM-INVESTMENT-CODE To Investment-Code of
+366201070810                                     Trans-Cdsc-Purchase
+366301070820      *defect 43561.1 use effective date to get the earliest
+366401070820      * dist unit in the absence of a purchase/SWI/TRI
+366501070820      *    Move WS-REQUIRE-DATE   To Age-Date of Trans-Cdsc-Purchase
+366601070820           Move WS-EFFECTIVE-DATE To Age-Date of Trans-Cdsc-Purchase
+366701070820      *defect 43561.1 ends
+36680108121959781b     Move ZEROS       to Placement-Date of Trans-Cdsc-Purchase
+366901081219  |                            Trans-No       of Trans-Cdsc-Purchase
+36700108121959781e                         Cdsc-Seq-No    of Trans-Cdsc-Purchase
+367101070820
+367201070810           Move "N" to lc_EofCdscRec
+367301070810
+367401070810           Start Trans-Cdsc-Purchase
+367501070810               Key is not less than Externally-Described-Key
+367601070810               Invalid Key
+367701070810                 Compute li_LowerLimitDays = li_LowerLimitDays + 1
+367801070810               Not Invalid Key
+367901070810                 Perform GetFirstCdscRecord Until lc_EofCdscRec = "Y"
+368001070810           End-Start
+36810109050750475a     End-If.
+368201070810
+368301070810           If li_EarliestPurAgeDate > 0 Then
+368401070810                 MOVE li_EarliestPurAgeDate TO li_AgeStartDate
+368501070810                 MOVE WS-END-DATE           TO li_AgeEndDate
+368601070810                 COMPUTE li_LowerLimitDays = FUNCTION FIND-DURATION
+368701070810                 (li_AgeStartDate li_AgeEndDate DAYS)
+368801070810                 ADD 1 TO li_LowerLimitDays
+368901070810              Else
+369001070810                 Compute li_LowerLimitDays = li_LowerLimitDays + 1
+369101070810             End-if
+369201070810      * Rfs43561 Ends
+369301070608
+369401070614            Exec Sql
+369501070608              SELECT TRSCVP.LOWER_LIMIT_DAYS
+369601070608                INTO :li_lowerDay
+369701070608                FROM MFAINVTVP INVTVP,
+369801070608                     MFATRSCVP TRSCVP
+369901070608               WHERE TRSCVP.TRAILER_SCHEDULE_CODE =
+370001070608                            INVTVP.TRAILER_SCHEDULE_CODE
+370101070608                     AND INVTVP.INVESTMENT_CODE = :Comm-Investment-code
+370201070608                     AND TRSCVP.LOWER_LIMIT_DAYS >= :li_LowerLimitDays
+370301070608               FETCH FIRST ROW ONLY
+370401070608               END-EXEC.
+370501070608
+370601070613      *Rfs 37142 defects 14, - 16,17,18.
+370701070605       AdjustDistUnits.
+370801070614      *defect 37142 .17,19  call it earlier
+370901070614      *    Perform GetlowerLimit
+371001070614
+371101070612           IF  AI-LOWER-LIMIT-DAYS (AIX) > li_lowerDay Then
+371201070612               Move AI-LOWER-LIMIT-DAYS (AIX) To li_LowerDay
+371301070612           END-If
+371401070614           Set AIX to 1
+371501070612           PERFORM VARYING AIX    FROM 1 BY 1
+371601070614            UNTIL  AIX > 50
+371701070614              IF (AI-LOWER-LIMIT-DAYS (AIX) = li_PreviousLowerDays
+371801070614                 AND li_PreviousLowerDays Not = 0 )
+371901070612                Subtract li_PreviousDistUnits  From AI-UNITS-VAR(AIX)
+372001070612                Move "Y" TO AI-DTL-EXIST (AIX)
+372101070612                Move "C" TO AI-DTL-OPT   (AIX)
+372201070612              END-IF
+372301070612            END-PERFORM
+372401070612
+372501070614      *defect 37142.17,19
+372601070614      * search to find if lower limit = li_lowerDay exist
+372701070614           Perform  SearchforNewLimit
+372801070614
+372901070614           SET AIX to 1
+373001070612           PERFORM VARYING AIX    FROM 1 BY 1
+373101070614      *      UNTIL (AI-LOWER-LIMIT-DAYS (AIX) > li_lowerDay
+373201070614             UNTIL  AIX > 50
+373301070612               IF AI-LOWER-LIMIT-DAYS (AIX) = li_lowerDay
+373401070614                  AND  lb_NextLimitExist    = "Y"
+373501070614                  Move li_PreviousDistUnits To
+373601070612                                        AI-DIST-UNITS-VAR(AIX)
+373701070612                  Add  li_PreviousDistUnits To
+373801070612                                        AI-UNITS-VAR(AIX)
+373901070614      *defect 37142.17,19
+374001070614               END-IF
+374101070614               IF  (   AIX =  li_AICount
+374201070614                  AND  lb_NextLimitExist    = "N"
+374301070614                  AND  AI-DTL-EXIST (AIX)   = " "
+374401070614                  AND  AI-DTL-OPT   (AIX)   = " "
+374501070614                  AND  li_Nooftimes         = 0 )
+374601070614                  Add  1 To AI-CNT
+374701070614                  Move li_lowerDay To AI-LOWER-LIMIT-DAYS (AIX)
+374801070614                  Move li_PreviousDistUnits To
+374901070614                                        AI-DIST-UNITS-VAR(AIX)
+375001070614                  Add  li_PreviousDistUnits To
+375101070614                                        AI-UNITS-VAR(AIX)
+375201070614                  Move "A" TO AI-DTL-OPT   (AIX)
+375301070614                  Move " " TO AI-DTL-EXIST (AIX)
+375401070614                  Add  1 To  li_Nooftimes
+375501070614               END-IF
+375601070614      *defect 37142.17,19
+375701070612            END-PERFORM.
+375801070612
+375901070614      *
+376001070614       SearchforNewLimit.
+376101070614            Set AIX  To 0
+376201070614            Move 0 to li_AICount
+376301070614            Move 0 to li_FirstTime
+376401070614            Move "N"  to lb_NextLimitExist
+376501070614            Perform  FindNextTier Until (AIX = 50 or lb_NextLimitExist
+376601070614                                         = "Y" or li_FirstTime > 1).
+376701070614       FindNextTier.
+376801070614            Set AIX up by 1
+376901070614            If AI-LOWER-LIMIT-DAYS (AIX) = li_lowerDay
+377001070614               Move "Y"  to lb_NextLimitExist
+377101070614            Else
+377201070614               If AI-DTL-OPT (AIX)       = "  "
+377301070614                  AND AI-DTL-EXIST (AIX) = "  "
+377401070614                  AND li_Firsttime       = 0
+377501070614                  Set li_AICount to AIX
+377601070614                  Add 1 to li_FirstTime
+377701070614            End-if.
+377801000000      /
+377901070810
+378001070810      * Rfs 43561 Begins
+378101070810       GetFirstCdscRecord.
+378201070813           READ Trans-Cdsc-Purchase Next Record
+378301070810                  At End
+378401070810                  Move "Y"  To  lc_EofCdscRec
+378501070813           END-READ
+378601070820
+378701070820           IF ACCOUNT-NO OF TRANS-CDSC-PURCHASE NOT = COMM-ACCOUNT-NO
+378801070820           OR INVESTMENT-CODE OF TRANS-CDSC-PURCHASE NOT =
+378901070820              COMM-INVESTMENT-CODE
+379001070820              Move "Y"  To  lc_EofCdscRec
+379101070820           END-IF
+379201070820
+379301070820           IF lc_EofCdscRec NOT = "Y"
+379401070813           IF (ACCOUNT-NO OF TRANS-CDSC-PURCHASE = COMM-ACCOUNT-NO AND
+379501070813               INVESTMENT-CODE OF TRANS-CDSC-PURCHASE =
+379601070813                                              COMM-INVESTMENT-CODE AND
+379701070813               ALL-UNITS-FREE OF TRANS-CDSC-PURCHASE    = "Y"      AND
+379801070813               REINVEST-DISTR-AS OF TRANS-CDSC-PURCHASE = "F")
+379901070813               Perform  VerifyDistributions
+380001070820             End-If
+380101070820             End-If.
+380201070813
+380301090507      *RFS50475 Add - Begin
+380401090507       GetFirstCdscRecord1.
+380501090507           READ Trans-Purchase-Units Next Record
+380601090507                  At End
+380701090507                  Move "Y"  To  lc_EofCdscRec
+380801090507           END-READ
+380901090507
+381001090507           IF ACCOUNT-NO OF TRANS-PURCHASE-UNITS NOT = COMM-ACCOUNT-NO
+381101090507              OR INVESTMENT-CODE OF TRANS-PURCHASE-UNITS NOT =
+381201090507              COMM-INVESTMENT-CODE
+381301090507              Move "Y"  To  lc_EofCdscRec
+381401090507           End-If.
+381501090507      *RFS50475 Add - End
+381601070813       VerifyDistributions.
+381701070813           Move Placement-Date of Trans-Cdsc-Purchase
+381801070813                               To li_placementdate
+381901070813           Move Trans-No      of Trans-Cdsc-Purchase
+382001070813                              To li_TransNo
+382101070813           EXEC SQL
+382201070813             SELECT Gross_Amt
+382301070813                  INTO  :ln_GrossAmt
+382401070813             FROM MFATRNP
+382501070813             WHERE
+382601070813               Placement_date = :li_placementdate AND
+382701070813               Trans_No       = :li_TransNo       AND
+382801070813               Trans_Status_Code in ("HST", "HSC") AND
+382901070813               Trans_type_code  IN ("INC","CPG","INT") AND
+383001070813               Process_Date  >= :WS-EFFECTIVE-DATE     AND
+383101070813               Process_Date  <= :WS-END-DATE           AND
+383201070813               Reverse           <>    "Y"
+383301070813           End-EXEC
+383401070813
+383501140606136335     MOVE SQLSTATE TO lc_sqlStates
+383601140606136335*    IF  SqlState = Ws-Sql-Successful Then
+383701140606136335     IF lncc_sqlSuccessful THEN
+383801070813                 Compute li_EarliestPurAgeDate =
+383901070813                         Age-Date of Trans-Cdsc-Purchase
+384001070813                 Add 1 To  li_CountDistunits
+384101070813                 Move  "Y" To lc_EofCdscRec
+384201070813           END-IF.
+384301070813
+384401070813      * Rfs 43561 Ends
+384501000000      *****************************************************************
+384601000000       SQLLOG.
+384701000000      *****************************************************************
+384801000000           MOVE "99"         TO COMM-RETURN-CODE.
+384901000000
+385001000000           IF WS-SQLLOG = "Y"
+385101000000              CALL "SQLLOG"     USING WS-CALLING-PROGRAM
+385201000000                                      WS-SQLERR-STATEMENT
+385301000000                                      SQLCODE
+385401000000                                      SQLERRD(1)
+385501000000                                      SQLERRD(2)
+385601000000                                      SQLERRD(3)
+385701000000                                      SQLERRD(4)
+385801000000                                      SQLERRD(5)
+385901000000                                      SQLERRD(6)
+386001000000                                      SQLSTATE
+386101000000                                      WS-SQLERR-DATA
+386201000000                                      WS-SQL-STATS
+386301000000                                      WS-SQLERR-REPLY
+386401000000              CANCEL "SQLLOG"
+386501000000           ELSE
+386601000000              MOVE SPACES    TO WS-MESSAGE-LINE
+386701000000              MOVE SQLCODE   TO WS-SQLCODE
+386801000000              STRING
+386901000000                     WS-CALLING-PROGRAM    DELIMITED BY "  "
+387001000000                     " SQL Error at "      DELIMITED BY SIZE
+387101000000                     WS-SQLERR-STATEMENT   DELIMITED BY "  "
+387201000000                     " SQLCODE: "          DELIMITED BY SIZE
+387301000000                     WS-SQLCODE            DELIMITED BY SIZE
+387401000000                     " SQLSTATE: "         DELIMITED BY SIZE
+387501000000                     SQLSTATE              DELIMITED BY SIZE
+387601000000                     INTO WS-MESSAGE-LINE
+387701000000              DISPLAY WS-MESSAGE-LINE
+387801000000           END-IF.
+387901000000
+388001000000           GOBACK.
+388101000000
+388201000000       SQLLOG-EXIT.
+388301000000           EXIT.

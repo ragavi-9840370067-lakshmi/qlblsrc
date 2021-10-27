@@ -1,0 +1,1305 @@
+000100210803      * %ATTR DBGVIEW(*SOURCE) CLOSQLCSR(*ENDMOD)
+000102210803       IDENTIFICATION DIVISION.
+000200130927125459 PROGRAM-ID.    RYTUTHEEXT.
+000300130327       AUTHOR.        Dharmendra Damke.
+000400130327       INSTALLATION.  L&T Financial Services Technology Inc.
+000500130327       DATE-WRITTEN.  March 27, 2013.
+000600130327       DATE-COMPILED.
+000700130327      *****************************************************************
+000800131023      **   RFS-NUMBER : 125459 (replace 118840)
+000900130327      **
+001000130328      **   DESCRIPTION: To capture exception on unitholder extract and
+001100130416      **                remove it from extract and put it on PEP
+001200130416      **                exception report.
+001300130327      **
+001400130327      **   CALLED BY  : RYTUNTGL
+001500130327      **
+001600130408      **   PARAMETERS :
+001700130408      **   Input      : Placement Date
+001800130408      **   Input      : Trans No
+001900130408      **   Output     : Exception Flag
+002000130327      *****************************************************************
+002100130327      *****************************************************************
+002200130327      *     C H A N G E   H I S T O R Y
+002300130327      *****************************************************************
+002400130327      ******************************************************************
+002500130327      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE              *
+002600130327      *****************************************************************
+002700131023      * Dharmendra D  * 2013/03/27 * RFS125459 - New Program Created
+002800131023      * Andy Chan     * 2013/07/09 *           - Removed marks from
+002900131029      *               *            * 118840 and 122976 as they never
+003000131023      *               *            * go to production. Mark them under
+003100131023      *               *            * 125459. Program originally created
+003200131023      *               *            * from 118848.
+003300140304      * Saravanan R   * 2014/03/04 * RFS132751 - Performance Enhancement
+003400210610      * Jebastin S    * 2021/06/10 * RFS1115914- Fix for Cross currencyt
+003500210610      *               *            * reporting for SWO/SWI trade.
+003600140304      *               *            *
+003700130327      ******************************************************************
+003800130327
+003900130327       ENVIRONMENT DIVISION.
+004000130327       CONFIGURATION SECTION.
+004100130327       SOURCE-COMPUTER. IBM-AS400.
+004200130327       OBJECT-COMPUTER. IBM-AS400.
+004300130327       SPECIAL-NAMES.
+004400130327
+004500130327       INPUT-OUTPUT SECTION.
+004600130327       FILE-CONTROL.
+004700130327
+004800130327       DATA DIVISION.
+004900130327
+005000130327       WORKING-STORAGE SECTION.
+005100130327      *
+005200130327           COPY CPYSQLFLD
+005300130327               REPLACING == "CURRENT_PROGRAM" == BY == "RYTUTHEEXT" ==.
+005400130327      *
+005500130327           EXEC SQL
+005600130327             INCLUDE SQLCA
+005700130327           END-EXEC.
+005800130327
+005900130327      * Error Codes, Uniquely Identify where the error happened
+006000130327       01  Ws-Err-Code                        PIC X(02) VALUE SPACES.
+006100130327         88  lncc_Err_Ok                                VALUE SPACES.
+006200130327         88  lncc_Err_10                                VALUE "10".
+006300130327         88  lncc_Err_11                                VALUE "11".
+006400130327         88  lncc_Err_12                                VALUE "12".
+006500130327         88  lncc_Err_13                                VALUE "13".
+006600130327         88  lncc_Err_14                                VALUE "14".
+006700130327         88  lncc_Err_15                                VALUE "15".
+006800130327         88  lncc_Err_16                                VALUE "16".
+006900130327         88  lncc_Err_17                                VALUE "17".
+007000130327         88  lncc_Err_18                                VALUE "18".
+007100130327         88  lncc_Err_19                                VALUE "19".
+007200130327         88  lncc_Err_20                                VALUE "20".
+007300130327         88  lncc_Err_21                                VALUE "21".
+007400130408         88  lncc_Err_22                                VALUE "25".
+007500130327
+007600130327       01  lc_Constants.
+007700130327         03  lncc_ErrorDropMfapepexp          PIC X(80) VALUE
+007800130327            "Error while drop MFAPEPEXP".
+007900130327         03  lncc_ErrorOpeningCursor          PIC X(80) VALUE
+008000130327            "Error while opening cursor PepCursor ".
+008100130327         03  lncc_ErrorFetchingCursor         PIC X(80) VALUE
+008200130327            "Error while fetching cursor PepCursor ".
+008300130327         03  lncc_ErrorGetAltAccTri           PIC X(80) VALUE
+008400130327            "Error while geting the lc_TrAccountNo for TRI ".
+008500130327         03  lncc_ErrorGetAltAccTro           PIC X(80) VALUE
+008600130327            "Error while geting the lc_TrAccountNo for TRO ".
+008700130327         03  lncc_ErrorGetRvsTriAltAcc        PIC X(80) VALUE
+008800130327            "Error while geting the lc_TrAccountNo for RVSTri".
+008900130327         03  lncc_ErrorGetRvsTroAltAcc        PIC X(80) VALUE
+009000130327            "Error while geting the lc_TrAccountNo for RVSTro".
+009100130408         03  lncc_ErrorGetAltAccSwi           PIC X(80) VALUE
+009200130408            "Error while geting the lc_TrAccountNo for SWI ".
+009300130408         03  lncc_ErrorGetAltAccSwo           PIC X(80) VALUE
+009400130408            "Error while geting the lc_TrAccountNo for SWO ".
+009500130408         03  lncc_ErrorGetRvsSwiAltAcc        PIC X(80) VALUE
+009600130408            "Error while geting the lc_TrAccountNo for RVSSwi".
+009700130408         03  lncc_ErrorGetRvsSwoAltAcc        PIC X(80) VALUE
+009800130408            "Error while geting the lc_TrAccountNo for RVSSwo".
+009900130327         03  lncc_ErrorGetCharge              PIC X(80) VALUE
+010000130327            "Error while geting the Charge".
+010100130327         03  lncc_ErrorInsertMfapepexp        PIC X(80) VALUE
+010200130327            "Error while insert rec in MFAPEPEXP".
+010300130404         03  lncc_MsgNetAmountZero            PIC X(50) VALUE
+010400130404            "Transactions that balance to zero".
+010500130404         03  lncc_MsgAltAccount               PIC X(50) VALUE
+010600130404            "Alternate account not populated".
+010700140304
+010800140304      *RFS132751 - Begins *
+010900140304         03  lncc_ErrorInsertMfawrkfle        PIC X(80) VALUE
+011000140304            "Error while insert rec in MFAWRKFLE".
+011100140304      *RFS132751 - Ends   *
+011200130404
+011300130327       01  lc_LocalVariables.
+011400130930125459   03  lc_OthCurrency                   PIC X(03).
+011500130930125459   03  li_DsrPlacementDate              PIC S9(09).
+011600130930125459   03  li_DsrTransactionNo              PIC S9(09).
+011700130327         03  lc_TrAccountNo                   PIC X(12).
+011800130327         03  ln_Tax                           PIC S9(11)V9(2).
+011900130327         03  ln_DscCharge                     PIC S9(11)V9(2).
+012000130327         03  ln_MgmFee                        PIC S9(11)V9(2).
+012100130327         03  lc_ErrorMsg                      PIC X(50).
+012200130327         03  li_PlaceDate                     PIC S9(09).
+012300130327         03  li_TransNo                       PIC S9(09).
+012400130327         03  li_SwTrPlaceDate                 PIC S9(09).
+012500130327         03  li_SwTrTransNo                   PIC S9(09).
+012600130327         03  lc_Exception                     PIC X(01).
+012700130926125459      88 lb_NoException                              Value "N".
+012800130926125459      88 lb_ExcludeAndException                      Value "Y".
+012900130930125459      88 lb_ExcludeButNoException                    Value "X".
+013000130327
+013100130327       01 lc_constant.
+013200130327         03  lnc_Swo                          PIC X(03) VALUE "SWO".
+013300130327         03  lnc_Swi                          PIC X(03) VALUE "SWI".
+013400130327         03  lnc_Tro                          PIC X(03) VALUE "TRO".
+013500130327         03  lnc_Tri                          PIC X(03) VALUE "TRI".
+013600130327         03  lnc_Hst                          PIC X(03) VALUE "HST".
+013700130327         03  lnc_Rvs                          PIC X(03) VALUE "RVS".
+013800130327         03  lnc_Yes                          PIC X(01) VALUE "Y".
+013900130327         03  lnc_No                           PIC X(01) VALUE "N".
+014000130327
+014100140304      *RFS132751 - Begins *
+014200140304       01    ln_Exception                     PIC X(01).
+014300140304       01    ln_maxfetch                      PIC S9(05) VALUE 30000.
+014400140304       01    ln_NoOfRowsFetched               PIC S9(05) .
+014500140304       01    lc_count                         PIC S9(50).
+014600140304      *RFS132751 - Ends *
+014700140304
+014800130327      * Table to hold transaction data from main cursor.
+014900130327       01  ltb_FetchDepTable.
+015000140304      *RFS132751 - Begins *
+015100140304      *  03  ltb_Fetchrec.
+015200140304         03  ltb_Fetchrec OCCURS 30000 TIMES INDEXED BY IDX1.
+015300140304      *RFS132751 - Ends   *
+015400140304
+015500130327           05  li_PlacementDate               PIC S9(09).
+015600130327           05  li_TransactionNo               PIC S9(09).
+015700130327           05  li_AccountNo                   PIC S9(09).
+015800130927125459     05  lc_TransOriginCode             PIC X(03).
+015900130327           05  lc_TransTypeCode               PIC X(03).
+016000130327           05  lc_TransStatusCode             PIC X(03).
+016100130327           05  lc_InvestmentName              PIC X(35).
+016200130327           05  lc_Investment                  PIC X(05).
+016300130327           05  ln_UnitAmt                     PIC S9(13)V9(3).
+016400130327           05  ln_UnitPrice                   PIC S9(5)V9999.
+016500130327           05  lc_SettledGrossOrNet           PIC X.
+016600130327           05  ln_NetAmt                      PIC S9(11)V99.
+016700130327           05  ln_GrossAmt                    PIC S9(11)V99.
+016800130327           05  lc_Currency                    PIC X(03).
+016900130327           05  lc_AltAccountNo                PIC X(12).
+017000130327
+017100130327       01  lc_PEXPInsertRec.
+017200130327         03  li_PEXPAccountNo               PIC S9(09).
+017300130327         03  lc_PEXPTransTypeCode           PIC X(03).
+017400130327         03  lc_PEXPInvestmentName          PIC X(35).
+017500130327         03  lc_PEXPInvestment              PIC X(05).
+017600130327         03  ln_PEXPUnitAmt                 PIC S9(13)V9(3).
+017700130327         03  ln_PEXPUnitPrice               PIC S9(5)V9999.
+017800130327         03  ln_PEXPMgmFee                  PIC S9(11)V9(2).
+017900130327         03  ln_PEXPDscCharge               PIC S9(11)V9(2).
+018000130327         03  ln_PEXPTax                     PIC S9(11)V9(2).
+018100130327         03  lc_PEXPSettledGrossOrNet       PIC X.
+018200130327         03  ln_PEXPNetAmt                  PIC S9(11)V99.
+018300130327         03  ln_PEXPGrossAmt                PIC S9(11)V99.
+018400130327         03  lc_PEXPErrorMsg                PIC X(50).
+018500140304
+018600140304      *RFS132751 - Begins *
+018700140304       01  lc_WORKInsertRec.
+018800140304         03  lc_WORKAccountNo               PIC S9(09).
+018900140304         03  lc_WORKTransTypeCode           PIC  X(03).
+019000140304         03  lc_WORKException               PIC  X(01).
+019100140304      *RFS132751 - Ends *
+019200130327
+019300130327       01  lc_DeleteTransFlag                 PIC X.
+019400130327         88  lb_DeleteTransFlagY                        VALUE 'Y'.
+019500130327         88  lb_DeleteTransFlagN                        VALUE 'N'.
+019600130327
+019700130327       01  lc_ExistRec                        PIC X.
+019800130327         88  lb_ExistRecY                               VALUE 'Y'.
+019900130327         88  lb_ExistRecN                               VALUE 'N'.
+020000130327
+020100130327       01  lc_EndOfCursor                     PIC X.
+020200130327         88  lb_EndOfCursorTrue                         VALUE 'Y'.
+020300130327         88  lb_EndOfCursorFalse                        VALUE 'N'.
+020400130327
+020500130327       01  lc_FetchIndicator                  PIC X(1).
+020600130327         88  lb_StartOfFetch                            VALUE "B".
+020700130327         88  lb_EndOfFetch                              VALUE "E".
+020800130327
+020900130327       01  WS-INDICATORS.
+021000140304      *RFS132751 - Begins *
+021100140304      *  03  li_Ind1                  PIC S9(4) BINARY
+021200140304      *                                  OCCURS  14 TIMES.
+021300140304         03  li_indicators1           OCCURS 30000 TIMES.
+021400140304           04  li_Ind1                 PIC S9(4) BINARY
+021500140304                                      OCCURS  14 TIMES.
+021600140304      *RFS132751 - Ends *
+021700130329
+021800130329       LINKAGE SECTION.
+021900140304      *RFS132751 - Begins *
+022000140304      *01  pc_PlacementDate             PIC S9(09).
+022100140304      *01  pc_TransNo                   PIC S9(09).
+022200140304      *01  pc_Exception                 PIC X(01).
+022300140304       01  pc_ProcessDate               PIC S9(08).
+022400210614      *RFS1115914- Begins *
+022500210614       01  pc_LastProcessDate           PIC S9(08).
+022600210614      *RFS1115914- Ends   *
+022700130329
+022800140304      *PROCEDURE DIVISION USING pc_PlacementDate,
+022900140304      *                         pc_TransNo,
+023000210614      *                         pc_Exception.
+023100140304
+023200210614      *RFS1115914- Begins *
+023300210614      *PROCEDURE DIVISION USING pc_ProcessDate.
+023400210614       PROCEDURE DIVISION USING pc_ProcessDate, pc_LastProcessDate.
+023500210614      *RFS1115914- Ends   *
+023600140304      *RFS132751 - Ends *
+023700130327
+023800130327       MAIN-PROCESS.
+023900130327
+024000130327           PERFORM INITIAL-LOGIC
+024100130327           PERFORM FETCH-CURSOR UNTIL lb_EndOfFetch.
+024200130327           PERFORM END-JOB.
+024300130327      /
+024400130327      * ---------------------------------
+024500130327       INITIAL-LOGIC.
+024600130327      * ---------------------------------
+024700130408           MOVE lnc_No  TO lc_Exception.
+024800130408
+024900130327      *CreatePepCursor
+025000130327           SET lb_StartOfFetch                 TO TRUE.
+025100130327           EXEC SQL
+025200130327             DECLARE PepCursor CURSOR FOR
+025300130327             SELECT
+025400130327                    COALESCE(TRNP.PLACEMENT_DATE, 0),
+025500130327                    COALESCE(TRNP.TRANS_NO, 0),
+025600130327                    COALESCE(TRNP.ACCOUNT_NO, 0),
+025700130927125459              COALESCE(TRNP.TRANS_ORIGIN_CODE," "),
+025800130327                    COALESCE(TRNP.TRANS_TYPE_CODE," "),
+025900130327                    COALESCE(TRNP.TRANS_STATUS_CODE," "),
+026000130327                    COALESCE(INVNMP.INVESTMENT_NAME_LONG, " "),
+026100130327                    COALESCE(TRNP.INVESTMENT_CODE, " " ),
+026200130327                    COALESCE(TRNP.UNIT_AMT, 0 ),
+026300130327                    COALESCE(TRNP.UNIT_PRICE, 0),
+026400130327                    COALESCE(TRNP.SETTLED_GROSS_OR_NET, " "),
+026500130327                    COALESCE(TRNP.NET_AMT, 0),
+026600130327                    COALESCE(TRNP.GROSS_AMT, 0),
+026700130327                    COALESCE(INVEST.CURRENCY, " "),
+026800130402                    COALESCE(ACCXRF.ACCNORIG, " ")
+026900130402      * Transaction File
+027000130327             FROM MFATRNP TRNP
+027100130327
+027200130327      * Investment Name
+027300130327             LEFT OUTER JOIN MFAINVNMP INVNMP ON
+027400130327                  INVNMP.INVESTMENT_CODE  = TRNP.INVESTMENT_CODE
+027500130327             AND  INVNMP.LANGUAGE_CODE    = "E"
+027600130327
+027700130416      * Investment
+027800130328             LEFT OUTER JOIN MFAINVP INVEST ON
+027900130327                  INVEST.INVESTMENT_CODE  = TRNP.INVESTMENT_CODE
+028000130327
+028100130327      * Alternate Account Number
+028200130327             LEFT OUTER JOIN CNVACTXREF ACCXRF ON
+028300130327                  ACCXRF.ACCOUNT_NO       = TRNP.ACCOUNT_NO
+028400130327
+028500140304      *RFS132751 - Begins *
+028600140304      *     WHERE TRNP.PLACEMENT_DATE = :pc_PlacementDate AND
+028700140304      *           TRNP.TRANS_NO       = :pc_TransNo
+028800130327
+028900140305            WHERE TRNP.PROCESS_DATE   = :pc_ProcessDate
+029000210614      *RFS 1115914 -Begin
+029100210614               OR (:pc_LastProcessDate <> 0 AND
+029200210614               TRNP.PROCESS_DATE IN (:pc_LastProcessDate,
+029300210614                                     :pc_ProcessDate))
+029400210614      *RFS 1115914 - Ends
+029500140304            FOR FETCH ONLY
+029600140304      *RFS132751 - Ends *
+029700140304
+029800130327           END-EXEC.
+029900130327
+030000130327           EXEC SQL
+030100130327             OPEN PepCursor
+030200130327           END-EXEC.
+030300130327
+030400130327           MOVE SQLSTATE                       TO lc_sqlStates.
+030500130327           IF NOT lncc_sqlSuccessful
+030600130327              SET lb_EndOfFetch                TO TRUE
+030700130408              SET lncc_Err_11                  TO TRUE
+030800130327              MOVE lncc_ErrorOpeningCursor     TO lc_sqlErrShortDESCR
+030900130327              PERFORM Dsp-Error
+031000130327           END-IF.
+031100130327
+031200130327      * ---------------------------------
+031300130327       FETCH-CURSOR.
+031400130327      * ---------------------------------
+031500140305      *RFS132751 - Begins *
+031600140305      *    INITIALIZE ltb_Fetchrec.
+031700140305           INITIALIZE ltb_FetchDepTable.
+031800140305           INITIALIZE ln_NoOfRowsFetched.
+031900140305      *RFS132751 - ends *
+032000130327           EXEC SQL
+032100130327             FETCH NEXT
+032200130327             FROM PepCursor
+032300140304      *RFS132751 - Begins *
+032400140304             FOR  :ln_Maxfetch ROWS
+032500140304      *      INTO :ltb_Fetchrec:li_Ind1
+032600140304             INTO :ltb_Fetchrec :li_indicators1
+032700140304      *RFS132751 - Ends *
+032800130327           END-EXEC.
+032900130327
+033000130327           MOVE SQLSTATE                       TO lc_sqlStates.
+033100130327
+033200130327           EVALUATE TRUE
+033300130327               WHEN lncc_sqlSuccessful
+033400140304      *RFS132751 - Begins *
+033500140304      *             PERFORM PROCESS-DETAIL
+033600140304                    MOVE SQLERRD(3)  TO ln_NoOfRowsFetched
+033700140304                    PERFORM PROCESS-DETAIL VARYING IDX1 FROM 1 BY 1
+033800140304                              UNTIL IDX1 > ln_NoOfRowsFetched
+033900140304      *RFS132751 - Ends *
+034000140304
+034100130327               WHEN lncc_sqlEnd
+034200130327                    SET lb_EndOfFetch          TO TRUE
+034300130327               WHEN OTHER
+034400130327                    SET lncc_Err_12            TO TRUE
+034500130327                    MOVE lncc_ErrorFetchingCursor
+034600130327                                               TO lc_sqlErrShortDESCR
+034700130327                    PERFORM Dsp-Error
+034800130327           END-EVALUATE.
+034900130327
+035000130327      * ---------------------------------
+035100130327       PROCESS-DETAIL.
+035200130327      * ---------------------------------
+035300130327           INITIALIZE lc_TrAccountNo
+035400130327                      li_PlaceDate
+035500130327                      li_TransNo.
+035600130327
+035700140304      *RFS132751 - Begins *
+035800140304      *    MOVE li_PlacementDate               TO li_PlaceDate.
+035900140304      *    MOVE li_TransactionNo               TO li_TransNo.
+036000140304           MOVE li_PlacementDate(IDX1)         TO li_PlaceDate.
+036100140304           MOVE li_TransactionNo(IDX1)         TO li_TransNo.
+036200140304      *RFS132751 - Ends *
+036300130327
+036400130327      *Validate Transaction Balance
+036500140304      *RFS132751 - Begins *
+036600140304      *    IF ln_NetAmt = 0 AND lc_TransTypeCode NOT EQUAL "FEE"
+036700140304           IF ln_NetAmt(IDX1) = 0 AND lc_TransTypeCode(IDX1)
+036800140304                                      NOT EQUAL "FEE"
+036900140304      *RFS132751 - Ends *
+037000140304
+037100130404              MOVE lncc_MsgNetAmountZero      TO lc_ErrorMsg
+037200130404
+037300130327              PERFORM PREPARE-TO-WRITE
+037400130327           END-IF.
+037500130620
+037600130926125459***  IF lc_Exception NOT = lnc_Yes
+037700130926125459     IF lb_NoException
+037800140304      *RFS132751 - Begins *
+037900140304125459*       and (lc_TransTypeCode   = lnc_Swo or
+038000140304125459*            lc_TransTypeCode   = lnc_Swi)
+038100140304              AND (lc_TransTypeCode(IDX1) = lnc_Swo OR
+038200140304                   lc_TransTypeCode(IDX1) = lnc_Swi)
+038300140304      *RFS132751 - Ends   *
+038400130709              PERFORM VALIDATE-ALT-ACCOUNT-SWITCH
+038500130709           END-IF.
+038600130709
+038700130926125459***  IF lc_Exception NOT = lnc_Yes
+038800130926125459     IF lb_NoException
+038900140304      *RFS132751 - Begins *
+039000140304125459*       and (lc_TransTypeCode   = lnc_Tro or
+039100140304125459*            lc_TransTypeCode   = lnc_Tri)
+039200140304              AND (lc_TransTypeCode(IDX1) = lnc_Tro OR
+039300140304                   lc_TransTypeCode(IDX1) = lnc_Tri)
+039400140304      *RFS132751 - Ends   *
+039500130709              PERFORM VALIDATE-ALT-ACCOUNT-TRANSFER
+039600130709           END-IF.
+039700130709
+039800130926125459     IF lb_NoException
+039900140304      *RFS132751 - Begins *
+040000140304125459*       and (lc_TransTypeCode   = "CPG" or
+040100140304125459*            lc_TransTypeCode   = "INC" or
+040200140304125459*            lc_TransTypeCode   = "INT" or
+040300140304125459*           (lc_TransTypeCode   = "BUY" and
+040400140304125459*            lc_TransOriginCode = "DSR"))
+040500140304              AND (lc_TransTypeCode(IDX1)   = "CPG" OR
+040600140304                   lc_TransTypeCode(IDX1)   = "INC" OR
+040700140304                   lc_TransTypeCode(IDX1)   = "INT" OR
+040800140304                  (lc_TransTypeCode(IDX1)   = "BUY" AND
+040900140304                   lc_TransOriginCode(IDX1) = "DSR"))
+041000140305125459*       PERFORM VALIDATE-ALT-ACCOUNT-DIST-REP
+041100140305125459        PERFORM VALIDATE-ALT-ACCOUNT-DIST-REP THRU EXIT-PARA
+041200140305      *RFS132751 - Ends   *
+041300130926125459     END-IF.
+041400130926
+041500140304      *RFS132751 - Begins *
+041600140304      *    MOVE lc_Exception TO pc_Exception.
+041700140304      *RFS132751 - Ends *
+041800130926
+041900130927125459     If lb_ExcludeButNoException
+042000140304      *RFS132751 - Begins *
+042100140304125459*       Move lnc_Yes to pc_Exception.
+042200140304              Move lnc_Yes to ln_Exception
+042300140304           ELSE IF lb_ExcludeAndException
+042400140304              MOVE lc_Exception TO ln_Exception
+042500140304           ELSE
+042600140304              MOVE lc_Exception TO ln_Exception
+042700140304           END-IF.
+042800140304
+042900140304              PERFORM INSERT-REC-MFAWRKFLE.
+043000140304      *RFS132751 - Ends *
+043100130408
+043200130327      * ---------------------------------
+043300130327       VALIDATE-ALT-ACCOUNT-SWITCH.
+043400130327      * ---------------------------------
+043500130327
+043600140304      *RFS132751 - Begins *
+043700140304      *    IF lc_TransTypeCode   = lnc_Swo  AND
+043800140304      *       lc_TransStatusCode = lnc_Hst
+043900140304            IF lc_TransTypeCode(IDX1)   = lnc_Swo  AND
+044000140304               lc_TransStatusCode(IDX1) = lnc_Hst
+044100140304      *RFS132751 - Ends   *
+044200130327              PERFORM GET-SWI-ALT-ACCOUNT
+044300130327           END-IF.
+044400130327
+044500140304      *RFS132751 - Begins *
+044600140304      *    IF lc_TransTypeCode   = lnc_Swi  AND
+044700140304      *       lc_TransStatusCode = lnc_Hst
+044800140304           IF lc_TransTypeCode(IDX1)   = lnc_Swi  AND
+044900140304              lc_TransStatusCode(IDX1) = lnc_Hst
+045000140304      *RFS132751 - Ends   *
+045100130327              PERFORM GET-SWO-ALT-ACCOUNT
+045200130327           END-IF.
+045300130327
+045400140304      *RFS132751 - Begins *
+045500140304      *    IF lc_TransTypeCode   = lnc_Swo  AND
+045600140304      *       lc_TransStatusCode = lnc_Rvs
+045700140304           IF lc_TransTypeCode(IDX1)   = lnc_Swo  AND
+045800140304              lc_TransStatusCode(IDX1) = lnc_Rvs
+045900140304      *RFS132751 - Ends   *
+046000130327              PERFORM GET-SWI-RVS-ALT-ACCOUNT
+046100130327           END-IF.
+046200130327
+046300140304      *RFS132751 - Begins *
+046400140304      *    IF lc_TransTypeCode   = lnc_Swi  AND
+046500140304      *       lc_TransStatusCode = lnc_Rvs
+046600140304           IF lc_TransTypeCode(IDX1)   = lnc_Swi  AND
+046700140304              lc_TransStatusCode(IDX1) = lnc_rvs
+046800140304      *RFS132751 - Ends   *
+046900130327              PERFORM GET-SWO-RVS-ALT-ACCOUNT
+047000130327           END-IF.
+047100130327
+047200130327      * ---------------------------------
+047300130327       VALIDATE-ALT-ACCOUNT-TRANSFER.
+047400130327      * ---------------------------------
+047500140304      *RFS132751 - Begins *
+047600140304      *    IF lc_TransTypeCode    = lnc_Tro AND
+047700140304      *       lc_TransStatusCode  = lnc_Hst
+047800140304           IF lc_TransTypeCode(IDX1)    = lnc_Tro AND
+047900140304              lc_TransStatusCode(IDX1)  = lnc_Hst
+048000140304      *RFS132751 - Ends *
+048100130327              PERFORM GET-TRI-ALT-ACCOUNT
+048200130327           END-IF.
+048300130327
+048400140304      *RFS132751 - Begins *
+048500140304      *    IF lc_TransTypeCode    = lnc_Tri AND
+048600140304      *       lc_TransStatusCode  = lnc_Hst
+048700140304           IF lc_TransTypeCode(IDX1)    = lnc_Tri AND
+048800140304              lc_TransStatusCode(IDX1)  = lnc_Hst
+048900140304      *RFS132751 - Ends *
+049000130327              PERFORM GET-TRO-ALT-ACCOUNT
+049100130327           END-IF.
+049200130327
+049300140304      *RFS132751 - Begins *
+049400140304      *    IF lc_TransTypeCode    = lnc_Tro AND
+049500140304      *       lc_TransStatusCode  = lnc_Rvs
+049600140304           IF lc_TransTypeCode(IDX1)    = lnc_Tro AND
+049700140304              lc_TransStatusCode(IDX1)  = lnc_Rvs
+049800140304      *RFS132751 - Ends *
+049900130327              PERFORM GET-TRI-RVS-ALT-ACCOUNT
+050000130327           END-IF.
+050100130327
+050200140304      *RFS132751 - Begins *
+050300140304      *    IF lc_TransTypeCode    = lnc_Tri AND
+050400140304      *       lc_TransStatusCode  = lnc_Rvs
+050500140304           IF lc_TransTypeCode(IDX1)    = lnc_Tri AND
+050600140304              lc_TransStatusCode(IDX1)  = lnc_Rvs
+050700140304      *RFS132751 - Ends *
+050800130327              PERFORM GET-TRO-RVS-ALT-ACCOUNT
+050900130327           END-IF.
+051000130327
+051100130327      * ---------------------------------
+051200130327       GET-SWI-ALT-ACCOUNT.
+051300130327      * ---------------------------------
+051400130327
+051500130327           INITIALIZE  li_SwTrPlaceDate,
+051600130327                       li_SwTrTransNo,
+051700130327                       lc_TrAccountNo
+051800130927125459                 , lc_OthCurrency
+051900130327
+052000130327           EXEC SQL
+052100130327             SELECT COALESCE(TRNP.PLACEMENT_DATE, 0),
+052200130327                    COALESCE(TRNP.TRANS_NO, 0),
+052300130402                    COALESCE(ACCXRF.ACCNORIG, " ")
+052400130927125459              ,COALESCE(INVP.CURRENCY, " ")
+052500130327             INTO : li_SwTrPlaceDate,
+052600130327                  : li_SwTrTransNo,
+052700130327                  : lc_TrAccountNo
+052800130927125459            ,: lc_OthCurrency
+052900130327             FROM MFATRNTGP TRNTGP
+053000130327
+053100130327             INNER JOIN MFATRNP TRNP
+053200130327             ON    TRNP.PLACEMENT_DATE    = TRNTGP.PLACEMENT_DATE_2
+053300130327             AND   TRNP.TRANS_NO          = TRNTGP.TRANS_NO_2
+053400130327             AND   TRNP.TRANS_TYPE_CODE IN ( "SWI" )
+053500130327
+053600130927125459       INNER JOIN MFAINVP INVP
+053700130927125459       ON    TRNP.INVESTMENT_CODE = INVP.INVESTMENT_CODE
+053800130927
+053900130327             LEFT OUTER JOIN CNVACTXREF ACCXRF ON
+054000130327                   TRNP.ACCOUNT_NO        = ACCXRF.ACCOUNT_NO
+054100130327             WHERE
+054200130327                   TRNTGP.PLACEMENT_DATE  = :li_PlaceDate
+054300130327             AND   TRNTGP.TRANS_NO        = :li_TransNo
+054400130327             AND   TRNTGP.RELATIONSHIP_TYPE IN ( "DSB" , "WSB" )
+054500130327           END-EXEC.
+054600130327
+054700130327           MOVE SQLSTATE                       TO lc_sqlStates.
+054800130327           EVALUATE TRUE
+054900130327               WHEN lncc_sqlSuccessful
+055000130927125459           Perform Exclude-Exception-Check
+055100130927125459****       IF lc_TrAccountNo     = SPACES OR
+055200130927125459****          lc_AltAccountNo    = SPACES
+055300130927125459****          MOVE lncc_MsgAltAccount  TO lc_ErrorMsg
+055400130927125459****
+055500130927125459****          PERFORM PREPARE-TO-WRITE
+055600130927125459***      END-IF
+055700130327               WHEN lncc_sqlEnd
+055800130327                    CONTINUE
+055900130327               WHEN OTHER
+056000130408                    SET lncc_Err_13            TO TRUE
+056100130408                    MOVE lncc_ErrorGetAltAccSwi
+056200130327                                               TO lc_sqlErrShortDESCR
+056300130327                    PERFORM Dsp-Error
+056400130327           END-EVALUATE.
+056500130327
+056600130327      * ---------------------------------
+056700130327       GET-SWO-ALT-ACCOUNT.
+056800130327      * ---------------------------------
+056900130327
+057000130327           INITIALIZE  li_SwTrPlaceDate,
+057100130327                       li_SwTrTransNo,
+057200130327                       lc_TrAccountNo
+057300130927125459                 , lc_OthCurrency
+057400130327
+057500130327           EXEC SQL
+057600130327             SELECT COALESCE(TRNP.PLACEMENT_DATE, 0),
+057700130327                    COALESCE(TRNP.TRANS_NO, 0),
+057800130402                    COALESCE(ACCXRF.ACCNORIG, " ")
+057900130927125459              ,COALESCE(INVP.CURRENCY, " ")
+058000130327             INTO : li_SwTrPlaceDate,
+058100130327                  : li_SwTrTransNo,
+058200130327                  : lc_TrAccountNo
+058300130927125459            ,: lc_OthCurrency
+058400130327             FROM MFATRNTGP TRNTGP
+058500130327
+058600130327             INNER JOIN MFATRNP TRNP
+058700130327             ON  TRNP.PLACEMENT_DATE      = TRNTGP.PLACEMENT_DATE
+058800130327             AND TRNP.TRANS_NO            = TRNTGP.TRANS_NO
+058900130327             AND TRNP.TRANS_TYPE_CODE IN ( "SWO" )
+059000130327
+059100130927125459       INNER JOIN MFAINVP INVP
+059200130927125459       ON    TRNP.INVESTMENT_CODE = INVP.INVESTMENT_CODE
+059300130927
+059400130327             LEFT OUTER JOIN CNVACTXREF ACCXRF
+059500130327             ON  ACCXRF.ACCOUNT_NO        = TRNP.ACCOUNT_NO
+059600130327
+059700130327             WHERE
+059800130327                 TRNTGP.PLACEMENT_DATE_2  = :li_PlaceDate
+059900130327             AND TRNTGP.TRANS_NO_2        = :li_TransNo
+060000130327             AND TRNTGP.RELATIONSHIP_TYPE IN ( "DSB" , "WSB" )
+060100130327           END-EXEC.
+060200130327
+060300130327           MOVE SQLSTATE                       TO lc_sqlStates.
+060400130327           EVALUATE TRUE
+060500130327               WHEN lncc_sqlSuccessful
+060600130927125459           Perform Exclude-Exception-Check
+060700130927125459****       IF lc_TrAccountNo     = SPACES OR
+060800130927125459****          lc_AltAccountNo    = SPACES
+060900130927125459****          MOVE 'Alternate account not populated'
+061000130927125459****                                     TO lc_ErrorMsg
+061100130927125459****          PERFORM PREPARE-TO-WRITE
+061200130927125459***        END-IF
+061300130327               WHEN lncc_sqlEnd
+061400130327                    CONTINUE
+061500130327               WHEN OTHER
+061600130408                    SET lncc_Err_14            TO TRUE
+061700130408                    MOVE lncc_ErrorGetAltAccSwo
+061800130327                                               TO lc_sqlErrShortDESCR
+061900130327                    PERFORM Dsp-Error
+062000130327           END-EVALUATE.
+062100130327
+062200130327      * ---------------------------------
+062300130327       GET-SWI-RVS-ALT-ACCOUNT.
+062400130327      * ---------------------------------
+062500130327
+062600130327           INITIALIZE  li_SwTrPlaceDate,
+062700130327                       li_SwTrTransNo,
+062800130327                       lc_TrAccountNo
+062900130927125459                 , lc_OthCurrency
+063000130327
+063100130327           EXEC SQL
+063200130327             SELECT COALESCE(TRNP.PLACEMENT_DATE, 0),
+063300130327                    COALESCE(TRNP.TRANS_NO, 0),
+063400130402                    COALESCE(ACCXRF.ACCNORIG, " ")
+063500130927125459              ,COALESCE(INVP.CURRENCY, " ")
+063600130327             INTO : li_SwTrPlaceDate,
+063700130327                  : li_SwTrTransNo,
+063800130327                  : lc_TrAccountNo
+063900130927125459            ,: lc_OthCurrency
+064000130327             FROM MFATRNTGP TRNTGP
+064100130327
+064200130327             INNER JOIN MFATRNTGP TRNTGP1
+064300130327             ON  TRNTGP1.PLACEMENT_DATE   = TRNTGP.PLACEMENT_DATE
+064400130327             AND TRNTGP1.TRANS_NO         = TRNTGP.TRANS_NO
+064500130327             AND TRNTGP1.RELATIONSHIP_TYPE IN ( "DSB" , "WSB" )
+064600130327
+064700130327             INNER JOIN MFATRNTGP TRNTGP2
+064800130327             ON  TRNTGP2.PLACEMENT_DATE   = TRNTGP1.PLACEMENT_DATE_2
+064900130327             AND TRNTGP2.TRANS_NO         = TRNTGP1.TRANS_NO_2
+065000130327             AND TRNTGP2.RELATIONSHIP_TYPE IN ( "RVS" )
+065100130327
+065200130327             INNER JOIN MFATRNP TRNP
+065300130327             ON  TRNP.PLACEMENT_DATE      = TRNTGP2.PLACEMENT_DATE_2
+065400130327             AND TRNP.TRANS_NO            = TRNTGP2.TRANS_NO_2
+065500130327
+065600130927125459       INNER JOIN MFAINVP INVP
+065700130927125459       ON    TRNP.INVESTMENT_CODE = INVP.INVESTMENT_CODE
+065800130927
+065900130327             LEFT OUTER JOIN CNVACTXREF ACCXRF
+066000130327             ON  TRNP.ACCOUNT_NO          = ACCXRF.ACCOUNT_NO
+066100130327
+066200130327             WHERE
+066300130327                 TRNTGP.PLACEMENT_DATE_2  = :li_PlaceDate
+066400130327             AND TRNTGP.TRANS_NO_2        = :li_TransNo
+066500130327             AND TRNTGP.RELATIONSHIP_TYPE IN ( "RVS" )
+066600130327           END-EXEC.
+066700130327
+066800130327           MOVE SQLSTATE                       TO lc_sqlStates.
+066900130327           EVALUATE TRUE
+067000130327               WHEN lncc_sqlSuccessful
+067100130927125459           Perform Exclude-Exception-Check
+067200130927125459****       IF lc_TrAccountNo     = SPACES OR
+067300130927125459****          lc_AltAccountNo    = SPACES
+067400130927125459****          MOVE lncc_MsgAltAccount    TO lc_ErrorMsg
+067500130927125459****
+067600130927125459****          PERFORM PREPARE-TO-WRITE
+067700130927125459***        END-IF
+067800130327               WHEN lncc_sqlEnd
+067900130327                    CONTINUE
+068000130327               WHEN OTHER
+068100130408                    SET lncc_Err_15            TO TRUE
+068200130408                    MOVE lncc_ErrorGetRvsSwiAltAcc
+068300130327                                               TO lc_sqlErrShortDESCR
+068400130327                    PERFORM Dsp-Error
+068500130327           END-EVALUATE.
+068600130327
+068700130327      * ---------------------------------
+068800130327       GET-SWO-RVS-ALT-ACCOUNT.
+068900130327      * ---------------------------------
+069000130327
+069100130327           INITIALIZE  li_SwTrPlaceDate,
+069200130327                       li_SwTrTransNo,
+069300130927125459                 lc_TrAccountNo
+069400130927125459                 , lc_OthCurrency
+069500130327
+069600130327           EXEC SQL
+069700130327             SELECT COALESCE(TRNP.PLACEMENT_DATE, 0),
+069800130327                    COALESCE(TRNP.TRANS_NO, 0),
+069900130402                    COALESCE(ACCXRF.ACCNORIG, " ")
+070000130927125459              ,COALESCE(INVP.CURRENCY, " ")
+070100130327             INTO : li_SwTrPlaceDate,
+070200130327                  : li_SwTrTransNo,
+070300130327                  : lc_TrAccountNo
+070400130927125459            ,: lc_OthCurrency
+070500130327             FROM MFATRNTGP TRNTGP
+070600130327
+070700130327             INNER JOIN MFATRNTGP TRNTGP1
+070800130327             ON  TRNTGP1.PLACEMENT_DATE_2 = TRNTGP.PLACEMENT_DATE
+070900130327             AND TRNTGP1.TRANS_NO_2       = TRNTGP.TRANS_NO
+071000130327             AND TRNTGP1.RELATIONSHIP_TYPE IN ( "DSB" , "WSB" )
+071100130327
+071200130327             INNER JOIN MFATRNTGP TRNTGP2
+071300130327             ON  TRNTGP2.PLACEMENT_DATE   = TRNTGP1.PLACEMENT_DATE
+071400130327             AND TRNTGP2.TRANS_NO         = TRNTGP1.TRANS_NO
+071500130327             AND TRNTGP2.RELATIONSHIP_TYPE IN ( "RVS" )
+071600130327
+071700130327             INNER JOIN MFATRNP TRNP
+071800130327             ON  TRNP.PLACEMENT_DATE      = TRNTGP2.PLACEMENT_DATE_2
+071900130327             AND TRNP.TRANS_NO            = TRNTGP2.TRANS_NO_2
+072000130327
+072100130927125459       INNER JOIN MFAINVP INVP
+072200130927125459       ON    TRNP.INVESTMENT_CODE = INVP.INVESTMENT_CODE
+072300130927
+072400130327             LEFT OUTER JOIN CNVACTXREF ACCXRF ON
+072500130327                 TRNP.ACCOUNT_NO          = ACCXRF.ACCOUNT_NO
+072600130327
+072700130327             WHERE
+072800130327                 TRNTGP.PLACEMENT_DATE_2  = :li_PlaceDate
+072900130327             AND TRNTGP.TRANS_NO_2        = :li_TransNo
+073000130327             AND TRNTGP.RELATIONSHIP_TYPE IN ( "RVS" )
+073100130327           END-EXEC.
+073200130327
+073300130327           MOVE SQLSTATE                       TO lc_sqlStates.
+073400130327           EVALUATE TRUE
+073500130327               WHEN lncc_sqlSuccessful
+073600130927125459           Perform Exclude-Exception-Check
+073700130927125459****       IF lc_TrAccountNo     = SPACES OR
+073800130927125459****          lc_AltAccountNo    = SPACES
+073900130927125459****          MOVE lncc_MsgAltAccount    TO lc_ErrorMsg
+074000130927125459****
+074100130927125459****          PERFORM PREPARE-TO-WRITE
+074200130927125459***        END-IF
+074300130327               WHEN lncc_sqlEnd
+074400130327                    CONTINUE
+074500130327               WHEN OTHER
+074600130408                    SET lncc_Err_16            TO TRUE
+074700130408                    MOVE lncc_ErrorGetRvsSwoAltAcc
+074800130327                                               TO lc_sqlErrShortDESCR
+074900130327                    PERFORM Dsp-Error
+075000130327           END-EVALUATE.
+075100130327
+075200130327      * ---------------------------------
+075300130327       GET-TRI-ALT-ACCOUNT.
+075400130327      * ---------------------------------
+075500130327
+075600130327           INITIALIZE  li_SwTrPlaceDate,
+075700130327                       li_SwTrTransNo,
+075800130327                       lc_TrAccountNo
+075900130927125459                 , lc_OthCurrency
+076000130327
+076100130327           EXEC SQL
+076200130327             SELECT COALESCE(TRNP.PLACEMENT_DATE, 0),
+076300130327                    COALESCE(TRNP.TRANS_NO, 0),
+076400130402                    COALESCE(ACCXRF.ACCNORIG, " ")
+076500130927125459              ,COALESCE(INVP.CURRENCY, " ")
+076600130327             INTO : li_SwTrPlaceDate,
+076700130327                  : li_SwTrTransNo,
+076800130327                  : lc_TrAccountNo
+076900130927125459            ,: lc_OthCurrency
+077000130327             FROM MFATRNTGP TRNTGP
+077100130327
+077200130327             INNER JOIN MFATRNP TRNP
+077300130327             ON    TRNP.PLACEMENT_DATE    = TRNTGP.PLACEMENT_DATE_2
+077400130327             AND   TRNP.TRANS_NO          = TRNTGP.TRANS_NO_2
+077500130327             AND   TRNP.TRANS_TYPE_CODE IN ( "TRI" )
+077600130327
+077700130927125459       INNER JOIN MFAINVP INVP
+077800130927125459       ON    TRNP.INVESTMENT_CODE = INVP.INVESTMENT_CODE
+077900130927
+078000130327             LEFT OUTER JOIN CNVACTXREF ACCXRF ON
+078100130327                   TRNP.ACCOUNT_NO        = ACCXRF.ACCOUNT_NO
+078200130327             WHERE
+078300130327                   TRNTGP.PLACEMENT_DATE  = :li_PlaceDate
+078400130327             AND   TRNTGP.TRANS_NO        = :li_TransNo
+078500130327             AND   TRNTGP.RELATIONSHIP_TYPE IN ( "DSB" , "WSB" )
+078600130327           END-EXEC.
+078700130327
+078800130327           MOVE SQLSTATE                       TO lc_sqlStates.
+078900130327           EVALUATE TRUE
+079000130327               WHEN lncc_sqlSuccessful
+079100130927125459           Perform Exclude-Exception-Check
+079200130927125459****       IF lc_TrAccountNo     = SPACES OR
+079300130927125459****          lc_AltAccountNo    = SPACES
+079400130927125459****          MOVE lncc_MsgAltAccount    TO lc_ErrorMsg
+079500130927125459****
+079600130927125459****          PERFORM PREPARE-TO-WRITE
+079700130927125459***        END-IF
+079800130327               WHEN lncc_sqlEnd
+079900130327                    CONTINUE
+080000130327               WHEN OTHER
+080100130327                    SET lncc_Err_17            TO TRUE
+080200130327                    MOVE lncc_ErrorGetAltAccTri
+080300130327                                               TO lc_sqlErrShortDESCR
+080400130327                    PERFORM Dsp-Error
+080500130327           END-EVALUATE.
+080600130327
+080700130327      * ---------------------------------
+080800130327       GET-TRO-ALT-ACCOUNT.
+080900130327      * ---------------------------------
+081000130327
+081100130327           INITIALIZE  li_SwTrPlaceDate,
+081200130327                       li_SwTrTransNo,
+081300130327                       lc_TrAccountNo
+081400130927125459                 , lc_OthCurrency
+081500130327
+081600130327           EXEC SQL
+081700130327             SELECT COALESCE(TRNP.PLACEMENT_DATE, 0),
+081800130327                    COALESCE(TRNP.TRANS_NO, 0),
+081900130402                    COALESCE(ACCXRF.ACCNORIG, " ")
+082000130927125459              ,COALESCE(INVP.CURRENCY, " ")
+082100130327             INTO : li_SwTrPlaceDate,
+082200130327                  : li_SwTrTransNo,
+082300130327                  : lc_TrAccountNo
+082400130927125459            ,: lc_OthCurrency
+082500130327             FROM MFATRNTGP TRNTGP
+082600130327
+082700130327             INNER JOIN MFATRNP TRNP
+082800130327             ON  TRNP.PLACEMENT_DATE      = TRNTGP.PLACEMENT_DATE
+082900130327             AND TRNP.TRANS_NO            = TRNTGP.TRANS_NO
+083000130327             AND TRNP.TRANS_TYPE_CODE IN ( "TRO" )
+083100130327
+083200130927125459       INNER JOIN MFAINVP INVP
+083300130927125459       ON    TRNP.INVESTMENT_CODE = INVP.INVESTMENT_CODE
+083400130927
+083500130327             LEFT OUTER JOIN CNVACTXREF ACCXRF
+083600130327             ON  ACCXRF.ACCOUNT_NO        = TRNP.ACCOUNT_NO
+083700130327
+083800130327             WHERE
+083900130327                 TRNTGP.PLACEMENT_DATE_2  = :li_PlaceDate
+084000130327             AND TRNTGP.TRANS_NO_2        = :li_TransNo
+084100130327             AND TRNTGP.RELATIONSHIP_TYPE IN ( "DSB" , "WSB" )
+084200130327           END-EXEC.
+084300130327
+084400130327           MOVE SQLSTATE                       TO lc_sqlStates.
+084500130327           EVALUATE TRUE
+084600130327               WHEN lncc_sqlSuccessful
+084700130927125459           Perform Exclude-Exception-Check
+084800130927125459****       IF lc_TrAccountNo     = SPACES OR
+084900130927125459****          lc_AltAccountNo    = SPACES
+085000130927125459****          MOVE lncc_MsgAltAccount    TO lc_ErrorMsg
+085100130927125459****
+085200130927125459****          PERFORM PREPARE-TO-WRITE
+085300130927125459***        END-IF
+085400130327               WHEN lncc_sqlEnd
+085500130327                    CONTINUE
+085600130327               WHEN OTHER
+085700130327                    SET lncc_Err_18            TO TRUE
+085800130327                    MOVE lncc_ErrorGetAltAccTro
+085900130327                                               TO lc_sqlErrShortDESCR
+086000130327                    PERFORM Dsp-Error
+086100130327           END-EVALUATE.
+086200130327
+086300130327      * ---------------------------------
+086400130327       GET-TRI-RVS-ALT-ACCOUNT.
+086500130327      * ---------------------------------
+086600130327
+086700130327           INITIALIZE  li_SwTrPlaceDate,
+086800130327                       li_SwTrTransNo,
+086900130327                       lc_TrAccountNo
+087000130927125459                 , lc_OthCurrency
+087100130327
+087200130327           EXEC SQL
+087300130327             SELECT COALESCE(TRNP.PLACEMENT_DATE, 0),
+087400130327                    COALESCE(TRNP.TRANS_NO, 0),
+087500130402                    COALESCE(ACCXRF.ACCNORIG, " ")
+087600130927125459              ,COALESCE(INVP.CURRENCY, " ")
+087700130327             INTO : li_SwTrPlaceDate,
+087800130327                  : li_SwTrTransNo,
+087900130327                  : lc_TrAccountNo
+088000130927125459            ,: lc_OthCurrency
+088100130327             FROM MFATRNTGP TRNTGP
+088200130327
+088300130327             INNER JOIN MFATRNTGP TRNTGP1
+088400130327             ON  TRNTGP1.PLACEMENT_DATE   = TRNTGP.PLACEMENT_DATE
+088500130327             AND TRNTGP1.TRANS_NO         = TRNTGP.TRANS_NO
+088600130327             AND TRNTGP1.RELATIONSHIP_TYPE IN ( "DSB" , "WSB" )
+088700130327
+088800130327             INNER JOIN MFATRNTGP TRNTGP2
+088900130327             ON  TRNTGP2.PLACEMENT_DATE   = TRNTGP1.PLACEMENT_DATE_2
+089000130327             AND TRNTGP2.TRANS_NO         = TRNTGP1.TRANS_NO_2
+089100130327             AND TRNTGP2.RELATIONSHIP_TYPE IN ( "RVS" )
+089200130327
+089300130327             INNER JOIN MFATRNP TRNP
+089400130327             ON  TRNP.PLACEMENT_DATE      = TRNTGP2.PLACEMENT_DATE_2
+089500130327             AND TRNP.TRANS_NO            = TRNTGP2.TRANS_NO_2
+089600130327
+089700130927125459       INNER JOIN MFAINVP INVP
+089800130927125459       ON    TRNP.INVESTMENT_CODE = INVP.INVESTMENT_CODE
+089900130927
+090000130327             LEFT OUTER JOIN CNVACTXREF ACCXRF
+090100130327             ON  TRNP.ACCOUNT_NO          = ACCXRF.ACCOUNT_NO
+090200130327
+090300130327             WHERE
+090400130327                 TRNTGP.PLACEMENT_DATE_2  = :li_PlaceDate
+090500130327             AND TRNTGP.TRANS_NO_2        = :li_TransNo
+090600130327             AND TRNTGP.RELATIONSHIP_TYPE IN ( "RVS" )
+090700130327           END-EXEC.
+090800130327
+090900130327           MOVE SQLSTATE                       TO lc_sqlStates.
+091000130327           EVALUATE TRUE
+091100130327               WHEN lncc_sqlSuccessful
+091200130927125459           Perform Exclude-Exception-Check
+091300130927125459****       IF lc_TrAccountNo     = SPACES OR
+091400130927125459****          lc_AltAccountNo    = SPACES
+091500130927125459****          MOVE lncc_MsgAltAccount    TO lc_ErrorMsg
+091600130927125459****
+091700130927125459****          PERFORM PREPARE-TO-WRITE
+091800130927125459***        END-IF
+091900130327               WHEN lncc_sqlEnd
+092000130327                    CONTINUE
+092100130327               WHEN OTHER
+092200130327                    SET lncc_Err_19            TO TRUE
+092300130327                    MOVE lncc_ErrorGetRvsTriAltAcc
+092400130327                                               TO lc_sqlErrShortDESCR
+092500130327                    PERFORM Dsp-Error
+092600130327           END-EVALUATE.
+092700130327
+092800130327      * ---------------------------------
+092900130327       GET-TRO-RVS-ALT-ACCOUNT.
+093000130327      * ---------------------------------
+093100130327
+093200130327           INITIALIZE  li_SwTrPlaceDate,
+093300130327                       li_SwTrTransNo,
+093400130927125459                 lc_TrAccountNo
+093500130927125459                 , lc_OthCurrency
+093600130327
+093700130327           EXEC SQL
+093800130327             SELECT COALESCE(TRNP.PLACEMENT_DATE, 0),
+093900130327                    COALESCE(TRNP.TRANS_NO, 0),
+094000130402                    COALESCE(ACCXRF.ACCNORIG, " ")
+094100130927125459              ,COALESCE(INVP.CURRENCY, " ")
+094200130327             INTO : li_SwTrPlaceDate,
+094300130327                  : li_SwTrTransNo,
+094400130327                  : lc_TrAccountNo
+094500130927125459            ,: lc_OthCurrency
+094600130327             FROM MFATRNTGP TRNTGP
+094700130327
+094800130327             INNER JOIN MFATRNTGP TRNTGP1
+094900130327             ON  TRNTGP1.PLACEMENT_DATE_2 = TRNTGP.PLACEMENT_DATE
+095000130327             AND TRNTGP1.TRANS_NO_2       = TRNTGP.TRANS_NO
+095100130327             AND TRNTGP1.RELATIONSHIP_TYPE IN ( "DSB" , "WSB" )
+095200130327
+095300130327             INNER JOIN MFATRNTGP TRNTGP2
+095400130327             ON  TRNTGP2.PLACEMENT_DATE   = TRNTGP1.PLACEMENT_DATE
+095500130327             AND TRNTGP2.TRANS_NO         = TRNTGP1.TRANS_NO
+095600130327             AND TRNTGP2.RELATIONSHIP_TYPE IN ( "RVS" )
+095700130327
+095800130327             INNER JOIN MFATRNP TRNP
+095900130327             ON  TRNP.PLACEMENT_DATE      = TRNTGP2.PLACEMENT_DATE_2
+096000130327             AND TRNP.TRANS_NO            = TRNTGP2.TRANS_NO_2
+096100130327
+096200130927125459       INNER JOIN MFAINVP INVP
+096300130927125459       ON    TRNP.INVESTMENT_CODE = INVP.INVESTMENT_CODE
+096400130927
+096500130327             LEFT OUTER JOIN CNVACTXREF ACCXRF ON
+096600130327                 TRNP.ACCOUNT_NO          = ACCXRF.ACCOUNT_NO
+096700130327
+096800130327             WHERE
+096900130327                 TRNTGP.PLACEMENT_DATE_2  = :li_PlaceDate
+097000130327             AND TRNTGP.TRANS_NO_2        = :li_TransNo
+097100130327             AND TRNTGP.RELATIONSHIP_TYPE IN ( "RVS" )
+097200130327           END-EXEC.
+097300130327
+097400130327           MOVE SQLSTATE                       TO lc_sqlStates.
+097500130327           EVALUATE TRUE
+097600130327               WHEN lncc_sqlSuccessful
+097700130927125459           Perform Exclude-Exception-Check
+097800130927125459****       IF lc_TrAccountNo     = SPACES OR
+097900130927125459****          lc_AltAccountNo    = SPACES
+098000130927125459****          MOVE lncc_MsgAltAccount    TO lc_ErrorMsg
+098100130927125459****
+098200130927125459****          PERFORM PREPARE-TO-WRITE
+098300130927125459***        END-IF
+098400130327               WHEN lncc_sqlEnd
+098500130327                    CONTINUE
+098600130327               WHEN OTHER
+098700130327                    SET lncc_Err_20            TO TRUE
+098800130327                    MOVE lncc_ErrorGetRvsTroAltAcc
+098900130327                                               TO lc_sqlErrShortDESCR
+099000130327                    PERFORM Dsp-Error
+099100130327           END-EVALUATE.
+099200130327
+099300130327      * ---------------------------------
+099400130327       PREPARE-TO-WRITE.
+099500130327      * ---------------------------------
+099600130327           INITIALIZE  ln_PEXPMgmFee,
+099700130327                       ln_PEXPDscCharge,
+099800130327                       ln_PEXPTax.
+099900130327
+100000130327           PERFORM PREPARE-TO-PEXP.
+100100130327
+100200130327           EXEC SQL
+100300130327             SELECT SUM(COALESCE(TRNCHP1.CHARGE, 0)),
+100400130327                    SUM(COALESCE(TRNCHP2.CHARGE, 0)),
+100500130327                    SUM(COALESCE(TRNCHP3.CHARGE, 0))
+100600130327             INTO   :ln_PEXPMgmFee,
+100700130327                    :ln_PEXPDscCharge ,
+100800130327                    :ln_PEXPTax
+100900130402             FROM MFATRNP PEFNDP
+101000130327
+101100130327             LEFT OUTER JOIN MFATRNCHP TRNCHP1
+101200130402             ON  TRNCHP1.PLACEMENT_DATE  = PEFNDP.PLACEMENT_DATE
+101300130327             AND TRNCHP1.TRANS_NO        = PEFNDP.TRANS_NO
+101400130327             AND TRNCHP1.DEDUCTION_CODE  = "ADMN"
+101500130327
+101600130327             LEFT OUTER JOIN MFATRNCHP TRNCHP2
+101700130402             ON  TRNCHP2.PLACEMENT_DATE  = PEFNDP.PLACEMENT_DATE
+101800130327             AND TRNCHP2.TRANS_NO        = PEFNDP.TRANS_NO
+101900130327             AND TRNCHP2.DEDUCTION_CODE  = "CDSC"
+102000130327
+102100130327             LEFT OUTER JOIN MFATRNCHP TRNCHP3
+102200130402             ON  TRNCHP3.PLACEMENT_DATE  = PEFNDP.PLACEMENT_DATE
+102300130327             AND TRNCHP3.TRANS_NO        = PEFNDP.TRANS_NO
+102400130327             AND TRNCHP3.DEDUCTION_CODE IN ( "GST" , "PST" , "NONT" ,
+102500130327                                             "FEDT" , "PRVT" )
+102600130327
+102700130402             WHERE PEFNDP.PLACEMENT_DATE = :li_PlaceDate
+102800130327             AND   PEFNDP.TRANS_NO       = :li_TransNo
+102900130327
+103000130402             GROUP BY  PEFNDP.PLACEMENT_DATE,
+103100130327                       PEFNDP.TRANS_NO
+103200130327
+103300130327           END-EXEC.
+103400130327
+103500130327           MOVE SQLSTATE                       TO lc_sqlStates.
+103600130327           EVALUATE TRUE
+103700130327               WHEN lncc_sqlSuccessful OR lncc_sqlEnd
+103800130327                       PERFORM INSERT-REC-MFAPEPEXP
+103900130327               WHEN OTHER
+104000130327                    SET lncc_Err_21            TO TRUE
+104100130327                    MOVE lncc_ErrorGetCharge   TO lc_sqlErrShortDESCR
+104200130327                    PERFORM Dsp-Error
+104300130327           END-EVALUATE.
+104400130327
+104500130327      * ---------------------------------
+104600130327       PREPARE-TO-PEXP.
+104700130327      * ---------------------------------
+104800130327           INITIALIZE lc_PEXPInsertRec.
+104900130327
+105000140304      *RFS132751 - Begins *
+105100140304      *    MOVE li_AccountNo         TO li_PEXPAccountNo.
+105200140304      *    MOVE lc_TransTypeCode     TO lc_PEXPTransTypeCode.
+105300140304      *    MOVE lc_InvestmentName    TO lc_PEXPInvestmentName.
+105400140304      *    MOVE lc_Investment        TO lc_PEXPInvestment.
+105500140304      *    MOVE ln_UnitAmt           TO ln_PEXPUnitAmt.
+105600140304      *    MOVE ln_UnitPrice         TO ln_PEXPUnitPrice.
+105700140304      *    MOVE lc_SettledGrossOrNet TO lc_PEXPSettledGrossOrNet.
+105800140304      *    MOVE ln_NetAmt            TO ln_PEXPNetAmt.
+105900140304      *    MOVE ln_GrossAmt          TO ln_PEXPGrossAmt.
+106000140304      *    MOVE lc_ErrorMsg          TO lc_PEXPErrorMsg.
+106100140304
+106200140304           MOVE li_AccountNo(IDX1)         TO li_PEXPAccountNo.
+106300140304           MOVE lc_TransTypeCode(IDX1)     TO lc_PEXPTransTypeCode.
+106400140304           MOVE lc_InvestmentName(IDX1)    TO lc_PEXPInvestmentName.
+106500140304           MOVE lc_Investment(IDX1)        TO lc_PEXPInvestment.
+106600140304           MOVE ln_UnitAmt(IDX1)           TO ln_PEXPUnitAmt.
+106700140304           MOVE ln_UnitPrice(IDX1)         TO ln_PEXPUnitPrice.
+106800140304           MOVE lc_SettledGrossOrNet(IDX1) TO lc_PEXPSettledGrossOrNet.
+106900140304           MOVE ln_NetAmt(IDX1)            TO ln_PEXPNetAmt.
+107000140304           MOVE ln_GrossAmt(IDX1)          TO ln_PEXPGrossAmt.
+107100140304           MOVE lc_ErrorMsg                TO lc_PEXPErrorMsg.
+107200140304      *RFS132751 - Ends *
+107300130327
+107400130327      * ---------------------------------
+107500130327       INSERT-REC-MFAPEPEXP.
+107600130327      * ---------------------------------
+107700130327           EXEC SQL
+107800130327             INSERT INTO MFAPEPEXP
+107900130327             VALUES(
+108000130327                 :li_PEXPAccountNo,
+108100130327                 :lc_PEXPTransTypeCode,
+108200130327                 :lc_PEXPInvestmentName,
+108300130327                 :lc_PEXPInvestment,
+108400130327                 :ln_PEXPUnitAmt,
+108500130327                 :ln_PEXPUnitPrice,
+108600130327                 :ln_PEXPMgmFee,
+108700130327                 :ln_PEXPDscCharge ,
+108800130327                 :ln_PEXPTax ,
+108900130327                 :lc_PEXPSettledGrossOrNet,
+109000130327                 :ln_PEXPNetAmt,
+109100130327                 :ln_PEXPGrossAmt,
+109200131028125459           :li_PlaceDate,
+109300131028125459           :li_TransNo,
+109400130327                 :lc_PEXPErrorMsg
+109500130327                 )
+109600130327           END-EXEC.
+109700130327           MOVE SQLSTATE                       TO lc_sqlStates.
+109800130327           EVALUATE TRUE
+109900130927               WHEN lncc_sqlSuccessful
+110000130927125459***           MOVE lnc_Yes               TO lc_Exception
+110100130927125459              Continue
+110200130327               WHEN OTHER
+110300130408                    SET lncc_Err_22            TO TRUE
+110400130327                    MOVE lncc_ErrorInsertMfapepexp
+110500130327                                               TO lc_sqlErrShortDESCR
+110600130327                    PERFORM Dsp-Error
+110700130327           END-EVALUATE.
+110800130927
+110900130930125459************************************
+111000130927125459 VALIDATE-ALT-ACCOUNT-DIST-REP.
+111100130930125459************************************
+111200130927
+111300130930125459     Move li_PlaceDate     to li_DsrPlacementDate
+111400130930125459     Move li_TransNo       to li_DsrTransactionNo
+111500130930125459
+111600130930125459******************************************************************
+111700130930125459* Get the Origin Trans (CPG/INC/INT/BUY) in order to locate
+111800130930125459* the Original Trans DSR trades
+111900130930125459******************************************************************
+112000140304      *RFS132751 - Begins *
+112100140304125459*    If lc_TransStatusCode = lnc_Rvs
+112200140304           If lc_TransStatusCode(IDX1) = lnc_Rvs
+112300140304      *RFS132751 - Ends *
+112400140304
+112500130930125459        Exec SQL
+112600130930125459           Select Placement_Date, Trans_No
+112700130930125459             into :li_DsrPlacementDate, :li_DsrTransactionNo
+112800130930125459             From MFATRNTGP
+112900130930125459            Where Placement_Date_2 = :li_PlaceDate
+113000130930125459              and Trans_No_2       = :li_TransNo
+113100130930125459              and RELATIONSHIP_TYPE = "RVS"
+113200130930125459        End-Exec
+113300130930125459     End-If
+113400140304
+113500140305      *RFS132751 - Begins *
+113600140304             EXEC SQL
+113700140304              SELECT COUNT(*)
+113800140304               INTO  :lc_count
+113900140304               FROM  MFATRNTGP TRNTG
+114000140304               WHERE ((trntg.placement_date_2= :li_DsrPlacementDate
+114100140304                AND    trntg.trans_no_2        = :li_DsrTransactionNo)
+114200140304                OR    (trntg.placement_date    = :li_DsrPlacementDate
+114300140304                AND    trntg.trans_no          = :li_DsrTransactionNo))
+114400140304                AND    trntg.RELATIONSHIP_TYPE = "DSR"
+114500140304             END-EXEC
+114600140304
+114700140304             IF lc_count > 0
+114800140304                CONTINUE
+114900140304             ELSE
+115000140304                GO TO EXIT-PARA
+115100140304             END-IF.
+115200140304      *RFS132751 - Ends *
+115300130930
+115400130930125459******************************************************************
+115500130930125459* Check the DSR pair, to see whether both side has Alterate A/C
+115600130930125459* and currency are the same. The max is used to check when there
+115700130930125459* is a 1 to many re-purchase, if any of the buy is in different
+115800130930125459* currency, or missing alternate account, then it should be skipped
+115900130930125459* Y = Exclude and Exception Report,  N = No Error nor Exception
+116000130930125459* X = Skip only, exception report already done at PEP GL process
+116100130930125459******************************************************************
+116200130930125459     Exec SQL
+116300130930125459          Select
+116400131030125459             Coalesce(Max(
+116500131017125459             Case When Coalesce(Accxrf1.ACCNORIG, " ") <> " "
+116600131017125459                   And Coalesce(Accxrf2.ACCNORIG, " ") <> " "
+116700131017125459                   And Invp1.Currency = Invp2.Currency
+116800131017125459                  Then "N"
+116900131029125459                  When Coalesce(Accxrf1.ACCNORIG, " ") = " "
+117000131029125459                   And Coalesce(Accxrf2.ACCNORIG, " ") = " "
+117100131029125459                  Then "X"
+117200131017125459                  When Coalesce(Accxrf1.ACCNORIG, " ") = " "
+117300131029125459                   Or Coalesce(Accxrf2.ACCNORIG, " ") = " "
+117400131029125459                  Then "Y"
+117500131029125459                  When Invp1.Currency <> Invp2.Currency
+117600131029125459                  Then "X"
+117700131030125459                  Else "N" end), "N")
+117800130930125459           into :lc_Exception
+117900130930125459           From MFATRNTGP TRNTG
+118000130930125459           Inner Join MFATRNP Trnp1 On
+118100130930125459                 trntg.Placement_Date = Trnp1.Placement_Date
+118200130930125459             and trntg.Trans_No       = Trnp1.Trans_No
+118300130930125459           Inner Join MFAINVP Invp1 On
+118400130930125459                 trnp1.Investment_Code = Invp1.Investment_Code
+118500130930125459           Left Outer Join CNVACTXREF ACCXRF1 ON
+118600130930125459              TRNP1.ACCOUNT_NO        = ACCXRF1.ACCOUNT_NO
+118700130930125459           Inner Join MFATRNP Trnp2 On
+118800130930125459                 trntg.Placement_Date_2 = Trnp2.Placement_Date
+118900130930125459             and trntg.Trans_No_2       = Trnp2.Trans_No
+119000130930125459           Inner Join MFAINVP Invp2 On
+119100130930125459                 trnp2.Investment_Code = Invp2.Investment_Code
+119200130930125459           Left Outer Join CNVACTXREF ACCXRF2 ON
+119300130930125459              TRNP2.ACCOUNT_NO        = ACCXRF2.ACCOUNT_NO
+119400131003126047       Where trntg.RELATIONSHIP_TYPE = "DSR" and
+119500131003126047             char(trntg.placement_date) || char(trntg.trans_no)
+119600131003126047             in(select char(trntg2.placement_date)
+119700131003126047                || char(trntg2.trans_no)
+119800131003126047           from mfatrntgp trntg2
+119900131003126047           where ((trntg2.placement_date_2= :li_DsrPlacementDate
+120000131003126047             and trntg2.trans_no_2        = :li_DsrTransactionNo)
+120100131003126047             or (trntg2.placement_date    = :li_DsrPlacementDate
+120200131003126047             and trntg2.trans_no          = :li_DsrTransactionNo))
+120300131003126047              and trntg2.RELATIONSHIP_TYPE = "DSR")
+120400130930125459           End-Exec
+120500130930
+120600130930125459     IF lb_ExcludeAndException
+120700130930125459        MOVE lncc_MsgAltAccount    TO lc_ErrorMsg
+120800130930125459        PERFORM PREPARE-TO-WRITE
+120900130930125459     END-IF
+121000130930125459     .
+121100140304      *RFS132751 - Begins *
+121200140304       EXIT-PARA.
+121300140304      *RFS132751 - Ends *
+121400130927125459************************************
+121500130927125459 Exclude-Exception-Check.
+121600130927125459************************************
+121700130927
+121800131017125459     IF  lc_TrAccountNo  Not = SPACES AND
+121900140304      *RFS132751 - Begins *
+122000140304125459*        lc_AltAccountNo Not = SPACES AND
+122100140304125459*        lc_Currency         = lc_OthCurrency
+122200140304               lc_AltAccountNo(IDX1) Not = SPACES         AND
+122300140304               lc_Currency(IDX1)         = lc_OthCurrency
+122400140304      *RFS132751 - Ends *
+122500131031125459         Set lb_NoException to True
+122600131031125459         Else IF lc_TrAccountNo  = SPACES AND
+122700140304      *RFS132751 - Begins *
+122800140304125459*                lc_AltAccountNo = SPACES
+122900140304                       lc_AltAccountNo(IDX1) = SPACES
+123000140304      *RFS132751 - Ends *
+123100131029125459                 Set lb_ExcludeButNoException to True
+123200131031125459         Else IF lc_TrAccountNo  = SPACES OR
+123300140304      *RFS132751 - Begins *
+123400140304125459*                lc_AltAccountNo = SPACES
+123500140304                       lc_AltAccountNo(IDX1) = SPACES
+123600140304      *RFS132751 - Ends *
+123700131028125459                 Set lb_ExcludeAndException   to True
+123800131028125459                 MOVE lncc_MsgAltAccount  TO lc_ErrorMsg
+123900131028125459                 PERFORM PREPARE-TO-WRITE
+124000131017125459               Else
+124100140304      *RFS132751 - Begins *
+124200140304125459*                If lc_Currency Not = lc_OthCurrency
+124300210610      *RFS1115914- Begins *
+124400210610      *                If lc_Currency(IDX1) Not = lc_OthCurrency
+124500210610                       If lc_Currency(IDX1) Not = lc_OthCurrency
+124600210610                          AND lc_TransTypeCode(IDX1) NOT = lnc_Swo
+124700210610                          AND lc_TransTypeCode(IDX1) NOT = lnc_Swi
+124800210610      *RFS1115914- Ends   *
+124900140304      *RFS132751 - Ends *
+125000131028125459                     Set lb_ExcludeButNoException to True
+125100131028125459                 Else
+125200131028125459                     Set lb_NoException to True
+125300131028125459                 End-If
+125400131029125459              End-If
+125500131017125459           End-If
+125600130927125459     End-If.
+125700130927
+125800140304      *RFS132751 - Begins *
+125900140304      * ---------------------------------
+126000140304       INSERT-REC-MFAWRKFLE.
+126100140304      * ---------------------------------
+126200140304           PERFORM PREPARE-TO-WORKEXP.
+126300140304
+126400140304           EXEC SQL
+126500140304             INSERT INTO MFAWRKFLE
+126600140304             VALUES(
+126700140304                    :lc_WORKAccountNo,
+126800140304                    :lc_WORKTransTypeCode,
+126900140304                    :li_PlaceDate,
+127000140304                    :li_TransNo,
+127100140304                    :lc_WORKException
+127200140304                    )
+127300140304           END-EXEC.
+127400140304
+127500140304           MOVE SQLSTATE TO lc_sqlStates.
+127600140304               IF lncc_sqlSuccessful
+127700140304                    MOVE lnc_No  TO lc_Exception
+127800140304                    Continue
+127900140304               IF NOT lncc_sqlSuccessful
+128000140304                    SET lncc_Err_22  TO TRUE
+128100140304                    MOVE lncc_ErrorInsertMfawrkfle
+128200140304                                 TO lc_sqlErrShortDESCR
+128300140304                    PERFORM Dsp-Error.
+128400140304
+128500140304      * ---------------------------------
+128600140304       PREPARE-TO-WORKEXP.
+128700140304      * ---------------------------------
+128800140304           INITIALIZE lc_WORKInsertRec.
+128900140304
+129000140304           MOVE li_AccountNo(IDX1)     TO lc_WORKAccountNo  .
+129100140304           MOVE lc_TransTypeCode(IDX1) TO lc_WORKTransTypeCode.
+129200140304           MOVE ln_Exception           TO lc_WORKException.
+129300140304      *RFS132751 - Ends *
+129400140304
+129500130327      * ---------------------------------
+129600130327       END-JOB.
+129700130327      * ---------------------------------
+129800130327           EXEC SQL
+129900130327             CLOSE PepCursor
+130000130327           END-EXEC.
+130100130327           GOBACK.
+130200130327
+130300130327      * DSP-ERROR and FORCE-MSGW Routines
+130400130327           COPY CPYSQLRTN.

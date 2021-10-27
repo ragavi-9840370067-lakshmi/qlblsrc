@@ -1,0 +1,2423 @@
+000100110727       IDENTIFICATION DIVISION.
+000200171005       PROGRAM-ID.    SRVFDR.
+000300111010       AUTHOR.        RAJKUMAR A.
+000400111004       INSTALLATION.  L&T Financial Services Technology Inc.
+000500111113       DATE-WRITTEN.  20 JULY 2011.
+000600110727       DATE-COMPILED.
+000700110727      *****************************************************************
+000800110727      * SPECIAL NOTE: create program - use opt 14                     *
+000900110727      *****************************************************************
+001000110727      *****************************************************************
+001100110727      * Purpose  : Variable units daily roll-up of aging units        *
+001200110727      *            by account investment                              *
+001300110727      *                                                               *
+001400110727      * Called by: SRVFDT                                             *
+001500110727      *                                                               *
+001600111123      * Parms:     pc_Option, X(03)                                   *
+001700110727      *              'ALL' - all accounts of the investment, input    *
+001800110727      *                      account no is not required.              *
+001900110727      *              'ONE' - One account of the investment, input     *
+002000110727      *                      account no is required.                  *
+002100110727      *                                                               *
+002200111123      *            pd_ProcessDate, S9(08)                             *
+002300110727      *              - current service fee process date, may not be   *
+002400110727      *                the same as the AS-AT-DATE of MFAPRCDTP.       *
+002500110727      *                                                               *
+002600111123      *            pc_InvestmentCode, X(05)                           *
+002700110727      *                                                               *
+002800111123      *            pi_AccountNo, S9(09)                               *
+002900111123      *              - set to zeros if pc_Option is 'ALL', set the    *
+003000110727      *                required account no. otherwise.                *
+003100110727      *                                                               *
+003200111123      *            pi_ReturnCode, X(03)                               *
+003300110727      *              " "   - Blank indicates no error, error occurred *
+003400110727      *                      otherwise.                               *
+003500111011      *              "001"  - Special authorization is required       *
+003600111011      *              "002"  - Invalid option                          *
+003700111011      *              "003"  - Process date is required                *
+003800111011      *              "004"  - Account no. is required for             *
+003900111011      *                       pc_Option 'ONE'.                        *
+004000111011      *              "005"  - Investment code is required             *
+004100111011      *              "006"  - Investment not found for var rate       *
+004200111011      *              "007"  - Error returned from FXSRVUAI for Get    *
+004300111011      *              "008"  - Error returned from FXSRVUAI for Put    *
+004400111011      *              "009"  - Day range of the current record was     *
+004500110818      *                      not found in lc_VrRateArray               *
+004600111011      *              "99"  - SQL error encounted.                     *
+004700110727      *                                                               *
+004800110727      *              Warning codes below are for internal tracking,   *
+004900110727      *              will not be returned to the calling program.     *
+005000110727      *                                                               *
+005100110727      *              "101" - Negative roll-up unit, it will be set    *
+005200110727      *                      to zeros.                                *
+005300110727      *              "102" - Roll-up unit > current, it will be set   *
+005400110727      *                      to the current unit instead.             *
+005500110727      *              "103" - CPP RVS target not found in MFATRNGTP,   *
+005600110727      *                      trans is treated as reversed, purchased  *
+005700110727      *                      unit has no effect.                      *
+005800110727      *              "104" - RDP RVS target not found in MFATRNGTP    *
+005900110727      *                      trans is treated as reversed, redeemed   *
+006000110727      *                      unit has no effect.                      *
+006100110727      *              "105" - Next higher day range is undefined in    *
+006200110727      *                      the table, roll-up action is declined,   *
+006300110727      *                      roll-up units stay in the current range. *
+006400110727      *                                                               *
+006500110727      *****************************************************************
+006600110727      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE             *
+006700110727      *****************************************************************
+006800111011      * RajKumar A * July 2011    * CREATED Program for RFS#64348     *
+006900130515      * Uma C      * 2013/05/15   * RFS121657 - recompile for MFATRNPUP*
+006901181126      * Sachin Soman * 2018/11/23 * RFS180293 - Recompile for MFATRNPUP*
+006902181207      *                                         and MFATRNRUP         *
+006903200811      * Rajesh R   * 2020/08/11   * RFS185178 - Recompile for         *
+006904200811      *            *              * MFAFEESCLP                        *
+007000110727      *****************************************************************
+007100110727
+007200110727       ENVIRONMENT DIVISION.
+007300110727       CONFIGURATION SECTION.
+007400110727       SOURCE-COMPUTER. IBM-AS400.
+007500110727       OBJECT-COMPUTER. IBM-AS400.
+007600110727       SPECIAL-NAMES.
+007700110825           LINKAGE TYPE IS PROCEDURE FOR "FXSRVUAI"
+007800110727                      DATA-AREA  IS WS-DATA-AREA-1
+007900110727                      LOCAL-DATA IS WS-LOCAL.
+008000110817
+008100110727       INPUT-OUTPUT SECTION.
+008200110727       FILE-CONTROL.
+008300110728           SELECT  TRANS
+008400110728                   ASSIGN TO DATABASE-MFATRNP
+008500110728                   ORGANIZATION IS INDEXED
+008600110728                   ACCESS IS DYNAMIC
+008700110728                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+008800111004                   FILE STATUS IS lc_FileStatus.
+008900110728
+009000110728           SELECT  TRANS-TARGET
+009100110728                   ASSIGN TO DATABASE-MFATRNTGLB
+009200110728                   ORGANIZATION IS INDEXED
+009300110728                   ACCESS IS DYNAMIC
+009400110728                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+009500111122                   WITH DUPLICATES
+009600111004                   FILE STATUS IS lc_FileStatus.
+009700110728
+009800110728           SELECT  TRANS-TARGET-2
+009900110728                   ASSIGN TO DATABASE-MFATRNTGLC
+010000110728                   ORGANIZATION IS INDEXED
+010100110728                   ACCESS IS DYNAMIC
+010200110728                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+010300110728                   WITH DUPLICATES
+010400111004                   FILE STATUS IS lc_FileStatus.
+010500110727
+010600110818           SELECT  TRANS-PURCHASE-UNITS
+010700110818                   ASSIGN TO DATABASE-MFATRNPUL1
+010800110818                   ORGANIZATION IS INDEXED
+010900110818                   ACCESS IS DYNAMIC
+011000110818                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+011100111004                   FILE STATUS IS lc_FileStatus.
+011200110818
+011300110818           SELECT  TRANS-PURCHASE-UNITS-2
+011400110927                   ASSIGN TO DATABASE-MFATRNPUL2
+011500110818                   ORGANIZATION IS INDEXED
+011600110818                   ACCESS IS DYNAMIC
+011700110818                   RECORD KEY IS EXTERNALLY-DESCRIBED-KEY
+011800111004                   FILE STATUS IS lc_FileStatus.
+011900110818
+012000110727
+012100110727       DATA DIVISION.
+012200110727       FILE SECTION.
+012300110728       FD  TRANS
+012400110728           LABEL RECORDS ARE STANDARD.
+012500111123       01  TRANS-REC.             COPY DD-ALL-FORMATS OF MFATRNP.
+012600110728
+012700110728       FD  TRANS-TARGET
+012800110728           LABEL RECORDS ARE STANDARD.
+012900110728       01  TRANS-TARGET-REC.      COPY DD-ALL-FORMATS OF MFATRNTGLB.
+013000110728
+013100110728       FD  TRANS-TARGET-2
+013200110728           LABEL RECORDS ARE STANDARD.
+013300110728       01  TRANS-TARGET-REC-2.    COPY DD-ALL-FORMATS OF MFATRNTGLC.
+013400111004
+013500110818       FD  TRANS-PURCHASE-UNITS
+013600110818           LABEL RECORDS ARE STANDARD.
+013700110818       01  TRANS-PURCHASE-UNITS-REC.
+013800111004                                  COPY DDR-ALL-FORMATS OF MFATRNPUL1.
+013900110818
+014000110818       FD  TRANS-PURCHASE-UNITS-2
+014100110818           LABEL RECORDS ARE STANDARD.
+014200110818       01  TRANS-PURCHASE-UNITS-2-REC.
+014300111004                                  COPY DDR-ALL-FORMATS OF MFATRNPUL2.
+014400110818
+014500110727       WORKING-STORAGE SECTION.
+014600110727
+014700110727           EXEC SQL
+014800110727             INCLUDE SQLCA
+014900110727           END-EXEC.
+015000110727
+015100111207       01  lc_CurrAccInv.
+015200111123           03  li_CurrAccount               PIC S9(09).
+015300111123           03  lc_CurrInvestment            PIC  X(05).
+015400110727
+015500111207       01  lc_PrevAccInv.
+015600111123           03  li_PrevAccount               PIC S9(09).
+015700111123           03  li_PrevInvestment            PIC  X(05).
+015800110727
+015900111123       01  lc_FileStatus                    PIC  X(02).
+016000110727
+016100110817       01  lc_Miscell.
+016200111123           03  lc_InvestmentCode            PIC  X(05).
+016300111123           03  li_AccountNo                 PIC S9(09).
+016400111123           03  ld_EffectiveDate             PIC S9(09)      COMP-3.
+016500111123           03  ld_CurrEffectDate            PIC S9(09)      COMP-3.
+016600111123           03  ld_NxtEffectiveDate          PIC S9(09)      COMP-3.
+016700111123           03  ld_EndDate                   PIC S9(09)      COMP-3.
+016800111123           03  ld_RequireDate               PIC S9(09)      COMP-3.
+016900111123           03  ld_EarlyEffDate              PIC S9(9).
+017000111123           03  lc_OneAccProcessed           PIC  X(01).
+017100111123           03  ld_PlacementDate             PIC S9(09)      COMP-3.
+017200111123           03  li_TransNo                   PIC S9(09)      COMP-3.
+017300111123           03  ld_RvsPlacementDate          PIC S9(09)      COMP-3.
+017400111123           03  li_RvsTransNo                PIC S9(09)      COMP-3.
+017500111123           03  ld_RvsProcessDate            PIC S9(09)      COMP-3.
+017600111123           03  ld_PupPrvRvsProcessDate      PIC S9(09)      COMP-3.
+017700111123           03  li_RecCnt                    PIC S9(07)      COMP-3.
+017800111123           03  li_TotUnits                  PIC S9(10)V9(3) COMP-3.
+017900111123           03  li_UnitBal                   PIC S9(10)V9(3) COMP-3.
+018000111123           03  ld_PupPrvPlacementDate       PIC S9(09)      COMP-3.
+018100111123           03  li_PupPrvTransNo             PIC S9(09)      COMP-3.
+018200111123           03  ld_PupPrvProcessDate         PIC S9(09)      COMP-3.
+018300111123           03  ld_RupPrvPlacementDate       PIC S9(09)      COMP-3.
+018400111123           03  li_RupPrvTransNo             PIC S9(09)      COMP-3.
+018500111123           03  ld_RupPrvProcessDate         PIC S9(09)      COMP-3.
+018600111123           03  ld_RupPrvRvsProcessDate      PIC S9(09)      COMP-3.
+018700111123           03  lc_ErrorCode                 PIC  X(03).
+018800111123           03  lc_WarningCode               PIC  X(03).
+018900111123           03  li_Days                      PIC S9(07).
+019000111123           03  li_RollUpUnit                PIC S9(10)V9(03) COMP-3.
+019100111123           03  li_RollUpUnitNet             PIC S9(10)V9(03) COMP-3.
+019200111123           03  li_DaysD1                    PIC  Z(06)9(01)-.
+019300111123           03  li_DaysD2                    PIC  Z(06)9(01)-.
+019400111123           03  li_UnitD1                    PIC  Z(09)9(01).9(03)-.
+019500111123           03  li_UnitD2                    PIC  Z(09)9(01).9(03)-.
+019600111123           03  li_Sysdate                   PIC S9(08).
+019700111123           03  li_Systime                   PIC S9(08).
+019800110727
+019900111123           03  li_TimeBegin.
+020000111123               05  li_TbHH                  PIC  9(02).
+020100111123               05  li_TbMM                  PIC  9(02).
+020200111123               05  li_TbSS                  PIC  9(02).
+020300111123               05  li_TbTT                  PIC  9(02).
+020400110727
+020500111123           03  li_TimeEnd.
+020600111123               05  li_TeHH                  PIC  9(02).
+020700111123               05  li_TeMM                  PIC  9(02).
+020800111123               05  li_TeSS                  PIC  9(02).
+020900111123               05  li_TeTT                  PIC  9(02).
+021000110727
+021100111123           03  lc_TimeUsed.
+021200111123               05  li_Tu                    PIC  9(02).
+021300111123               05  FILLER                   PIC  X(01) VALUE ":".
+021400111123               05  li_TuMM                  PIC  9(02).
+021500111123               05  FILLER                   PIC  X(01) VALUE ":".
+021600111123               05  li_TuSS                  PIC  9(02).
+021700111123               05  FILLER                   PIC  X(01) VALUE ":".
+021800111123               05  li_TuTT                  PIC  9(02).
+021900110727
+022000111123           03  lc_StatsEvent                PIC  X(01).
+022100111123           03  lc_LogProgramCalled          PIC  X(10).
+022200110727
+022300110727
+022400111123       01  ld_FormatDateIn                  FORMAT DATE "@Y%m%d".
+022500111123       01  ld_FormatDateOut                 FORMAT DATE "@Y%m%d".
+022600110727
+022700111123       01  lc_Current03Rec.
+022800111123           03  ld_PupPlacementDate          PIC S9(09)       COMP-3.
+022900111123           03  li_PupTransNo                PIC S9(09)       COMP-3.
+023000111123           03  li_PupCdscSeqNo              PIC S9(05)       COMP-3.
+023100111123           03  li_PupOrigUnitBal            PIC S9(10)V9(03) COMP-3.
+023200111123           03  li_PupAgeDate                PIC S9(09)       COMP-3.
+023300111123           03  ld_PupProcessDate            PIC S9(09)       COMP-3.
+023400111123           03  li_PupAccountNo              PIC S9(09).
+023500111123           03  lc_PupInvestmentCode         PIC  X(05).
+023600111123           03  li_PupTransProcSeq           PIC S9(03)       COMP-3.
+023700111123           03  lc_PupReverse                PIC  X(01).
+023800110727
+023900111123       01  lc_Current04Rec.
+024000111123           03  ld_RupPlacementDate          PIC S9(09)       COMP-3.
+024100111123           03  li_RupTransNo                PIC S9(09)       COMP-3.
+024200111123           03  li_RupCdscSeqNo              PIC S9(05)       COMP-3.
+024300111123           03  li_RupFreeUnitsTaken         PIC S9(10)V9(03) COMP-3.
+024400111123           03  li_RupChrgUnitsTaken         PIC S9(10)V9(03) COMP-3.
+024500111123           03  ld_RupProcessDate            PIC S9(09)       COMP-3.
+024600111123           03  li_RupAccountNo              PIC S9(09).
+024700111123           03  lc_RupInvestmentCode         PIC  X(05).
+024800111123           03  li_RupTransProcSeq           PIC S9(03)       COMP-3.
+024900111123           03  lc_RupReverse                PIC  X(01).
+025000110804
+025100111123       01  ltb_FetchC2Table.
+025200111123           03  ltb_C2Cursor              OCCURS 2340 TIMES.
+025300111123               05  li_F2AccountNo           PIC S9(09).
+025400111123               05  lc_F2InvestmentCode      PIC  X(05).
+025500110817
+025600110727      *********************
+025700110727      ** SQL DEFINE AREA **
+025800110727      *********************
+025900110727
+026000111123       01  lc_SqlVariables.
+026100111123           03  lc_CallingProgram            PIC  X(10)  VALUE "SRVFDR".
+026200111124           03  lc_RoutineName               PIC  X(25).
+026300111125           03  lc_SqlErrData                PIC  X(1780) VALUE " ".
+026400111123           03  lc_SqlStats                  PIC  X(1966) VALUE SPACES.
+026500111124           03  lc_SqlErrReply               PIC  X(01)   VALUE SPACES.
+026600111123           03  lc_Sqllog                    PIC  X(01)   VALUE "Y".
+026700111125           03  lc_Strsql                    PIC  X(1000) VALUE SPACES.
+026800111123           03  li_Sqlcode                   PIC -9(09).
+026900110727
+027000110727
+027100111125      * C1 tables for cursor lcu_Srvfdrc1 (33 bytes long, 10 fields)
+027200110727
+027300111123       01  li_Cnt                           PIC S9(05)       COMP-3.
+027400111124       01  li_MaxRows                       PIC S9(05)       BINARY
+027500111124                                                         VALUES 990.
+027600111123       01  li_C1NoOfRowsFetched             PIC S9(05)       COMP-3.
+027700111123       01  li_Cntr                          PIC S9(05)       COMP-3.
+027800111123       01  li_C2TotNoOfRowsFetched          PIC S9(05)       COMP-3.
+027900110923
+028000110727
+028100110817       01  C1_FetchTbl.
+028200111124           03  C1_FetchArray             OCCURS 990  TIMES.
+028300111123               05  C1_InvestmentCode        PIC  X(05).
+028400111123               05  C1_EffectiveDate         PIC S9(9).
+028500111123               05  C1_RateRule              PIC  X(01).
+028600111123               05  C1_LowerLimitDays        PIC S9(05)       COMP-3.
+028700110727
+028800110817       01  C1_IndTbl.
+028900111123           03  C1_IndArray               OCCURS 990  TIMES.
+029000111124               05  C1_Ind                   PIC S9(04)       BINARY
+029100111123                                            OCCURS 4 TIMES.
+029200110727
+029300110727
+029400111125      * C2 tables for cursor lcu_Srvfdrc2 (14 bytes long, 2 fields)
+029500110727
+029600111123       01  C2_Cnt                           PIC S9(05)       COMP-3.
+029700111124       01  C2_MaxRows                       PIC S9(05)       BINARY
+029800111124                                                        VALUES 2340.
+029900111123       01  C2_LastRowFetched                PIC  X(01).
+030000111123       01  C2_NoOfRowsFetched               PIC S9(05)       BINARY.
+030100110727
+030200110817       01  C2_FetchTbl.
+030300111123           03  C2_FetchArray                OCCURS 2340 TIMES.
+030400111123               05  C2_AccountNo             PIC S9(09).
+030500111123               05  C2_InvestmentCode        PIC  X(05).
+030600110727
+030700110817       01  C2_IndTbl.
+030800111123           03  C2_IndArray                  OCCURS 2340 TIMES.
+030900111123               05  C2_Ind                   PIC S9(04)       BINARY
+031000111123                                            OCCURS 2 TIMES.
+031100110727
+031200110727
+031300111125      * C3 tables for cursor lcu_Srvfdrc3 (47 bytes long, 10 fields)
+031400110727
+031500111123       01  C3_Cnt                           PIC S9(05)       COMP-3.
+031600111123       01  C3_MaxRows                       PIC S9(05)       BINARY
+031700111123                                                          VALUE 695.
+031800111123       01  C3_NoOfRowsFetched               PIC S9(05)       BINARY.
+031900110727
+032000110817       01  C3_FetchTbl.
+032100111123           03  C3_FetchArray             OCCURS 695  TIMES.
+032200111123               05  C3_PupPlacementDate      PIC S9(09)       COMP-3.
+032300111123               05  C3_PupTransNo            PIC S9(09)       COMP-3.
+032400111123               05  C3_PupCdscSeqNo          PIC S9(05)       COMP-3.
+032500111123               05  C3_PupOrigUnitBal        PIC S9(10)V9(03) COMP-3.
+032600111123               05  C3_PupAgeDate            PIC S9(09)       COMP-3.
+032700111123               05  C3_PupProcessDate        PIC S9(09)       COMP-3.
+032800111123               05  C3_PupAccountNo          PIC S9(09).
+032900111123               05  C3_PupInvestmentCode     PIC  X(05).
+033000111123               05  C3_PupTRANS-PROC-SEQ     PIC S9(03)       COMP-3.
+033100111123               05  C3_PupReverse            PIC  X(01).
+033200110727
+033300110817       01  C3_IndTbl.
+033400111123           03  C3_IndArray               OCCURS 695  TIMES.
+033500111123               05  C3_Ind                   PIC S9(04)       BINARY
+033600111123                                            OCCURS 10 TIMES.
+033700110727
+033800110727
+033900111125      * C4 tables for cursor lcu_Srvfdrc4 (49 bytes long, 10 fields)
+034000110727
+034100111123       01  C4_Cnt                           PIC S9(05)       COMP-3.
+034200111123       01  C4_MaxRows                       PIC S9(05)       BINARY
+034300111123                                                          VALUES 665.
+034400111124       01  C4_NoOfRowsFetched               PIC S9(05)       BINARY.
+034500110727
+034600110817       01  C4_FetchTbl.
+034700111123           03  C4_FetchArray                OCCURS 665  TIMES.
+034800111123               05  C4_RdpPlacementDate      PIC S9(09)       COMP-3.
+034900111123               05  C4_RdpTransNo            PIC S9(09)       COMP-3.
+035000111123               05  C4_RdpCdscSeqNo          PIC S9(05)       COMP-3.
+035100111123               05  C4_RdpFreeUnitsTaken     PIC S9(10)V9(03) COMP-3.
+035200111123               05  C4_RdpChrgUnitsTaken     PIC S9(10)V9(03) COMP-3.
+035300111123               05  C4_RdpProcessDate        PIC S9(09)       COMP-3.
+035400111123               05  C4_RdpAccountNo          PIC S9(09).
+035500111123               05  C4_RdpInvestmentCode     PIC  X(05).
+035600111123               05  C4_RdpTransProcSeq       PIC S9(03)       COMP-3.
+035700111123               05  C4_RdpReverse            PIC  X(01).
+035800110727
+035900110817       01  C4_IndTbl.
+036000111123           03  C4_IndArray                  OCCURS 665  TIMES.
+036100111123               05  C4_Ind                   PIC S9(04)       BINARY
+036200111123                                            OCCURS 10 TIMES.
+036300110727
+036400111123
+036500111123       01  lc_VrPrvInvestmentCode           PIC  X(05).
+036600110727      * Variable rate table is two-dimensional and set for
+036700110727      * binary search capability. Sort by investment first, and
+036800111010      * by Effective date and then by lower limit days.
+036900110727      *
+037000110818      * Be caution when moving lx_Vi1 and lx_Vi2 indexes - its postion
+037100110727      * is dependent by subsequent logic.
+037200110727
+037300110727      * Index control at investment level
+037400111123       01  li_VrIx1                         PIC S9(05)       COMP-3.
+037500110727
+037600110727      * Index control at lower limit days level
+037700111123       01  li_VrIx2                         PIC S9(05)       COMP-3.
+037800110727
+037900110817       01  ltb_VrTbl.
+038000111123            03  lc_VrInvArray               OCCURS 1000
+038100111123                                            ASCENDING KEY IS
+038200111123                                            lc_VrInvestmentCode
+038300111123                                            INDEXED BY lx_Vi1.
+038400111123                 05  lc_VrInvestmentCode    PIC  X(05)
+038500111123                                                 VALUE  HIGH-VALUES.
+038600111123                 05  li_VrCnt               PIC S9(05)       COMP-3
+038700111123                                                 VALUE       ZEROS.
+038800111123                 05  lc_VrRateArray         OCCURS 50
+038900111123                                            ASCENDING KEY IS
+039000111123                                            ld_VrEffectiveDate
+039100111123                                            li_VrLowerLimitDays
+039200111123                                            INDEXED BY lx_Vi2.
+039300111123                     07  li_VrLowerLimitDays   PIC S9(07)    COMP-3
+039400111123                                                    VALUE   9999999.
+039500111123                     07  ld_VrEffectiveDate    PIC S9(08) VALUE ZEROS.
+039600111123                     07  lc_VrRateRule         PIC  X(01) VALUE SPACES.
+039700110728
+039800110817      * Roll-up require table, two dimensiona, creation is based on
+039900111010      * lc_VrInvArray, and pd_ProcessDate.
+040000110727
+040100111123       01  li_RqI1                          PIC S9(05)       COMP-3.
+040200111123       01  li_RqI2                          PIC S9(05)       COMP-3.
+040300110727
+040400110817       01  ltb_RqTbl.
+040500111123           03  lc_RqInvArray                OCCURS 1000
+040600111123                                            INDEXED BY lx_Ri1.
+040700110727
+040800111123               05  lc_RqInvestmentCode      PIC  X(05)  VALUE SPACES.
+040900111123               05  ld_RqProcessDate         PIC S9(08)  VALUE ZEROS.
+041000111123               05  lc_RqRollUpArray         OCCURS 50
+041100111123                                            INDEXED BY  lx_Ri2.
+041200110727
+041300111123                   07  ld_RqRequireDate     PIC S9(09)         COMP-3
+041400111123                                                        VALUE ZEROS.
+041500111123                   07  ld_RqEffectDate      PIC S9(09)  VALUE ZEROS.
+041600111123                   07  lc_RqRollUpFlag      PIC  X(01)  VALUE SPACES.
+041700111123                       88  lb_RqRollUpYes               VALUE "Y".
+041800111123                       88  lb_RqRollUpNo                VALUE "N" " ".
+041900110727
+042000110727
+042100110727      * Account Investment variable units table for roll-up effect
+042200110727      * for the current account investment process.
+042300110727
+042400111123       01  li_AiCnt                         PIC S9(05)       COMP-3.
+042500111123       01  li_AiLoc                         PIC S9(05)       COMP-3.
+042600111123       01  li_AiIx                          PIC S9(05)       COMP-3.
+042700110727
+042800110817       01  ltb_AiTbl.
+042900111123           03  lc_AiArray                   OCCURS 50
+043000111123                                            INDEXED BY lx_AI.
+043100111123                05  li_AiLowerLimitDays     PIC S9(05)       COMP-3.
+043200111123                05  li_AiUnitsVar           PIC S9(10)V9(03) COMP-3.
+043300111123                05  lc_AiDtlExist           PIC  X(01).
+043400111123                05  lc_AiDtlOpt             PIC  X(01).
+043500111123                05  ld_AiEffectiveDate      PIC S9(08).
+043600111123                05  lc_AiRateRule           PIC  X(01) VALUE SPACES.
+043700110727
+043800110727
+043900110727      * Function FXSRVUAI area - GET buffer definition
+044000110727
+044100111123       01  li_FvgIxLoc                      PIC S9(05)       COMP-3.
+044200111123       01  li_FvgIx                         PIC S9(05)       COMP-3.
+044300110727
+044400110817       01  lc_FvgGetBuffer.
+044500111123           03  li_FvgAccountNo              PIC S9(09).
+044600111123           03  lc_FvgInvestmentCode         PIC  X(05).
+044700111123           03  lc_FvgOption                 PIC  X(01).
+044800111123           03  lc_FvgRecordExist            PIC  X(01).
+044900111123               88  lb_FvgRecordExistYes                 VALUE "Y".
+045000111123               88  lb_FvgRecordExistNo                  VALUE "N" " ".
+045100111123           03  lc_FvgHeaderOpt              PIC  X(01).
+045200111123           03  lc_FvgReturnCode             PIC X(02).
+045300111123           03  ld_FvgProcessDate            PIC S9(09).
+045400111123           03  li_FvgUnitsTotal             PIC S9(10)V9(03).
+045500111123           03  li_FvgCnt                    PIC S9(05).
+045600110727
+045700111123           03  ltb_FvgTbl.
+045800111123               05  lc_FvgArray              OCCURS 50
+045900111123                                            INDEXED BY lx_fvg.
+046000111123                   07  li_FvgLowerLimitDays PIC S9(05).
+046100111123                   07  li_FvgUnits          PIC S9(10)V9(03).
+046200111123                   07  lc_FvgDtlExist       PIC  X(01).
+046300111123                       88  lb_FvgDtlExistYes            VALUE "Y".
+046400111123                       88  lb_FvgDtlExistNo             VALUE "N" " ".
+046500111123                   07  lc_FvgDtlOpt         PIC  X(01).
+046600111123                   07  ld_FvgEffectiveDate  PIC S9(09).
+046700111123                   07  lc_FvgRateRule       PIC  X(01).
+046800111123                   07  lc_FvgOrgInvCode     PIC  X(05).
+046900111123                   07  lc_FvgRateRule2      PIC  X(01).
+047000110727
+047100110727
+047200110727      * Function FXSRVUAI area - PUT buffer definition
+047300110727
+047400111123       01  li_FvpIxLoc                      PIC S9(05)       COMP-3.
+047500111123       01  li_FvpIx                         PIC S9(05)       COMP-3.
+047600110727
+047700110817       01  lc_FvpPutBuffer.
+047800111123           03  li_FvpAccountNo              PIC S9(09).
+047900111123           03  lc_FvpInvestmentCode         PIC  X(05).
+048000111123           03  lc_FvpOption                 PIC  X(01).
+048100111123           03  lc_FvpRecordExist            PIC  X(01).
+048200111123           03  lc_FvpHeaderOpt              PIC  X(01).
+048300111123               88  lb_FvpOptAdd                          VALUE "A".
+048400111123               88  lb_FvpOptChange                       VALUE "C".
+048500111123               88  lb_FvpOptNoUpd                        VALUE " ".
+048600110727      *      'A' - Add header record
+048700110727      *      'C' - Change header record
+048800110727      *      ' ' - no update option for header record
+048900111123           03  lc_FvpReturnCode             PIC  X(02).
+049000111123           03  ld_FvpProcessDate            PIC S9(09).
+049100111123           03  li_FvpUnitsVarTotal          PIC S9(10)V9(03).
+049200111123           03  li_FvpCnt                    PIC S9(05).
+049300110727
+049400111123           03  ltb_FvpTbl.
+049500111123               05  lc_FvpArray              OCCURS 50
+049600111123                                            INDEXED BY FVPIX.
+049700111123                   07  li_FvpLowerLimitDays PIC S9(05).
+049800111123                   07  li_FvpUnitsVar       PIC S9(10)V9(03).
+049900111123                   07  lc_FvpDtlExist       PIC  X(01).
+050000111123                   07  lc_FvpDtlOpt         PIC  X(01).
+050100111124                       88  lb_FvpDtlOptAdd               VALUE "A".
+050200111124                       88  lb_FvpDtlOptChange            VALUE "C".
+050300111124                       88  lb_FvpDtlOptNoUpd             VALUE " ".
+050400110817      *         'A' - Add detail record
+050500110817      *         'C' - Change detail record
+050600110817      *         ' ' - no update option for detail record
+050700111123                   07  ld_FvpEffectiveDate  PIC S9(09).
+050800111123                   07  lc_FvpRateRule       PIC  X(01).
+050900111123                   07  lc_FvpOrgInvCode     PIC  X(05).
+051000111123                   07  lc_FvpRateRule2      PIC  X(01).
+051100110817
+051200110728       01  Misc_Fields.
+051300111123           03  lncc_FIFO                    PIC  X(04) VALUE "FIFO".
+051400111202           03  lncc_SRVFEE                  PIC  X(10) VALUE "SRVFEE".
+051500111123           03  lncc_SRVF                    PIC  X(04) VALUE "SRVF".
+051600111123           03  lncc_RVS                     PIC  X(03) VALUE "RVS".
+051700111123           03  lncc_HST                     PIC  X(03) VALUE "HST".
+051800111123           03  lncc_HSC                     PIC  X(03) VALUE "HSC".
+051900111123           03  lncc_001                     PIC  X(03) VALUE "001".
+052000111123           03  lncc_002                     PIC  X(03) VALUE "002".
+052100111123           03  lncc_2                       PIC  X(01) VALUE "2".
+052200111123           03  lncc_003                     PIC  X(03) VALUE "003".
+052300111123           03  lncc_004                     PIC  X(03) VALUE "004".
+052400111123           03  lncc_005                     PIC  X(03) VALUE "005".
+052500111123           03  lncc_006                     PIC  X(03) VALUE "006".
+052600111123           03  lncc_007                     PIC  X(03) VALUE "007".
+052700111123           03  lncc_008                     PIC  X(03) VALUE "008".
+052800111123           03  lncc_009                     PIC  X(03) VALUE "009".
+052900111123           03  lncc_010                     PIC  X(03) VALUE "010".
+053000111123           03  lncc_011                     PIC  X(03) VALUE "011".
+053100111123           03  lncc_012                     PIC  X(03) VALUE "012".
+053200111123           03  lncc_013                     PIC  X(03) VALUE "013".
+053300111123           03  lncc_014                     PIC  X(03) VALUE "014".
+053400111123           03  lncc_015                     PIC  X(03) VALUE "015".
+053500111123           03  lncc_016                     PIC  X(03) VALUE "016".
+053600111123           03  lncc_017                     PIC  X(03) VALUE "017".
+053700111123           03  lncc_101                     PIC  X(03) VALUE "101".
+053800111123           03  lncc_102                     PIC  X(03) VALUE "102".
+053900111123           03  lncc_103                     PIC  X(03) VALUE "103".
+054000111123           03  lncc_104                     PIC  X(03) VALUE "104".
+054100111123           03  lncc_105                     PIC  X(03) VALUE "105".
+054200111123           03  lncc_ALL                     PIC  X(03) VALUE "ALL".
+054300111123           03  lncc_ONE                     PIC  X(03) VALUE "ONE".
+054400111123           03  lncc_Y                       PIC  X(01) VALUE "Y".
+054500111123           03  lncc_N                       PIC  X(01) VALUE "N".
+054600111123           03  lncc_S                       PIC  X(01) VALUE "S".
+054700111123           03  lncc_E                       PIC  X(01) VALUE "E".
+054800111123           03  lncc_W                       PIC  X(01) VALUE "W".
+054900111123           03  lncc_G                       PIC  X(01) VALUE "G".
+055000111123           03  lncc_P                       PIC  X(01) VALUE "P".
+055100111123           03  lncc_A                       PIC  X(01) VALUE "A".
+055200111123           03  lncc_C                       PIC  X(01) VALUE "C".
+055300111123           03  lncc_99999999                PIC  9(09) VALUE 99999999.
+055400111123           03  lncc_ErrFetchingCursor       PIC  X(80)
+055500110822               VALUE "Error while fetching cursor".
+055600111123           03  lncc_ErrOpeningCursor        PIC  X(80)
+055700110822               VALUE "Error while Opening cursor ".
+055800111125
+055900111125       01  lc_ErrCode                    PIC X(02)  VALUE SPACES.
+056000111125           88 lb_ErrOK                   VALUE SPACES.
+056100111125           88 lb_Err01                   VALUE "01".
+056200111125           88 lb_Err02                   VALUE "02".
+056300111125           88 lb_Err03                   VALUE "03".
+056400111125           88 lb_Err04                   VALUE "04".
+056500111125           88 lb_Err05                   VALUE "05".
+056600111125           88 lb_Err06                   VALUE "06".
+056700111125           88 lb_Err07                   VALUE "07".
+056800111125           88 lb_Err08                   VALUE "08".
+056900111125
+057000111129       01  lc_SqlErrStatement            PIC  X(50) VALUE SPACES.
+057100111129           88 lb_Stmt01
+057200111129              VALUE "Err in OPEN CURSOR lcu_Srvfdrc1 ".
+057300111129           88 lb_Stmt02
+057400111129              VALUE "Err in FETCH NEXT  lcu_Srvfdrc1 ".
+057500111129           88 lb_Stmt03
+057600111129              VALUE "Err in OPEN CURSOR lcu_Srvfdrc2 ".
+057700111129           88 lb_Stmt04
+057800111129              VALUE "Err in FETCH NEXT  lcu_Srvfdrc2 ".
+057900111129           88 lb_Stmt05
+058000111129              VALUE "Err in OPEN CURSOR lcu_Srvfdrc3 ".
+058100111129           88 lb_Stmt06
+058200111129              VALUE "Err in FETCH NEXT  lcu_Srvfdrc3 ".
+058300111129           88 lb_Stmt07
+058400111129              VALUE "Err in OPEN CURSOR lcu_Srvfdrc4 ".
+058500111129           88 lb_Stmt08
+058600111129              VALUE "Err in FETCH NEXT  lcu_Srvfdrc4 ".
+058700110728
+058800111129       01  lc_Flags.
+058900111123           03  lc_Log_Error                 PIC  X(01).
+059000111123               88  lb_LogErrorOn                       VALUE "Y".
+059100111123               88  lb_LogErrorOff                      VALUE "N" " ".
+059200111123
+059300111123           03  lc_Log_Stats                 PIC  X(01).
+059400111123               88  lb_LogStatsOn                       VALUE "Y".
+059500111123               88  lb_LogStatsOff                      VALUE "N" " ".
+059600111123
+059700111123           03  lc_RVS                       PIC  X(01).
+059800111123               88  lb_RvsFound                         VALUE "Y".
+059900111123               88  lb_RvsNotFound                      VALUE "N" " ".
+060000110819
+060100111123           03  lc_PupRvs                    PIC  X(01).
+060200111123               88 lb_PupRvsFound                       VALUE "Y".
+060300111123               88 lb_PupRvsNotFound                    VALUE "N" " ".
+060400110819
+060500111123           03  lc_PupPrvRvs                 PIC  X(01).
+060600111123               88  lb_PupPrvRvsFound                   VALUE "Y".
+060700111123               88  lb_PupPrvRvsNotFound                VALUE "N" " ".
+060800111123
+060900111123           03  lc_RupRvs                    PIC  X(01).
+061000111123               88  lb_RupRvsFound                      VALUE "Y".
+061100111123               88  lb_RupRvsNotFound                   VALUE "N" " ".
+061200110819
+061300111123           03  lc_RupprvRvs                 PIC  X(01).
+061400111123               88  lb_RupPrvRvsFound                   VALUE "Y".
+061500111123               88  lb_RupPrvRvsNotFound                VALUE "N" " ".
+061600110819
+061700111123           03  lc_AiDays                    PIC  X(01).
+061800111123               88 lb_AiDaysFound                       VALUE "Y".
+061900111123               88 lb_AiDaysNotFound                    VALUE "N" " ".
+062000110819
+062100111123           03  lc_FvgDays                   PIC  X(01).
+062200111123               88  lb_FvgDaysFound                     VALUE "Y".
+062300111123               88  lb_FvgDaysNotFound                  VALUE "N" " ".
+062400110819
+062500111123           03  lc_UpdateReq                 PIC  X(01).
+062600111123               88  lb_UpdateReqYes                     VALUE "Y".
+062700111123               88  lb_UpdateReqNo                      VALUE "N" " ".
+062800110819
+062900111123           03  lc_VrInv                     PIC  X(01).
+063000111123                88  lb_VrInvFound                      VALUE "Y".
+063100111123                88  lb_VrInvNotFound                   VALUE "N" " ".
+063200110927
+063300111123           03  lc_VrRate                    PIC  X(01).
+063400111123                88  lb_VrRateFound                     VALUE "Y".
+063500111123                88  lb_VrRateNotFound                  VALUE "N" " ".
+063600110927
+063700111123           03  lc_FvgRecord                 PIC  X(01).
+063800111123                88  lb_FvgFound                        VALUE "Y".
+063900111123                88  lb_FvgNotFound                     VALUE "N" " ".
+064000110927
+064100111123           03  lc_F2ArrayLoaded             PIC  X(01).
+064200111123                88  lb_F2ArrayLoadedYes                VALUE "Y".
+064300111123                88  lb_F2ArrayLoadedNo                 VALUE "N" " ".
+064400111123
+064500111123           03  lc_EndOfCursor               PIC  X(01).
+064600111123                88  lb_EndOfCursorTrue                 VALUE "Y".
+064700111123                88  lb_EndOfCursorFalse                VALUE "N" " ".
+064800110927
+064900111123           03  lc_SrvfeeModFlag             PIC  X(01).
+065000111123                88  lb_SevfeeModYes                    VALUE "Y".
+065100111123                88  lb_SrvfeeModNo                     VALUE "N" " ".
+065200110927
+065300111123           03  lc_TransTargtEOF             PIC  X(01).
+065400111123                88  lb_TransTargtEOFYes                VALUE "Y".
+065500111123                88  lb_TransTargtEOFNo                 VALUE "N" " ".
+065600110927
+065700111123           03  lc_TransTargt2EOF            PIC  X(01).
+065800111123                88  lb_TransTargt2EOFYes               VALUE "Y".
+065900111123                88  lb_TransTargt2EOFNo                VALUE "N" " ".
+066000110927
+066100111123           03  lc_EndOfProcess              PIC  X(01).
+066200111123               88  lb_EndOfProcessTrue                 VALUE "Y".
+066300111123               88  lb_EndOfProcessFalse                VALUE "N" " ".
+066400110801
+066500111123           03  lc_Error                     PIC  X(01).
+066600111123                88  lb_ErrorYes                        VALUE "Y".
+066700111123                88  lb_ErrorYesNo                      VALUE "N" " ".
+066800111207
+066900111207           03  lc_CurOpen2                  PIC  X(01).
+067000111207                88  lb_CurOpen2Yes                     VALUE "Y".
+067100111207                88  lb_CurOpen2No                      VALUE "N" " ".
+067200110728
+067300110727      * Error and Statistics log record
+067400110727
+067500110817       01 lc_LogRec.
+067600110727          COPY DD-ALL-FORMATS OF MFASRVLOGP.
+067700110727
+067800110727      * Data area MFASRVCTL  - Service Fee Process Control
+067900110727
+068000110727       COPY CPYSRVCTL.
+068100110727      * Copy SQLSTATE working variables
+068200110822        COPY CPYSQLFLD
+068300110822             REPLACING == "CURRENT_PROGRAM" == BY == "SRVFDR" ==.
+068400111202      *---------------
+068500110727       LINKAGE SECTION.
+068600111202      *---------------
+068700110727
+068800111125       01  pc_Option                     PIC  X(03).
+068900111125           88  pb_OptionAllAccount                     VALUE "ALL".
+069000111125           88  pb_OptionOneAccount                     VALUE "ONE".
+069100111123       01  pd_ProcessDate                PIC S9(08).
+069200111125       01  pc_InvestmentCode             PIC  X(05).
+069300111123       01  pi_AccountNo                  PIC S9(09).
+069400111125       01  pi_ReturnCode                 PIC  X(03).
+069500110727
+069600110817
+069700110923       PROCEDURE DIVISION USING pc_Option
+069800110923                                pd_ProcessDate
+069900110923                                pc_InvestmentCode
+070000110923                                pi_AccountNo
+070100110923                                pi_ReturnCode.
+070200110727
+070300111202      *--------------
+070400110727       MAINLINE.
+070500111202      *--------------
+070600110727
+070700110817           PERFORM Initial_Logic.
+070800110923           IF pi_ReturnCode = SPACES
+070900110818             PERFORM Main_Process UNTIL lb_EndOfProcessTrue
+071000111004           END-IF.
+071100110817           PERFORM EndOfProgram.
+071200110727
+071300111202      *---------------
+071400110818       Main_Process.
+071500111202      *---------------
+071600111124             MOVE "Main_Process"  TO lc_RoutineName.
+071700111215             Initialize          lc_FvgRecord.
+071800111207             PERFORM Get_CurrentRecord
+071900111207                     UNTIL lb_FvgFound  OR  lb_EndOfProcessTrue.
+072000111219             IF NOT lb_EndOfProcessTrue
+072100111207               IF lc_PrevAccInv NOT= lc_CurrAccInv
+072200111207                 PERFORM Process_RollUpReq
+072300111207                 MOVE lc_CurrAccInv TO lc_PrevAccInv
+072400111219               END-IF
+072500111219               PERFORM Detail_Processing
+072600111219             END-IF.
+072700110805
+072800111202      *------------------
+072900110817       Initial_Logic.
+073000111202      *------------------
+073100111124           MOVE "Initail_Logic"  TO lc_RoutineName.
+073200111215           INITIALIZE           lc_Flags
+073300111215                                lc_Miscell
+073400111215                                lc_Current03Rec
+073500111215                                lc_Current04Rec
+073600111215                                lc_SqlErrStatement.
+073700111215
+073800111207           MOVE LOW-VALUES   TO lc_CurrAccInv
+073900111207                                lc_PrevAccInv.
+074000110727
+074100110818      *    Set error and statistics log flag
+074200110727
+074300110727           ACCEPT WS-MFASRVCTL-DTAARA
+074400110727             FROM WS-DATA-AREA-1 FOR "MFASRVCTL".
+074500110727
+074600110818           IF WS-SV-ERROR-OPT-ALL    = lncc_Y OR
+074700110818              WS-SV-ERROR-OPT-SRVVDR = lncc_Y
+074800110818              MOVE lncc_Y    TO lc_Log_Error
+074900110727           ELSE
+075000110818              MOVE lncc_N    TO lc_Log_Error
+075100110727           END-IF.
+075200110727
+075300110818           IF WS-SV-STATS-OPT-ALL    = lncc_Y OR
+075400110818              WS-SV-STATS-OPT-SRVVDR = lncc_Y
+075500110818              MOVE lncc_Y    TO lc_Log_Stats
+075600110727           ELSE
+075700110818              MOVE lncc_N    TO lc_Log_Stats
+075800110727           END-IF.
+075900110727
+076000110923            OPEN INPUT TRANS
+076100111010            IF lc_FileStatus NOT = ZEROES
+076200111010              DISPLAY "ERR OPEN TRANS                " lc_FileStatus
+076300111010            END-IF.
+076400111010
+076500111010            OPEN INPUT TRANS-TARGET
+076600111010            IF lc_FileStatus NOT = ZEROES
+076700111010              DISPLAY "ERR OPEN TRANS-TARGET         " lc_FileStatus
+076800111010            END-IF.
+076900111010
+077000111010            OPEN INPUT TRANS-TARGET-2
+077100111010            IF lc_FileStatus NOT = ZEROES
+077200111010              DISPLAY "ERR OPEN TRANS-TARGET-2       " lc_FileStatus
+077300111010            END-IF.
+077400111010
+077500111010            OPEN INPUT TRANS-PURCHASE-UNITS
+077600111010            IF lc_FileStatus NOT = ZEROES
+077700111010              DISPLAY "ERR OPEN TRANS-PURCHASE-UNITS " lc_FileStatus
+077800111010            END-IF.
+077900111010
+078000111010            OPEN INPUT TRANS-PURCHASE-UNITS-2
+078100111010            IF lc_FileStatus NOT = ZEROES
+078200111010              DISPLAY "ERR OPEN TRANS-PURCHASE-UNITS2" lc_FileStatus
+078300111010            END-IF.
+078400111010
+078500110818      *    Check SRVFEE Module exist or not
+078600110805
+078700110818           INITIALIZE lc_SrvfeeModFlag.
+078800110818
+078900110926           CALL "RTVMODAUTH" USING lncc_SRVFEE, lc_SrvfeeModFlag.
+079000110818           IF lb_SrvfeeModNo
+079100110923              MOVE lncc_001   TO pi_ReturnCode
+079200110818              PERFORM EndOfProgram
+079300110818           END-IF.
+079400110727
+079500110923           MOVE SPACES       TO pi_ReturnCode.
+079600111005           INITIALIZE           lc_Miscell
+079700111005                                ltb_VrTbl.
+079800110727
+079900110805      * Validate Input parameters
+080000110727
+080100110923           IF pc_Option NOT= lncc_ALL AND lncc_ONE
+080200110923              MOVE lncc_002   TO pi_ReturnCode
+080300110728           ELSE
+080400110923           IF pd_ProcessDate IS NOT NUMERIC OR
+080500110923              pd_ProcessDate = ZEROS
+080600110923              MOVE lncc_003   TO pi_ReturnCode
+080700111122           ELSE
+080800111122           IF pc_InvestmentCode = SPACES
+080900111122              MOVE lncc_005   TO pi_ReturnCode
+081000110728           ELSE
+081100110818           IF pb_OptionOneAccount
+081200110923              IF pi_AccountNo IS NOT NUMERIC OR
+081300110923                 pi_AccountNo   = ZEROS
+081400110923                 MOVE lncc_004   TO pi_ReturnCode
+081500110727              END-IF
+081600110728           END-IF.
+081700110727
+081800110727      * Load VR-TBL only once, plus other misc loadings if needed
+081900110923           IF pi_ReturnCode = SPACES
+082000110802
+082100110818            PERFORM Declare_SqlStatements
+082200110818            PERFORM Load_VrTable
+082300110805
+082400110818      * search the loaded array to find the matching investment code
+082500111123            SET lx_Vi1 TO 1
+082600111123            SEARCH lc_VrInvArray VARYING lx_Vi1
+082700110728            AT END
+082800111125               SET lb_VrInvNotFound      TO TRUE
+082900110923            WHEN lc_VrInvestmentCode (lx_Vi1) = pc_InvestmentCode
+083000111125               SET lb_VrInvFound         TO TRUE
+083100110728            END-SEARCH
+083200110727
+083300110822            IF lb_VrInvFound
+083400111125              MOVE pd_ProcessDate        TO ld_FormatDateIn
+083500110817              MOVE FUNCTION SUBTRACT-DURATION(ld_FormatDateIn DAYS 1)
+083600110817                                         TO ld_FormatDateOut
+083700111125              MOVE ld_FormatDateOut      TO ld_EndDate
+083800110728            ELSE
+083900111125              MOVE lncc_006              TO pi_ReturnCode
+084000111125              SET lb_EndOfProcessTrue    TO TRUE
+084100110728            END-IF
+084200110728           END-IF.
+084300110727
+084400110818      *---------------------                                           *
+084500110818       Declare_SqlStatements.
+084600110818      *---------------------                                           *
+084700111202      *CURSOR: lcu_Srvfdrc1
+084800111202      *----------------------------------------------------------------      *
+084900111202      *ALIAS      FILENAME                       OpenName
+085000111202      *----------------------------------------------------------------      *
+085100111202      *FEESCLP    FEE-SCHEDULE-LEVEL             MFAFEESCLP
+085200111202      *FEESCHP    FEE-SCHEDULE                   MFAFEESCHP
+085300111202      *INVSXP     INVESTMENT-STRUCTURE-XREF      MFAINVSXP
+085400111202      *----------------------------------------------------------------      *
+085500110818
+085600110818      * For variable rate table loading
+085700110818
+085800110818           EXEC SQL
+085900111125             DECLARE lcu_Srvfdrc1 CURSOR FOR
+086000110818
+086100110818             SELECT
+086200110818               CASE WHEN feesclp.investment_structure_code <> " "
+086300110819                    THEN invsxp.investment_code
+086400110818                    ELSE feesclp.investment_code
+086500110818                    END  AS invcd,
+086600110818                    Feeschp.effect_date,
+086700110818                    Feeschp.rate_rule,
+086800110818                    Feeschp.lower_limit_days
+086900110818             FROM   MFAFEESCLP feesclp
+087000110818
+087100110818             LEFT OUTER JOIN MFAINVSXP invsxp ON
+087200110818                    feesclp.investment_structure_code =
+087300110818                    invsxp.investment_structure_code
+087400110818
+087500110818             INNER  JOIN MFAFEESCHP feeschp ON
+087600110818                   feeschp.fee_schedule  = feesclp.fee_schedule
+087700110818             WHERE
+087800110818                   feesclp.fee_type_code   = :lncc_SRVF
+087900110818               AND feesclp.dealer_code     = " "
+088000110818               AND feesclp.dealer_rep_code = " "
+088100110818               AND feesclp.account_no      = 0
+088200110818               AND feeschp.rate_rule       = :lncc_2
+088300110818             ORDER BY Invcd,
+088400110818                   Feeschp.effect_date,
+088500110818                   Feeschp.lower_limit_days
+088600110818             FOR READ ONLY
+088700110818           END-EXEC.
+088800110818
+088900111202      *----------------------------------------------------------------      *
+089000111202      * CURSOR: lcu_Srvfdrc2
+089100111202      *----------------------------------------------------------------      *
+089200111202      * ALIAS      FILENAME                       OpenName
+089300111202      *----------------------------------------------------------------      *
+089400111202      * ACIDUP     ACCOUNT-INV-DLY-SRV            MFAACIDUP
+089500111202      *----------------------------------------------------------------      *
+089600110818
+089700110818      * For All accounts option,
+089800110818      * it will be more efficient to include prior day only.
+089900110818
+090000110818           EXEC SQL
+090100111125             DECLARE lcu_Srvfdrc2 CURSOR FOR
+090200110818
+090300110818             SELECT account_no,
+090400110818                    investment_code
+090500110818             FROM   MFAACIDUP
+090600110923             WHERE  investment_code = :pc_InvestmentCode AND
+090700110819                    process_date    = :ld_EndDate
+090800110818             ORDER BY
+090900110818                    investment_code,
+091000110927                    account_no
+091100110818
+091200110818             FOR READ ONLY
+091300110818           END-EXEC.
+091400110818
+091500111202      *----------------------------------------------------------------      *
+091600111202      * CURSOR: lcu_Srvfdrc3
+091700111202      *----------------------------------------------------------------      *
+091800111202      * ALIAS      FILENAME                       OpenName
+091900111202      *----------------------------------------------------------------      *
+092000111202      * TRNPUP     TRANS-PURCHASE-UNITS           MFATRNPUP
+092100111202      * TRNP       TRANS                          MFATRNP
+092200111202      *----------------------------------------------------------------      *
+092300110818
+092400110818      * Potential PUP records for the account investment that has
+092500110818      * age date = require date for roll-up of aging units, including
+092600110818      * negative unit balance but not zero unit balance.
+092700110818
+092800110818
+092900110818
+093000110818           EXEC SQL
+093100111125             DECLARE lcu_Srvfdrc3 CURSOR FOR
+093200110818
+093300110818             SELECT
+093400110818                   trnpup.placement_date,
+093500110818                   trnpup.trans_no,
+093600110818                   trnpup.purch_seq_no,
+093700110818                   trnpup.purch_orig_unit_bal,
+093800110818                   trnpup.purch_age_date,
+093900110818                   trnp.process_date,
+094000110818                   trnp.account_no,
+094100110818                   trnp.investment_code,
+094200110818                   trnp.trans_proc_seq_no,
+094300110818                   trnp.reverse
+094400110818
+094500110818             FROM  MFATRNP  TRNP
+094600110818
+094700110818             INNER JOIN
+094800110818               (SELECT pup0.placement_date,
+094900110818                       pup0.trans_no,
+095000110818                       pup0.Purch_Seq_No,
+095100110818                       pup0.Purch_Orig_Unit_Bal,
+095200110818                       pup0.Purch_Age_Date,
+095300110818                       pup0.account_no,
+095400110818                       pup0.investment_code
+095500110818
+095600110818               FROM MFATRNPUP pup0
+095700110818               WHERE
+095800110818                  pup0.unit_monitor_type = :lncc_FIFO            AND
+095900110818                  pup0.account_no        = :li_AccountNo         AND
+096000110818                  pup0.investment_code   = :lc_InvestmentCode    AND
+096100110818                  pup0.purch_age_date    = :ld_RequireDate       AND
+096200111004                  pup0.event_date       >= :ld_CurrEffectDate    AND
+096300111004                  pup0.event_date       <  :ld_NxtEffectiveDate  AND
+096400110818                  pup0.purch_orig_unit_bal  <> 0) trnpup
+096500110818               ON trnpup.placement_date = trnp.placement_date    AND
+096600110818                  trnpup.trans_no       = trnp.trans_no
+096700110818
+096800110818             WHERE
+096900110818                 trnp.account_no        = trnpup.account_no       AND
+097000110818                 trnp.investment_code   = trnpup.investment_code  AND
+097100111004                 trnp.process_date     >= :ld_EarlyEffDate        AND
+097200110819                 trnp.process_date     <= :ld_EndDate             AND
+097300110818                 trnp.trans_status_code IN (:lncc_HST, :lncc_HSC)
+097400110818
+097500110818             ORDER BY
+097600110818                 trnp.account_no,
+097700110818                 trnp.investment_code,
+097800110818                 trnp.process_date,
+097900110818                 trnp.trans_proc_seq_no
+098000110818
+098100110818             FOR READ ONLY
+098200110818           END-EXEC.
+098300110818
+098400111202      *----------------------------------------------------------------      *
+098500111202      * CURSOR: lcu_Srvfdrc4
+098600111202      *----------------------------------------------------------------      *
+098700111202      * ALIAS      FILENAME                       OpenName
+098800111202      *----------------------------------------------------------------      *
+098900111202      * TRNRUP     TRANS-REDUCTION-UNITS          MFATRNRUP
+099000111202      * TRNP       TRANS                          MFATRNP
+099100111202      *----------------------------------------------------------------      *
+099200110818
+099300110818      * Corresponding RUP reduction records related to a PUP record,
+099400110818      * including negative taken down units but not zero taken down
+099500110818      * unit.
+099600110818
+099700110818           EXEC SQL
+099800111125             DECLARE lcu_Srvfdrc4  CURSOR FOR
+099900110818
+100000110818             SELECT
+100100110818                   trnrup.placement_date,
+100200110818                   trnrup.trans_no,
+100300110818                   trnrup.reduc_seq_no,
+100400110818                   0,
+100500110818                   trnrup.units_taken_down,
+100600110818                   trnp.process_date,
+100700110818                   trnp.account_no,
+100800110818                   trnp.investment_code,
+100900110818                   trnp.trans_proc_seq_no,
+101000110818                   trnp.reverse
+101100110818
+101200110818             FROM  MFATRNRUP trnrup
+101300110818
+101400110818             INNER JOIN MFATRNP trnp
+101500110818               ON  trnrup.placement_date = trnp.placement_date AND
+101600110818                   trnrup.trans_no       = trnp.trans_no
+101700110818
+101800110818             WHERE
+101900110819                   trnrup.placement_date_2 = :ld_PupPlacementDate   AND
+102000110819                   trnrup.trans_no_2       = :li_PupTransNo         AND
+102100110819                   trnrup.purch_seq_no_2   = :li_PupCdscSeqNo       AND
+102200110818                   trnrup.units_taken_down <> 0                     AND
+102300110818                   trnp.account_no         = :li_AccountNo          AND
+102400110818                   trnp.investment_code    = :lc_InvestmentCode     AND
+102500111004                   trnp.process_date      >= :ld_EarlyEffDate       AND
+102600110819                   trnp.process_date      <= :ld_EndDate            AND
+102700110927                   trnp.trans_status_code  IN (:lncc_HST, :lncc_HSC)
+102800110818
+102900110818             ORDER BY
+103000110818                   trnp.account_no,
+103100110818                   trnp.investment_code,
+103200110818                   trnp.process_date,
+103300110818                   trnp.trans_proc_seq_no
+103400110818
+103500110818             FOR READ ONLY
+103600110818           END-EXEC.
+103700110818
+103800110818      *------------------
+103900110818       Load_VrTable.
+104000110818      *------------------
+104100110727
+104200111005      * For efficiency, this table should be loaded only once.
+104300111125           PERFORM OpenCur_Srvfdrc1.
+104400111125           PERFORM FetchCur_Srvfdrc1  UNTIL lb_EndOfCursorTrue.
+104500111125           PERFORM CloseCur_Srvfdrc1.
+104600110805
+104700111202      *------------------                                              *
+104800111125        OpenCur_Srvfdrc1.
+104900111202      *------------------                                              *
+105000110727
+105100110727           EXEC SQL
+105200111125             OPEN lcu_Srvfdrc1
+105300110727           END-EXEC.
+105400110727
+105500111125           MOVE SQLSTATE                 TO lc_sqlStates
+105600110923           IF NOT lncc_sqlSuccessful
+105700111125              SET  lb_Err01              TO TRUE
+105800111125              SET  lb_Stmt01             TO TRUE
+105900111124              PERFORM SQL_ErrorRoutine
+106000110923           END-IF.
+106100110923
+106200111125           MOVE ZEROS                    TO li_C1NoOfRowsFetched
+106300111125                                            li_Cnt
+106400111125                                            li_VrIx1
+106500111125                                            li_VrIx2.
+106600111125           MOVE LOW-VALUES               TO lc_VrPrvInvestmentCode.
+106700110727
+106800111202      *------------------                                              *
+106900111125       FetchCur_Srvfdrc1.
+107000111202      *------------------                                              *
+107100110817           INITIALIZE C1_FetchTbl.
+107200110728
+107300110728           EXEC SQL
+107400111125             FETCH lcu_Srvfdrc1 FOR :li_MaxRows ROWS
+107500110817                   INTO :C1_FetchArray :C1_IndArray
+107600110728           END-EXEC.
+107700110728
+107800111125           MOVE SQLSTATE                 TO lc_sqlStates.
+107900110728           EVALUATE TRUE
+108000110728             WHEN lncc_sqlSuccessful
+108100111125               MOVE SQLERRD (3)          TO li_C1NoOfRowsFetched
+108200110728             WHEN lncc_sqlEnd
+108300111125               SET lb_EndOfCursorTrue    TO TRUE
+108400111125               MOVE SQLERRD (3)          TO li_C1NoOfRowsFetched
+108500110728             WHEN OTHER
+108600111125               SET  lb_Err02             TO TRUE
+108700111125               SET  lb_Stmt02  TO TRUE
+108800111129               PERFORM SQL_ErrorRoutine
+108900110728           END-EVALUATE.
+109000110728
+109100110818           IF li_C1NoOfRowsFetched < li_MaxRows
+109200111125               SET lb_EndOfCursorTrue    TO TRUE
+109300110818           END-IF
+109400110818
+109500110817           PERFORM  VARYING li_Cnt FROM 1 BY 1
+109600110817                        UNTIL   li_Cnt  > li_C1NoOfRowsFetched
+109700110817            IF C1_InvestmentCode(li_Cnt) NOT= lc_VrPrvInvestmentCode
+109800110728
+109900111125             COMPUTE li_VrIx1               =  li_VrIx1 + 1
+110000110817             MOVE C1_InvestmentCode(li_Cnt)
+110100110817                               TO lc_VrPrvInvestmentCode
+110200110818                                  lc_VrInvestmentCode(li_VrIx1)
+110300110817             MOVE ZERO         TO li_VrIx2
+110400110818             MOVE ZERO         TO li_VrCnt(li_VrIx1)
+110500110808            END-IF
+110600111125             COMPUTE li_VrIx2               =  li_VrIx2 + 1
+110700111125             COMPUTE li_VrCnt(li_VrIx1)     =  li_VrCnt(li_VrIx1)+ 1
+110800110817             MOVE C1_LowerLimitDays (li_Cnt)
+110900110818                            TO li_VrLowerLimitDays (li_VrIx1, li_VrIx2)
+111000110817             MOVE C1_EffectiveDate(li_Cnt)
+111100111130                            TO ld_VrEffectiveDate  (li_VrIx1, li_VrIx2)
+111200111123             MOVE C1_RateRule     (li_Cnt)
+111300111130                            TO lc_VrRateRule       (li_VrIx1, li_VrIx2)
+111400110728           END-PERFORM.
+111500111202      *------------------                                              *
+111600111125       CloseCur_Srvfdrc1.
+111700111202      *------------------                                              *
+111800110727
+111900110727           EXEC SQL
+112000111125             CLOSE lcu_Srvfdrc1
+112100110727           END-EXEC.
+112200110727
+112300110805
+112400110923      *------------------
+112500110923       Get_CurrentRecord.
+112600110923      *------------------
+112700111125           MOVE "Get_CurrentRecord "     TO lc_RoutineName.
+112800111207           INITIALIZE   lc_EndOfProcess
+112900111207                        lc_EndOfCursor.
+113000111207           IF pb_OptionOneAccount    AND
+113100111207              lc_OneAccProcessed   = lncc_Y
+113200111207              SET lb_EndOfProcessTrue   TO  TRUE
+113300111207           END-IF.
+113400110923           IF pb_OptionAllAccount
+113500110818              PERFORM Get_AllRecord
+113600110729           ELSE
+113700110817           IF pb_OptionOneAccount
+113800111125              MOVE pc_InvestmentCode     TO lc_InvestmentCode
+113900111125              MOVE pi_AccountNo          TO li_AccountNo
+114000111207              MOVE lncc_Y                TO lc_OneAccProcessed
+114100110727           END-IF.
+114200111207           IF NOT lb_EndOfProcessTrue
+114300111207              PERFORM Populate_FXRecord
+114400111207           END-IF.
+114500110727
+114600110923      *------------------
+114700110923       Populate_FXRecord.
+114800110923      *------------------
+114900111125           MOVE "Populate_FXRecord"      TO lc_RoutineName.
+115000110818            PERFORM Get_varRecord
+115100110727
+115200110802      * Process date of the header record must be yesterday
+115300111130      * Is there any unit or detail records? Skip if no.
+115400111130            IF lc_FvgReturnCode    NOT= SPACES     OR
+115500111130               lc_FvgRecordExist   NOT= lncc_Y     OR
+115600111130               ld_FvgProcessDate   NOT= ld_EndDate OR
+115700111130               li_FvgCnt              = ZEROS      OR
+115800111130               li_FvgUnitsTotal       = ZEROS
+115900111130                 SET lb_FvgNotFound   TO TRUE
+116000111130            ELSE
+116100111130                 SET lb_FvgFound      TO TRUE
+116200110818            END-IF
+116300110727
+116400111125            MOVE lc_InvestmentCode       TO lc_CurrInvestment
+116500111207            MOVE li_AccountNo            TO li_CurrAccount.
+116600110729
+116700111202      *------------------                                              *
+116800110818       Get_varRecord.
+116900111202      *------------------                                              *
+117000110727
+117100110817           IF lb_LogStatsOn OR lb_LogErrorOn
+117200111125              MOVE "FXSRVUAI"            TO lc_LogProgramCalled
+117300110727           END-IF.
+117400110727
+117500110817           INITIALIZE lc_FvgGetBuffer.
+117600110727
+117700111125           MOVE SPACES                   TO lc_FvgRecordExist
+117800111125                                            lc_FvgReturnCode
+117900111125           MOVE ZEROS                    TO ld_FvgProcessDate
+118000111125                                            li_FvgUnitsTotal
+118100111125                                            li_FvgCnt.
+118200110727
+118300111125           MOVE li_AccountNo             TO li_FvgAccountNo.
+118400111125           MOVE lc_InvestmentCode        TO lc_FvgInvestmentCode.
+118500111125           MOVE lncc_G                   TO lc_FvgOption.
+118600110727
+118700110817           IF lb_LogStatsOn
+118800111125              MOVE lncc_S                TO lc_StatsEvent
+118900111202              PERFORM Log_StatsRoutine
+119000110727           END-IF.
+119100110727
+119200110926           CALL "FXSRVUAI" USING li_FvgAccountNo,
+119300110926                                 lc_FvgInvestmentCode,
+119400110926                                 lc_FvgOption,
+119500110926                                 lc_FvgRecordExist,
+119600110926                                 lc_FvgHeaderOpt,
+119700110926                                 lc_FvgReturnCode,
+119800110926                                 ld_FvgProcessDate,
+119900111004                                 li_FvgUnitsTotal,
+120000110926                                 li_FvgCnt,
+120100110817                                 ltb_FvgTbl.
+120200110727
+120300110817           IF lb_LogStatsOn
+120400111125              MOVE lncc_E                  TO lc_StatsEvent
+120500111202              PERFORM Log_StatsRoutine
+120600110727           END-IF.
+120700110727
+120800110817           IF lc_FvgReturnCode NOT = SPACES
+120900111125              MOVE lncc_007                TO lc_ErrorCode
+121000110923              IF pi_ReturnCode = SPACES
+121100111125                 MOVE lc_ErrorCode         TO pi_ReturnCode
+121200110727              END-IF
+121300110817              IF lb_LogErrorOn
+121400111202                 PERFORM Log_ErrorRoutine
+121500110727              END-IF
+121600110727           END-IF.
+121700110727
+121800111202      *------------------                                              *
+121900110818       Get_AllRecord.
+122000111202      *------------------                                              *
+122100111207           IF lb_CurOpen2No
+122200111207             PERFORM OpenCur_Srvfdrc2
+122300111207           END-IF
+122400111207
+122500111207           IF C2_Cnt = ZEROES  or
+122600111207              C2_Cnt > C2_NoOfRowsFetched
+122700111207             PERFORM FetchCur_Srvfdrc2
+122800111207           END-IF
+122900111207
+123000111207           IF NOT lb_EndOfCursorTrue
+123100111207             PERFORM Populate_CurrentRec
+123200111207           ELSE
+123300111207             SET lb_EndOfProcessTrue  TO TRUE
+123400111207             PERFORM CloseCur_Srvfdrc2
+123500111207           END-IF.
+123600110802
+123700111202      *------------------                                              *
+123800111125       Opencur_Srvfdrc2.
+123900111202      *------------------                                              *
+124000110727           EXEC SQL
+124100111125             OPEN lcu_Srvfdrc2
+124200110727           END-EXEC.
+124300110727
+124400110729           MOVE SQLSTATE TO lc_sqlStates
+124500110729           IF NOT lncc_sqlSuccessful
+124600111125              SET  lb_Err03              TO TRUE
+124700111125              SET  lb_Stmt03  TO TRUE
+124800111124              PERFORM SQL_ErrorRoutine
+124900110729           END-IF.
+125000111125           MOVE ZEROS                    TO C2_NoOfRowsFetched
+125100111207                                            C2_Cnt.
+125200111207           SET lb_CurOpen2Yes            TO TRUE.
+125300110727
+125400111202      *------------------
+125500111125       FetchCur_Srvfdrc2.
+125600111202      *------------------
+125700110727
+125800110817           INITIALIZE C2_FetchTbl
+125900110729
+126000110729
+126100110729           EXEC SQL
+126200111125             FETCH lcu_Srvfdrc2 FOR :C2_MaxRows ROWS
+126300110817                   INTO :C2_FetchArray :C2_IndArray
+126400110729           END-EXEC.
+126500111125           MOVE SQLSTATE                 TO lc_sqlStates.
+126600110729           EVALUATE TRUE
+126700110802             WHEN lncc_sqlSuccessful OR lncc_SqlWarning
+126800110802               COMPUTE C2_NoOfRowsFetched = SQLERRD(3)
+126900110729             WHEN lncc_sqlEnd
+127000110817               SET lb_EndOfCursorTrue TO TRUE
+127100110802               COMPUTE C2_NoOfRowsFetched = SQLERRD(3)
+127200111125             WHEN OTHER
+127300111207               SET  lb_Err04           TO TRUE
+127400111207               SET  lb_Stmt04          TO TRUE
+127500111125               SET  lb_EndOfCursorTrue TO TRUE
+127600111125               PERFORM SQL_ErrorRoutine
+127700110729           END-EVALUATE.
+127800110729
+127900110818           IF C2_NoOfRowsFetched  <  C2_MaxRows
+128000110818              SET lb_EndOfCursorTrue TO TRUE
+128100111207           END-IF.
+128200111207      *------------------
+128300111207       Populate_CurrentRec.
+128400111207      *------------------
+128500111207            COMPUTE C2_Cnt   = C2_Cnt  + 1
+128600111207            MOVE C2_AccountNo     (C2_Cnt) TO li_AccountNo
+128700111207            MOVE C2_InvestmentCode(C2_Cnt) TO lc_InvestmentCode.
+128800110818
+128900111202      *------------------
+129000111125       CloseCur_Srvfdrc2.
+129100111202      *------------------
+129200110727
+129300110727
+129400110727           EXEC SQL
+129500111125             CLOSE lcu_Srvfdrc2
+129600110727           END-EXEC.
+129700110727
+129800110817
+129900111202      *------------------
+130000110817       Detail_Processing.
+130100111202      *------------------
+130200110727
+130300110727      * Assume the lower limit days of the retrieved account investment
+130400110817      * record exists in the table, i.e. all day ranges in the ltb_FvgTbl
+130500110727      * exist in the VR-TBL of the investment. Each day range of the
+130600110727      * current record will be examined if roll-up is required or not.
+130700110727
+130800110818           INITIALIZE ltb_AiTbl.
+130900110727
+131000111124           MOVE "Detail_Processing"  TO lc_RoutineName.
+131100110817           MOVE SPACES              TO lc_ErrorCode
+131200110822                                       lc_UpdateReq.
+131300110818           MOVE ZEROS               TO li_FvgIx
+131400110817                                       li_AiCnt
+131500110817                                       li_AiIx.
+131600110727
+131700110818           PERFORM Process_VrRateArray VARYING li_FvgIx FROM 1 BY 1
+131800110818                               UNTIL   li_FvgIx > li_FvgCnt
+131900110923           IF pi_ReturnCode   = SPACES
+132000110802      * Update is required for at least one roll-up action performed.
+132100111219      *      IF lb_UpdateReqYes
+132200110819               PERFORM Update_AccInvVar
+132300111219      *      END-IF
+132400110802           END-IF.
+132500111129      *------------------
+132600110818        Process_VrRateArray.
+132700111129      *------------------
+132800110818
+132900111123            SET lx_Vi2 TO 1.
+133000111123            SEARCH  lc_VrRateArray  (lx_Vi1)  VARYING lx_Vi2
+133100110818            AT END
+133200110818               SET lb_VrRateNotFound   TO TRUE
+133300110818            WHEN li_VrLowerLimitDays  (lx_Vi1, lx_Vi2) =
+133400110818                 li_FvgLowerLimitDays (li_FvgIx)             AND
+133500110818                 ld_VrEffectiveDate   (lx_Vi1, lx_Vi2) =
+133600110818                 ld_FvgEffectiveDate  (li_FvgIx)
+133700110927               SET lb_VrRateFound   TO TRUE
+133800110818            END-SEARCH
+133900110818
+134000110818      * Skip record if day range is not found in the schedule table
+134100110818      * and has no variable unit.
+134200111011      * Return error "009" only if the day range is not found in the
+134300110818      * schedule table and has non-zero variable units.
+134400110818
+134500110927             IF lb_VrRateFound           AND
+134600111004                li_FvgUnits (li_FvgIx) NOT= ZEROS
+134700110818                PERFORM Process_FvgRec
+134800110818             ELSE
+134900110818             IF lb_VrRateNotFound        AND
+135000111004                li_FvgUnits (li_FvgIx)    = ZEROS
+135100110818                CONTINUE
+135200110818             ELSE
+135300110818                MOVE lncc_009  TO lc_ErrorCode
+135400110923                                  pi_ReturnCode
+135500110818                IF lb_LogErrorOn
+135600111202                   PERFORM Log_ErrorRoutine
+135700110818                END-IF
+135800110818             END-IF
+135900110818             END-IF.
+136000111004      *-----------------
+136100110802        Process_FvgRec.
+136200111004      *-----------------
+136300110818
+136400110818           MOVE  li_FvgLowerLimitDays (li_FvgIx)
+136500110818                             TO li_Days.
+136600110818           MOVE  ld_FvgEffectiveDate   (li_FvgIx)
+136700110817                             TO ld_EffectiveDate.
+136800110818           PERFORM Check_DaysAiTbl.
+136900110727
+137000110818           IF lb_AiDaysFound
+137100110818              MOVE li_AiLoc         TO li_AiIx
+137200110727           ELSE
+137300111125              COMPUTE li_AiCnt              =  li_AiCnt + 1
+137400110818              MOVE li_AiCnt         TO li_AiIx
+137500110818              MOVE li_FvgLowerLimitDays (li_FvgIx)
+137600110817                             TO li_AiLowerLimitDays (li_AiIx)
+137700110819              MOVE ld_FvgEffectiveDate  (li_FvgIx)
+137800110822                             TO ld_AiEffectiveDate  (li_AiIx)
+137900110819              MOVE lc_FvgDtlExist       (li_FvgIx)
+138000110818                             TO lc_AiDtlExist       (li_AiIx)
+138100111130              MOVE lc_FvgRateRule       (li_FvgIx)
+138200111123                             TO lc_AiRateRule       (li_AiIx)
+138300110727           END-IF.
+138400110727
+138500110817           COMPUTE li_AiUnitsVar  (li_AiIx) =
+138600111004                   li_FvgUnits (li_FvgIx) + li_AiUnitsVar (li_AiIx)
+138700110804
+138800110727
+138900110727      * Is roll-up required at the current day range?
+139000110727
+139100110818           SET lx_Ri1        TO lx_Vi1.
+139200110818           SET lx_Ri2        TO lx_Vi2.
+139300110727
+139400110819           IF lc_RqRollUpFlag  (lx_Ri1, lx_Ri2)    = lncc_Y  AND
+139500110818              ld_RqRequireDate (lx_Ri1, lx_Ri2) NOT= ZEROS
+139600110727
+139700110818              MOVE ld_RqRequireDate (lx_Ri1, lx_Ri2)
+139800110817                               TO ld_RequireDate
+139900111010              MOVE ld_RqEffectDate (lx_Ri1, lx_Ri2)
+140000111010                               TO ld_CurrEffectDate
+140100111004
+140200111010      *   Logic to find the Next effective date in the occurance
+140300111004              INITIALIZE ld_NxtEffectiveDate
+140400111004              PERFORM VARYING li_Cnt FROM lx_Ri2 BY 1 UNTIL
+140500111004                         ld_NxtEffectiveDate NOT= ZEROES  OR
+140600111004                         li_Cnt > li_VrCnt(lx_Vi1)
+140700111004                IF ld_RqEffectDate (lx_Ri1, lx_Ri2) NOT=
+140800111004                   ld_RqEffectDate (lx_Ri1, li_Cnt)
+140900111004                   MOVE ld_RqEffectDate (lx_Ri1, li_Cnt)
+141000111004                                       TO ld_NxtEffectiveDate
+141100111004                END-IF
+141200111004              END-PERFORM
+141300111004              IF li_Cnt > li_VrCnt(lx_Vi1) AND
+141400111004                 ld_NxtEffectiveDate = ZEROES
+141500111123                 MOVE lncc_99999999    TO ld_NxtEffectiveDate
+141600111004              END-IF
+141700111004
+141800110818              PERFORM Check_PupOnReqDate
+141900110818              IF li_RecCnt   = ZEROS OR
+142000110818                 li_TotUnits = ZEROS
+142100110802                 CONTINUE
+142200110802              ELSE
+142300110818                 PERFORM Calc_RollUpUnit
+142400110817                 IF li_RollUpUnit= ZEROS
+142500110802                   CONTINUE
+142600110802                 ELSE
+142700110819                   PERFORM Update_RollUpUnit
+142800110802                 END-IF
+142900110802           END-IF.
+143000110802
+143100111202      *------------------                                              *
+143200110818       Check_PupOnReqDate.
+143300111202      *------------------                                              *
+143400110802
+143500110818           MOVE ZEROS             TO    li_RecCnt
+143600110818                                        li_TotUnits.
+143700110802
+143800111004           INITIALIZE MFATRNPUP OF TRANS-PURCHASE-UNITS-2-REC.
+143900111004           MOVE lncc_FIFO         TO
+144000111004                UNIT-MONITOR-TYPE OF TRANS-PURCHASE-UNITS-2-REC.
+144100111004           MOVE li_AccountNo      TO
+144200111004                ACCOUNT-NO      OF TRANS-PURCHASE-UNITS-2-REC.
+144300111004           MOVE lc_InvestmentCode TO
+144400111004                INVESTMENT-CODE OF TRANS-PURCHASE-UNITS-2-REC.
+144500111004           MOVE ld_RequireDate    TO
+144600111004                PURCH-AGE-DATE  OF TRANS-PURCHASE-UNITS-2-REC.
+144700111004           MOVE ZEROS             TO
+144800111004                PLACEMENT-DATE  OF TRANS-PURCHASE-UNITS-2-REC.
+144900111004           MOVE ZEROS             TO
+145000111004                TRANS-NO        OF TRANS-PURCHASE-UNITS-2-REC.
+145100110818
+145200110818           START TRANS-PURCHASE-UNITS-2
+145300110818              KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+145400110818            INVALID KEY
+145500110818              CONTINUE
+145600110818            NOT INVALID KEY
+145700110818              READ TRANS-PURCHASE-UNITS-2 NEXT RECORD
+145800110822                AT END
+145900110822                   MOVE ZERO TO li_RecCnt
+146000110822                   CONTINUE
+146100110818                NOT AT END
+146200110818                 PERFORM Sum_PupOnReqDate UNTIL
+146300110818                   lncc_FIFO         NOT EQUAL
+146400110818                    UNIT-MONITOR-TYPE OF TRANS-PURCHASE-UNITS-2-REC OR
+146500110818                   li_AccountNo      NOT EQUAL
+146600110818                    ACCOUNT-NO        OF TRANS-PURCHASE-UNITS-2-REC OR
+146700110818                   lc_InvestmentCode NOT EQUAL
+146800110818                    INVESTMENT-CODE   OF TRANS-PURCHASE-UNITS-2-REC OR
+146900110818                   ld_RequireDate    NOT EQUAL
+147000110818                    PURCH-AGE-DATE    OF TRANS-PURCHASE-UNITS-2-REC
+147100110802               END-READ
+147200110818           END-START.
+147300110818
+147400111202      *------------------
+147500110818       Sum_PupOnReqDate.
+147600111202      *------------------
+147700111010           IF (EVENT-DATE OF TRANS-PURCHASE-UNITS-2-REC >=
+147800111010               ld_CurrEffectDate  )      AND
+147900111010              (EVENT-DATE OF TRANS-PURCHASE-UNITS-2-REC <
+148000111010               ld_NxtEffectiveDate)
+148100111125              COMPUTE li_RecCnt      = li_RecCnt + 1
+148200111004              IF PURCH-ORIG-UNIT-BAL OF TRANS-PURCHASE-UNITS-2-REC > 0
+148300111004                 COMPUTE li_TotUnits = li_TotUnits +
+148400111004                 PURCH-ORIG-UNIT-BAL OF TRANS-PURCHASE-UNITS-2-REC
+148500111004              ELSE
+148600111004                 COMPUTE li_TotUnits = li_TotUnits -
+148700111004                 PURCH-ORIG-UNIT-BAL OF TRANS-PURCHASE-UNITS-2-REC
+148800111004              END-IF
+148900111010           END-IF
+149000110818
+149100110819           READ TRANS-PURCHASE-UNITS-2 NEXT RECORD
+149200110802              AT END
+149300110802                 MOVE ZEROS TO
+149400110818                    ACCOUNT-NO OF TRANS-PURCHASE-UNITS-2-REC
+149500110802                 MOVE SPACES TO
+149600110818                    INVESTMENT-CODE OF TRANS-PURCHASE-UNITS-2-REC
+149700110802                 MOVE ZEROS TO
+149800110818                    PURCH-AGE-DATE OF TRANS-PURCHASE-UNITS-2-REC
+149900110802           END-READ.
+150000110818
+150100111202      *------------------                                              *
+150200110818       Calc_RollUpUnit.
+150300111202      *------------------                                              *
+150400110802
+150500110817           MOVE ZEROS        TO li_RollUpUnit
+150600110819                                ld_PupPrvPlacementDate
+150700110819                                li_PupPrvTransNo
+150800110819                                ld_PupPrvProcessDate.
+150900110802
+151000110819           MOVE SPACES       TO lc_PupPrvRvs
+151100110819                                lc_PupRVS.
+151200110817           SET  lb_EndOfCursorFalse   To TRUE.
+151300110804
+151400111125           PERFORM OpenCur_Srvfdrc3.
+151500111125           PERFORM FetchCur_Srvfdrc3 UNTIL lb_EndOfCursorTrue
+151600111125           PERFORM CloseCur_Srvfdrc3.
+151700110804
+151800111202      *------------------                                              *
+151900111125       OpenCur_Srvfdrc3.
+152000111202      *------------------                                              *
+152100110802
+152200110802           EXEC SQL
+152300111125             OPEN lcu_Srvfdrc3
+152400110802           END-EXEC.
+152500110802
+152600110804           MOVE SQLSTATE TO lc_sqlStates
+152700110804           IF NOT lncc_sqlSuccessful
+152800111125              SET  lb_Err05   TO TRUE
+152900111125              SET  lb_Stmt05  TO TRUE
+153000111125              PERFORM SQL_ErrorRoutine
+153100110804           END-IF.
+153200110804           MOVE ZEROS        TO C3_NoOfRowsFetched
+153300110817                                C3_Cnt.
+153400110802
+153500111202      *------------------                                              *
+153600111125       FetchCur_Srvfdrc3.
+153700111202      *------------------                                              *
+153800110817           INITIALIZE C3_FetchTbl.
+153900110802
+154000110802
+154100110802           EXEC SQL
+154200111125             FETCH lcu_Srvfdrc3 FOR :C3_MaxRows ROWS
+154300110817                   INTO :C3_FetchArray :C3_IndArray
+154400110802           END-EXEC.
+154500110802
+154600110804           MOVE SQLSTATE TO lc_sqlStates.
+154700110804           EVALUATE TRUE
+154800110804             WHEN lncc_sqlSuccessful OR lncc_SqlWarning
+154900110804               COMPUTE C3_NoOfRowsFetched = SQLERRD(3)
+155000110804             WHEN lncc_sqlEnd
+155100110817               SET lb_EndOfCursorTrue TO TRUE
+155200110804               COMPUTE C3_NoOfRowsFetched = SQLERRD(3)
+155300110804             WHEN OTHER
+155400111125               SET lb_Err06    TO TRUE
+155500111125               SET lb_Stmt06   TO TRUE
+155600110817               SET lb_EndOfCursorTrue TO TRUE
+155700111125               PERFORM SQL_ErrorRoutine
+155800110804           END-EVALUATE.
+155900110802
+156000110818           IF C3_NoOfRowsFetched  < C3_MaxRows
+156100110818              SET lb_EndOfCursorTrue TO TRUE
+156200110818           END-IF
+156300110818
+156400110818           PERFORM Process_RollupUnit3 VARYING C3_Cnt FROM 1 BY 1
+156500110818                            UNTIL C3_Cnt > C3_NoOfRowsFetched.
+156600111123      *------------------
+156700110804       Process_RollupUnit3.
+156800111123      *------------------
+156900110804
+157000110817           MOVE C3_FetchArray(C3_Cnt) TO lc_Current03Rec.
+157100110802
+157200110818           IF lc_PupReverse  = lncc_Y
+157300110818              PERFORM Process_PupReverse
+157400110804           ELSE
+157500110818              PERFORM Process_DtlReduction
+157600110804           END-IF.
+157700111123      *------------------
+157800110818       Process_PupReverse.
+157900111123      *------------------
+158000110818
+158100110818            IF ld_PupPlacementDate   = ld_PupPrvPlacementDate   AND
+158200110818               li_PupTransNo         = li_PupPrvTransNo
+158300110819                PERFORM Prv_RvsCheck
+158400110804            ELSE
+158500110818               MOVE ld_PupPlacementDate  TO ld_PlacementDate
+158600110818                                            ld_PupPrvPlacementDate
+158700110818               MOVE li_PupTransNo        TO li_TransNo
+158800110818                                            li_PupPrvTransNo
+158900110802
+159000110818               PERFORM Get_RvsTrans
+159100110802
+159200110819               MOVE lc_RVS             TO lc_PupPrvRvs
+159300110819               MOVE ld_RvsProcessDate  TO ld_PupPrvRvsProcessDate
+159400110802
+159500110819               IF lb_RvsFound
+159600110818                  PERFORM Process_DtlReduction
+159700110804               ELSE
+159800110819                  SET lb_PupRvsNotFound  TO TRUE
+159900110817                  MOVE "103"     TO lc_WarningCode
+160000110802
+160100110817                  IF lb_LogErrorOn
+160200111202                   PERFORM Log_WarningRoutine
+160300110804                  END-IF
+160400110804               END-IF
+160500110804             END-IF.
+160600110802
+160700111202      *------------------                                              *
+160800110819       Prv_RvsCheck.
+160900111202      *------------------                                              *
+161000110804      * If PUP Transaction was reversed within the period, the units
+161100110804      * will be considered as no effect.
+161200110822              IF lb_PupPrvRvsFound
+161300110819                 MOVE ld_PupPrvRvsProcessDate
+161400110817                             TO ld_RvsProcessDate
+161500110818                  PERFORM Process_DtlReduction
+161600110804              END-IF.
+161700110802
+161800111202      *------------------                                              *
+161900110818       Process_DtlReduction.
+162000111202      *------------------                                              *
+162100110804      * Any redemption to reduce the unit balance of this PUP record?
+162200110817             IF ld_RvsProcessDate >= ld_EffectiveDate AND
+162300110819                ld_RvsProcessDate <= ld_EndDate       AND
+162400110822                lc_PupReverse  = lncc_Y
+162500110804                    CONTINUE
+162600110804             ELSE
+162700110819                 MOVE li_PupOrigUnitBal     TO li_UnitBal
+162800110819                 PERFORM Process_ReductionUnit
+162900110804
+163000110819      *        Accumulate reduced unit of PUP for roll up process later
+163100111123                 COMPUTE li_RollUpUnit = li_RollUpUnit + li_UnitBal
+163200110804             END-IF.
+163300110802
+163400111202      *------------------                                              *
+163500111125       CloseCur_Srvfdrc3.
+163600111202      *------------------                                              *
+163700110802
+163800110802           EXEC SQL
+163900111125             CLOSE lcu_Srvfdrc3
+164000110802           END-EXEC.
+164100110802
+164200110802      * Negative roll-up unit for the account investment on the
+164300110802      * require date will not be rolled up.
+164400110802
+164500110817           IF li_RollUpUnit< 0
+164600110817              MOVE "101"     TO lc_WarningCode
+164700110802
+164800110817              IF lb_LogErrorOn
+164900111202                 PERFORM Log_WarningRoutine
+165000110802              END-IF
+165100110802
+165200110817              MOVE ZEROS     TO li_RollUpUnit
+165300110802           END-IF.
+165400110802
+165500110819      *--------------------                                            *
+165600110819       Update_RollUpUnit.
+165700110819      *--------------------                                            *
+165800110727
+165900110727      * Do not roll up more than it currently has!
+166000110727
+166100111004           IF li_RollUpUnit> li_FvgUnits (li_FvgIx)
+166200110817              MOVE "102"     TO lc_WarningCode
+166300110727
+166400110817              IF lb_LogErrorOn
+166500111202                 PERFORM Log_WarningRoutine
+166600110727              END-IF
+166700111004              MOVE li_FvgUnits(li_FvgIx) TO li_RollUpUnitNet
+166800110727           ELSE
+166900110819              MOVE li_RollUpUnit            TO li_RollUpUnitNet
+167000110727           END-IF.
+167100110727
+167200110727      * Is the next higher range defined in the table? If not exist,
+167300111004      * roll-up action will not be performed, unit stays as it is.
+167400110727
+167500110818           MOVE li_VrLowerLimitDays (lx_Vi1, lx_Vi2 + 1)
+167600110819                             TO li_Days.
+167700111005           MOVE ld_VrEffectiveDate   (lx_Vi1, lx_Vi2)
+167800110817                             TO ld_EffectiveDate
+167900110727
+168000111005           IF  ld_VrEffectiveDate   (lx_Vi1, lx_Vi2) NOT=
+168100111005               ld_VrEffectiveDate   (lx_Vi1, lx_Vi2 + 1)
+168200111005              MOVE lncc_105  TO lc_WarningCode
+168300110817              IF lb_LogErrorOn
+168400111202                 PERFORM Log_WarningRoutine
+168500110727              END-IF
+168600110804           ELSE
+168700110819              SET  lb_UpdateReqYes  TO TRUE
+168800110727
+168900110727      * Check if the next higher day range exist or not in two tables.
+169000110817      * Increment li_AiCnt only if a new one is going to be added.
+169100110727
+169200110819              PERFORM Check_DaysFvgTbl
+169300110818              PERFORM Check_DaysAiTbl
+169400110727
+169500110727
+169600110818      * Case 1: Record is not found in ltb_FvgTbl and ltb_AiTbl
+169700110727      * -------------------------------------------------
+169800110818      * Create new one in ltb_AiTbl, move roll-up units to the new one,
+169900110727      * and reduce units from the old one. Request 'A' to add the
+170000110727      * detail record if new, or 'C' to change if it exists.
+170100110727
+170200110819              IF lb_FvgDaysNotFound  AND
+170300110819                 lb_AiDaysNotFound
+170400111123                 COMPUTE li_AiCnt = li_AiCnt + 1
+170500110818                 MOVE li_VrLowerLimitDays (lx_Vi1, lx_Vi2 + 1)
+170600110817                                TO li_AiLowerLimitDays (li_AiCnt)
+170700111123                 MOVE lc_VrRateRule       (lx_Vi1, lx_Vi2 + 1)
+170800111123                                TO lc_AiRateRule       (li_AiCnt)
+170900111005                 MOVE ld_VrEffectiveDate  (lx_Vi1, lx_Vi2 )
+171000111005                                TO ld_AiEffectiveDate  (li_AiCnt)
+171100110817                 MOVE li_RollUpUnitNet
+171200111005                                TO li_AiUnitsVar       (li_AiCnt)
+171300111005                 MOVE lncc_A    TO lc_AiDtlOpt         (li_AiCnt)
+171400110804
+171500111005                 COMPUTE  li_AiUnitsVar (li_AiIx) =
+171600111005                          li_AiUnitsVar (li_AiIx) - li_RollUpUnitNet
+171700110804
+171800110819                 IF lc_AiDtlExist (li_AiIx) = lncc_Y
+171900110819                    MOVE lncc_C    TO lc_AiDtlOpt (li_AiIx)
+172000110804                 ELSE
+172100110817                    IF lc_AiDtlExist (li_AiIx) = SPACES
+172200110819                       MOVE lncc_A TO lc_AiDtlOpt (li_AiIx)
+172300110804                    END-IF
+172400110804                 END-IF
+172500110727
+172600110818      * Case 2: Record is found in ltb_FvgTbl but not in ltb_AiTbl
+172700110727      * ----------------------------------------------------
+172800110818      * Create new one in ltb_AiTbl from ltb_FvgTbl, add roll-up units to
+172900110727      * the new one, and reduce units from the old one. Request 'A'
+173000110727      * to add the detail record if new, or 'C' to change if it exists.
+173100110727
+173200110819              ELSE IF lb_AiDaysNotFound
+173300111123                 COMPUTE li_AiCnt = li_AiCnt + 1
+173400110817                 MOVE li_FvgLowerLimitDays (li_FvgIxLoc)
+173500110817                                TO li_AiLowerLimitDays (li_AiCnt)
+173600111130                 MOVE lc_FvgRateRule       (li_FvgIxLoc)
+173700111123                                TO lc_AiRateRule       (li_AiCnt)
+173800111005                 MOVE ld_FvgEffectiveDate  (li_FvgIxLoc)
+173900111005                                TO ld_AiEffectiveDate  (li_AiCnt)
+174000110817                 MOVE lc_FvgDtlExist (li_FvgIxLoc)
+174100111005                                TO lc_AiDtlExist       (li_AiCnt)
+174200110817                 MOVE li_RollUpUnitNet
+174300111005                                TO li_AiUnitsVar       (li_AiCnt)
+174400111005                 MOVE lncc_C    TO lc_AiDtlOpt         (li_AiCnt)
+174500110804
+174600110817                 COMPUTE  li_AiUnitsVar (li_AiIx) =
+174700110817                          li_AiUnitsVar (li_AiIx) - li_RollUpUnitNet
+174800110804
+174900110819                 IF lc_AiDtlExist (li_AiIx) = lncc_Y
+175000110819                    MOVE lncc_C TO lc_AiDtlOpt (li_AiIx)
+175100110804                 ELSE
+175200110817                    IF lc_AiDtlExist (li_AiIx) = SPACES
+175300110819                       MOVE lncc_A TO lc_AiDtlOpt (li_AiIx)
+175400110804                    END-IF
+175500110804                 END-IF
+175600110727
+175700110818      * Case 3: Record is found in ltb_AiTbl
+175800110727      * ---------------------------------
+175900110727      * Add roll-up units to the one found and reduce units from the
+176000110727      * old one. Request 'A' to add the detail record if new, or
+176100110727      * 'C' to change if it exists.
+176200110727
+176300110819              ELSE IF lb_AiDaysFound
+176400110818                 COMPUTE  li_AiUnitsVar (li_AiLoc) =
+176500110818                      li_AiUnitsVar (li_AiLoc) + li_RollUpUnitNet
+176600110804
+176700110819                 IF lc_AiDtlExist (li_AiLoc) = lncc_Y
+176800110819                       MOVE lncc_C TO lc_AiDtlOpt (li_AiIx)
+176900110804                 ELSE
+177000110927                    IF lc_AiDtlExist (li_AiLoc) = SPACES
+177100110927                      MOVE lncc_A TO lc_AiDtlOpt (li_AiIx)
+177200110804                    END-IF
+177300110804                 END-IF
+177400110804
+177500111005                 COMPUTE  li_AiUnitsVar (li_AiIx) =
+177600111005                          li_AiUnitsVar (li_AiIx) - li_RollUpUnitNet
+177700110804
+177800110819                 IF lc_AiDtlExist (li_AiIx) = lncc_Y
+177900110819                    MOVE lncc_C    TO lc_AiDtlOpt (li_AiIx)
+178000110804                 ELSE
+178100110817                    IF lc_AiDtlExist (li_AiIx) = SPACES
+178200110819                       MOVE lncc_A TO lc_AiDtlOpt (li_AiIx)
+178300110804                    END-IF
+178400110804                 END-IF
+178500110727
+178600110804case 3         END-IF
+178700110804case 2         END-IF
+178800110804case 1         END-IF
+178900110927lidays      END-IF.
+179000110727
+179100111005      *------------------                                              *
+179200110819       Check_DaysFvgTbl.
+179300111005      *------------------                                              *
+179400110727
+179500110822           MOVE SPACES       TO lc_FvgDays.
+179600110817           MOVE ZEROS        TO li_FvgIxLoc.
+179700110727
+179800110817      * Does the day range exist currently in the ltb_FvgTbl?
+179900110727
+180000110817           SET lx_fvg         TO 1.
+180100110727
+180200110817           SEARCH lc_FvgArray VARYING lx_fvg
+180300110727           AT END
+180400110819              SET  lb_FvgDaysNotFound  TO TRUE
+180500110817           WHEN lx_fvg > li_FvgCnt
+180600110819              SET  lb_FvgDaysNotFound  TO TRUE
+180700110817           WHEN li_FvgLowerLimitDays(lx_fvg)  = li_Days  AND
+180800110819                ld_FvgEffectiveDate(lx_fvg)   = ld_EffectiveDate
+180900110819              SET  lb_FvgDaysFound  TO TRUE
+181000110817              MOVE lx_fvg     TO li_FvgIxLoc
+181100110727           END-SEARCH.
+181200110727
+181300111005      *-----------------                                               *
+181400110818       Check_DaysAiTbl.
+181500111005      *-----------------                                               *
+181600110727
+181700110818           MOVE ZEROS        TO li_AiLoc.
+181800110727
+181900110818      * Does the day range exist currently in the ltb_AiTbl?
+182000110727
+182100110818           SET lx_AI         TO 1.
+182200110727
+182300110818           SEARCH lc_AiArray VARYING lx_AI
+182400110727           AT END
+182500110819              SET  lb_AiDaysNotFound  TO TRUE
+182600110818           WHEN lx_AI > li_AiCnt
+182700110822              SET  lb_AiDaysNotFound   TO TRUE
+182800110818           WHEN li_AiLowerLimitDays (lx_AI) = li_Days  AND
+182900110818                ld_AiEffectiveDate  (lx_AI) = ld_EffectiveDate
+183000110822              SET  lb_AiDaysFound      TO TRUE
+183100110818              MOVE lx_AI     TO li_AiLoc
+183200110727           END-SEARCH.
+183300110727
+183400110818      *----------------                                                *
+183500110818       Get_RvsTrans.
+183600110818      *----------------                                                *
+183700110727
+183800110818           SET   lb_RvsNotFound     TO TRUE.
+183900110818           MOVE ZEROS               TO ld_RvsProcessDate
+184000110818                                       ld_RvsPlacementDate
+184100110818                                       li_RvsTransNo.
+184200110818           SET lb_TransTargtEOFNo   TO TRUE.
+184300110818           SET lb_TransTargt2EOFNo  TO TRUE.
+184400110727
+184500110727           START TRANS-TARGET
+184600110727              KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+184700110804              INVALID KEY
+184800110804               PERFORM Trans_Target2
+184900110804              NOT INVALID KEY
+185000110817               PERFORM Read_Trans_Target UNTIL lb_TransTargtEOFYes
+185100110727           END-START.
+185200110804
+185300111202      *------------------                                              *
+185400110804       Read_Trans_Target.
+185500111202      *------------------                                              *
+185600110727           READ TRANS-TARGET NEXT
+185700110727             AT END
+185800110817                SET lb_TransTargtEOFYes TO TRUE
+185900110804                PERFORM Trans_Target2
+186000110727           END-READ.
+186100110817           IF NOT lb_TransTargtEOFYes
+186200110817            IF PLACEMENT-DATE   OF TRANS-TARGET   = ld_PlacementDate
+186300110817              AND  TRANS-NO     OF TRANS-TARGET   = li_TransNo
+186400110727              AND  RELATIONSHIP-TYPE OF TRANS-TARGET = "RVS"
+186500110727                MOVE PLACEMENT-DATE-2 OF TRANS-TARGET
+186600110817                  TO ld_RvsPlacementDate
+186700110727                MOVE TRANS-NO-2 OF TRANS-TARGET
+186800110817                  TO li_RvsTransNo
+186900110817                SET lb_TransTargtEOFYes TO TRUE
+187000110819                SET lb_RvsFound         TO TRUE
+187100110804            END-IF
+187200110817            IF PLACEMENT-DATE   OF TRANS-TARGET NOT = ld_PlacementDate
+187300110819              OR   TRANS-NO     OF TRANS-TARGET NOT = li_TransNo
+187400110817                SET lb_TransTargtEOFYes TO TRUE
+187500110804                PERFORM Trans_Target2
+187600110804            END-IF
+187700110727           END-IF.
+187800110727
+187900111202      *------------------                                              *
+188000110804       Trans_Target2.
+188100111202      *------------------                                              *
+188200110727
+188300110727           START TRANS-TARGET-2
+188400110727              KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+188500110822            INVALID KEY
+188600110822              CONTINUE
+188700110822            NOT INVALID KEY
+188800110817              PERFORM Read_Trans_Target2 UNTIL  lb_TransTargt2EOFYes
+188900110727           END-START.
+189000110727
+189100111202      *------------------                                              *
+189200110804       Read_Trans_Target2.
+189300111202      *------------------                                              *
+189400110727           READ TRANS-TARGET-2 NEXT
+189500110727             AT END
+189600110817                SET lb_TransTargt2EOFYes TO TRUE
+189700110727           END-READ.
+189800110817           IF NOT lb_TransTargt2EOFYes
+189900110727
+190000110817            IF PLACEMENT-DATE-2 OF TRANS-TARGET-2 = ld_PlacementDate
+190100110817               AND  TRANS-NO-2       OF TRANS-TARGET-2 = li_TransNo
+190200110819               AND  RELATIONSHIP-TYPE OF TRANS-TARGET-2 =  lncc_RVS
+190300110727                MOVE PLACEMENT-DATE   OF TRANS-TARGET-2
+190400110817                  TO ld_RvsPlacementDate
+190500110727                MOVE TRANS-NO   OF TRANS-TARGET-2
+190600110817                  TO li_RvsTransNo
+190700110819                SET lb_RvsFound   TO TRUE
+190800110817                SET lb_TransTargt2EOFYes TO TRUE
+190900110804            END-IF
+191000110804            IF PLACEMENT-DATE-2 OF TRANS-TARGET-2 NOT =
+191100110817                   ld_PlacementDate
+191200110817              OR  TRANS-NO-2       OF TRANS-TARGET-2 NOT = li_TransNo
+191300110817                SET lb_TransTargt2EOFYes TO TRUE
+191400110804            END-IF
+191500110804           END-IF.
+191600110727
+191700111202      *------------------                                              *
+191800110819       Process_ReductionUnit.
+191900111202      *------------------                                              *
+192000110802
+192100110819           MOVE ZEROS        TO ld_RupPrvPlacementDate
+192200110819                                ld_RupPrvRvsProcessDate
+192300110819                                li_RupPrvTransNo.
+192400110802
+192500110819           MOVE SPACES       TO lc_RupprvRvs
+192600110819                                lc_RupRvs
+192700110817           SET  lb_EndOfCursorFalse   To TRUE.
+192800110804
+192900111125           PERFORM OpenCur_Srvfdrc4.
+193000111125           PERFORM FetchCur_Srvfdrc4 UNTIL lb_EndOfCursorTrue
+193100111125           PERFORM CloseCur_Srvfdrc4.
+193200110804
+193300111202      *------------------
+193400111125       OpenCur_Srvfdrc4.
+193500111202      *------------------
+193600110802
+193700110802           EXEC SQL
+193800111125             OPEN lcu_Srvfdrc4
+193900110802           END-EXEC.
+194000110802
+194100110804           MOVE SQLSTATE TO lc_sqlStates
+194200110804           IF NOT lncc_sqlSuccessful
+194300111125              SET  lb_Err07   TO  TRUE
+194400111125              SET  lb_Stmt07  TO  TRUE
+194500111125              PERFORM SQL_ErrorRoutine
+194600110804           END-IF.
+194700110804           MOVE ZEROS        TO C4_NoOfRowsFetched
+194800110817                                C4_Cnt.
+194900110802
+195000111202      *------------------
+195100111125       FetchCur_Srvfdrc4.
+195200111202      *------------------
+195300110802
+195400110817           INITIALIZE C4_FetchTbl.
+195500110802
+195600110802
+195700110802           EXEC SQL
+195800111125             FETCH lcu_Srvfdrc4 FOR :C4_MaxRows ROWS
+195900110817                   INTO :C4_FetchArray :C4_IndArray
+196000110802           END-EXEC.
+196100110802
+196200110804           MOVE SQLSTATE TO lc_sqlStates.
+196300110804           EVALUATE TRUE
+196400110804             WHEN lncc_sqlSuccessful OR lncc_SqlWarning
+196500111123               COMPUTE C4_NoOfRowsFetched = SQLERRD(3)
+196600110804             WHEN lncc_sqlEnd
+196700110817               SET lb_EndOfCursorTrue TO TRUE
+196800111123               COMPUTE C4_NoOfRowsFetched = SQLERRD(3)
+196900110804             WHEN OTHER
+197000111125               SET lb_Err08   TO TRUE
+197100111125               SET lb_Stmt08  TO TRUE
+197200110817               SET lb_EndOfCursorTrue TO TRUE
+197300111125               PERFORM SQL_ErrorRoutine
+197400110804           END-EVALUATE.
+197500111123
+197600111123           IF C4_NoOfRowsFetched  <  C4_MaxRows
+197700111123              SET lb_EndOfCursorTrue TO TRUE
+197800111123           END-IF.
+197900110802
+198000110819           PERFORM Process_FetchRedUnit VARYING C4_Cnt FROM 1 BY 1
+198100110817                           UNTIL C4_Cnt > C4_NoOfRowsFetched.
+198200110802
+198300111202      *------------------
+198400110819       Process_FetchRedUnit.
+198500111202      *------------------
+198600110804
+198700110817           MOVE C4_FetchArray(C4_Cnt)  TO lc_Current04Rec.
+198800110802
+198900110819           IF lc_RupReverse  = lncc_Y
+199000110819               PERFORM Process_RupReverse
+199100110804           ELSE
+199200110819               PERFORM Process_RupReduction
+199300110802           END-IF.
+199400110804
+199500111202      *------------------
+199600110819        Process_RupReverse.
+199700111202      *------------------
+199800110802      * For efficiency, the previously saved reversal may be used
+199900110802
+200000110819           IF ld_RupPlacementDate = ld_RupPrvPlacementDate AND
+200100110819              li_RupTransNo       = li_RupPrvTransNo
+200200110819                 PERFORM Prv_RupRvsCheck
+200300110804           ELSE
+200400110819             MOVE ld_RupPlacementDate  TO ld_PlacementDate
+200500110819                                          ld_RupPrvPlacementDate
+200600110819             MOVE li_RupTransNo        TO li_TransNo
+200700110819                                          li_RupPrvTransNo
+200800110818             PERFORM Get_RvsTrans
+200900111125             MOVE lc_RVS               TO lc_RupPrvRvs
+201000111125             MOVE ld_RvsProcessDate    TO ld_RupPrvRvsProcessDate
+201100110819
+201200110802
+201300110819             IF lb_RvsFound
+201400110819                PERFORM Process_RupReduction
+201500110805             ELSE
+201600110819                SET lb_RupRvsNotFound  TO TRUE
+201700110817                MOVE "104"     TO lc_WarningCode
+201800110805
+201900110817                IF lb_LogErrorOn
+202000111202                   PERFORM Log_WarningRoutine
+202100110805                END-IF
+202200110805             END-IF
+202300110802           END-IF.
+202400110802
+202500111202      *------------------
+202600110819       Prv_RupRvsCheck.
+202700111202      *------------------
+202800110819
+202900110819              IF lb_RupPrvRvsFound
+203000110819                 MOVE ld_RupPrvRvsProcessDate TO ld_RvsProcessDate
+203100110819                 PERFORM Process_RupReduction
+203200110804              END-IF.
+203300110804
+203400111202      *------------------
+203500110819       Process_RupReduction.
+203600111202      *------------------
+203700110802
+203800110802      * If RUP Transaction was reversed within the period, the units
+203900110802      * will be considered as no effect.
+204000110802
+204100111010           IF ld_RvsProcessDate >= ld_EarlyEffDate  AND
+204200110819              ld_RvsProcessDate <= ld_EndDate       AND
+204300110927              lc_RupReverse  = lncc_Y
+204400110805              CONTINUE
+204500110805           ELSE
+204600110817              COMPUTE li_UnitBal = li_UnitBal -
+204700110817                  (li_RupFreeUnitsTaken  + li_RupChrgUnitsTaken)
+204800110805           END-IF.
+204900111202      *------------------
+205000111125       CloseCur_Srvfdrc4.
+205100111202      *------------------
+205200110802
+205300110802
+205400110802           EXEC SQL
+205500111125             CLOSE lcu_Srvfdrc4
+205600110802           END-EXEC.
+205700110802
+205800110819      *-------------------                                             *
+205900110819       Update_AccInvVar.
+206000110819      *-------------------                                             *
+206100110727
+206200110727      * Physical update of the roll-up units to the
+206300110727      * account investment on file
+206400110727
+206500110817           IF lb_LogStatsOn OR lb_LogErrorOn
+206600111125              MOVE "FXSRVUAI"    TO lc_LogProgramCalled
+206700110727           END-IF.
+206800110727
+206900110817           MOVE lc_FvgGetBuffer  TO lc_FvpPutBuffer.
+207000111213           MOVE pd_ProcessDate   TO ld_FvpProcessDate.
+207100111208           INITIALIZE               ltb_FvpTbl
+207200111208                                    lc_FvpReturnCode.
+207300111208           MOVE ZEROS            TO li_FvpCnt
+207400111208                                    li_AiIx.
+207500111213           IF  lc_FvpRecordExist = lncc_Y
+207600111213               MOVE lncc_C  TO lc_FvpHeaderOpt
+207700111213           ELSE
+207800111213               MOVE lncc_A  TO lc_FvpHeaderOpt
+207900111213           END-IF.
+208000111208
+208100110822           PERFORM VARYING li_Cnt FROM 1 BY 1 UNTIL li_Cnt > li_AiCnt
+208200110727
+208300111123             COMPUTE li_FvpCnt = li_FvpCnt + 1
+208400110727
+208500110822             IF li_AiUnitsVar (li_Cnt) <=  0
+208600110822                Move 0 To li_AiUnitsVar (li_Cnt)
+208700110805             END-IF
+208800110822             MOVE li_AiLowerLimitDays (li_Cnt)
+208900110822                               TO li_FvpLowerLimitDays (li_Cnt)
+209000110822             MOVE li_AiUnitsVar       (li_Cnt)
+209100110822                               TO li_FvpUnitsVar        (li_Cnt)
+209200110822             MOVE lc_AiDtlExist       (li_Cnt)
+209300110822                               TO lc_FvpDtlExist        (li_Cnt)
+209400110822             MOVE lc_AiDtlOpt         (li_Cnt)
+209500110822                               TO lc_FvpDtlOpt          (li_Cnt)
+209600110822             MOVE ld_AiEffectiveDate  (li_Cnt)
+209700110822                               TO ld_FvpEffectiveDate   (li_Cnt)
+209800111114             MOVE lc_InvestmentCode
+209900111113                               TO lc_FvpOrgInvCode      (li_Cnt)
+210000111124             MOVE lc_AiRateRule       (li_Cnt)
+210100111130                               TO lc_FvpRateRule        (li_Cnt)
+210200110805           END-PERFORM.
+210300110727
+210400110819           MOVE lncc_P       TO lc_FvpOption.
+210500110817           MOVE SPACES       TO lc_FvpReturnCode.
+210600110727
+210700110817           IF lb_LogStatsOn
+210800110819              MOVE lncc_S        TO lc_StatsEvent
+210900111202              PERFORM Log_StatsRoutine
+211000110727           END-IF.
+211100110727
+211200110926           CALL "FXSRVUAI" USING li_FvpAccountNo,
+211300110926                                 lc_FvpInvestmentCode,
+211400110926                                 lc_FvpOption,
+211500110926                                 lc_FvpRecordExist,
+211600110926                                 lc_FvpHeaderOpt,
+211700110926                                 lc_FvpReturnCode,
+211800110926                                 ld_FvpProcessDate,
+211900110926                                 li_FvpUnitsVarTotal,
+212000110926                                 li_FvpCnt,
+212100110819                                 ltb_FvpTbl.
+212200110727
+212300110817           IF lb_LogStatsOn
+212400110819              MOVE lncc_E       TO lc_StatsEvent
+212500111202              PERFORM Log_StatsRoutine
+212600110727           END-IF.
+212700110727
+212800110817           IF lc_FvpReturnCode NOT = SPACES
+212900110822              MOVE lncc_008      TO lc_ErrorCode
+213000110923                                pi_ReturnCode
+213100110817              IF lb_LogErrorOn
+213200111202                 PERFORM Log_ErrorRoutine
+213300110727              END-IF
+213400110727           END-IF.
+213500110727
+213600110818      *------------------                                              *
+213700110927       Process_RollUpReq.
+213800110818      *------------------                                              *
+213900110822
+214000110727      * Calculate the require dates for roll-up of aging units
+214100110727      * based on the current table definition
+214200111124
+214300111125              MOVE "Process_RollUpReq"  TO lc_RoutineName.
+214400111125              SET lx_Ri1        TO lx_Vi1
+214500110802      * For efficiency, set up if on different process date and
+214600110802      * investment
+214700111124
+214800111125             IF pd_ProcessDate       NOT = ld_RqProcessDate(lx_Ri1) OR
+214900111125              lc_VrInvestmentCode(lx_Vi1)
+215000111125                                     NOT = lc_RqInvestmentCode(lx_Ri1)
+215100110818              INITIALIZE lc_RqInvArray(lx_Ri1)
+215200110923              MOVE pd_ProcessDate     TO ld_RqProcessDate(lx_Ri1)
+215300110818              MOVE lc_VrInvestmentCode(lx_Vi1) TO
+215400110818                                          lc_RqInvestmentCode(lx_Ri1)
+215500110802             END-IF
+215600110727
+215700111010              MOVE ld_VrEffectiveDate  (lx_Vi1, 1)
+215800111010                                  TO ld_EarlyEffDate
+215900111004
+216000111125              PERFORM VARYING li_RqI2 FROM 1 BY 1 UNTIL
+216100110818                                   li_RqI2 > li_VrCnt (lx_Vi1)
+216200110727
+216300110818              MOVE li_VrLowerLimitDays (lx_Vi1, li_RqI2)
+216400111004                                  TO li_Days
+216500111010              MOVE ld_VrEffectiveDate  (lx_Vi1, li_RqI2)
+216600111010                                  TO ld_RqEffectDate  (lx_Ri1, li_RqI2)
+216700110923              MOVE pd_ProcessDate TO ld_FormatDateIn
+216800110727
+216900110801              MOVE FUNCTION SUBTRACT-DURATION
+217000110818                   (ld_FormatDateIn DAYS li_days)
+217100111004                                  TO ld_FormatDateOut
+217200110727
+217300110817              MOVE ld_FormatDateOut
+217400110818                                  TO ld_RqRequireDate (lx_Ri1, li_RqI2)
+217500110727
+217600111004              IF ld_RqRequireDate (lx_Ri1, li_RqI2) < ld_EarlyEffDate
+217700111125                 MOVE lncc_N      TO lc_RqRollUpFlag (lx_Ri1, li_RqI2)
+217800110802              ELSE
+217900111125                 MOVE lncc_Y      TO lc_RqRollUpFlag (lx_Ri1, li_RqI2)
+218000110802              END-IF
+218100110727
+218200110818             END-PERFORM.
+218300110802
+218400111202      *------------------
+218500111202       Log_ErrorRoutine.
+218600111202      *------------------
+218700110727
+218800110727      * Log error information
+218900110727
+219000111004           PERFORM SetBasic_LogInfo.
+219100110727
+219200110927           MOVE lncc_E             TO LOG-TYPE OF lc_LogRec.
+219300111004           MOVE lc_ErrorCode       TO LOG-CODE OF lc_LogRec.
+219400110802
+219500110817           EVALUATE lc_ErrorCode
+219600110822             WHEN lncc_007
+219700110817               MOVE lc_LogProgramCalled
+219800110817                             TO PROGRAM-CALLED OF lc_LogRec
+219900110817               MOVE lc_FvgReturnCode
+220000110817                             TO PROGRAM-RETCDE OF lc_LogRec
+220100110729               MOVE "FXSRVUAI get error                      "
+220200110817                             TO  ADDL-DTL      OF lc_LogRec
+220300110727
+220400110822             WHEN lncc_008
+220500110817               MOVE lc_LogProgramCalled
+220600110817                             TO PROGRAM-CALLED OF lc_LogRec
+220700110817               MOVE lc_FvpReturnCode
+220800110817                             TO PROGRAM-RETCDE OF lc_LogRec
+220900110729               MOVE "FXSRVUAI put error                      "
+221000110817                             TO  ADDL-DTL      OF lc_LogRec
+221100110727
+221200110822             WHEN lncc_009
+221300110818               MOVE li_FvgLowerLimitDays (li_FvgIx)
+221400110817                             TO li_DaysD1
+221500110727               STRING "Days not in tbl:"             DELIMITED BY SIZE
+221600111125                       li_DaysD1                     DELIMITED BY SIZE
+221700110817                 INTO  ADDL-DTL OF lc_LogRec
+221800110727
+221900110727           END-EVALUATE.
+222000110727
+222100110727
+222200110727
+222300110727           EXEC SQL
+222400110727             INSERT INTO MFASRVLOGP VALUES (:MFASRVLOGP)
+222500110727           END-EXEC.
+222600110727
+222700111125           MOVE SQLSTATE      TO lc_sqlStates.
+222800111125           IF NOT lncc_sqlSuccessful
+222900111125              DISPLAY "Error STATEMENT: INSERT MFASRVLOGP - ERROR "
+223000111125              DISPLAY "ErrorCode: " lc_ErrorCode
+223100111125           END-IF.
+223200111125
+223300111202      *-------------------
+223400111202       Log_WarningRoutine.
+223500111202      *-------------------
+223600110727
+223700110727      * Log warning information
+223800110727
+223900111004           PERFORM SetBasic_LogInfo.
+224000110727
+224100110927           MOVE lncc_W            TO LOG-TYPE         OF lc_LogRec.
+224200110817           MOVE lc_WarningCode    TO LOG-CODE         OF lc_LogRec.
+224300110802
+224400110817           EVALUATE lc_WarningCode
+224500110927             WHEN lncc_101
+224600111125               MOVE li_RollUpUnit TO li_UnitD1
+224700110727               STRING "Negative roll-up unit:"       DELIMITED BY SIZE
+224800111125                       li_UnitD1                     DELIMITED BY SIZE
+224900110817                 INTO  ADDL-DTL OF lc_LogRec
+225000110727
+225100110927             WHEN lncc_102
+225200111125               MOVE li_RollUpUnit TO li_UnitD1
+225300111125
+225400110818               MOVE li_FvgLowerLimitDays (li_FvgIx)
+225500111125                                  TO li_DaysD2
+225600111125               MOVE li_FvgUnits(li_FvgIx)
+225700111125                                  TO li_UnitD2
+225800110727               STRING "Roll-up unit:"                DELIMITED BY SIZE
+225900111125                       li_UnitD1                     DELIMITED BY SIZE
+226000110727                      " > current in "               DELIMITED BY SIZE
+226100111125                       li_DaysD2                     DELIMITED BY SIZE
+226200110727                      ":"                            DELIMITED BY SIZE
+226300111125                       li_UnitD2                     DELIMITED BY SIZE
+226400110817                 INTO  ADDL-DTL OF lc_LogRec
+226500110727
+226600110927             WHEN lncc_103
+226700110817               MOVE ld_PlacementDate
+226800110817                             TO PLACEMENT-DATE OF lc_LogRec
+226900110817               MOVE li_TransNo
+227000110817                             TO TRANS-NO       OF lc_LogRec
+227100110822               MOVE li_PupCdscSeqNo
+227200110817                             TO CDSC-SEQ-NO    OF lc_LogRec
+227300110822               MOVE "PUP RVS target not found, treated as rvs"
+227400110817                             TO  ADDL-DTL      OF lc_LogRec
+227500110727
+227600110927             WHEN lncc_104
+227700110817               MOVE ld_PlacementDate
+227800110817                             TO PLACEMENT-DATE OF lc_LogRec
+227900110817               MOVE li_TransNo
+228000110817                             TO TRANS-NO       OF lc_LogRec
+228100110822               MOVE li_RupCdscSeqNo
+228200110817                             TO TRANS-NO       OF lc_LogRec
+228300110822               MOVE "RUP RVS target not found, treated as rvs"
+228400110817                             TO  ADDL-DTL      OF lc_LogRec
+228500110727
+228600110927             WHEN lncc_105
+228700110817               MOVE li_RollUpUnitNet
+228800110817                             TO li_UnitD1
+228900110818               MOVE li_FvgLowerLimitDays (li_FvgIx)
+229000110817                             TO li_DaysD1
+229100110727               STRING "Roll-up unit:"                DELIMITED BY SIZE
+229200111125                       li_UnitD1                     DELIMITED BY SIZE
+229300110727                      " stays in:"                   DELIMITED BY SIZE
+229400111125                       li_DaysD1                     DELIMITED BY SIZE
+229500110817                 INTO  ADDL-DTL OF lc_LogRec
+229600110727
+229700110727           END-EVALUATE.
+229800110727
+229900110727           EXEC SQL
+230000110727             INSERT INTO MFASRVLOGP VALUES (:MFASRVLOGP)
+230100110727           END-EXEC.
+230200110727
+230300111125           MOVE SQLSTATE      TO lc_sqlStates.
+230400111125           IF NOT lncc_sqlSuccessful
+230500111125              DISPLAY "Error STATEMENT: INSERT MFASRVLOGP - WARN  "
+230600111125              DISPLAY "WarningErrorCode: " lc_WarningCode
+230700111125           END-IF.
+230800111125
+230900111202      *------------------
+231000111202       Log_StatsRoutine.
+231100111202      *------------------
+231200110727
+231300110727      * Log statistics information
+231400110727
+231500111004           PERFORM SetBasic_LogInfo.
+231600110727
+231700110822           MOVE lncc_S          TO LOG-TYPE OF lc_LogRec.
+231800110817           MOVE lc_LogProgramCalled
+231900110817                             TO PROGRAM-CALLED OF lc_LogRec
+232000110727
+232100110817           EVALUATE lc_StatsEvent
+232200110822             WHEN lncc_S
+232300110817               MOVE li_Systime
+232400110817                             TO li_TimeBegin
+232500110817               MOVE "START"  TO ADDL-DTL OF lc_LogRec
+232600110727
+232700110822             WHEN lncc_E
+232800110817               MOVE li_Systime       TO li_TimeEnd
+232900111202               PERFORM Calc_UsedTime
+233000110727               STRING "END - ELAPSED "               DELIMITED BY SIZE
+233100110817                       lc_TimeUsed                  DELIMITED BY SIZE
+233200110817                 INTO  ADDL-DTL OF lc_LogRec
+233300110727
+233400110727           END-EVALUATE.
+233500110727
+233600110727
+233700110727           EXEC SQL
+233800110727             INSERT INTO MFASRVLOGP VALUES (:MFASRVLOGP)
+233900110727           END-EXEC.
+234000110727
+234100111125           MOVE SQLSTATE      TO lc_sqlStates.
+234200111125           IF NOT lncc_sqlSuccessful
+234300111125              DISPLAY "Error STATEMENT: INSERT MFASRVLOGP - STATS "
+234400111129              DISPLAY "StatsCode: " lc_StatsEvent
+234500111125           END-IF.
+234600111125
+234700111202      *------------------
+234800111004       SetBasic_LogInfo.
+234900111202      *------------------
+235000110727
+235100110727      * Set basic log information
+235200110727
+235300110817           INITIALIZE MFASRVLOGP OF lc_LogRec.
+235400110727
+235500110817           ACCEPT li_Sysdate FROM DATE YYYYMMDD.
+235600110817           ACCEPT li_Systime FROM TIME.
+235700110727
+235800110927           MOVE li_Sysdate        TO LOG-DATE         OF lc_LogRec.
+235900110927           MOVE li_Systime        TO LOG-TIME         OF lc_LogRec.
+236000110817           MOVE lc_CallingProgram TO PROGRAM-CODE     OF lc_LogRec.
+236100110802
+236200110927           MOVE pd_ProcessDate    TO PROCESS-DATE     OF lc_LogRec.
+236300110817           MOVE lc_InvestmentCode TO INVESTMENT-CODE  OF lc_LogRec.
+236400110817           MOVE li_AccountNo      TO ACCOUNT-NO       OF lc_LogRec.
+236500110802
+236600111202      *------------------
+236700111202       Calc_UsedTime.
+236800111202      *------------------
+236900110727
+237000110727      * Calculate elapsed time used in HH:MM:SS:TT
+237100110727
+237200110817           IF li_TeTT >= li_TbTT
+237300111123              COMPUTE li_TuTT = li_TeTT - li_TbTT
+237400110727           ELSE
+237500110817              COMPUTE li_TuTT = li_TeTT + 100 - li_TbTT
+237600111123              COMPUTE li_TeSS = li_TeSS - 1
+237700110727           END-IF.
+237800110727
+237900110817           IF li_TeSS >= li_TbSS
+238000111123              COMPUTE li_TuSS =  li_TeSS - li_TbSS
+238100110727           ELSE
+238200110817              COMPUTE li_TuSS = li_TeSS + 60 - li_TbSS
+238300111123              COMPUTE li_TeMM = li_TeMM - 1
+238400110727           END-IF.
+238500110727
+238600110817           IF li_TeMM >= li_TbMM
+238700111123              COMPUTE  li_TuMM = li_TeMM - li_TbMM
+238800110727           ELSE
+238900110817              COMPUTE li_TuMM = li_TeMM + 60 - li_TbMM
+239000111123              COMPUTE li_TeHH = li_TeHH - 1
+239100110727           END-IF.
+239200110727
+239300110817           IF li_TeHH >= li_TbHH
+239400111123              COMPUTE li_Tu = li_TeHH - li_TbHH
+239500110727           ELSE
+239600110817              COMPUTE li_Tu = li_TeHH + 24 - li_TbHH
+239700110727           END-IF.
+239800110727
+239900110805      *----------------
+240000110817       EndOfProgram.
+240100110805      *----------------
+240200111122
+240300111122            CLOSE  TRANS
+240400111122                   TRANS-TARGET
+240500111122                   TRANS-TARGET-2
+240600111122                   TRANS-PURCHASE-UNITS
+240700111122                   TRANS-PURCHASE-UNITS-2.
+240800111122
+240900110805            GOBACK.
+241000111124      *----------------
+241100111124       SQL_ErrorRoutine.
+241200111124      *----------------
+241300111124           DISPLAY "SRVFDR - ENDED WITH ERROR".
+241400111124           DISPLAY "PROCEDURE: "  lc_RoutineName.
+241500111124           DISPLAY "STATEMENT: "  lc_SqlErrStatement.
+241600111124           DISPLAY "SQLCODE = "   SQLCODE, " SQLSTATE = " SQLSTATE.
+241700111124           DISPLAY "lc_ErrCode: " lc_ErrCode
+241800111124           PERFORM EndOfProgram.
+241900110805

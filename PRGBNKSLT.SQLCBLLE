@@ -1,0 +1,305 @@
+000100110209       IDENTIFICATION DIVISION.
+000200110209       PROGRAM-ID.     PRGBNKSLT.
+000300110209       INSTALLATION.   CITI.
+000400110209       AUTHOR.         CITI.
+000500110209       DATE-WRITTEN.   February 2011.
+000600110208       DATE-COMPILED.
+000700110208      ******************************************************************
+000800110208      *    RFS-NUMBER : 84468                                          *
+000900110208      *                                                                *
+001000110208      *    DESCRIPTION: This program selects Bank Account records for  *
+001100110208      *                 the purge process at investor level purge mode.*
+001200110225      *                 Selected Bank Account records in TMPBNKACP file*
+001300110208      *                 will be used by subsequent purge processes.    *
+001400110208      *                                                                *
+001500110208      *   CALLED BY: JOBPURGE                                          *
+001600110208      *                                                                *
+001700110208      ******************************************************************
+001800110208      *    C H A N G E   H I S T O R Y                                 *
+001900110208      ******************************************************************
+002000110208      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE              *
+002100110208      ******************************************************************
+002200110208      * Ganbold L. * 2011/02/08 * RFS 84468 - New program to create    *
+002300110225      *            *            * TMPBNKACP FILE. (Bank Account Purge  *
+002400110208      *            *            * file).                               *
+002401170724      * Suresh G.  * 2017/07/21 * RFS171752 - Recompile of MFABNKACP
+002402191124      * Priya N    * 2019/11/15 * RFS185037 - Recompile of MFABNKACP   *
+002500110208      ******************************************************************
+002600110208      /
+002700110208       ENVIRONMENT DIVISION.
+002800110208       CONFIGURATION SECTION.
+002900110208       SOURCE-COMPUTER. IBM-AS400.
+003000110208       OBJECT-COMPUTER. IBM-AS400.
+003100110208       SPECIAL-NAMES.
+003200110208              DATA-AREA IS WS-DATA-AREA.
+003300110208      /
+003400110208       INPUT-OUTPUT SECTION.
+003500110208      *****************************************************************
+003600110208      *    I N P U T   /   O U T P U T   S E C T I O N                *
+003700110208      *****************************************************************
+003800110208       FILE-CONTROL.
+003900110208      /
+004000110208       DATA DIVISION.
+004100110208      *****************************************************************
+004200110208      *    D A T A   D I V I S I O N                                  *
+004300110208      *****************************************************************
+004400110208
+004500110208       FILE SECTION.
+004600110208      *****************************************************************
+004700110208      *    F I L E   S E C T I O N                                    *
+004800110208      *****************************************************************
+004900110208       WORKING-STORAGE SECTION.
+005000110208      ******************************************************************
+005100110208      *    W O R K I N G   S T O R A G E   S E C T I O N               *
+005200110208      ******************************************************************
+005300110208        01 WS-WORK-FIELDS.
+005400110208           02 WS-ACCOUNT-STATUS     PIC X(1).
+005500110208           02 WS-CUTOFF-DATE-GROUP.
+005600110208              03 WS-YEAR-MONTH          PIC 9(6).
+005700110208              03 WS-DAY                 PIC 9(2).
+005800110208           02 WS-CUTOFF-DATE            PIC S9(8).
+005900110208
+006000110208
+006100110208           02 WS-AA-VARIABLES.
+006200110208              05 WS-MFAPRCDTP.
+006300110208                 07 WS-PDATE             PIC 9(8).
+006400110208                 07 FILLER               PIC X(161).
+006500110208              05 WS-PROCESS-DATE         PIC S9(9).
+006600110208
+006700110209        01 CL-CONSTANTS.
+006800110208          02 lc_IVR           PIC X(3)  VALUE "IVR".
+006900110208          02 lc_A             PIC X(1)  VALUE "A".
+007000110208          02 lc_I             PIC X(1)  VALUE "I".
+007100110208
+007200110209        01 CL-COMMANDS.
+007300110208          02 CMD-SIZE         PIC 9(10)V9(5) COMP-3 VALUE 25.
+007400110225          02 CLRPFM-TMPBNKACP PIC X(25) VALUE "CLRPFM TMPBNKACP".
+007500110208
+007600110208      *SQLLOG Variables.
+007700110208        01 WS-CALLING-PROGRAM       PIC X(10)     VALUE "PRGBNKSLT ".
+007800110208        01 WS-SQLERR-STATEMENT      PIC X(25)     VALUE " ".
+007900110208        01 WS-SQLERR-DATA           PIC X(1780)   VALUE " ".
+008000110208        01 WS-SQL-STATS             PIC X(1966)   VALUE " ".
+008100110208        01 WS-SQLERR-REPLY          PIC X(1)      VALUE " ".
+008200110208        01 WS-SQLLOG                PIC X(1)      VALUE "Y".
+008300110208        01 WS-STRSQL                PIC X(1000)   VALUE SPACES.
+008400110208
+008500110208           EXEC SQL
+008600110208             INCLUDE SQLCA
+008700110208           END-EXEC.
+008800110208
+008900110208           EXEC SQL
+009000110208             INCLUDE SQLDA
+009100110208           END-EXEC.
+009200110208
+009300110208       LINKAGE SECTION.
+009400110208       01  COMM-MFAPURPARM.
+009500110208      ***************************************
+009600110208      *    P U R G E   D A T A   A R E A    *
+009700110208      ***************************************
+009800110208           03 COMM-CUTOFF-DATE               PIC X(6).
+009900110208           03 COMM-PURGE-MODE                PIC X(1).
+010000110208           03 COMM-ACTIVE-ACCOUNTS           PIC X(1).
+010100110208           03 COMM-ACTIVE-INVESTMENT         PIC X(1).
+010200110208           03 COMM-PURGE-TYPE                PIC X(1).
+010300110208           03 COMM-SWITCH-TRANSFER           PIC X(1).
+010400110208           03 COMM-MIN-NUM-OF-TRANS          PIC X(2).
+010500110208           03 COMM-ACCOUNT-OWNER-TYPE        PIC X(1).
+010600110208           03 COMM-ACCT-INVESTOR-CUTOFF-DATE PIC X(6).
+010700110208           03 COMM-PURGE-QUEUE               PIC X(10).
+010800110208           03 COMM-REPORT-PURGE-QUEUE        PIC X(10).
+010900110208       01 COMM-RETURN-CODE                   PIC X(2).
+011000110208
+011100110208       PROCEDURE DIVISION USING COMM-MFAPURPARM,
+011200110208                                COMM-RETURN-CODE.
+011300110208      *********************************************
+011400110208      *    P R O C E D U R E   D I V I S I O N    *
+011500110208      *********************************************
+011600110208
+011700110208       MAINLINE.
+011800110208      **************************
+011900110208      *    M A I N L I N E     *
+012000110208      **************************
+012100110208           PERFORM INITIAL-LOGIC THRU IL-EXIT.
+012200110208           PERFORM DETAIL-PROCESSING THRU DPR-EXIT.
+012300110208           PERFORM END-JOB THRU EOJ-EXIT.
+012400110208
+012500110208       DETAIL-PROCESSING.
+012600110208      *************************
+012700110208      *   DETAIL PROCESSING   *
+012800110208      *************************
+012900110208
+013000110208           EXEC SQL
+013100110208             WHENEVER SQLERROR GOTO SQLLOG
+013200110208           END-EXEC.
+013300110208
+013400110225      **** Do clear Purge Bank Account TMPBNKACP file once at ****
+013500110208      **** beginning.                                         ****
+013600110208
+013700110225           CALL "QCMDEXC" USING CLRPFM-TMPBNKACP CMD-SIZE.
+013800110208
+013900110225           IF COMM-PURGE-TYPE = lc_I
+014000110209              PERFORM PROCESS-INVESTOR-BANK-INFO THRU PIBI-EXIT.
+014100110208
+014200110208       DPR-EXIT.
+014300110208           EXIT.
+014400110208      /
+014500110208       PROCESS-INVESTOR-BANK-INFO.
+014600110208
+014700110208      **** Create Purge Bank Account file from MFAIVRBKP file.
+014800110209      **** (Investor Bank Acct)
+014900110208
+015000110208           DISPLAY WS-CALLING-PROGRAM
+015100110225           " - CREATE-TMPBNKACP-FROM-MFAIVRBKP"
+015200110225           PERFORM INS-TMPBNKACP-FROM-MFAIVRBKP THRU IPFM1-EXIT.
+015300110208
+015400110208       PIBI-EXIT.
+015500110208            EXIT.
+015600110208      /
+015700110208       INITIAL-LOGIC.
+015800110208      *********************
+015900110208      *   INITIAL LOGIC   *
+016000110208      *********************
+016100110208
+016200110208           DISPLAY WS-CALLING-PROGRAM " - Start ".
+016300110208           INITIALIZE WS-WORK-FIELDS.
+016400110208           ACCEPT WS-MFAPRCDTP FROM WS-DATA-AREA FOR "MFAPRCDTP".
+016500110208           MOVE WS-PDATE TO WS-PROCESS-DATE.
+016600110208
+016700110208           MOVE COMM-ACTIVE-ACCOUNTS TO WS-ACCOUNT-STATUS.
+016800110208           IF WS-ACCOUNT-STATUS NOT = "Y"
+016900110208               MOVE "C" TO WS-ACCOUNT-STATUS.
+017000110208
+017100110208           MOVE "COMM-CUTOFF-DATE " TO WS-SQLERR-STATEMENT.
+017200110208           IF COMM-CUTOFF-DATE IS NOT NUMERIC
+017300110208               GO TO SQLLOG
+017400110208           END-IF.
+017500110208
+017600110208           MOVE COMM-CUTOFF-DATE TO WS-YEAR-MONTH.
+017700110208           MOVE 32 TO WS-DAY.
+017800110208           MOVE WS-CUTOFF-DATE-GROUP TO WS-CUTOFF-DATE.
+017900110208
+018000110208       IL-CREATE-INDICES.
+018100110208
+018200110208           EXEC SQL
+018300110208             WHENEVER SQLERROR CONTINUE
+018400110208           END-EXEC.
+018500110208
+018600110208           EXEC SQL
+018700110225            DROP INDEX QTEMP/TMPBNKACP1
+018800110208           END-EXEC.
+018900110208
+019000110224           EXEC SQL
+019100110225            DROP TABLE QTEMP/TMPBNKACP
+019200110224           END-EXEC.
+019300110208
+019400110224           EXEC SQL
+019500110225           CREATE TABLE QTEMP/TMPBNKACP (
+019600110224            BANK_SEQ_NO FOR COLUMN F0000 NUMERIC (7 ))
+019700110224           END-EXEC.
+019800110208
+019900110208           EXEC SQL
+020000110225            CREATE INDEX QTEMP/TMPBNKACP1
+020100110225             ON QTEMP/TMPBNKACP (BANK_SEQ_NO ASC)
+020200110208           END-EXEC.
+020300110208
+020400110208       IL-EXIT.
+020500110208           EXIT.
+020600110208      /
+020700110225       INS-TMPBNKACP-FROM-MFAIVRBKP.
+020800110208      ****--------------------------------------------------****
+020900110208      ****  Create Purge Bank Accounts file from MFAIVRBKP. ****
+021000110208      ****--------------------------------------------------****
+021100110208      ***************************************************
+021200110208      * ALIAS        FILENAME                 OPENNAME  *
+021300110208      ***************************************************
+021400110209      * MFAIVRBKP    INVESTOR-BANK-ACCT       MFAIVRBKP *
+021500110208      ***************************************************
+021600110208
+021700110208           MOVE SPACE TO WS-SQLERR-STATEMENT.
+021800110225           MOVE "INSERT INTO TMPBNKACP IVRBKP" TO WS-SQLERR-STATEMENT.
+021900110208
+022000110208           PERFORM DSP-SQLERR-STATEMENT.
+022100110208
+022200110208           EXEC SQL
+022300110225             INSERT INTO TMPBNKACP
+022400110208               SELECT A.BANK_SEQ_NO
+022500110208                FROM MFAIVRBKP A
+022600110208                WHERE EXISTS
+022700110208                 (SELECT * FROM PURIVRP C
+022800110208                  WHERE A.INVESTOR_NO = C.INVESTOR_NO)
+022900110209                GROUP BY A.BANK_SEQ_NO
+023000110208           END-EXEC.
+023100110208
+023200110208       IPFM1-EXIT.
+023300110208           EXIT.
+023400110208      /
+023500110208       END-JOB.
+023600110208      *****************************
+023700110208      *    E N D   O F   J O B    *
+023800110208      *****************************
+023900110225
+024000110225           PERFORM INS-PURBNKACP-FROM-TMPBNKACP THRU IPFMT1-EXIT.
+024100110208           STOP RUN.
+024200110208
+024300110208       EOJ-EXIT.
+024400110208           EXIT.
+024500110225      /
+024600110225       INS-PURBNKACP-FROM-TMPBNKACP.
+024700110225      ****----------------------------------------****
+024800110225      ****  Insert PURBNKACP from TMPBNKACP file. ****
+024900110225      ****----------------------------------------****
+025000110225      ***************************************************
+025100110225      * ALIAS        FILENAME                 OPENNAME  *
+025200110225      ***************************************************
+025300110225      * PURBNKACP    Purge Bank Account       PURBNKACP *
+025400110225      * TMPBNKACP    Temp Purge Bank Account  TMPBNKACP *
+025500110225      ***************************************************
+025600110225
+025700110225           MOVE SPACE TO WS-SQLERR-STATEMENT.
+025800110225           MOVE "INSERT INTO PURBNKACP from TMPBNKACP"
+025900110225             TO WS-SQLERR-STATEMENT.
+026000110225
+026100110225           PERFORM DSP-SQLERR-STATEMENT.
+026200110225
+026300110225           EXEC SQL
+026400110225             INSERT INTO PURBNKACP
+026500110225               SELECT A.*
+026600110225                FROM MFABNKACP A
+026700110225                INNER JOIN TMPBNKACP B ON
+026800110225                  A.BANK_SEQ_NO = B.BANK_SEQ_NO
+026900110225           END-EXEC.
+027000110225
+027100110225       IPFMT1-EXIT.
+027200110225           EXIT.
+027300110208      /
+027400110208      **********
+027500110208      * SQLLOG *
+027600110208      **********
+027700110208       DSP-SQLERR-STATEMENT.
+027800110208           CONTINUE.
+027900110208
+028000110208       SQLLOG.
+028100110208
+028200110208           IF WS-SQLLOG = "Y"
+028300110208              CALL "SQLLOG"     USING WS-CALLING-PROGRAM
+028400110208                                      WS-SQLERR-STATEMENT
+028500110208                                      SQLCODE
+028600110208                                      SQLERRD(1)
+028700110208                                      SQLERRD(2)
+028800110208                                      SQLERRD(3)
+028900110208                                      SQLERRD(4)
+029000110208                                      SQLERRD(5)
+029100110208                                      SQLERRD(6)
+029200110208                                      SQLSTATE
+029300110208                                      WS-SQLERR-DATA
+029400110208                                      WS-SQL-STATS
+029500110208                                      WS-SQLERR-REPLY
+029600110208              CANCEL "SQLLOG"
+029700110208           END-IF.
+029800110208
+029900110208           MOVE "99" TO COMM-RETURN-CODE.
+030000110208           DISPLAY WS-CALLING-PROGRAM " - End   ".
+030100110208           STOP RUN.
+030200110208       SQLLOG-EXIT.
+030300110208           EXIT.

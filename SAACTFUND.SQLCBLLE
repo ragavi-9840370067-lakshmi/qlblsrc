@@ -1,0 +1,1161 @@
+000100170313      * %ATTR OPTION(*XREF *GEN) CLOSQLCSR(*ENDMOD) DBGVIEW(*SOURCE)+
+000200210623
+000300121112       IDENTIFICATION DIVISION.
+000400130430       PROGRAM-ID.    SAACTFUND.
+000500121112       AUTHOR.        Emmanuel Yala.
+000600121112       INSTALLATION.  L&T Infotech Financial Services Technology Inc.
+000700121112       DATE-WRITTEN.  November, 2012
+000800121112      /***************************************************************/
+000900121112      /* RFS Number : RFS108683                                      */
+001000121112      /* Name       : SAACTFUND                                      */
+001100121112      /* Function   : An API for SOA                                 */
+001200121112      /*                                                             */
+001300121112      /* Description: An API to return account's investments that    */
+001400121112      /*              have a particular investment structure         */
+001500121112      /*              or all investments if Inv Struct not given     */
+001600121112      /* Called By  : Middleware programs                            */
+001700121112      /*                                                             */
+001800121112      /* Parameters : pc_LanguageCode - Language Code                */
+001900121112      /*              pc_RowThreshold - Row Threshold                */
+002000121112      /*              pc_Account No   - Account Number               */
+002100121112      /*              pc_InvStrucCode - Investment Structure Code    */
+002200121112      /*              pc_PriceDate    - Pricing Date to be used      */
+002300150402      /*              pc_FunctionCode - Function Code                */
+002400121112      /*              pc_RowCount     - Output Parm                  */
+002500121112      /*              pc_Message      - Output Parm                  */
+002600121112      /*              pc_MessageDesc  - Output Parm                  */
+002700121112      /*                                                             */
+002800121112      *****************************************************************
+002900121112      *    C H A N G E   H I S T O R Y                                *
+003000121112      *****************************************************************
+003100121112      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE             *
+003200121112      *****************************************************************
+003300121112      * Emmanuel Yala* 2012/10/30 * RFS108683 - New program.          *
+003400140516      * Emmanuel Yala* 2014/03/19 * RFS135101 - Fix issue due to V7R1 *
+003500140516      * Sushmita J   * 2014/03/11 * RFS127707 - Modifying the program *
+003600140516      *              *            * to accept the system access flag  *
+003700140516      *              *            * as'Y'from the data area MFATRXACP.*
+003800150402      * Ewa K.       * 2015/02/25 * RFS145046 - Add new parm, Function*
+003900150402      *              *            * Code.                             *
+004000150402      * Ewa K.       * 2015/03/19 * RFS145046 - Replace MFAFNCTP with *
+004100150402      *              *            * MFAISTFNP.                        *
+004200150707      * Sushmita Jain* 2015/06/30 * RFS146676 - Modified the calcula- *
+004300150707      *              *            * tion of Market Value.             *
+004400151008      * Ewa K     * 2015/09/15 * RFS151216 - Calcualte MV based on     *
+004500151008      *           *            * Process Date.                         *
+004600151013      * Ewa K     * 2015/10/13 * RFS152372 - Move accept of MFAPRCDTP  *
+004700151013      *           *            * after calling the SWAPUSER.           *
+004800151030      * Ewa K     * 2015/10/23 * RFS152606 - Calculate MV for GIC/DII  *
+004900151030      *           *            * funds based on System Date and for    *
+005000151030      *           *            * other products based on Process Date  *
+005100160308      * Ewa K     * 2016/03/07 * RFS157108 - Calculate Market Value    *
+005200160309      *           *            * based on the fund's currency,not BASE *
+005300210610      * Balu B    * 2021/06/10 * RFS1115991 - Add investment group and *
+005400210610      *           *            * desciption to the resultset           *
+005500210817      * Bagath M  * 2021/08/17 * RFS187397 - Advisor portal 2
+005600121112      *****************************************************************
+005700121112
+005800121112       ENVIRONMENT DIVISION.
+005900121112       CONFIGURATION SECTION.
+006000121112       SOURCE-COMPUTER. IBM-AS400.
+006100121112       OBJECT-COMPUTER. IBM-AS400.
+006200121112       SPECIAL-NAMES.
+006300150714146676 LINKAGE TYPE IS PROCEDURE FOR "MKTVALTD"
+006400151008146676 LINKAGE TYPE IS PROCEDURE FOR "FXCHKOBJ"
+006500151008151216 DATA-AREA IS lc_ProcessDateDA.
+006600121112       INPUT-OUTPUT SECTION.
+006700121112       FILE-CONTROL.
+006800150707      *RFS146676 - Start.
+006900150708           SELECT  ACCOUNT-INVESTMENT
+007000150708                   ASSIGN       TO DATABASE-MFAACCIVP
+007100150708                   ORGANIZATION IS INDEXED
+007200150708                   ACCESS       IS DYNAMIC
+007300150708                   RECORD KEY   IS EXTERNALLY-DESCRIBED-KEY
+007400150708                   FILE STATUS  IS WS-FILE-STATUS.
+007500150707      *RFS146676 - End.
+007600121112
+007700121112       DATA DIVISION.
+007800150707      *RFS146676 - Start.
+007900150707       FILE SECTION.
+008000150707
+008100150708       FD  ACCOUNT-INVESTMENT
+008200150707           LABEL RECORDS ARE STANDARD.
+008300150708       01  ACCOUNT-INVESTMENT-REC.   COPY DD-ALL-FORMATS OF MFAACCIVP.
+008400150707
+008500150707      *RFS146676 - End.
+008600121112
+008700121112       WORKING-STORAGE SECTION.
+008800121112
+008900150708146676 01 WS-OPEN-FILES-FLAG                 PIC X(1) VALUE "Y".
+009000150708146676 01 WS-FILE-STATUS                     PIC X(02).
+009100150708
+009200121112       01 Constants.
+009300121112          03 Inc_FundList                      PIC X(03) VALUE "FNL".
+009400121218          03 lnc_E                             PIC X(01) VALUE "E".
+009500150715      *RFS146676 - Start.
+009600150714          03 lnc_MktValueIncorrect             PIC X(05) VALUE "92042".
+009700150714          03 lc_MKTV_A                         PIC X VALUE "A".
+009800150714          03 lnc_CurrencyFlag                  PIC X(01) VALUE "Y".
+009900150714          03 lnc_CurrencyStatus                PIC X(01) VALUE "A".
+010000150714          03 lnc_ProgramAction                 PIC X(10)
+010100150714                                                   VALUE "DEFAULT".
+010200150714          03 lnc_ProgramName                   PIC X(10)
+010300150714                                                   VALUE "ACILST".
+010400150714          03 lnc_BaseCurrency                  PIC X(03) VALUE "CAD".
+010500150714          03 lnc_ExchangeRateType              PIC X(01) VALUE "N".
+010600150715      *RFS146676 - End.
+010700121112
+010800121112       01 ErrorCodes.
+010900121112          03 lnc_NoFundsFound                  PIC X(05) VALUE "92320".
+011000121112          03 lnc_errTradeDate                  PIC X(05) VALUE "92463".
+011100121112
+011200121112       01 WorkingStorageFields.
+011300160308157108    03 li_MarketValue                    PIC S9(11)V9(2).
+011400160308157108    03 lc_InvCurrency                    PIC  X(03).
+011500121112          03 lc_LanguageCode                   PIC  X(01).
+011600121112          03 li_RowThreshold                   PIC S9(06).
+011700121112          03 lc_AccountNo                      PIC  X(09).
+011800121112          03 li_AccountNo                      PIC S9(09).
+011900121112          03 li_PriceDate                      PIC S9(08).
+012000121218             88 lb_DateSetToZero   VALUE 0.
+012100121112          03 lc_InvStrucCode                   PIC  X(05).
+012200150402145046    03 lc_FunctionCode                   PIC  X(10).
+012300150714      *RFS146676 - Start.
+012400150714          03 li_MarketValueGIC                 PIC S9(11)V9(2).
+012500150714          03 lc_BaseCurrency                   PIC X(03).
+012600150714          03 lc_ExchangeRateType               PIC X(01).
+012700150714          03 lc_InvestmentCode                 PIC X(05).
+012800151008      *RFS151216 starts
+012900151030152606    03 li_SystemDate                     PIC S9(08).
+013000151030   |      03 li_SystemDate_R REDEFINES li_SystemDate.
+013100151030   |          07  li_System_YEAR               PIC 9(4).
+013200151030   |          07  li_System_MM                 PIC 99.
+013300151030152606        07  li_System_DD                 PIC 99.
+013400151008          03  lc_ProcessDateDataArea.
+013500151008              05  lc_ProcessDate             PIC X(08).
+013600151008              05  ln_ProcessDate REDEFINES lc_ProcessDate PIC S9(08).
+013700151008              05  FILLER                     PIC X(161).
+013800151008      *RFS151216 ends
+013900121112
+014000150707       01  lc_MKTVALTD_Parms.
+014100150707          03  li_MKTV_Date                     PIC  9(08).
+014200150707          03  li_MKTV_AccountNo                PIC  9(09).
+014300150707          03  lc_MKTV_InvestmentCode           PIC  X(05).
+014400150707          03  li_MKTV_ValueInvestmentCur       PIC S9(11)V9(2).
+014500150707          03  li_MKTV_MarketValueBase          PIC S9(11)V9(2).
+014600150707          03  li_MKTV_BookValueBase            PIC S9(11)V9(2).
+014700150707          03  li_MKTV_BookValueExchange        PIC S9(02)V9(7).
+014800150707          03  li_MKTV_TranClosUnitBal          PIC S9(10)V9(3).
+014900150707          03  li_MKTV_BaseUnitPrice            PIC S9(05)V9(4).
+015000150707          03  li_MKTV_ValueBaseCurrency        PIC S9(11)V9(2).
+015100150707          03  lc_MKTV_ErrorCode                PIC  X(01).
+015200150707          03  lc_MKTV_DateInd                  PIC  X(01).
+015300150707
+015400150707       01 lcnd_conditions.
+015500150707          02 lc_Mfaaccivp-EOF               PIC X(01)  VALUE SPACE.
+015600150707             88 ncc_MfaaccivpEOFyes                    VALUE "Y".
+015700150714          02 lnc_MessagesInternal           PIC X(05) VALUE SPACES.
+015800150714              88 lnc_DeleteWithoutWHERE       VALUE "01504".
+015900150708      *RFS146676 - End.
+016000151030152606    02 lc_PrdTypeRule                 PIC X(01).
+016100151030   |        88  lncc_PrdTypeRuleBlank                  VALUE " ".
+016200151030152606      88  lncc_GIC_DII_Investment                VALUE "2" "7".
+016300150707
+016400121112       01 lc_validateDate.
+016500121112          03 ln_dateNum8                        PIC 9(08).
+016600121112          03 lc_dateX8    REDEFINES ln_dateNum8 PIC X(08).
+016700121112          03 lc_dateValidFlag                   PIC X(01).
+016800121112            88 lc_dateValidYes                    VALUE "Y".
+016900121112            88 lc_dateValidNo                     VALUE "N".
+017000121112
+017100121205      * SQL States to check
+017200121205       01 lnc_SqlStates.
+017300121205          03 lnc_SqlSuccessful            PIC X(05) VALUE "00000".
+017400121205          03 lnc_SqlEnd                   PIC X(05) VALUE "02000".
+017500121205          03 lnc_SqlMoreThanOneRow        PIC X(05) VALUE "21000".
+017600121205          03 lnc_SqlDuplicate             PIC X(05) VALUE "23505".
+017700121205          03 lnc_SqlDivideByZero          PIC X(05) VALUE "22012".
+017800121205          03 lnc_SqlCursorIsNotOpen       PIC X(05) VALUE "24501".
+017900121205          03 lnc_SqlCursorAlreadyOpen     PIC X(05) VALUE "24502".
+018000121205          03 lnc_SqlTblNotExist           PIC X(05) VALUE "42704".
+018100121205          03 lnc_SqlTblAlreadyExist       PIC X(05) VALUE "42710".
+018200121205
+018300121205      *   Parms to call MKTVALTD
+018400121205       01  MKTV-DATE                        PIC S9(8).
+018500121205       01  MKTV-ACCOUNT-NO                  PIC S9(9).
+018600121205       01  MKTV-INVESTMENT-CODE             PIC X(5).
+018700121205       01  MKTV-VALUE-INVESTMENT-CURRENCY   PIC S9(11)V9(2).
+018800121205       01  MKTV-MARKET-VALUE-BASE           PIC S9(11)V9(2).
+018900121205       01  MKTV-BOOK-VALUE-BASE             PIC S9(11)V9(2).
+019000121205       01  MKTV-BOOK-VALUE-EXCHANGE         PIC S9(2)V9(7).
+019100121205       01  MKTV-TRAN-CLOS-UNIT-BAL          PIC S9(10)V9(3).
+019200121205       01  MKTV-BASE-UNIT-PRICE             PIC S9(5)V9(4).
+019300121205       01  MKTV-VALUE-BASE-CURRENCY         PIC S9(11)V9(2).
+019400121205       01  MKTV-ERROR-CODE                  PIC X(1).
+019500121205       01  MKTV-DATE-IND                    PIC X(1).
+019600150707146676 01  pc_TableName                     PIC X(10)
+019700150707146676                                               VALUE "ACCINVMKT".
+019800150708      *RFS146676 - Start.
+019900150708      * FXCHKOBJ parameters.
+020000150707       01 lc_checkObjectParms.
+020100150707          03 lc_checkObjectConstants.
+020200150707             05 lnc_libQtemp               PIC X(10) VALUE "QTEMP".
+020300150707             05 lnc_objectTypeFile         PIC X(10) VALUE "*FILE".
+020400150707          03 lc_objectName                 PIC X(10).
+020500150707          03 lc_messageId                  PIC X(10).
+020600150707             88 lnc_messageIdOk                      VALUE SPACES.
+020700150708      *RFS146676 - End.
+020800150714
+020900121112          COPY CPYSWAPFLD.
+021000121112
+021100121112          COPY CPYSOAMSG.
+021200121112
+021300121112           EXEC SQL
+021400121112             INCLUDE SQLCA
+021500121112           END-EXEC.
+021600121112      /
+021700121112       LINKAGE SECTION.
+021800121112       01 pc_RequestUserId                     PIC  X(10).
+021900121112       01 pc_LanguageCode                      PIC  X(01).
+022000121112       01 pc_RowThreshold                      PIC  X(06).
+022100121112       01 pc_AccountNo                         PIC  X(09).
+022200121112       01 pc_InvStrucCode                      PIC  X(05).
+022300121112       01 pc_PriceDate                         PIC  X(08).
+022400150402145046 01 pc_FunctionCode                      PIC  X(10).
+022500121112       01 pc_RowCount                          PIC  X(09).
+022600121112       01 pi_RowCount REDEFINES pc_RowCount    PIC S9(09).
+022700121112       01 pc_MessageCode                       PIC  X(08).
+022800121112       01 pc_MessageDesc                       PIC  X(80).
+022900121112
+023000121112      /
+023100121112       PROCEDURE DIVISION USING pc_RequestUserId,
+023200121112                                pc_LanguageCode,
+023300121112                                pc_RowThreshold,
+023400121112                                pc_AccountNo,
+023500121112                                pc_InvStrucCode,
+023600121112                                pc_PriceDate,
+023700150402145046                          pc_FunctionCode,
+023800121112                                pc_RowCount,
+023900121112                                pc_MessageCode,
+024000121112                                pc_MessageDesc.
+024100121112     **
+024200121112       MAINLINE.
+024300121112     **--------**
+024400121112
+024500121112           PERFORM Initial-Validation.
+024600140516      *RFS127707 - Start.
+024700140516      *    MOVE "Y" to lb_SystemAvailable.
+024800140516           PERFORM Check-Env-Avail.
+024900140516      * RFS127707 - End.
+025000121112
+025100121112           IF lb_SystemUp
+025200121112              PERFORM Validate-Input-Parm
+025300121112              PERFORM Get-Sql-Count
+025400121112              IF pi_RowCount = ZEROES
+025500121112                 MOVE lnc_NoRowsReturned TO lc_ErrorCode
+025600121112                 PERFORM GET-MESSAGE-DESCR
+025700121112              ELSE
+025800121112              IF pi_RowCount > li_RowThreshold
+025900121112                 MOVE lnc_ThresholdExceeded TO lc_ErrorCode
+026000121112                 PERFORM GET-MESSAGE-DESCR
+026100121112              ELSE
+026200121112                 PERFORM Detail-Process
+026300121112              END-IF
+026400121112           END-IF.
+026500121112
+026600121112           PERFORM Termination.
+026700121112
+026800121112       Initial-Validation.
+026900121112     **
+027000121112           INITIALIZE  WorkingStorageFields,
+027100121112                       lc_MessageCode,
+027200121112                       pc_RowCount,
+027300121112                       pc_MessageCode,
+027400121112                       pc_MessageDesc.
+027500121112
+027600151008      *RFS151216 starts
+027700151013152372*    ACCEPT lc_ProcessDateDataArea FROM lc_ProcessDateDA
+027800151013152372*           FOR "MFAPRCDTP".
+027900151030152606     ACCEPT li_SystemDate FROM DATE YYYYMMDD.
+028000151008      *RFS151216 ends
+028100121112           MOVE Inc_FundList                TO lc_ProcName.
+028200121112           MOVE SPACES                      TO lc_LanguageCode.
+028300121112
+028400121229           IF pc_RequestUserid NOT = SPACES THEN
+028500121229              MOVE pc_RequestUserid TO swap_RequestUserid
+028600121229              PERFORM Swap-User
+028700121229              IF swap_error
+028800121229                 PERFORM Termination
+028900121229              END-IF
+029000121229           END-IF.
+029100121229
+029200151013152372     ACCEPT lc_ProcessDateDataArea FROM lc_ProcessDateDA
+029300151013152372            FOR "MFAPRCDTP".
+029400151013
+029500121112      * Validate Language Code
+029600121112           IF pc_LanguageCode = SPACES THEN
+029700121112              MOVE lnc_InvalidLanguageCode TO lc_ErrorCode
+029800121218              MOVE lnc_E                   TO lc_LanguageCode
+029900121112              PERFORM GET-MESSAGE-DESCR
+030000121112              PERFORM Termination
+030100121112           ELSE
+030200121112              EXEC SQL
+030300121112                SET :lc_LanguageCode = UPPER(:pc_LanguageCode)
+030400121112              END-EXEC
+030500121112           END-IF.
+030600121112
+030700150402      *RFS145046 starts
+030800150402           IF pc_FunctionCode NOT = SPACES THEN
+030900150402              EXEC SQL
+031000150402                SET :lc_FunctionCode = UPPER(:pc_FunctionCode)
+031100150402              END-EXEC
+031200150402           END-IF.
+031300150402      *RFS145046 ends
+031400150402
+031500121112       Validate-Input-Parm.
+031600121112     **
+031700121112
+031800121112      * Validate Row Threshold
+031900121112           EXEC SQL
+032000121112             SET :li_RowThreshold = INTEGER(:pc_RowThreshold)
+032100121112           END-EXEC.
+032200121112
+032300121112           IF SQLSTATE        = Inc_NotNumeric OR
+032400121112              li_RowThreshold = ZEROES
+032500121112
+032600121112              MOVE lnc_InvalidThreshold TO lc_ErrorCode
+032700121112              PERFORM Get-Message-Descr
+032800121112              PERFORM Termination
+032900121112           END-IF.
+033000121112
+033100121112      * Validate Account Number
+033200121112           MOVE pc_AccountNo                TO lc_AccountNo.
+033300150402
+033400150707      *RFS145046 start
+033500150402      *    MOVE pc_InvStrucCode             TO lc_InvStrucCode
+033600150402           IF pc_InvStrucCode NOT = SPACES THEN
+033700150402              EXEC SQL
+033800150402                SET :lc_InvStrucCode = UPPER(:pc_InvStrucCode)
+033900150402              END-EXEC
+034000150402           END-IF.
+034100150402      *RFS145046 ends
+034200121112
+034300121112           EXEC SQL
+034400121112                SET :li_AccountNo = INTEGER(:lc_AccountNo)
+034500121112           END-EXEC.
+034600121112
+034700121112           IF (SQLSTATE        = Inc_NotNumeric OR
+034800121112               li_AccountNo    = ZEROES         )
+034900121112               MOVE lnc_InvalidAccountNo    TO lc_ErrorCode
+035000121112               PERFORM Get-Message-Descr
+035100121112               PERFORM Termination
+035200121112           END-IF.
+035300121112
+035400121112      * Validate Price date
+035500121112           EXEC SQL
+035600121112                SET :li_PriceDate = INTEGER(:pc_PriceDate)
+035700121112           END-EXEC.
+035800121112
+035900121112           IF li_PriceDate > 0
+036000121112              MOVE li_PriceDate  TO ln_dateNum8
+036100121112              CALL "VALDATEFMT" USING lc_dateX8
+036200121112                                      lc_dateValidFlag
+036300121112           END-IF.
+036400121112           IF (SQLSTATE        = Inc_NotNumeric
+036500121218               OR lb_DateSetToZero
+036600121112               OR lc_dateValidNo)
+036700121112               MOVE lnc_errTradeDate   TO lc_ErrorCode
+036800121112               PERFORM Get-Message-Descr
+036900121112               PERFORM Termination
+037000121112           END-IF.
+037100121205
+037200150708      *146676 - Start.
+037300150708      * Open files.
+037400150708           IF WS-OPEN-FILES-FLAG = "Y"
+037500150708              THEN
+037600150708                 MOVE "N" TO WS-OPEN-FILES-FLAG
+037700150708                 OPEN INPUT ACCOUNT-INVESTMENT
+037800150708           END-IF.
+037900150708      *146676 - End.
+038000121112     **
+038100121112       Get-Sql-Count.
+038200121112     **--------------**
+038300121112           IF lc_InvStrucCode = SPACES
+038400150402145046        IF lc_FunctionCode = SPACES
+038500150402                PERFORM Build-FundList-Count
+038600150402145046        ELSE
+038700150402   |            PERFORM Count-InvestFunction
+038800150402145064        END-IF
+038900121112           ELSE
+039000150402145046        IF lc_FunctionCode = SPACES
+039100150402                PERFORM Build-SpecificFundList-Count
+039200150402145046        ELSE
+039300150402   |            PERFORM Count-InvestStructFunction
+039400150402145064        END-IF
+039500121112           END-IF.
+039600121112
+039700140516135101     MOVE SQLSTATE TO Ic_SqlStates.
+039800140516135101*    IF SQLSTATE NOT = Inc_SqlSuccessful
+039900140516135101     IF NOT Incc_sqlSuccessful
+040000121112              MOVE ZERO               TO pi_RowCount
+040100121112           END-IF.
+040200121112
+040300121112     **
+040400121112       Build-FundList-Count.
+040500121112     **--------------------**
+040600121112           EXEC SQL
+040700121112             SELECT COUNT(*)
+040800121112               INTO :pi_RowCount
+040900121112               FROM MFAACCIVP accivp
+041000121112               INNER JOIN MFAINVP invp ON
+041100121112                    invp.Investment_Code    = accivp.Investment_Code
+041200121112
+041300150402145046          INNER JOIN MFAINVLPP invlpp ON
+041400150402145046               invlpp.Investment_Code  = accivp.Investment_Code
+041500150402
+041600150402145046          LEFT OUTER JOIN MFAINVSXP invsxp ON
+041700150402145046               invsxp.Investment_Code  = accivp.Investment_Code
+041800150402
+041900121112              WHERE accivp.Account_No       = :li_AccountNo
+042000121112           END-EXEC.
+042100121112
+042200121112     **
+042300121112       Build-SpecificFundList-Count.
+042400121112     **----------------------------**
+042500121112           EXEC SQL
+042600121112             SELECT COUNT(*)
+042700121112               INTO :pi_RowCount
+042800121112               FROM MFAACCIVP accivp
+042900121112               INNER JOIN MFAINVP invp ON
+043000121112                    invp.Investment_Code    = accivp.Investment_Code
+043100121112
+043200150402145046         INNER JOIN MFAINVLPP invlpp ON
+043300150402145046              invlpp.Investment_Code  = accivp.Investment_Code
+043400150402
+043500121112               INNER JOIN MFAINVSXP invsxp ON
+043600121112                    invsxp.Investment_Code  = accivp.Investment_Code
+043700121112
+043800121112              WHERE accivp.Account_No       = :li_AccountNo
+043900121112                AND invsxp.Investment_Structure_Code
+044000150402145046                               = :lc_InvStrucCode
+044100150402145046*                              = UPPER(TRIM(:lc_InvStrucCode))
+044200121112           END-EXEC.
+044300121112
+044400121112     **
+044500121112       Detail-Process.
+044600121112     **--------------**
+044700150714
+044800150708      *RFS146676 - Start.
+044900160308           PERFORM Get-Base-Currency.
+045000160308157108*    PERFORM Get-Exchange-Rate-Type.
+045100150707           PERFORM Create-Output-File.
+045200150707           PERFORM GetMarketValue.
+045300150714      *RFS146676 - End.
+045400150707
+045500121112           IF lc_InvStrucCode = SPACES
+045600150402145046        IF lc_FunctionCode = SPACES
+045700150402                PERFORM Build-FundList-Cursor
+045800150402145046        ELSE
+045900150402   |            PERFORM Build-FundList-Function
+046000150402145064        END-IF
+046100121112           ELSE
+046200150402145046        IF lc_FunctionCode = SPACES
+046300150402                PERFORM Build-SpecificFundList-Cursor
+046400150402145046        ELSE
+046500150402   |            PERFORM Build-InvestStructFunction
+046600150402145064        END-IF
+046700121112           END-IF.
+046800121112           PERFORM Prepare-Results.
+046900121112
+047000121112       Build-FundList-Cursor.
+047100121112     **
+047200121112           EXEC SQL
+047300121112             DECLARE CSR_FUNDLIST SCROLL CURSOR FOR
+047400121205               SELECT :li_PriceDate         AS AsOfDate,
+047500121205                     accivp.Investment_Code AS Inv_Code,
+047600121112                     invp.Industry_Fund_Code AS Fund_Code,
+047700121205                     invnmp.Investment_Name_Long As Fund_Name,
+047800121112                     invp.Load_Structure,
+047900121112                     COALESCE(invsxp.Investment_Structure_Code," ")
+048000121112                              AS Investment_Structure_Code,
+048100130507                     invp.Investment_Group_Code,
+048200121112                     invp.Currency,
+048300121112                     CASE WHEN (COALESCE(Invupp.Unit_Price, 0)) > 0
+048400121112                          THEN invupp.Unit_Price
+048500121112                          ELSE invlpp.Unit_Price END AS Unit_Price,
+048600121112                     accivp.Curr_Unit_Bal  As Unit_Held,
+048700121112                     Decimal(Round((accivp.Curr_Unit_Bal *
+048800121112                     accivp.Average_Unit_Cost),2),13,2) AS Book_Value,
+048900150708      *RFS146676 - Start.
+049000150707      *              CASE WHEN (COALESCE(Invupp.Unit_Price, 0)) > 0
+049100150707      *                   THEN Decimal(Round((accivp.Curr_Unit_Bal *
+049200150707      *                        invupp.Unit_Price),2),13,2)
+049300150707      *                   ELSE Decimal(Round((accivp.Curr_Unit_Bal *
+049400150707      *                        invlpp.Unit_Price),2),13,2) END
+049500150707      *              AS Market_Value,
+049600150707                     CASE WHEN (acciap.Accrual_Amt IS NOT NULL)
+049700160307      *RFS157108 - Start
+049800160307      *              THEN  Decimal(COALESCE(
+049900160307      *                          GET_INTACR(acciap.Accrual_Amt,
+050000160307      *                          invp.Currency,
+050100160307      *                          CHAR(:lc_BaseCurrency),
+050200160307      *                          CHAR(:lc_ExchangeRateType)), 0) +
+050300160307      *                          MKTV.MARKET_VALUE, 13, 2)
+050400160307                     THEN  Decimal(Round((acciap.Accrual_Amt +
+050500160307                           MKTV.MARKET_VALUE),2),13,2)
+050600160307      *RFS157108 - End
+050700150714                     ELSE  MKTV.MARKET_VALUE
+050800150707                     END
+050900150707                     AS Market_Value,
+051000150708      *RFS146676 - End.
+051100121112                     accivp.Average_Unit_Cost
+051200210610115991              ,invgrp.INVESTMENT_GROUP_CODE AS Investment_Grp_Code
+051300210610115991              ,invgrp.INVESTMENT_GROUP_NAME AS Investment_Grp_Name
+051400121112
+051500210817      *RFS187397 - Start
+051600210817                    ,Invp.Product_Type_Code
+051700210817                    ,invlpp.Trade_Date As MarketValueDate
+051800210817      *RFS187397 - ends
+051900121112
+052000121112                FROM MFAACCIVP accivp
+052100121112
+052200121112                INNER JOIN MFAINVP invp ON
+052300121112                     invp.Investment_Code    = accivp.Investment_Code
+052400121112
+052500121112                INNER JOIN MFAINVLPP invlpp ON
+052600121112                     invlpp.Investment_Code  = accivp.Investment_Code
+052700121112
+052800121205                INNER JOIN MFAINVNMP invnmp ON
+052900121205                     invnmp.Investment_Code  = accivp.Investment_Code
+053000150708      *RFS146676 - Start.
+053100150707                INNER JOIN QTEMP/ACCINVMKT MKTV  ON
+053200150707                     accivp.Account_No      = MKTV.Account_No
+053300150707                AND accivp.Investment_Code  = MKTV.Investment_Code
+053400150707
+053500150707                LEFT OUTER JOIN MFAACCIAP acciap ON
+053600150707                     accivp.Account_No      = acciap.Account_No
+053700150707                AND accivp.Investment_Code  =  acciap.Investment_Code
+053800150708      *RFS146676 - End.
+053900150707
+054000121112                LEFT OUTER JOIN MFAINVSXP invsxp ON
+054100121112                     invsxp.Investment_Code  = accivp.Investment_Code
+054200121112
+054300121112                LEFT OUTER JOIN MFAINVUPP invupp ON
+054400121112                     invupp.Investment_Code  = accivp.Investment_Code
+054500121112                     AND invupp.Trade_Date =  :li_PriceDate
+054600150402145046               AND invupp.Distribution_Flag = " "
+054700210610
+054800210610115991          LEFT OUTER JOIN MFAINVGRP invgrp ON
+054900210610115991               invp.Investment_Group_Code =
+055000210610115991                                     invgrp.Investment_Group_Code
+055100121112
+055200121112               WHERE accivp.Account_No       = :li_AccountNo
+055300121205                 AND invnmp.Language_Code     = :lc_LanguageCode
+055400121112               ORDER BY accivp.Investment_Code
+055500121112
+055600121112           END-EXEC.
+055700121112
+055800121112           EXEC SQL
+055900121112             OPEN CSR_FUNDLIST
+056000121112           END-EXEC.
+056100121112
+056200121112     ** If no rows are returned then exit
+056300140516135101     MOVE SQLSTATE TO Ic_SqlStates.
+056400140516135101*    IF SQLSTATE = Inc_SqlSuccessful
+056500140516135101     IF Incc_sqlSuccessful
+056600121112              Move lnc_SuccessMsgId   TO lc_ErrorCode
+056700121112           ELSE
+056800121112              MOVE lnc_NoFundsFound   TO lc_ErrorCode
+056900121112           END-IF.
+057000121112           PERFORM Get-Message-Descr.
+057100121112
+057200150707       Build-SpecificFundList-Cursor.
+057300121112     **
+057400121112           EXEC SQL
+057500121112             DECLARE CSR_SFUNDLIST SCROLL CURSOR FOR
+057600121205              SELECT :li_PriceDate              AS AsOfDate,
+057700121205                     accivp.Investment_Code      AS Inv_Code,
+057800121112                     invp.Industry_Fund_Code     AS Fund_Code,
+057900121205                     invnmp.Investment_Name_Long  As Fund_Name,
+058000121112                     invp.Load_Structure,
+058100121112                     invsxp.Investment_Structure_Code,
+058200130507                     invp.Investment_Group_Code,
+058300121112                     invp.Currency,
+058400121112                     CASE WHEN (COALESCE(Invupp.Unit_Price, 0)) > 0
+058500121112                          THEN invupp.Unit_Price
+058600121112                          ELSE invlpp.Unit_Price END AS Unit_Price,
+058700121112                     accivp.Curr_Unit_Bal AS Unit_Held,
+058800121112                     Decimal(Round((accivp.Curr_Unit_Bal *
+058900121112                     accivp.Average_Unit_Cost),2),13,2) AS Book_Value,
+059000150708      *RFS146676 - Start.
+059100150707      *              CASE WHEN (COALESCE(Invupp.Unit_Price, 0)) > 0
+059200150707      *                   THEN Decimal(Round((accivp.Curr_Unit_Bal *
+059300150707      *                        invupp.Unit_Price),2),13,2)
+059400150707      *                   ELSE Decimal(Round((accivp.Curr_Unit_Bal *
+059500150707      *                        invlpp.Unit_Price),2),13,2) END
+059600150707                     CASE WHEN (acciap.Accrual_Amt IS NOT NULL)
+059700160307      *RFS157108 - Start
+059800160307      *              THEN  Decimal(COALESCE(
+059900160307      *                          GET_INTACR(acciap.Accrual_Amt,
+060000160307      *                          invp.Currency,
+060100160307      *                          CHAR(:lc_BaseCurrency),
+060200160307      *                          CHAR(:lc_ExchangeRateType)), 0) +
+060300160307      *                          MKTV.MARKET_VALUE, 13, 2)
+060400160307                     THEN  Decimal(Round((acciap.Accrual_Amt  +
+060500160307                           MKTV.MARKET_VALUE),2),13,2)
+060600160307      *RFS157108 - End
+060700150714                     ELSE  MKTV.MARKET_VALUE
+060800150707                     END
+060900150707                     AS Market_Value,
+061000150708      *RFS146676 - End.
+061100121112                     accivp.Average_Unit_Cost
+061200210610115991              ,invgrp.INVESTMENT_GROUP_CODE AS Investment_Grp_Code
+061300210610115991              ,invgrp.INVESTMENT_GROUP_NAME AS Investment_Grp_Name
+061400210817      *RFS187397 - Start
+061500210817                    ,Invp.Product_Type_Code
+061600210817                    ,invlpp.Trade_Date As MarketValueDate
+061700210817      *RFS187397 - ends
+061800121112
+061900121112
+062000121112                FROM MFAACCIVP accivp
+062100121112
+062200121112                INNER JOIN MFAINVP invp ON
+062300121112                     invp.Investment_Code    = accivp.Investment_Code
+062400121112
+062500121112                INNER JOIN MFAINVLPP invlpp ON
+062600121112                     invlpp.Investment_Code  = accivp.Investment_Code
+062700121112
+062800121205                INNER JOIN MFAINVNMP invnmp ON
+062900121205                     invnmp.Investment_Code   = accivp.Investment_Code
+063000121112
+063100121112                INNER JOIN MFAINVSXP invsxp ON
+063200121112                     invsxp.Investment_Code  = accivp.Investment_Code
+063300121112
+063400150708      *RFS146676 -Start.
+063500150707                INNER JOIN QTEMP/ACCINVMKT MKTV  ON
+063600150707                accivp.Account_No  = MKTV.Account_No
+063700150707                AND accivp.Investment_Code  = MKTV.Investment_Code
+063800150707
+063900150707                LEFT OUTER JOIN MFAACCIAP acciap ON
+064000150707                   accivp.Account_No  = acciap.Account_No
+064100150707                AND accivp.Investment_Code  = acciap.Investment_Code
+064200150708      *RFS146676 - End.
+064300121112                LEFT OUTER JOIN MFAINVUPP invupp ON
+064400121112                     invupp.Investment_Code  = accivp.Investment_Code
+064500121112                     AND invupp.Trade_Date =  :li_PriceDate
+064600150402145046               AND invupp.Distribution_Flag = " "
+064700121112
+064800210610115991          LEFT OUTER JOIN MFAINVGRP invgrp ON
+064900210610115991               invp.Investment_Group_Code =
+065000210610115991                                     invgrp.Investment_Group_Code
+065100121112
+065200121112               WHERE accivp.Account_No       = :li_AccountNo
+065300121205                 AND invnmp.Language_Code     = :lc_LanguageCode
+065400121112                 AND invsxp.Investment_Structure_Code
+065500150402145046                                  = :lc_InvStrucCode
+065600150402145046*                                 = UPPER(TRIM(:lc_InvStrucCode))
+065700121112
+065800121112               ORDER BY accivp.Investment_Code
+065900121112
+066000121112           END-EXEC.
+066100121112
+066200121112           EXEC SQL
+066300121112             OPEN CSR_SFUNDLIST
+066400121112           END-EXEC.
+066500121112
+066600121112     ** If no rows are returned then exit
+066700140516135101     MOVE SQLSTATE TO Ic_SqlStates.
+066800140516135101*    IF SQLSTATE = Inc_SqlSuccessful
+066900140516135101     IF Incc_sqlSuccessful
+067000121112              Move lnc_SuccessMsgId   TO lc_ErrorCode
+067100121112           ELSE
+067200121112              MOVE lnc_NoFundsFound   TO lc_ErrorCode
+067300121112           END-IF.
+067400121112           PERFORM Get-Message-Descr.
+067500121112
+067600150402      *RFS145046 starts
+067700150402       Count-InvestFunction.
+067800150402     **--------------------**
+067900150402           EXEC SQL
+068000150402             SELECT COUNT(*)
+068100150402               INTO :pi_RowCount
+068200150402               FROM MFAACCIVP accivp
+068300150402               INNER JOIN MFAINVP invp ON
+068400150402                    invp.Investment_Code    = accivp.Investment_Code
+068500150402               INNER JOIN MFAINVLPP invlpp ON
+068600150402                     invlpp.Investment_Code  = accivp.Investment_Code
+068700150402               INNER JOIN MFAINVSXP invsxp ON
+068800150402                    invsxp.Investment_Code  = accivp.Investment_Code
+068900150402               INNER JOIN MFAISTFNP istfnp ON
+069000150402                    istfnp.Investment_Code  = accivp.Investment_Code
+069100150402                AND istfnp.Investment_Structure_Code =
+069200150402                    invsxp.Investment_Structure_Code
+069300150402                AND istfnp.Function_Code = :lc_FunctionCode
+069400150402
+069500150402              WHERE accivp.Account_No   = :li_AccountNo
+069600150402           END-EXEC.
+069700150402
+069800150402       Count-InvestStructFunction.
+069900150402     **----------------------------**
+070000150402           EXEC SQL
+070100150402             SELECT COUNT(*)
+070200150402               INTO :pi_RowCount
+070300150402               FROM MFAACCIVP accivp
+070400150402               INNER JOIN MFAINVP invp ON
+070500150402                    invp.Investment_Code    = accivp.Investment_Code
+070600150402
+070700150402               INNER JOIN MFAINVLPP invlpp ON
+070800150402                     invlpp.Investment_Code  = accivp.Investment_Code
+070900150402
+071000150402               INNER JOIN MFAINVSXP invsxp ON
+071100150402                    invsxp.Investment_Code  = accivp.Investment_Code
+071200150402                AND invsxp.Investment_Structure_Code
+071300150402                                     = :lc_InvStrucCode
+071400150402
+071500150402               INNER JOIN MFAFNCTP fnctp ON
+071600150402                    fnctp.Investment_Structure_Code =
+071700150402                   invsxp.Investment_Structure_Code
+071800150402                AND fnctp.Function_Code = :lc_FunctionCode
+071900150402
+072000150402              WHERE accivp.Account_No       = :li_AccountNo
+072100150402           END-EXEC.
+072200150402
+072300150402       Build-FundList-Function.
+072400150402     **------------------------------**
+072500150402           EXEC SQL
+072600150402             DECLARE CSR_FUND_FUNCT SCROLL CURSOR FOR
+072700150402               SELECT :li_PriceDate          AS AsOfDate,
+072800150402                     accivp.Investment_Code  AS Inv_Code,
+072900150402                     invp.Industry_Fund_Code AS Fund_Code,
+073000150402                     invnmp.Investment_Name_Long As Fund_Name,
+073100150402                     invp.Load_Structure,
+073200150402                     invsxp.Investment_Structure_Code
+073300150402                         AS Investment_Structure_Code,
+073400150402                     invp.Investment_Group_Code,
+073500150402                     invp.Currency,
+073600150402                     CASE WHEN (COALESCE(Invupp.Unit_Price, 0)) > 0
+073700150402                          THEN invupp.Unit_Price
+073800150402                          ELSE invlpp.Unit_Price END AS Unit_Price,
+073900150402                     accivp.Curr_Unit_Bal  As Unit_Held,
+074000150402                     Decimal(Round((accivp.Curr_Unit_Bal *
+074100150402                     accivp.Average_Unit_Cost),2),13,2) AS Book_Value,
+074200150708      *RFS146676 - Start.
+074300150707      *              CASE WHEN (COALESCE(Invupp.Unit_Price, 0)) > 0
+074400150707      *                   THEN Decimal(Round((accivp.Curr_Unit_Bal *
+074500150707      *                        invupp.Unit_Price),2),13,2)
+074600150707      *                   ELSE Decimal(Round((accivp.Curr_Unit_Bal *
+074700150707      *                        invlpp.Unit_Price),2),13,2) END
+074800150707      *              AS Market_Value,
+074900150707                     CASE WHEN (acciap.Accrual_Amt IS NOT NULL)
+075000160308      *RFS157108 - Start
+075100160308      *              THEN  Decimal(COALESCE(
+075200160308      *                          GET_INTACR(acciap.Accrual_Amt,
+075300160308      *                          invp.Currency,
+075400160308      *                          CHAR(:lc_BaseCurrency),
+075500160308      *                          CHAR(:lc_ExchangeRateType)), 0) +
+075600160308      *                          MKTV.MARKET_VALUE, 13, 2)
+075700160308                     THEN  Decimal(Round((acciap.Accrual_Amt +
+075800160308                           MKTV.MARKET_VALUE),2),13,2)
+075900160308      *RFS157108 - End
+076000150714                     ELSE  MKTV.MARKET_VALUE
+076100150707                     END
+076200150707                     AS Market_Value,
+076300150708      *RFS146676 - End.
+076400150402                     accivp.Average_Unit_Cost
+076500210610115991              ,invgrp.INVESTMENT_GROUP_CODE AS Investment_Grp_Code
+076600210610115991              ,invgrp.INVESTMENT_GROUP_NAME AS Investment_Grp_Name
+076700210817      *RFS187397 - Start
+076800210817                     ,Invp.Product_Type_Code
+076900210817                     ,invlpp.Trade_Date As MarketValueDate
+077000210817      *RFS187397 - ends
+077100150402
+077200150402                FROM MFAACCIVP accivp
+077300150402
+077400150402                INNER JOIN MFAINVP invp ON
+077500150402                     invp.Investment_Code    = accivp.Investment_Code
+077600150402
+077700150402                INNER JOIN MFAINVLPP invlpp ON
+077800150402                     invlpp.Investment_Code  = accivp.Investment_Code
+077900150402
+078000150402                INNER JOIN MFAINVNMP invnmp ON
+078100150402                     invnmp.Investment_Code  = accivp.Investment_Code
+078200150402                 AND invnmp.Language_Code    = :lc_LanguageCode
+078300150402
+078400150402                INNER JOIN MFAINVSXP invsxp ON
+078500150402                     invsxp.Investment_Code  = accivp.Investment_Code
+078600150402
+078700150402                INNER JOIN MFAISTFNP istfnp ON
+078800150402                     istfnp.Investment_Code  = accivp.Investment_Code
+078900150402                 AND istfnp.Investment_Structure_Code =
+079000150402                     invsxp.Investment_Structure_Code
+079100150402                 AND istfnp.Function_Code = :lc_FunctionCode
+079200150708      *RFS146676 - Start.
+079300150707                INNER JOIN QTEMP/ACCINVMKT MKTV  ON
+079400150707                accivp.Account_No  = MKTV.Account_No
+079500150707                AND accivp.Investment_Code  = MKTV.Investment_Code
+079600150707
+079700150707                LEFT OUTER JOIN MFAACCIAP acciap ON
+079800150707                   accivp.Account_No  = acciap.Account_No
+079900150707                 AND accivp.Investment_Code  = acciap.Investment_Code
+080000150708      * RFS146676 - End.
+080100150707
+080200150402                LEFT OUTER JOIN MFAINVUPP invupp ON
+080300150402                     invupp.Investment_Code  = accivp.Investment_Code
+080400150402                     AND invupp.Trade_Date =  :li_PriceDate
+080500150402                     AND invupp.Distribution_Flag = " "
+080600150402
+080700210610115991          LEFT OUTER JOIN MFAINVGRP invgrp ON
+080800210610115991               invp.Investment_Group_Code =
+080900210610115991                                     invgrp.Investment_Group_Code
+081000150402               WHERE accivp.Account_No       = :li_AccountNo
+081100150402               ORDER BY accivp.Investment_Code
+081200150402               FOR FETCH ONLY
+081300150402           END-EXEC.
+081400150402
+081500150402           EXEC SQL
+081600150402             OPEN CSR_FUND_FUNCT
+081700150402           END-EXEC.
+081800150402
+081900150402     ** If no rows are returned then exit
+082000150402           MOVE SQLSTATE TO Ic_SqlStates.
+082100150402           IF Incc_sqlSuccessful
+082200150402              Move lnc_SuccessMsgId   TO lc_ErrorCode
+082300150402           ELSE
+082400150402              MOVE lnc_NoFundsFound   TO lc_ErrorCode
+082500150402           END-IF.
+082600150402           PERFORM Get-Message-Descr.
+082700150402
+082800150402       Build-InvestStructFunction.
+082900150402     **------------------------------**
+083000150402           EXEC SQL
+083100150402             DECLARE CSR_SFUND_FUNCT SCROLL CURSOR FOR
+083200150402              SELECT :li_PriceDate                AS AsOfDate,
+083300150402                     accivp.Investment_Code       AS Inv_Code,
+083400150402                     invp.Industry_Fund_Code      AS Fund_Code,
+083500150402                     invnmp.Investment_Name_Long  As Fund_Name,
+083600150402                     invp.Load_Structure,
+083700150402                     invsxp.Investment_Structure_Code,
+083800150402                     invp.Investment_Group_Code,
+083900150402                     invp.Currency,
+084000150402                     CASE WHEN (COALESCE(Invupp.Unit_Price, 0)) > 0
+084100150402                          THEN invupp.Unit_Price
+084200150402                          ELSE invlpp.Unit_Price END AS Unit_Price,
+084300150402                     accivp.Curr_Unit_Bal AS Unit_Held,
+084400150402                     Decimal(Round((accivp.Curr_Unit_Bal *
+084500150402                     accivp.Average_Unit_Cost),2),13,2) AS Book_Value,
+084600150708      *RFS146676 - Start.
+084700150707      *              CASE WHEN (COALESCE(Invupp.Unit_Price, 0)) > 0
+084800150707      *                   THEN Decimal(Round((accivp.Curr_Unit_Bal *
+084900150707      *                        invupp.Unit_Price),2),13,2)
+085000150707      *                   ELSE Decimal(Round((accivp.Curr_Unit_Bal *
+085100150707      *                        invlpp.Unit_Price),2),13,2) END
+085200150707      *              AS Market_Value,
+085300150707                     CASE WHEN (acciap.Accrual_Amt IS NOT NULL)
+085400160308      *RFS157108 - Start
+085500160308      *              THEN  Decimal(COALESCE(
+085600160308      *                          GET_INTACR(acciap.Accrual_Amt,
+085700160308      *                          invp.Currency,
+085800160308      *                          CHAR(:lc_BaseCurrency),
+085900160308      *                          CHAR(:lc_ExchangeRateType)), 0) +
+086000160308      *                          MKTV.MARKET_VALUE, 13, 2)
+086100160308                     THEN  Decimal(Round((acciap.Accrual_Amt +
+086200160308                           MKTV.MARKET_VALUE),2),13,2)
+086300160308      *RFS157108 - End
+086400150714                     ELSE  MKTV.MARKET_VALUE
+086500150707                     END
+086600150707                     AS Market_Value,
+086700150708      *RFS146676 - End.
+086800150402                     accivp.Average_Unit_Cost
+086900210610115991              ,invgrp.INVESTMENT_GROUP_CODE AS Investment_Grp_Code
+087000210610115991              ,invgrp.INVESTMENT_GROUP_NAME AS Investment_Grp_Name
+087100210817      *RFS187397 - Start
+087200210817                    ,Invp.Product_Type_Code
+087300210817                    ,invlpp.Trade_Date As MarketValueDate
+087400210817      *RFS187397 - ends
+087500150402
+087600150402                FROM MFAACCIVP accivp
+087700150402
+087800150402                INNER JOIN MFAINVP invp ON
+087900150402                     invp.Investment_Code    = accivp.Investment_Code
+088000150402
+088100150402                INNER JOIN MFAINVLPP invlpp ON
+088200150402                     invlpp.Investment_Code  = accivp.Investment_Code
+088300150402
+088400150402                INNER JOIN MFAINVNMP invnmp ON
+088500150402                     invnmp.Investment_Code   = accivp.Investment_Code
+088600150402                 AND invnmp.Language_Code     = :lc_LanguageCode
+088700150402
+088800150402                INNER JOIN MFAINVSXP invsxp ON
+088900150402                     invsxp.Investment_Code  = accivp.Investment_Code
+089000150402                 AND invsxp.Investment_Structure_Code
+089100150402                                        = :lc_InvStrucCode
+089200150402
+089300150402                INNER JOIN MFAFNCTP fnctp ON
+089400150402                     fnctp.Investment_Structure_Code =
+089500150402                    invsxp.Investment_Structure_Code
+089600150402                 AND fnctp.Function_Code = :lc_FunctionCode
+089700150708      *RFS146676 - Start.
+089800150707                INNER JOIN QTEMP/ACCINVMKT MKTV ON
+089900150707                accivp.Account_No  = MKTV.Account_No
+090000150707                AND accivp.Investment_Code  = MKTV.Investment_Code
+090100150707
+090200150707                LEFT OUTER JOIN MFAACCIAP acciap ON
+090300150707                accivp.Account_No  = acciap.Account_No
+090400150707                AND accivp.Investment_Code  = acciap.Investment_Code
+090500150707
+090600150708      *RFS146676 - End.
+090700150402
+090800150402                LEFT OUTER JOIN MFAINVUPP invupp ON
+090900150402                     invupp.Investment_Code   = accivp.Investment_Code
+091000150402                 AND invupp.Trade_Date        =  :li_PriceDate
+091100150402                 AND invupp.Distribution_Flag = " "
+091200150402
+091300210610115991          LEFT OUTER JOIN MFAINVGRP invgrp ON
+091400210610115991               invp.Investment_Group_Code =
+091500210610115991                                     invgrp.Investment_Group_Code
+091600150402               WHERE accivp.Account_No       = :li_AccountNo
+091700150402               ORDER BY accivp.Investment_Code
+091800150402               FOR FETCH ONLY
+091900150402           END-EXEC.
+092000150402
+092100150402           EXEC SQL
+092200150402             OPEN CSR_SFUND_FUNCT
+092300150402           END-EXEC.
+092400150402
+092500150402     ** If no rows are returned then exit
+092600150402           MOVE SQLSTATE TO Ic_SqlStates.
+092700150402           IF Incc_sqlSuccessful
+092800150402              Move lnc_SuccessMsgId   TO lc_ErrorCode
+092900150402           ELSE
+093000150402              MOVE lnc_NoFundsFound   TO lc_ErrorCode
+093100150402           END-IF.
+093200150402           PERFORM Get-Message-Descr.
+093300150402      *RFS145046 ends
+093400121112       Prepare-Results.
+093500121112     **
+093600121112           IF lc_InvStrucCode = SPACES
+093700150402145046       IF lc_FunctionCode = SPACES
+093800150402               EXEC SQL
+093900150402                  SET RESULT SETS CURSOR CSR_FUNDLIST
+094000150402               END-EXEC
+094100150402145046       ELSE
+094200150402   |            EXEC SQL
+094300150402   |               SET RESULT SETS CURSOR CSR_FUND_FUNCT
+094400150402   |            END-EXEC
+094500150402145046       END-IF
+094600121112           ELSE
+094700150402145046       IF lc_FunctionCode = SPACES
+094800150402               EXEC SQL
+094900150402                  SET RESULT SETS CURSOR CSR_SFUNDLIST
+095000150402               END-EXEC
+095100150402145046       ELSE
+095200150402   |           EXEC SQL
+095300150402   |              SET RESULT SETS CURSOR CSR_SFUND_FUNCT
+095400150402   |           END-EXEC
+095500150402145046       END-IF
+095600121112           END-IF.
+095700121112
+095800150714      *RFS146676 - Start.
+095900160308       Get-Base-Currency.
+096000160308
+096100160308           EXEC SQL
+096200160308                SELECT CURRENCY
+096300160308                  INTO :lc_BaseCurrency
+096400160308                FROM MFACURP
+096500160308                WHERE BASE_CURRENCY    = :lnc_CurrencyFlag
+096600160308                      AND CURRENCY_STATUS = :lnc_CurrencyStatus
+096700160308           END-EXEC.
+096800160308
+096900160308           MOVE SQLSTATE TO Ic_SqlStates.
+097000160308
+097100160308           IF NOT Incc_sqlSuccessful
+097200160308              MOVE lnc_BaseCurrency    TO  lc_BaseCurrency
+097300160308           END-IF.
+097400150714      /
+097500160308      *RFS157108 - Start.
+097600160308      * Get-Exchange-Rate-Type.
+097700160308      *
+097800160308      *    EXEC SQL
+097900160308      *       SELECT EXCHANGE_RATE_TYPE
+098000160308      *          INTO :lc_ExchangeRateType
+098100160308      *          FROM MFAPRGERP
+098200160308      *          WHERE PROGRAM_CODE   = :lnc_ProgramName
+098300160308      *          AND PROGRAM_ACTION   = :lnc_ProgramAction
+098400160308      *    END-EXEC.
+098500160308      *
+098600160308      *    MOVE SQLSTATE TO Ic_SqlStates.
+098700160308      *    IF NOT Incc_sqlSuccessful
+098800160308      *       MOVE lnc_ExchangeRateType TO  lc_ExchangeRateType
+098900160308      *    END-IF.
+099000160308      *RFS157108 - End.
+099100150714      /
+099200150714
+099300150714        Create-Output-File.
+099400150714      *Create QTEMP/ACCINVMKT table if it does not exist.
+099500150714
+099600150714           MOVE pc_TableName TO lc_objectName
+099700150714
+099800150714           PERFORM CheckObject
+099900150714           IF lnc_messageIdOk
+100000150714             EXEC SQL
+100100150714                DELETE FROM  QTEMP/ACCINVMKT
+100200150714             END-EXEC
+100300150714           ELSE
+100400150714             EXEC SQL
+100500150714               CREATE TABLE QTEMP/ACCINVMKT (
+100600150714               ACCOUNT_NO NUMERIC (09,0) NOT NULL WITH DEFAULT,
+100700150714               INVESTMENT_CODE CHAR (05) NOT NULL WITH DEFAULT,
+100800150714               MARKET_VALUE DECIMAL (13,2) NOT NULL WITH DEFAULT)
+100900150714             END-EXEC
+101000150714
+101100150714           END-IF.
+101200150714           MOVE SQLSTATE TO Ic_SqlStates, lnc_MessagesInternal.
+101300150714           EVALUATE TRUE
+101400150714           WHEN Incc_sqlSuccessful OR SQLSTATE = Inc_SqlEnd OR
+101500150714                lnc_DeleteWithoutWHERE
+101600150714                CONTINUE
+101700150714           WHEN OTHER
+101800150714                PERFORM GET-MESSAGE-DESCR
+101900150714                PERFORM Termination
+102000150714           END-EVALUATE.
+102100150714
+102200150714      /
+102300150714        CheckObject.
+102400150714           CALL "FXCHKOBJ" USING lc_objectName
+102500150714                                 lnc_libQtemp
+102600150714                                 lnc_objectTypeFile
+102700150714                                 lc_messageId.
+102800150714      /
+102900150714        GetMarketValue.
+103000150714
+103100150714           INITIALIZE lc_Mfaaccivp-EOF
+103200150714           INITIALIZE MFAACCIVP OF ACCOUNT-INVESTMENT-REC
+103300150714           MOVE li_AccountNo
+103400150714             TO Account-No OF ACCOUNT-INVESTMENT-REC
+103500150714           START ACCOUNT-INVESTMENT
+103600150714           KEY IS NOT LESS THAN EXTERNALLY-DESCRIBED-KEY
+103700150714             INVALID KEY
+103800150714                CONTINUE
+103900150714           NOT INVALID KEY
+104000150714             PERFORM UNTIL ncc_MfaaccivpEOFyes
+104100150714               READ ACCOUNT-INVESTMENT NEXT
+104200150714               AT END
+104300150714                   MOVE "Y"  TO lc_Mfaaccivp-EOF
+104400150714               NOT AT END
+104500150714                  IF Account-No OF ACCOUNT-INVESTMENT-REC
+104600150714                                  = li_AccountNo
+104700150714                  THEN
+104800150714                     MOVE INVESTMENT-CODE OF ACCOUNT-INVESTMENT-REC
+104900150714                                         TO lc_InvestmentCode
+105000151030152606               PERFORM  Get-Product-Type-Rule
+105100150714                     PERFORM  Call-MKTVALTD
+105200150714                  ELSE
+105300150714                     MOVE "Y"  TO lc_Mfaaccivp-EOF
+105400150714                  END-IF
+105500150714               END-READ
+105600150714             END-PERFORM
+105700150714           END-START.
+105800150714      /
+105900150714        Call-MKTVALTD.
+106000150714
+106100160308157108      INITIALIZE li_MarketValue.
+106200150714            INITIALIZE li_MKTV_Date,
+106300150714                       li_MKTV_AccountNo,
+106400150714                       lc_MKTV_InvestmentCode,
+106500150714                       li_MKTV_ValueInvestmentCur,
+106600150714                       li_MKTV_MarketValueBase,
+106700150714                       li_MKTV_BookValueBase,
+106800150714                       li_MKTV_BookValueExchange,
+106900150714                       li_MKTV_TranClosUnitBal,
+107000150714                       li_MKTV_BaseUnitPrice,
+107100150714                       li_MKTV_ValueBaseCurrency,
+107200150714                       lc_MKTV_ErrorCode,
+107300150714                       lc_MKTV_DateInd.
+107400150714
+107500151008151216*    COMPUTE li_MKTV_Date          =  li_SystemDate.
+107600151008151216     COMPUTE li_MKTV_Date          =  ln_ProcessDate.
+107700151030152606     IF lncc_GIC_DII_Investment
+107800151030   |          COMPUTE li_MKTV_Date       = li_SystemDate
+107900151030152606     END-IF.
+108000150714           COMPUTE li_MKTV_AccountNo     =  li_AccountNo.
+108100150714           MOVE  lc_InvestmentCode       TO lc_MKTV_InvestmentCode.
+108200150714           MOVE  lc_MKTV_A               TO lc_MKTV_DateInd.
+108300150714
+108400150714           CALL "MKTVALTD" USING  li_MKTV_Date,
+108500150714                                  li_MKTV_AccountNo,
+108600150714                                  lc_MKTV_InvestmentCode,
+108700150714                                  li_MKTV_ValueInvestmentCur,
+108800150714                                  li_MKTV_MarketValueBase,
+108900150714                                  li_MKTV_BookValueBase,
+109000150714                                  li_MKTV_BookValueExchange,
+109100150714                                  li_MKTV_TranClosUnitBal,
+109200150714                                  li_MKTV_BaseUnitPrice,
+109300150714                                  li_MKTV_ValueBaseCurrency,
+109400150714                                  lc_MKTV_ErrorCode,
+109500150714                                  lc_MKTV_DateInd.
+109600160308      *RFS157108 Start
+109700160308           IF lc_InvCurrency = lc_BaseCurrency
+109800160308              COMPUTE li_MarketValue = li_MKTV_MarketValueBase
+109900160308           ELSE
+110000160308              COMPUTE li_MarketValue = li_MKTV_ValueInvestmentCur
+110100160308           END-IF.
+110200160308      *RFS157108 End
+110300160308
+110400150714           PERFORM InsertACCINVMKT.
+110500150714      /
+110600150714        InsertACCINVMKT.
+110700150714
+110800150714            EXEC SQL
+110900150714              INSERT INTO QTEMP/ACCINVMKT
+111000150714                    VALUES ( :li_AccountNo,
+111100150714                             :lc_MKTV_InvestmentCode,
+111200160308157108                       :li_MarketValue)
+111300160308157108*                      :li_MKTV_MarketValueBase)
+111400150714            END-EXEC.
+111500150714
+111600150714            MOVE SQLSTATE TO Ic_SqlStates.
+111700150714
+111800150714             IF NOT Incc_sqlSuccessful
+111900150714                MOVE lnc_MktValueIncorrect  TO lc_ErrorCode
+112000150714                PERFORM Get-Message-Descr
+112100150714                PERFORM Termination
+112200150714            END-IF.
+112300150714
+112400150714      *RFS146676 - End.
+112500151030      *RFS152606 - Start
+112600151030       Get-Product-Type-Rule.
+112700151030     **------------------------**
+112800151030           SET lncc_PrdTypeRuleBlank TO TRUE.
+112900151030           EXEC SQL
+113000151030             SELECT PRTCDP.PRODUCT_TYPE_RULE
+113100160308157108             ,INVP.CURRENCY
+113200151030             INTO   :lc_PrdTypeRule
+113300160308157108             ,:lc_InvCurrency
+113400151030             FROM   MFAPRTCDP PRTCDP
+113500151030             INNER  JOIN MFAINVP INVP ON
+113600151030                    PRTCDP.PRODUCT_TYPE_CODE = INVP.PRODUCT_TYPE_CODE
+113700151030             WHERE  INVP.INVESTMENT_CODE     = :lc_InvestmentCode
+113800151030           END-EXEC.
+113900151030
+114000151030           MOVE SQLSTATE TO Ic_SqlStates.
+114100151030           IF NOT Incc_sqlSuccessful
+114200151030              CONTINUE
+114300151030           END-IF.
+114400151030      *RFS152606 - End
+114500121112     **
+114600121112       Termination.
+114700121112     **-----------**
+114800121112
+114900121112           IF pc_RequestUserid NOT = SPACES THEN
+115000121112              PERFORM Swap-Back
+115100121112           END-IF.
+115200121112
+115300121112           GOBACK.
+115400121112
+115500121112
+115600140516127707 COPY CPYCHKTRX.
+115700121112       COPY CPYSWAPRTN.
+115800121112
+115900121112       COPY CPYSOARTN.
+116000121112
+116100120812

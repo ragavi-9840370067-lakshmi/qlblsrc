@@ -1,0 +1,261 @@
+000100010131       IDENTIFICATION DIVISION.
+000200021025       PROGRAM-ID.    ESGFILNUM.
+000300021028       AUTHOR.        ALI ALNEMERA.
+000400010131       INSTALLATION.  JEWELSTONE SYSTEMS INC.
+000500021025       DATE-WRITTEN.  OCT 25, 2002.
+000600010131       DATE-COMPILED.
+000700010131      **************************************************************
+000800021028      *  RFS-NUMBER : RFS-14335                                    *   *
+000900021028      *                                                            *   *
+001000021028      *  DESCRIPTION:This program will retrieve the filenumber     *
+001100021028      *              from file ESG-FILE-NUMBERS based on the       *
+001200021028      *              File-Type and File-attribute (Dlr/Dlr-rep/Nom)*
+001300021028      *                                                            *   *
+001400021028      *  PARAMETERS: COMM-FILE-TYPE                                *   *
+001500021028      *              COMM-FILE-ATTR                                *   *
+001600021028      *              COMM-FILENUM                                  *   *
+001700021028      *              COMM-BUILD-FILE                               *   *
+001800021028      ******************************************************************
+001900021028      *    C H A N G E   H I S T O R Y                                 *
+002000021028      ******************************************************************
+002100040331      * PROGRAMMER * YY/MM/DD  * RFS     *  DESCRIPTION            *
+002200040331      * Tony       * 04/03/31  * RFS21667*  Recompiled only        *
+002300040331      * Punzalan   *           *         *                         *
+002400021028      *------------------------------------------------------------*
+002500001020      **************************************************************
+002600050316      * Brian Z    * 05/03/16  * RFS26000                          *
+002700050316      *            *           * Recompile on MFAESGFNP expanding  *
+002800080409      * Abdi Hassan* 2008/04/09 * RFS47979 - Increment file no each
+002900080409      *            *            * time file no is requested when
+003000080409      *            *            * "A" is passed.
+003100120310      * Abdi Hassan* 2012/03/10 * RFS97573 - Change File Type to two
+003200120310      *            *            * characters
+003300191023      * Chaya SP   * 2019/10/23 * RFS1019621 - Modify the NS program
+003400191023      *            *            * to generate the exception reports
+003500191023      *            *            * under spool files.
+003600191023      **************************************************************
+003700010131       ENVIRONMENT DIVISION.
+003800010131       CONFIGURATION SECTION.
+003900010131       SOURCE-COMPUTER. IBM-AS400.
+004000010131       OBJECT-COMPUTER. IBM-AS400.
+004100010131       SPECIAL-NAMES.
+004200010131           LOCAL-DATA IS WS-LOCAL.
+004300010131      /
+004400010131       INPUT-OUTPUT SECTION.
+004500020304       FILE-CONTROL.
+004600010410
+004700020304       DATA DIVISION.
+004800020304       FILE SECTION.
+004900010410
+005000961123       WORKING-STORAGE SECTION.
+005100021025
+005200021025       01    WS-FILE-TYPE         PIC X(2).
+005300021025       01    WS-DEALER            PIC X(2).
+005400021025       01    WS-DEALER-REP        PIC X(2).
+005500021025       01    WS-NOMINEE           PIC X(2).
+005600080409
+005700080409      **RFS47979 - Begin
+005800080409       01 StaticFields.
+005900080409          03 lncc-A               PIC X(1) VALUE "A".
+006000080409          03 lncc-D               PIC X(1) VALUE "D".
+006100080409          03 lncc-N               PIC X(1) VALUE "N".
+006200080409          03 lncc-R               PIC X(1) VALUE "R".
+006300080409      *
+006400080409       01 WorkFields.
+006500080409          03 lc-FileNo            PIC X(2).
+006600080409          03 li-FileNo REDEFINES  lc-FileNo
+006700080409                                  PIC S9(2).
+006800080409
+006900080409      **RFS47979 - End
+007000010815
+007100020304           EXEC SQL
+007200020304              INCLUDE SQLCA
+007300020304           END-EXEC.
+007400020304
+007500010208      * ---------------------------------------------------------------
+007600010208       LINKAGE SECTION.
+007700021025
+007800120310      *Rfs97573 - Start
+007900120310      *01  COMM-FILETYPE                     PIC X(1).
+008000120310       01  COMM-FILETYPE                     PIC X(2).
+008100120310      *Rfs97573 - End
+008200021028       01  COMM-FILEATTR                     PIC X(1).
+008300021028       01  COMM-FILENUM                      PIC X(2).
+008400021028       01  COMM-BUILD-FILE                   PIC X(1).
+008500010208      * ---------------------------------------------------------------
+008600010207
+008700021028       PROCEDURE DIVISION  USING   COMM-FILETYPE
+008800021028                                   COMM-FILEATTR
+008900021028                                   COMM-FILENUM
+009000021028                                   COMM-BUILD-FILE.
+009100000307      /
+009200001018
+009300010327       MAINLINE.
+009400020304           PERFORM INITIAL-LOGIC THRU INL-EXIT.
+009500010327
+009600021028           IF COMM-BUILD-FILE = "B"
+009700021028           PERFORM GET-FILE-TYPE-NUMBER THRU FILB-EXIT
+009800021028           END-IF.
+009900021025
+010000021028           IF COMM-BUILD-FILE = "I"
+010100021028           PERFORM INITIALZE-TYPE-NUMBER THRU FILI-EXIT
+010200021028           END-IF.
+010300080409      **rfs 47979 - Begin
+010400080409           IF Comm-Build-File = lncc-A
+010500080409              PERFORM Get-File-Type-Number THRU FilB-Exit
+010600080409              PERFORM IncrementFileNumber
+010700080409           END-IF.
+010800080409      **rfs 47979 - End
+010900010327
+011000191023019621*    STOP RUN.
+011100191023019621     GOBACK.
+011200010327      *------------------------------------------
+011300010327       INITIAL-LOGIC.
+011400010327      *------------------------------------------
+011500020304
+011600021028           INITIALIZE COMM-FILENUM.
+011700010402
+011800020304       INL-EXIT.
+011900010409      * ---------------------------------
+012000010327
+012100010327      *----------------------------------------------------
+012200021025       GET-FILE-TYPE-NUMBER.
+012300010327      *----------------------------------------------------
+012400010327
+012500010327           EXEC SQL
+012600021029            WHENEVER NOT FOUND GOTO STOPPGM-000
+012700010327           END-EXEC.
+012800010327
+012900010327           EXEC SQL
+013000021029             WHENEVER SQLERROR GOTO STOPPGM-000
+013100010327           END-EXEC.
+013200021025
+013300021025           EXEC SQL
+013400021025            DECLARE ESGCUR CURSOR FOR
+013500021025             SELECT ESG_FILE_TYPE,
+013600021025                    DEALER_FILE_NO,
+013700021025                    DEALER_REP_FILE_NO,
+013800021025                    INTERMEDIARY_FILE_NO
+013900021025                    FROM MFAESGFNP
+014000021028                    WHERE ESG_FILE_TYPE = :COMM-FILETYPE
+014100021025           END-EXEC.
+014200021025
+014300021025           EXEC SQL
+014400021025            OPEN ESGCUR
+014500021025           END-EXEC.
+014600021025
+014700021025           EXEC SQL
+014800021025            FETCH NEXT FROM ESGCUR INTO
+014900021025                  :WS-FILE-TYPE,
+015000021025                  :WS-DEALER,
+015100021025                  :WS-DEALER-REP,
+015200021025                  :WS-NOMINEE
+015300021025           END-EXEC.
+015400021025
+015500021028           EVALUATE COMM-FILEATTR
+015600021028           WHEN "D"
+015700021028              MOVE WS-DEALER     TO COMM-FILENUM
+015800021028           WHEN "R"
+015900021028              MOVE WS-DEALER-REP TO COMM-FILENUM
+016000021028           WHEN "N"
+016100021028              MOVE WS-NOMINEE    TO COMM-FILENUM
+016200021028           END-EVALUATE.
+016300021025
+016400021025           EXEC SQL
+016500021025            CLOSE ESGCUR
+016600021025           END-EXEC.
+016700021025
+016800021028       FILB-EXIT.
+016900010327           EXIT.
+017000010410
+017100010410      *------------------------------------
+017200021025      *----------------------------------------------------
+017300021025       INITIALZE-TYPE-NUMBER.
+017400021025      *----------------------------------------------------
+017500021025
+017600021025           EXEC SQL
+017700021028            WHENEVER NOT FOUND GOTO FILI-EXIT
+017800021025           END-EXEC.
+017900021025
+018000021025           EXEC SQL
+018100021028             WHENEVER SQLERROR GOTO FILI-EXIT
+018200021025           END-EXEC.
+018300021025
+018400021028           IF COMM-FILEATTR = "D"
+018500021025            EXEC SQL
+018600021025            UPDATE MFAESGFNP
+018700021025             SET DEALER_FILE_NO = "00"
+018800021028            WHERE ESG_FILE_TYPE = :COMM-FILETYPE
+018900021025            END-EXEC
+019000021025           END-IF.
+019100021025
+019200021028           IF COMM-FILEATTR = "R"
+019300021025            EXEC SQL
+019400021025            UPDATE MFAESGFNP
+019500021025             SET DEALER_REP_FILE_NO = "00"
+019600021028            WHERE ESG_FILE_TYPE = :COMM-FILETYPE
+019700021025            END-EXEC
+019800021025           END-IF.
+019900021025
+020000021028           IF COMM-FILEATTR = "N"
+020100021025            EXEC SQL
+020200021025            UPDATE MFAESGFNP
+020300021025             SET INTERMEDIARY_FILE_NO = "00"
+020400021028            WHERE ESG_FILE_TYPE =  :COMM-FILETYPE
+020500021025            END-EXEC
+020600021025           END-IF.
+020700021025
+020800021028       FILI-EXIT.
+020900021025           EXIT.
+021000021029
+021100080409      **RFS47979 - Begin
+021200080409       IncrementFileNumber.
+021300080409
+021400080409           MOVE Comm-FileNum TO lc-FileNo
+021500080409           COMPUTE li-FileNo = li-FileNo + 1
+021600080409             ON SIZE ERROR
+021700080409                 MOVE "00" TO lc-FileNo
+021800080409           END-COMPUTE.
+021900080409
+022000080409           EXEC SQL
+022100080409            WHENEVER NOT FOUND CONTINUE
+022200080409           END-EXEC.
+022300080409
+022400080409           EXEC SQL
+022500080409             WHENEVER SQLERROR CONTINUE
+022600080409           END-EXEC.
+022700080409
+022800080409           IF Comm-FileAttr = lncc-D
+022900080409             EXEC SQL
+023000080409               UPDATE MFAESGFNP
+023100080409                  SET Dealer_File_No = :lc-FileNo
+023200080409                WHERE Esg_File_Type = :Comm-FileType
+023300080409             END-EXEC
+023400080409           END-IF.
+023500080409
+023600080409           IF Comm-FileAttr = lncc-R
+023700080409             EXEC SQL
+023800080409               UPDATE MFAESGFNP
+023900080409                  SET Dealer_Rep_File_No = :lc-FileNo
+024000080409                WHERE Esg_File_Type = :Comm-FileType
+024100080409            END-EXEC
+024200080409           END-IF.
+024300080409
+024400080409           IF Comm-FileAttr = lncc-N
+024500080409             EXEC SQL
+024600080409               UPDATE MFAESGFNP
+024700080409                  SET Intermediary_File_No = :lc-FileNo
+024800080409                WHERE Esg_File_Type = :Comm-FileType
+024900080409            END-EXEC
+025000080409           END-IF.
+025100080409
+025200080409      **RFS47979 - End
+025300080409
+025400021029      *----------------------------------------------------
+025500021029      *IF NOT FOUND OR ERROR. INITIALIZE FILENUM TO "00"
+025600021029      *----------------------------------------------------
+025700021029       ERROR-TYPE-NUMBER.
+025800021029       STOPPGM-000.
+025900021029              MOVE "00"          TO COMM-FILENUM
+026000191023019621*       STOP RUN.
+026100191023019621        GOBACK.

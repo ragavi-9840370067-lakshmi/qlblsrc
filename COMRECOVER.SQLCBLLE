@@ -1,0 +1,1901 @@
+000100210120       IDENTIFICATION DIVISION.
+000200210128       PROGRAM-ID.    COMRECOVER.
+000300210120       AUTHOR.        Frank Hong.
+000400210120       INSTALLATION.  CitiGroup CIB.
+000500210120       DATE-WRITTEN.  Sept 06, 2006.
+000600210120       DATE-COMPILED.
+000700210120      ******************************************************************
+000800210120      *    RFS-NUMBER : RFS-34695                                      *
+000900210120      *                                                                *
+001000210120      *    DESCRIPTION: This program recover commission from dealer    *
+001100210120      *                 for historical and reversed redemption
+001200210120      *                 (SWO, TRO, SEL) transactions.                  *
+001300210120      *                                                                *
+001400210120      *                 This is rewrite of old version of COMRECOVER.  *
+001500210120      *                                                                *
+001600210120      *    CALLED BY:   JOBDAILY                                       *
+001700210120      *                                                                *
+001800210120      *    PARAMETERS:  N/A                                            *
+001900210120      *                                                                *
+002000210120      * LINKED MODULES: GETCTLNUM                                      *
+002100210120      *    COMPILE PGM: 1) Use option 15 to create module.             *
+002200210120      *                 2) CRTPGM prompt F4                            *
+002300210120      *                    program: COMRECOVER                         *
+002400210120      *                    library: Object library                     *
+002500210120      *                    Module : COMRECOVER                         *
+002600210120      *                    library: Object library                     *
+002700210120      *                  + Module : FXSCEDTALW                         *
+002800210120      *                    library: *LIBL                              *
+002900210120      *                  + Module : CHECKMOD10                         *
+003000210120      *                    library: *LIBL                              *
+003100210120      *                  + Module : GETCTLNUM                          *
+003200210120      *                    library: *LIBL                              *
+003300210120      *                    Prompt F10 (additional parameters)          *
+003400210120      *                    program entry...:COMRECOVER                 *
+003500210120      *                    library: ie. Object library                 *
+003600210120      ******************************************************************
+003700210120      *    C H A N G E   H I S T O R Y                                 *
+003800210120      ******************************************************************
+003900210120      * PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE              *
+004000210120      ******************************************************************
+004100210120      * Frank Hong * 2006/09/06   * RFS 34695.                         *
+004200210120      *            *              * Rewrite.                           *
+004300210120      *            *              * Modify to use new structure of     *
+004400210120      *            *              * MFACOMRPP and MFAIMSCHP.           *
+004500210120      ******************************************************************
+004600210120      * Ewa K.     * 2006/09/19   * RFS 34695 - Complete rewirte.      *
+004700210120      * Abdi Hassan* 2007/01/12   * RFS36325 - Add lesser condition    *
+004800210120      * Daisy Ly   * 2008/03/30   *RFS50067 - recompile for MFATRSACP
+004900210120      * Sherene N  * 2013/04/13   * RFS103858 - Seg Fund Compensation  *
+005000210120      *            *              * Structure.                         *
+005100210120      * Lev O      * 2013/06/08   * RFS103858 - defect 32369.          *   SW
+005200210120      *            *              *                                    *
+005300210120      * Lev O      * 2013/06/08   * RFS103858 - defect 32406.          *
+005400210120      * Lev O      * 2013/06/08   * RFS103858 - defect 32448.          *
+005500210120      * Emmanuel Y * 2013/06/24   * RFS124451 - Issue on WS file       *
+005600210120      *            *              * Curr/Prod Type reported incorrectly*
+005700210120      * Alex       * 2013/10/03   * RFS123719 - Recompile for FATCA    *
+005800210120      * Jayasundara*              * FILE CHANGES                       *
+005900210120      * Banupriya V* 2014/10/14   * RFS141507 - Recompile for MFATRNCPP*
+006000210120      * Zaheer A   * 2014/10/27   * RFS129787 - ChargeBack exemption   *
+006100210120      *            *              *             for all products       *
+006200210120      * Aarthi M   * 2016/01/27 * RFS155635 - Recompile for MFAINVMDP. *
+006300210120      *Janapriya J * 2016/10/03 * RFS161093 - Recompile for MFADEPI2P  *
+006400210120      * Divya  V   * 2017/03/01 * RFS166545 - Recompile for MFATRTXRP  *
+006500210120      * Marita S   * 2017/06/16 * RFS170408 _ Recompile for mfadepi2p  *
+006600210120      * Marita S   * 2017/06/24 * RFS170408 _ Recompile for mfadepi2p  *
+006700210120      * Lev O      * 2017/06/28 * RFS172224 - DMC change for
+006800210120      *            *            *   RFS163133.
+006900210120      * Lev O      * 2017/06/28 * RFS163133 - New field in MFATRNCMRP
+007000210120      * Arthy K    * 2017/09/22 * RFS164482 - To change commission     *
+007100210120      *            *            * amount reference from MFATRNCMP to   *
+007200210120      *            *            * MFATRNPUP.                           *
+007300210120      * Arthy K    * 2017/10/26 * RFS175134 - Commission Recovery Amount
+007400210120      *            *            * in ACITDTL is calculated incorrectly
+007500210120      *            *            * upon more than one SELL processing
+007600210120      * Sairam     * 2017/11/27 * RFS175992- To fix charge back commissi
+007700210120      *            *            * calculated for units older than 24
+007800210120      *            *            * months.
+007900210120      * Aarthi M   * 2018/01/19 * RFS175845- Apply Commission Clawback *
+008000210120      *            *            * only for Chargeback to Non-Chargeback*
+008100210120      * Sachin S   * 2018/11/23 * RFS180293 - Recompile for MFACOMRPP  *
+008200210120      *            *            * MFATRNPUP & MFATRNRUP
+008300210120      * Suresh G.  * 2018/12/05 * RFS180293 - To deduct the commission recovery
+008400210120      *            *            * free units from the redeemed units before
+008500210120      *            *            * calculate the dealer commission for new
+008600210120      *            *            * calculation rule 4.
+008700210120      * Kavya K    * 2019/02/21 * RFS181057- Recompile for MFAXACCDP
+008800210120      * Sachin S   * 2019/04/11 * RFS1014027 - Incorrect calculation of
+008900210120      *                                        commission chargeback
+009000210120      * Lev O      * 2019/06/13 * RFS1016101 - Fixed sql to avoid duplicates.
+009100210120      * Chaya SP   * 2019/12/10 * RFS1019621 - Recompile for MFAXACCDP
+009200210120      * Arthy K    * 2020/03/23 * RFS1098460 - Fix for incorrect commission
+009300210120      *            *            * chargeback calculation due to wrong decimal
+009400210120      *            *            * place definition
+009500210120      * Ewa K.     * 2020/11/11 * RFS185174 Recompile for CPWSYSPARM.
+009600210129      * Aarthi M.  * 2021/01/08 * RFS187022 Recompile for MFACOMRPP.
+009601210405      * Aarthi M.  * 2021/01/08 * RFS185897 Introducing Period Indicator(D/M).
+009602210405      * Ashwini B  * 2021/02/08 * RFS187046 - Recompile for MFATRNR
+009603210407      * Chaya SP  * 2021/04/07 * RFS186088 - Recompile of MFAINVMDP    *
+009604210419      * Sasikumar  * 2021/04/20 * RFS187293 - Apply Commission chargeback for
+009605210419      *            *            * fee transactions adjustments
+009800210120      ******************************************************************
+009900210120
+010000210120       ENVIRONMENT DIVISION.
+010100210120       CONFIGURATION SECTION.
+010200210120       SOURCE-COMPUTER. IBM-AS400.
+010300210120       OBJECT-COMPUTER. IBM-AS400.
+010400210120       SPECIAL-NAMES.
+010500210120            LINKAGE TYPE IS PROCEDURE FOR "GETCTLNUM"
+010600210120            DATA-AREA IS lc_ProcessDateDA.
+010700210120
+010800210120       INPUT-OUTPUT SECTION.
+010900210120       FILE-CONTROL.
+011000210120
+011100210120       DATA DIVISION.
+011200210120
+011300210120       WORKING-STORAGE SECTION.
+011400210120      *
+011500210120           Copy Drg2jls.
+011600210120      *
+011700210120           Copy Cpysqlfld
+011800210120               REPLACING == "CURRENT_PROGRAM" == BY == "COMRECOVER" ==.
+011900210120      *
+012000210120103858     Copy CPCALCDUR.
+012100210120           EXEC SQL
+012200210120             INCLUDE SQLCA
+012300210120           END-EXEC.
+012400210120      *
+012500210120      * Error Codes, Uniquely Identify where the error happened
+012600210120       01  Ws-Err-Code                   PIC X(02) VALUE SPACES.
+012700210120           88  lncc_Err-Ok                         VALUE SPACES.
+012800210120           88  lncc_Err-10                         VALUE "10".
+012900210120           88  lncc_Err-11                         VALUE "11".
+013000210120           88  lncc_Err-12                         VALUE "12".
+013100210120           88  lncc_Err-13                         VALUE "13".
+013200210120           88  lncc_Err-14                         VALUE "14".
+013300210120           88  lncc_Err-15                         VALUE "15".
+013400210120           88  lncc_Err-16                         VALUE "16".
+013500210120           88  lncc_Err-17                         VALUE "17".
+013600210120           88  lncc_Err-18                         VALUE "18".
+013700210120           88  lncc_Err-19                         VALUE "19".
+013800210120           88  lncc_Err-20                         VALUE "20".
+013900210120           88  lncc_Err-21                         VALUE "21".
+014000210120103858     88  lncc_Err-22                         VALUE "22".
+014100210120103858     88  lncc_Err-23                         VALUE "23".
+014200210120103858     88  lncc_Err-24                         VALUE "24".
+014300210120129787     88  lncc_Err-25                         VALUE "25".
+014400210120129787     88  lncc_Err-26                         VALUE "26".
+014500210120      *
+014600210120       01  lc_Constants.
+014700210120           03  lncc_DeclareErrorHistory       PIC X(45)
+014800210120           VALUE "Error while Declaring cursor C_History".
+014900210120           03  lncc_DeclareErrorReversal      PIC X(45)
+015000210120           VALUE "Error while Declaring cursor C_Reversal".
+015100210120           03  lncc_OpenErrorHistory          PIC X(45)
+015200210120           VALUE "Error while Opening cursor C_History".
+015300210120           03  lncc_OpenErrorReversal         PIC X(45)
+015400210120           VALUE "Error while Opening cursor C_Reversal".
+015500210120           03  lncc_FetchErrorHistory         PIC X(45)
+015600210120           VALUE "Error while Fetching cursor C_History".
+015700210120           03  lncc_FetchErrorReversal        PIC X(45)
+015800210120           VALUE "Error while Fetching cursor C_Reversal".
+015900210120           03  lncc_RetrieveMFACDSRDP         PIC X(45)
+016000210120           VALUE "Error while Retrieving MFACDSRDP".
+016100210120           03  lncc_InsertMFATRNCMRP          PIC X(45)
+016200210120           VALUE "Error while Inserting MFATRNCMRP".
+016300210120           03  lncc_InsertMFADEPI2P           PIC X(45)
+016400210120           VALUE "Error while Inserting MFADEPI2P".
+016500210120           03  lncc_NextControlNumber         PIC X(45)
+016600210120           VALUE "Error while Retrieving Next Control Number".
+016700210120           03  lncc_CloseErrorHistory           PIC X(45)
+016800210120           VALUE "Error while Closing C_History".
+016900210120           03  lncc_CloseErrorReversal          PIC X(45)
+017000210120           VALUE "Error while Closing C_Reversal".
+017100210120      * RFS103858 - Start
+017200210120           03  lncc_DropSqaInvRulp              PIC X(45)
+017300210120           VALUE "Error while dropping SqaInvRulp".
+017400210120           03  lncc_CreateSqaInvRulp            PIC X(45)
+017500210120           VALUE "Error while Creating SqaInvRulp".
+017600210120           03  lncc_InsertSqaInvRulp            PIC X(45)
+017700210120           VALUE "Error while Inserting SqaInvRulp".
+017800210120      * RFS103858 - End
+017900210120      *
+018000210120      * RFS129787  - Start
+018100210120           03  lncc_SelectWaiveFlag             PIC X(45)
+018200210120           VALUE "Error while Selecting Waive Flag".
+018300210120           03  lncc_SelectStdFlag               PIC X(45)
+018400210120           VALUE "Error while Selecting Std   Flag".
+018500210120      * RFS129787  - End
+018600210120           03  lnci_MaxFetchRec               PIC S9(03) VALUE 200.
+018700210120           03  lncc_SwitchOut                 PIC X(03)  VALUE "SWO".
+018800210120           03  lncc_TransferOut               PIC X(03)  VALUE "TRO".
+018900210120           03  lncc_Sell                      PIC X(03)  VALUE "SEL".
+018901210413187293     03  lncc_Fee                       PIC X(03)  VALUE "FEE".
+019000210120           03  lncc_HST                       PIC X(03)  VALUE "HST".
+019100210120           03  lncc_HSC                       PIC X(03)  VALUE "HSC".
+019200210120           03  lncc_ReversalRule1             PIC X(01)  VALUE "1".
+019300210120           03  lncc_DCOMM                     PIC X(05)  VALUE "DCOMM".
+019400210120           03  lncc_Reversal                  PIC X(03)  VALUE "RVS".
+019500210120           03  lncc_External                  PIC X(03)  VALUE "E".
+019600210120           03  lncc_No                        PIC X(01)  VALUE "N".
+019700210120           03  lncc_Yes                       PIC X(01)  VALUE "Y".
+019800210120           03  lncc_SuccessfulCall            PIC X(02)  VALUE "00".
+019900210120           03  lncc_SettlementC               PIC X(01)  VALUE "C".
+020000210120           03  lncc_RuleSeg                   PIC X(01)  VALUE "6".
+020100210120           03  lncc_Seg                       PIC X(01)  VALUE "S".
+020200210120           03  lncc_NonSeg                    PIC X(01)  VALUE "N".
+020300210120           03  lncc_Original                  PIC X(01)  VALUE "O".
+020400210120R36325     03  lncc_Lesser                    PIC X(01)  VALUE "L".
+020500210120           03  lncc_COMRECOVER                PIC X(10)
+020600210120                                              VALUE "COMRECOVER".
+020700210120      *RFS 103858 - Start
+020800210120           03  lnc_FIFO                      PIC X(04) VALUE "FIFO".
+020900210120           03  lnc_Death                     PIC X(03) VALUE "DTH".
+021000210120           03  lnc_2                         PIC X(01) VALUE "2".
+021100210120129787     03  lnc_3                         PIC X(01) VALUE "3".
+021200210120129787     03  lncc_X                        PIC X(01) VALUE "X".
+021300210120129787     03  lncc_C                        PIC X(01) VALUE "C".
+021400210120129787     03  lncc_INC                      PIC X(03) VALUE "INC".
+021500210120129787     03  lncc_CPG                      PIC X(03) VALUE "CPG".
+021600210120129787     03  lncc_INT                      PIC X(03) VALUE "INT".
+021700210120129787     03  lncc_MFR                      PIC X(03) VALUE "MFR".
+021800210120           03  lnc_17                        PIC X(02) VALUE "17".
+021900210120           03  lnc_1                         PIC X(01) VALUE "1".
+022000210120           03  lnc_C                         PIC X(01) VALUE "C".
+022100210120           03  lnc_CalculationRule           PIC X(1)  VALUE  2 .
+022200210120           03  lnc_ExtLoadType               PIC X(3)  VALUE " ".
+022300210120180293     03  lnc_4                         PIC X(01) VALUE "4".
+022400210120      *RFS 103858 - End
+022500210120       01  lc_Flags.
+022600210120           03  lb_EndOfCursorFlag             PIC 1.
+022700210120               88  lb_EndOfCursorTrue         VALUE B"1".
+022800210120               88  lb_EndOfCursorFalse        VALUE B"0".
+022900210120      * RFS 103858 - Start
+023000210120       01 ln_tmpUpperLimit     PIC S9(07)V9(06) COMP-3.
+023100210120       01 ln_tmpAgePeriod      PIC S9(07)V9(06) COMP-3.
+023200210120
+023300210120      *RFS129787 - Start
+023400210120       01 ln_tmpUpperLimit3    PIC S9(07)V9(06) COMP-3.
+023500210120       01 ln_tmpAgePeriod3     PIC S9(07)V9(06) COMP-3.
+023600210120       01 lc_StdFlag           PIC X(01) VALUE SPACES.
+023700210120       01 lc_TransTypeCode     PIC X(03) VALUE SPACES.
+023800210120       01 lc_OptionCode        PIC X(01) VALUE SPACES.
+023900210120      *RFS129787 - End
+024000210120
+024100210120       01  lc_CalculationRuleFound            PIC 1.
+024200210120          88  lb_CalculationRuleFoundYes     VALUE B"1".
+024300210120          88  lb_CalculationRuleFoundNo      VALUE B"0".
+024400210120
+024500210120       01  lc_CalculationRule                 PIC X(1).
+024600210120           88  lb_CalculationRule2           VALUES "2".
+024700210120129787     88  lb_CalculationRule3           VALUES "3".
+024800210120180293     88  lb_CalculationRule4           VALUES "4".
+024900210120      * RFS 103858 - End
+025000210120      *RFS129787 -begin.
+025100210120       01  lc_ProceedChargeBack               PIC X(1).
+025200210120           88  lb_ProceedChargeBackYes       VALUES "Y".
+025300210120           88  lb_ProceedChargeBackNo        VALUES "N".
+025400210120       01  lc_CashDist                        PIC X(1).
+025500210120           88  lb_CashDistYes                VALUES "Y".
+025600210120           88  lb_CashDistNo                 VALUES "N".
+025700210120      *RFS129787 -end.
+025800210120
+025900210120175845 01 lc_CalRuleFound                     PIC X(1) VALUE SPACE.
+026000210120       01 lc_Conditions.
+026100210120           02 lc_HSTCursorIsOpen        PIC X(01)  VALUE SPACE.
+026200210120              88 lncc_HSTCursorIsOpen              VALUE "Y".
+026300210120           02 lc_RVSCursorIsOpen        PIC X(01)  VALUE SPACE.
+026400210120              88 lncc_RVSCursorIsOpen              VALUE "Y".
+026500210120           02 lc_MfatrncmrpInserted     PIC X(01)  VALUE SPACE.
+026600210120              88 lncc_MfatrncmrpInserted           VALUE "Y".
+026700210120           02 lc_ReversalCursorProcess  PIC X(01)  VALUE SPACE.
+026800210120              88 lncc_ReversalCursorProcess        VALUE "Y".
+026900210120
+027000210120       01  lc_Tables.
+027100210120           03  ltb_FetchCurTransHstTable.
+027200210120               05  ltb_FetchCurTransHistory    OCCURS 200 TIMES.
+027300210120                   07  ltbi_HstPlacementDate      PIC S9(09) COMP-3.
+027400210120                   07  ltbi_HstTransNo            PIC S9(09) COMP-3.
+027500210120                   07  ltbi_HstAccountNo          PIC S9(09) COMP-3.
+027600210120                   07  ltbi_HstTradeDate          PIC S9(09) COMP-3.
+027700210120                   07  ltbc_HstDealerCode         PIC X(04).
+027800210120                   07  ltbc_HstDealerRepCode      PIC X(06).
+027900210120                   07  ltbn_HstUnitPriceOrig      PIC S9(05)V9(04)
+028000210120                                                      COMP-3.
+028100210120                   07  ltbn_HstUnitPriceCpp       PIC S9(05)V9(04)
+028200210120                                                      COMP-3.
+028300210120                   07  ltbc_HstCurrency           PIC X(03).
+028400210120                   07  ltbc_HstCommBonusSource    PIC X(01).
+028500210120                   07  ltbn_HstCommBonusRate      PIC S9(09)V9(03)
+028600210120                                                      COMP-3.
+028700210120                   07  ltbn_HstFreeUnitsTakenDown PIC S9(10)V9(03)
+028800210120                                                      COMP-3.
+028900210120                   07  ltbn_HstChrgUnitsTakenDown PIC S9(10)V9(03)
+029000210120                                                      COMP-3.
+029100210120                   07  ltbi_HstAgeDate            PIC S9(09) COMP-3.
+029200210120                   07  ltbc_HstCDSCSchedule       PIC X(05).
+029300210120                   07  ltbc_HstChargeCDSCOrigMkt  PIC X(01).
+029400210120                   07  ltbc_HstDealerSettlement   PIC X(01).
+029500210120                   07  ltbc_HstTrustAccountCode   PIC X(04).
+029600210120                   07  ltbc_HstProductTypeRule    PIC X(01).
+029700210120                   07  ltbn_HstPercentAmt         PIC S9(03)V9(05)
+029800210120                                                      COMP-3.
+029900210120      *RFS 103858 - Start
+030000210120                   07  ltbc_HstTransTypeCode      PIC X(03).
+030100210120                   07  ltbc_HstTransOriginCode    PIC X(03).
+030200210120                   07  ltbc_HstInvestmentCode     PIC X(05).
+030300210120                   07  ltbn_HstGrossAmt           PIC S9(13)V9(02)
+030400210120                                                      COMP-3.
+030500210120                   07  ltbn_origPurchUnitAmt      PIC S9(13)V9(03)
+030600210120                                                      COMP-3.
+030700210120                   07  ltbn_HstOriginalCommAmt    PIC S9(13)V9(02)
+030800210120                                                      COMP-3.
+030900210120                   07  ltbn_HstOriginalCommRate   PIC S9(07)V9(03)
+031000210120                                                      COMP-3.
+031100210120      *RFS1098460 -Begin
+031200210120      *            07  ltbn_HstDepositTakenDown   PIC S9(13)V9(02)
+031300210120      *                                               COMP-3.
+031400210120      *            07  ltbn_HstCurrDepositBalance PIC S9(13)V9(02)
+031500210120      *                                               COMP-3.
+031600210120                   07  ltbn_HstDepositTakenDown   PIC S9(13)V9(03)
+031700210120                                                      COMP-3.
+031800210120                   07  ltbn_HstCurrDepositBalance PIC S9(13)V9(03)
+031900210120                                                      COMP-3.
+032000210120      *RFS1098460 -End
+032100210120                   07  ltbc_HstInvestmentCodePUP  PIC X(05).
+032200210120                   07  ltbc_HstCalculationRule    PIC X(01).
+032300210120                   07  ltbc_HstCommRecovSchedCode PIC X(05).
+032400210120                   07  ltbi_HstAgeDate_2          PIC S9(09) COMP-3.
+032500210120                   07  ltbn_HstPurchOrigUnitBal   PIC S9(13)V9(03)
+032600210120                                                      COMP-3.
+032700210120                   07  ltbc_ExtLoadType           PIC X(03).
+032800210120180293             07  ltbn_FreeUnitsTaken        PIC S9(10)V9(03)
+032900210120180293                                                COMP-3.
+033000210120      *RFS 103858 - End
+033100210120           03  ltb_FetchCurTransRvsTable.
+033200210120               05  ltb_FetchCurTransReversal   OCCURS 200 TIMES.
+033300210120                   07  ltbi_RvsPlacementDate      PIC S9(09) COMP-3.
+033400210120                   07  ltbi_RvsTransNo            PIC S9(09) COMP-3.
+033500210120                   07  ltbi_RvsAccountNo          PIC S9(09) COMP-3.
+033600210120                   07  ltbc_RvsDealerCode         PIC X(04).
+033700210120                   07  ltbc_RvsDealerRepCode      PIC X(06).
+033800210120                   07  ltbc_RvsCurrency           PIC X(03).
+033900210120                   07  ltbc_RvsProductTypeRule    PIC X(01).
+034000210120                   07  ltbc_RvsTrustAccountCode   PIC X(04).
+034100210120                   07  ltbc_RvsDealerSettlement   PIC X(01).
+034200210120                   07  ltbn_RvsTheoreticalDSCAmt  PIC S9(09)V9(02)
+034300210120                                                      COMP-3.
+034400210120                   07  ltbn_RvsRecoveryPercentage PIC S9(05)V9(02)
+034500210120                                                      COMP-3.
+034600210120                   07  ltbn_RvsBonusAmt           PIC S9(09)V9(02)
+034700210120                                                      COMP-3.
+034800210120                   07  ltbn_RvsCommRecoveryAmt    PIC S9(05)V9(02)
+034900210120                                                      COMP-3.
+035000210120                   07  ltbc_RvsCommBonusSource    PIC X(01).
+035100210120
+035200210120       01  lc_WorkingStorageFields.
+035300210120           03  li_NumRows                PIC S9(5)   COMP-3 VALUE 0.
+035400210120           03  li_FetchIdx               PIC S9(5)   COMP-3 VALUE 0.
+035500210120           03  lc_ProcessDateDataArea.
+035600210120               05  lc_ProcessDate             PIC X(08).
+035700210120               05  ln_ProcessDate REDEFINES lc_ProcessDate PIC S9(08).
+035800210120               05  FILLER                     PIC X(161).
+035900210120           03  lc_SaveComment                 PIC X(25).
+036000210120           03  lc_Comment.
+036100210120               05  lc_CommentTitleRep         PIC X(04)  VALUE "Rep ".
+036200210120               05  lc_CommentDealerRepCode    PIC X(06).
+036300210120               05  lc_CommentTitleAcct        PIC X(06)  VALUE " Acct ".
+036400210120               05  li_CommentAccountNo        PIC 9(09).
+036500210120
+036600210120      *RFS 103858 - Start
+036700210120           03  li_AgePeriod                   PIC S9(05) VALUE 0.
+036800210120           03  ln_RecoveryPercentage          PIC S9(05)V9(02) COMP-3.
+036900210120           03  lc_ComCalculationRule          PIC X(01).
+037000210120           03  lc_ApplicableTo                PIC X(05).
+037100210120           03  ln_UpperLimitPeriod            PIC S9(04) COMP-3.
+037200210120           03  lc_PeriodType                  PIC X(06).
+037300210120           03  ln_CommGrossAmt                PIC S9(13)V9(02) COMP-3.
+037400210120           03  ln_CommUnitAmt                 PIC S9(13)V9(03) COMP-3.
+037500210120           03  ln_CommToRecover               PIC S9(05)V9(02) COMP-3.
+037600210120           03  ln_PurchOrigUnitBal_F          PIC S9(13)V9(03)
+037700210120                                                  COMP-3 VALUE 0.
+037800210120           03  ln_FreeUnitsTakenDown_F        PIC S9(10)V9(03)
+037900210120                                                  COMP-3 VALUE 0.
+038000210120           03  ln_ChrgUnitsTakenDown_F        PIC S9(10)V9(03)
+038100210120                                                  COMP-3 VALUE 0.
+038200210120           03  lc_CDSCSchedule_F              PIC X(05) VALUE " ".
+038300210120           03  lc_CDSCOrigMkt_F               PIC X(01) VALUE " ".
+038400210120           03  ln_PercentAmt_F                PIC S9(03)V9(05)
+038500210120                                                  COMP-3 VALUE 0.
+038600210120      * RFS103858 Defect 32406 - Begin
+038700210120      *    03  li_SaveTransNo1                PIC S9(09) COMP-3
+038800210120      *                                       VALUE 0.
+038900210120      * RFS103858 Defect 32406 - End
+039000210120      *RFS 103858 - End
+039100210120
+039200210120      *RFS129787 - Start
+039300210120       01  lc_NewCalcFields.
+039400210120          03  lc_WaiveCommFlag               PIC X(01).
+039500210120          03  li_NewPlacementDate            PIC S9(09) COMP-3.
+039600210120          03  li_NewTransNo                  PIC S9(09) COMP-3.
+039700210120      *RFS129787 - End
+040100210120
+040101210405      *RFS185897 - Starts
+040102210405       01  lc_PeriodIndicator                PIC X(1) VALUE "  ".
+040103210405      *RFS185897 - Ends
+040104210405
+040200210120       01  lc_PrevTransBuffer.
+040300210120           03  li_SavePlacementDate           PIC S9(09) COMP-3.
+040400210120           03  li_SaveTransNo                 PIC S9(09) COMP-3.
+040500210120           03  li_JulianAgeDate               PIC S9(08).
+040600210120           03  li_JulianTradeDate             PIC S9(08).
+040700210120           03  li_JulianDifference            PIC S9(08).
+040800210120           03  lc_CDSCSchedule                PIC X(05).
+040900210120           03  ln_UnitPrice                   PIC S9(05)V9(04) COMP-3.
+041000210120           03  ln_TheoreticalDSC              PIC S9(09)V9(02) COMP-3.
+041100210120           03  ln_CommissionRecovery          PIC S9(05)V9(02) COMP-3.
+041200210120           03  ln_TotalToRecover              PIC S9(05)V9(02) COMP-3.
+041300210120           03  ln_ApplicableRate              PIC S9(09)V9(03) COMP-3.
+041400210120           03  ln_SaveRecoveryPercentage      PIC S9(05)V9(02) COMP-3.
+041500210120           03  ln_SaveBonusAmt                PIC S9(09)V9(02) COMP-3.
+041600210120           03  ln_SaveBonusRate               PIC S9(09)V9(03) COMP-3.
+041700210120           03  lc_SaveCommBonusSource         PIC X(01).
+041800210120           03  lc_SaveDealerCode              PIC X(04).
+041900210120           03  lc_SaveCurrency                PIC X(03).
+042000210120           03  lc_SaveTrustAccountCode        PIC X(04).
+042100210120           03  lc_SaveProductTypeRule         PIC X(01).
+042200210120           03  lc_SaveSegOrNonSeg             PIC X(01).
+042300210120           03  lc_SaveDealerSettlement        PIC X(01).
+042400210120           03  li_SaveAccountNo               PIC S9(09)       COMP-3.
+042500210120           03  lc_SaveBonusSource             PIC X(01).
+042600210120
+042700210120      *RFS 103858 - Start.
+042800210120           03  lc_SaveTransTypeCode           PIC X(03).
+042900210120           03  lc_SaveTransOriginCode         PIC X(03).
+043000210120           03  lc_SaveInvestmentCode          PIC X(05).
+043100210120           03  ln_SaveGrossAmt                PIC S9(13)V9(02) COMP-3.
+043200210120           03  ln_SaveOriginalCommAmt         PIC S9(13)V9(02) COMP-3.
+043300210120           03  ln_SaveOriginalCommRate        PIC S9(07)V9(03) COMP-3.
+043400210120      *RFS1098460 -Begin
+043500210120      *    03  ln_SaveDepositTakenDown        PIC S9(13)V9(02)
+043600210120           03  ln_SaveDepositTakenDown        PIC S9(13)V9(03)
+043700210120      *RFS1098460 -End
+043800210120                                                  COMP-3.
+043900210120           03  lc_SaveInvestmentCodePUP       PIC X(05).
+044000210120           03  lc_SaveCalculationRule         PIC X(01).
+044100210120           03  lc_SaveCommRecovSchedCode      PIC X(05).
+044200210120           03  li_SaveTradeDate               PIC S9(09) COMP-3.
+044300210120           03  ln_SaveUnitAmt                 PIC S9(13)V9(03) COMP-3.
+044400210120           03  ln_CommAmt_F                   PIC S9(13)V9(02)
+044500210120                                                  COMP-3 VALUE 0.
+044600210120           03  ln_CommRate_F                  PIC S9(07)V9(03)
+044700210120                                                  COMP-3 VALUE 0.
+044800210120           03  lc_InvestmentCodePUP_F         PIC X(05) VALUE " ".
+044900210120           03  li_AgeDate2_F                  PIC S9(09)
+045000210120                                                  COMP-3 VALUE 0.
+045100210120           03  li_JulAgeDate                  PIC S9(09) COMP-3.
+045200210120           03  li_JulTradeDate                PIC S9(09) COMP-3.
+045300210120      *RFS 103858 - End.
+045400210120
+045500210120      *RFS 129787 - Begin.
+045600210120           03  li_SaveOrigPurUnitAmt          PIC S9(11)V9(02)
+045700210120                                              COMP-3.
+045800210120           03  li_SaveChrgUnitsTakenDown      PIC S9(10)V9(03)
+045900210120                                              COMP-3.
+046000210120           03  li_SaveOrigCommAmt             PIC S9(11)V9(02)
+046100210120                                              COMP-3.
+046200210120      *RFS 129787 - End.
+046300210120
+046400210120       01  lc_Parameters.
+046500210120           03  Parms_GETCTLNUM.
+046600210120               05  lc_ControlCode             PIC X(04)  VALUES "DIN#".
+046700210120               05  li_ControlNumber           PIC S9(09) COMP-3.
+046800210120               05  lc_ReturnCodeGETCTLNUM     PIC X(02).
+046900210120      *
+047000210120       LINKAGE SECTION.
+047100210120      *
+047200210120       PROCEDURE DIVISION.
+047300210120
+047400210120      * ---------------------------------
+047500210120       MAINLINE.
+047600210120      * ---------------------------------
+047700210120           PERFORM InitialLogic.
+047800210120           PERFORM DetailProcess.
+047900210120           PERFORM Termination.
+048000210120
+048100210120      * ---------------------------------
+048200210120       InitialLogic.
+048300210120      * ---------------------------------
+048400210120
+048500210120           EXEC SQL
+048600210120             WHENEVER SQLERROR CONTINUE
+048700210120           END-EXEC.
+048800210120
+048900210120           PERFORM InitializeVariables.
+049000210120103858     PERFORM Create_LoadTable.
+049100210120           PERFORM GetProcessDate.
+049200210120           PERFORM DeclareCursor.
+049300210120           PERFORM OpenCursorHistory.
+049400210120
+049500210120      * ---------------------------------
+049600210120       InitializeVariables.
+049700210120      * ---------------------------------
+049800210120
+049900210120           INITIALIZE Ws-Sql-Err-Short-Descr,
+050000210120                      ln_TheoreticalDSC,
+050100210120                      lc_ReversalCursorProcess.
+050200210120           INITIALIZE lc_PrevTransBuffer.
+050300210120           SET lb_EndOfCursorFalse TO TRUE.
+050400210120           SET lncc_Err-Ok         TO TRUE.
+050500210120
+050600210120      * RFS103858 - Start
+050700210120      * ---------------------------------
+050800210120       Create_LoadTable.
+050900210120      * ---------------------------------
+051000210120           EXEC SQL
+051100210120             DROP TABLE QTEMP/SqaInvRulp
+051200210120           END-EXEC.
+051300210120
+051400210120           IF SQLSTATE = WS-SQL-TBL-NOT-EXIST OR WS-SQL-SUCCESSFUL
+051500210120               CONTINUE
+051600210120           ELSE
+051700210120               SET lncc_Err-24         TO TRUE
+051800210120               MOVE SQLSTATE   TO WS-SQLSTATE
+051900210120               PERFORM DSP-ERROR
+052000210120           END-IF.
+052100210120
+052200210120           EXEC SQL
+052300210120                CREATE TABLE QTEMP/SqaInvRulp
+052400210120                      (Investment_Code FOR COLUMN F0000 CHAR (5)
+052500210120                                  NOT NULL WITH DEFAULT,
+052600210120                       Calculation_Rule FOR COLUMN F0001 CHAR (1)
+052700210120                                  NOT NULL WITH DEFAULT)
+052800210120           END-EXEC.
+052900210120
+053000210120              MOVE SQLSTATE TO lc_sqlStates
+053100210120              IF NOT lncc_sqlSuccessful
+053200210120                 SET lncc_Err-22 TO TRUE
+053300210120                 STRING lncc_CreateSqaInvRulp     DELIMITED BY "  "
+053400210120                        " "                       DELIMITED BY SIZE
+053500210120                        SQLSTATE                  DELIMITED BY SIZE
+053600210120                   INTO Ws-Sql-Err-Short-Descr
+053700210120                 PERFORM SQLFailProcess
+053800210120              END-IF
+053900210120
+054000210120           EXEC SQL
+054100210120                 INSERT INTO QTEMP/SqaInvRulp
+054200210120                   SELECT DISTINCT invp.Investment_Code,
+054300210120                                   comrpp.Calculation_Rule
+054400210120                     FROM Mfainvp invp
+054500210120                     INNER JOIN Mfaimschp imschp ON
+054600210120                       invp.Investment_Code = imschp.Investment_Code
+054700210120                     INNER JOIN Mfacomrpp comrpp ON
+054800210120                       imschp.Comm_Recov_Sched_Code =
+054900210120                                   comrpp.Comm_Recov_Sched_Code
+055000210120           END-EXEC.
+055100210120
+055200210120           MOVE SQLSTATE TO lc_sqlStates.
+055300210120           IF NOT lncc_sqlSuccessful
+055400210120              SET lncc_Err-23 TO TRUE
+055500210120              STRING lncc_InsertSqaInvRulp  DELIMITED BY "  "
+055600210120                     " "                    DELIMITED BY SIZE
+055700210120                     SQLSTATE               DELIMITED BY SIZE
+055800210120                INTO Ws-Sql-Err-Short-Descr
+055900210120              PERFORM Dsp-Error
+056000210120           END-IF.
+056100210120
+056200210120      * RFS103858 - End
+056300210120
+056400210120      * ---------------------------------
+056500210120       GetProcessDate.
+056600210120      * ---------------------------------
+056700210120
+056800210120           ACCEPT lc_ProcessDateDataArea FROM lc_ProcessDateDA
+056900210120                  FOR "MFAPRCDTP".
+057000210120
+057100210120      * ---------------------------------
+057200210120       DeclareCursor.
+057300210120      * ---------------------------------
+057400210120
+057500210120           EXEC SQL
+057600210120            DECLARE C_History CURSOR FOR
+057700210120            SELECT
+057800210120               Trnp.Placement_Date,
+057900210120               Trnp.Trans_No,
+058000210120               Trnp.Account_No,
+058100210120               Trnp.Trade_Date,
+058200210120               Trnp.Dealer_Code,
+058300210120               Trnp.Dealer_Rep_Code,
+058400210120               Trnp.Unit_Price,
+058500210120               Trncpp.Unit_Price,
+058600210120               Invp.Currency,
+058700210120               Deacmp.Comm_Bonus_Source,
+058800210120               Deacmp.Comm_Bonus_Rate,
+058900210120               Trnrdp.Free_Units_Taken_Down,
+059000210120               Trnrdp.Chrg_Units_Taken_Down,
+059100210120               Trncpp.Age_Date,
+059200210120               Trncpp.CDSC_Schedule,
+059300210120               Trncpp.Charge_CDSC_On_Orig_Or_Market,
+059400210120               Deap.Dealer_Settlement,
+059500210120               Petacp.Trust_Account_Code,
+059600210120               Prtcdp.Product_Type_Rule,
+059700210120               COALESCE(Comrpp.Percent_Amt, 0.0)
+059800210120      * RFS103858 - Start
+059900210120              ,Trnp.Trans_Type_Code
+060000210120              ,Trnp.Trans_Origin_Code
+060100210120              ,Trnp.Investment_Code
+060200210120              ,Trnp.Gross_Amt
+060300210120              ,Trnp.Unit_Amt
+060400210120129787*       ,:ln_CommAmt_F
+060500210120129787        ,Trncpp.Comm_Amt
+060600210120              ,:ln_CommRate_F
+060700210120              ,0.00
+060800210120              ,0.00
+060900210120              ,:lc_InvestmentCodePUP_F
+061000210120              ,COALESCE(Comrpp.Calculation_Rule, " ")
+061100210120              ,COALESCE(Comrpp.Comm_Recov_Sched_Code, " ")
+061200210120              ,:li_AgeDate2_F
+061300210120      *RFS129787 -start
+061400210120      *       ,:ln_PurchOrigUnitBal_F
+061500210120              ,Trncpp.Orig_Unit_Bal
+061600210120      *RFS129787 -end
+061700210120              ," "
+061800210120      * RFS103858 - End
+061900210120180293        ,0
+062000210120              FROM
+062100210120      * 92499 v6r1 fix
+062200210120      *
+062300210120      *        Mfatrnp   Trnp,
+062400210120      *        Mfarvrp   Rvrp,
+062500210120      *        Mfainvp   Invp,
+062600210120      *        Mfadeacmp Deacmp,
+062700210120      *        Mfatrnrdp Trnrdp,
+062800210120      *        Mfatrncpp Trncpp,
+062900210120      *        Mfadeap   Deap,
+063000210120      *        Mfapetacp Petacp,
+063100210120      *        Mfatrsacp Trsacp,
+063200210120      *        Mfatrbnkp Trbnkp,
+063300210120      * RFS1016101 - Start: replace cross join to left join
+063400210120      *         Mfatrnp   Trnp      cross join
+063500210120      *         Mfarvrp   Rvrp      cross join
+063600210120                Mfatrnp   Trnp  LEFT JOIN Mfarvrp Rvrp ON
+063700210120                    trnp.reversal_code = rvrp.reversal_code
+063800210120                                   cross join
+063900210120      * RFS1016101 - End
+064000210120               Mfainvp   Invp      cross join
+064100210120               Mfadeacmp Deacmp    cross join
+064200210120               Mfatrnrdp Trnrdp    cross join
+064300210120               Mfatrncpp Trncpp    cross join
+064400210120               Mfadeap   Deap      cross join
+064500210120               Mfapetacp Petacp    cross join
+064600210120               Mfatrsacp Trsacp    cross join
+064700210120               Mfatrbnkp Trbnkp    cross join
+064800210120
+064900210120      * 92499 v6r1 fix
+065000210120
+065100210120               Mfaprtcdp Prtcdp
+065200210120      * RFS103858 - Start
+065300210120               INNER JOIN SqaInvRulp Rulp ON
+065400210120                    Invp.Investment_Code = Rulp.Investment_Code
+065500210120      *        INNER JOIN MFAINVMDP INVMDP ON
+065600210120      *          Invmdp.Investment_Code = Trnp.Investment_Code
+065700210120      * RFS103858 - Ends
+065701210420      * RFS187293 - Start
+065702210429               LEFT OUTER JOIN Mfatrnrep Trnrep ON
+065703210420                    Trnrep.Placement_Date = Trnp.Placement_Date   AND
+065704210420                    Trnrep.Trans_No = Trnp.Trans_No
+065705210420      * RFS187293 - End
+065800210120               LEFT OUTER JOIN Mfaimschp Imschp ON
+065900210120                    Imschp.Investment_Code = Trnp.Investment_Code
+066000210120               LEFT OUTER JOIN Mfacomrpp Comrpp ON
+066100210120                    Comrpp.Comm_Recov_Sched_Code =
+066200210120                    Imschp.Comm_Recov_Sched_Code                  AND
+066300210120                    Comrpp.Start_Date <= Trnp.Trade_Date          AND
+066400210120                    Comrpp.End_Date >= Trnp.Trade_Date
+066500210120             WHERE
+066600210120               Trnp.Process_Date    = :ln_ProcessDate             AND
+066700210120      *129787 - Start
+066800210120103858*        Rulp.Calculation_Rule IN ("1")                     AND
+066900210120              ( (Rulp.Calculation_Rule IN ("1")         AND
+067000210120                   Rvrp.Reversal_Rule = :lncc_ReversalRule1  AND
+067100210120                   Rvrp.Reversal_Code = Trnp.Reversal_Code)
+067200210120                   OR  (Rulp.Calculation_Rule IN (:lnc_3)) )  AND
+067300210120      *129787 - End
+067400210120              (Trnp.Trans_Type_Code = :lncc_SwitchOut     OR
+067500210120               Trnp.Trans_Type_Code = :lncc_TransferOut   OR
+067600210120      *129787 - Start
+067700210120      *        Trnp.Trans_Type_Code = :lncc_Sell)                 AND
+067800210120               Trnp.Trans_Type_Code = :lncc_Sell          OR
+067801210420187293         (Trnp.Trans_Type_Code = :lncc_Fee    AND
+067802210429187293        Coalesce(Trnrep.Waive_Comm_Chargeback," ") = :lncc_Yes) OR
+067900210120               ((Trnp.Trans_Type_Code = :lncc_INC   OR
+068000210120                Trnp.Trans_Type_Code = :lncc_CPG    OR
+068100210120                Trnp.Trans_Type_Code = :lncc_INT    OR
+068200210120                Trnp.Trans_Type_Code = :lncc_MFR )  AND
+068300210120                (Rulp.Calculation_Rule IN (:lnc_3)))) AND
+068400210120      *129787 - End
+068500210120              (Trnp.Trans_Status_Code = :lncc_HST         OR
+068600210120               Trnp.Trans_Status_Code = :lncc_HSC)                AND
+068700210120      *
+068800210120               Invp.Investment_Code = Trnp.Investment_Code        AND
+068900210120               Deacmp.Dealer_Code = Trnp.Dealer_Code              AND
+069000210120               Deacmp.Currency = Invp.Currency                    AND
+069100210120129787*        Rvrp.Reversal_Rule = :lncc_ReversalRule1           AND
+069200210120129787*        Rvrp.Reversal_Code = Trnp.Reversal_Code            AND
+069300210120               Trnrdp.Placement_Date = Trnp.Placement_Date        AND
+069400210120               Trnrdp.Trans_No = Trnp.Trans_No                    AND
+069500210120               Trncpp.Placement_Date = Trnrdp.Placement_Date_2    AND
+069600210120               Trncpp.Trans_No = Trnrdp.Trans_No_2                AND
+069700210120               Trncpp.CDSC_Seq_No = Trnrdp.CDSC_Seq_No_2          AND
+069800210120               Deap.Dealer_Code = Trnp.Dealer_Code                AND
+069900210120               Petacp.Pay_Adjust_Type = :lncc_DCOMM               AND
+070000210120               Petacp.Trust_Account_Code = Trsacp.Trust_Account_Code
+070100210120                                                                  AND
+070200210120               Trsacp.Bank_Seq_No = Trbnkp.Bank_Seq_No            AND
+070300210120               Trbnkp.Currency = Invp.Currency                    AND
+070400210120               Prtcdp.Product_Type_Code = Invp.Product_Type_Code
+070500210120
+070600210120      * RFS103858 - Start
+070700210120      * RFS1014027 - Start
+070800210120      *      UNION
+070900210120             UNION ALL
+071000210120      * RFS1014027 - End
+071100210120             SELECT
+071200210120               Trnp.Placement_Date
+071300210120              ,Trnp.Trans_No
+071400210120              ,Trnp.Account_No
+071500210120              ,Trnp.Trade_Date
+071600210120              ,Trnp.Dealer_Code
+071700210120              ,Trnp.Dealer_Rep_Code
+071800210120              ,Trnp.Unit_Price
+071900210120              ,Trnp.Unit_Price
+072000210120              ,Invp.Currency
+072100210120              ,Deacmp.Comm_Bonus_Source
+072200210120              ,Deacmp.Comm_Bonus_Rate
+072300210120              ,:ln_FreeUnitsTakenDown_F
+072400210120              ,:ln_ChrgUnitsTakenDown_F
+072500210120              ,Trnpup.Purch_Age_Date
+072600210120              ,:lc_CDSCSchedule_F
+072700210120              ,:lc_CDSCOrigMkt_F
+072800210120              ,Deap.Dealer_Settlement
+072900210120              ,Petacp.Trust_Account_Code
+073000210120              ,Prtcdp.Product_Type_Rule
+073100210120              ,:ln_PercentAmt_F
+073200210120              ,Trnp.Trans_Type_Code
+073300210120              ,Trnp.Trans_Origin_Code
+073400210120              ,Trnp.Investment_Code
+073500210120              ,Trnp.Gross_Amt
+073600210120      * RFS103858 - Defect 32369 - Start
+073700210120      *       ,Trnp.Unit_Amt
+073800210120              ,Trnp1.unit_Amt
+073900210120      * RFS103858 - Defect 32369 - End
+074000210120164482*       ,Trncmp.Comm_Amt
+074100210120164482        ,Trnpup.Comm_Amt
+074200210120              ,Trncmp.Comm_Rate
+074300210120              ,Trnrup.UNITS_TAKEN_DOWN
+074400210120              ,0.00
+074500210120              ,Trnpup.Investment_Code
+074600210120              ,Rulp.Calculation_Rule
+074700210120              ,imschp.Comm_Recov_Sched_Code
+074800210120              ,Trnpup.Purch_Age_Date_2
+074900210120              ,Trnpup.Purch_Orig_Unit_Bal
+075000210120              ,Invmdp.External_Load_Type_Code
+075100210120180293        ,Trnrup.Free_Units_Taken_Down
+075200210120            FROM
+075300210120               Mfatrnp Trnp
+075400210120               INNER JOIN MFAINVMDP INVMDP ON
+075500210120                 Invmdp.Investment_Code = Trnp.Investment_Code
+075600210120               INNER JOIN MFAINVP INVP ON
+075700210120                 Invp.Investment_Code = Trnp.Investment_Code
+075800210120               INNER JOIN SQAINVRULP rulp ON
+075900210120                 Invp.Investment_Code = Rulp.Investment_Code
+076000210120               INNER JOIN Mfadeacmp Deacmp ON
+076100210120                 Deacmp.Dealer_Code = Trnp.Dealer_Code  AND
+076200210120                 Deacmp.Currency = Invp.Currency
+076300210120               INNER JOIN Mfatrnrup Trnrup ON
+076400210120                 Trnrup.Placement_Date = Trnp.Placement_Date AND
+076500210120                 Trnrup.Trans_No = Trnp.Trans_No  AND
+076600210120                 Trnrup.Unit_Monitor_Type = :lnc_FIFO
+076700210120               INNER JOIN Mfatrnpup Trnpup ON
+076800210120                 Trnpup.Placement_Date = Trnrup.Placement_Date_2  AND
+076900210120                 Trnpup.Trans_No = Trnrup.Trans_No_2    AND
+077000210120                 Trnpup.Purch_Seq_No = Trnrup.Purch_Seq_No_2  AND
+077100210120                 TrnPup.Unit_Monitor_Type = :lnc_FIFO
+077200210120      * RFS103858 - Defect 32369 - Start
+077300210120               INNER JOIN Mfatrnp Trnp1  ON
+077400210120                 Trnpup.Placement_Date = Trnp1.Placement_Date  AND
+077500210120                 Trnpup.Trans_No       = trnp1.Trans_No
+077600210120      * RFS103858 - Defect 32369 - End
+077700210120      * RFS 175134 Start
+077800210120               INNER JOIN Mfatrncmp Trncmp ON
+077900210120                 Trnpup.Placement_Date = Trncmp.Placement_Date  AND
+078000210120                 Trnpup.Trans_No = Trncmp.Trans_No
+078100210120      * RFS103858 Defect 32448 - Start
+078200210120      *          Trncmp.Comm_Paid_Date <> 0           AND
+078300210120      * RFS103858 Defect 32448 - End
+078400210120      *          Trncmp.Comm_Amt <> 0
+078500210120      * RFS 175134 End
+078600210120               INNER JOIN Mfadeap Deap ON
+078700210120                 Deap.Dealer_Code = Trnp.Dealer_Code
+078800210120               INNER JOIN Mfapetacp Petacp ON
+078900210120                 Petacp.Pay_Adjust_Type = :lncc_DCOMM
+079000210120               INNER JOIN Mfatrsacp Trsacp ON
+079100210120                 Petacp.Trust_Account_Code = Trsacp.Trust_Account_Code
+079200210120               INNER JOIN Mfatrbnkp Trbnkp ON
+079300210120                 Trsacp.Bank_Seq_No = Trbnkp.Bank_Seq_No  AND
+079400210120                 Trbnkp.Currency = Invp.Currency
+079500210120               INNER JOIN Mfaprtcdp Prtcdp ON
+079600210120                 Prtcdp.Product_Type_Code = Invp.Product_Type_Code
+079700210120               INNER JOIN Mfaimschp Imschp ON
+079800210120                 Imschp.Investment_Code = Trnp.Investment_Code
+079900210120               LEFT EXCEPTION JOIN MFATRTXRP trtxrp ON
+080000210120                 Trnp.Trans_Type_Code = Trtxrp.Trans_Type_Code    AND
+080100210120                 Trnp.Trans_Origin_Code = Trtxrp.Trans_Origin_Code AND
+080200210120                 Trtxrp.Exemption_Rule = :lnc_17
+080300210120175845           AND (Trtxrp.CONTR_REDEM_CODE = " " OR
+080400210120175845                Trtxrp.CONTR_REDEM_CODE = Trnp.CONTR_REDEM_CODE)
+080500210120               LEFT EXCEPTION JOIN MFARVRP rvrp ON
+080600210120                 Trnp.Reversal_Code = Rvrp.Reversal_Code  AND
+080700210120                 Rvrp.Reversal_Rule = :lnc_C
+080701210420      * RFS187293 - Start
+080702210429               LEFT OUTER JOIN Mfatrnrep Trnrep ON
+080703210420                    Trnrep.Placement_Date = Trnp.Placement_Date   AND
+080704210420                    Trnrep.Trans_No = Trnp.Trans_No
+080705210420      * RFS187293 - End
+080800210120              WHERE
+080900210120                 Trnp.Process_Date = :ln_ProcessDate         AND
+081000210120180293*          Rulp.Calculation_Rule = "2"     AND
+081100210120180293           Rulp.Calculation_Rule IN ("2", "4")    AND
+081200210120                (Trnp.Trans_Type_Code = :lncc_SwitchOut   OR
+081300210120                 Trnp.Trans_Type_Code = :lncc_TransferOut OR
+081301210420187293          (Trnp.Trans_Type_Code = :lncc_Fee         AND
+081302210429187293        Coalesce(Trnrep.Waive_Comm_Chargeback," ") = :lncc_Yes) OR
+081400210120                 Trnp.Trans_Type_Code = :lncc_Sell  )     AND
+081500210120                (Trnp.Trans_Status_Code = :lncc_HST       OR
+081600210120                 Trnp.Trans_Status_Code = :lncc_HSC )
+081700210120             ORDER BY Placement_Date,Trans_No
+081800210120             FOR FETCH ONLY
+081900210120             OPTIMIZE FOR ALL ROWS
+082000210120           END-EXEC.
+082100210120      * RFS103858 - Ends
+082200210120
+082300210120           EXEC SQL
+082400210120            DECLARE C_Reversal CURSOR FOR
+082500210120            SELECT
+082600210120               Trnp.Placement_Date,
+082700210120               Trnp.Trans_No,
+082800210120               Trnp.Account_No,
+082900210120               Trnp.Dealer_Code,
+083000210120               Trnp.Dealer_Rep_Code,
+083100210120               Invp.Currency,
+083200210120               Prtcdp.Product_Type_Rule,
+083300210120               Trsacp.Trust_Account_Code,
+083400210120               Deap.Dealer_Settlement,
+083500210120               Trncmrp.Theoretical_DSC_Amount,
+083600210120               Trncmrp.Recovery_Percentage,
+083700210120               Trncmrp.Bonus_Amount,
+083800210120               Trncmrp.Commission_Recovery_Amount,
+083900210120               Deacmp.Comm_Bonus_Source
+084000210120              FROM
+084100210120      * 92499 - v6r1 fix
+084200210120      *        Mfatrnp    Trnp,
+084300210120      *        Mfatrntgp  Trntgp,
+084400210120      *        Mfatrncmrp Trncmrp,
+084500210120      *        Mfainvp    Invp,
+084600210120      *        Mfaprtcdp  Prtcdp,
+084700210120      *        Mfadeacmp  Deacmp,
+084800210120      *        Mfadeap    Deap,
+084900210120      *        Mfapetacp Petacp,
+085000210120      *        Mfatrsacp  Trsacp,
+085100210120      *        Mfatrbnkp  Trbnkp
+085200210120               Mfatrnp    Trnp       cross join
+085300210120               Mfatrntgp  Trntgp     cross join
+085400210120               Mfatrncmrp Trncmrp    cross join
+085500210120               Mfainvp    Invp       cross join
+085600210120               Mfaprtcdp  Prtcdp     cross join
+085700210120               Mfadeacmp  Deacmp     cross join
+085800210120               Mfadeap    Deap       cross join
+085900210120               Mfapetacp Petacp      cross join
+086000210120               Mfatrsacp  Trsacp     cross join
+086100210120               Mfatrbnkp  Trbnkp
+086200210120      * 92499 - ends
+086201210420      * RFS187293 - Start
+086202210429               LEFT OUTER JOIN Mfatrnrep Trnrep ON
+086203210420                Trnrep.Placement_Date  = Trnp.Placement_Date AND
+086204210420                Trnrep.Trans_No = Trnp.Trans_No
+086205210420      * RFS187293 - End
+086300210120             WHERE
+086400210120               Trnp.Process_Date    = :ln_ProcessDate             AND
+086500210120              (Trnp.Trans_Type_Code = :lncc_SwitchOut     OR
+086600210120               Trnp.Trans_Type_Code = :lncc_TransferOut   OR
+086601210420187293        (Trnp.Trans_Type_Code = :lncc_Fee           AND
+086602210429187293       Coalesce(Trnrep.Waive_Comm_Chargeback," ") = :lncc_Yes)  OR
+086700210120               Trnp.Trans_Type_Code = :lncc_Sell)                 AND
+086800210120               Trnp.Trans_Status_Code   = :lncc_Reversal          AND
+086900210120      *
+087000210120               Trntgp.Placement_Date_2  = Trnp.Placement_Date     AND
+087100210120               Trntgp.Trans_No_2        = Trnp.Trans_No           AND
+087200210120               Trntgp.Relationship_Type = :lncc_Reversal          AND
+087300210120               Trncmrp.Placement_Date = Trntgp.Placement_Date     AND
+087400210120               Trncmrp.Trans_No = Trntgp.Trans_No                 AND
+087500210120               Invp.Investment_Code = Trnp.Investment_Code        AND
+087600210120               Prtcdp.Product_Type_Code = Invp.Product_Type_Code  AND
+087700210120               Deacmp.Dealer_Code = Trnp.Dealer_Code              AND
+087800210120               Deacmp.Currency  = Invp.Currency                   AND
+087900210120               Deap.Dealer_Code = Trnp.Dealer_Code                AND
+088000210120               Petacp.Pay_Adjust_Type = :lncc_DCOMM               AND
+088100210120               Petacp.Trust_Account_Code = Trsacp.Trust_Account_Code
+088200210120                                                                  AND
+088300210120               Trsacp.Bank_Seq_No = Trbnkp.Bank_Seq_No            AND
+088400210120               Trbnkp.Currency = Invp.Currency
+088500210120             ORDER BY Trnp.Placement_Date, Trnp.Trans_No
+088600210120             FOR FETCH ONLY
+088700210120             OPTIMIZE FOR ALL ROWS
+088800210120           END-EXEC.
+088900210120
+089000210120           IF SQLSTATE NOT = SPACES
+089100210120              MOVE SQLSTATE TO lc_sqlStates
+089200210120              IF NOT lncc_sqlSuccessful
+089300210120                 SET lncc_Err-11 TO TRUE
+089400210120                 STRING lncc_DeclareErrorReversal DELIMITED BY "  "
+089500210120                        " "                       DELIMITED BY SIZE
+089600210120                        SQLSTATE                  DELIMITED BY SIZE
+089700210120                   INTO Ws-Sql-Err-Short-Descr
+089800210120                 PERFORM SQLFailProcess
+089900210120              END-IF
+090000210120           END-IF.
+090100210120
+090200210120      * ---------------------------------
+090300210120       OpenCursorHistory.
+090400210120      * ---------------------------------
+090500210120
+090600210120           EXEC SQL
+090700210120             OPEN C_History
+090800210120           END-EXEC.
+090900210120
+091000210120      *    If C_History is not opened then process reversal trades.
+091100210120           MOVE SQLSTATE TO lc_sqlStates.
+091200210120           IF lncc_sqlSuccessful
+091300210120              SET lncc_HSTCursorIsOpen TO TRUE
+091400210120           ELSE
+091500210120              SET lncc_Err-12 TO TRUE
+091600210120              STRING lncc_OpenErrorHistory  DELIMITED BY "  "
+091700210120                     " "                    DELIMITED BY SIZE
+091800210120                     SQLSTATE               DELIMITED BY SIZE
+091900210120                INTO Ws-Sql-Err-Short-Descr
+092000210120              PERFORM Dsp-Error
+092100210120           END-IF.
+092200210120
+092300210120      * ---------------------------------
+092400210120       OpenCursorReversal.
+092500210120      * ---------------------------------
+092600210120
+092700210120           EXEC SQL
+092800210120             OPEN C_Reversal
+092900210120           END-EXEC.
+093000210120
+093100210120           MOVE SQLSTATE TO lc_sqlStates.
+093200210120           IF lncc_sqlSuccessful
+093300210120              SET lncc_RVSCursorIsOpen TO TRUE
+093400210120           ELSE
+093500210120              SET lncc_Err-13 TO TRUE
+093600210120              STRING lncc_OpenErrorReversal DELIMITED BY "  "
+093700210120                     " "                    DELIMITED BY SIZE
+093800210120                     SQLSTATE               DELIMITED BY SIZE
+093900210120                INTO Ws-Sql-Err-Short-Descr
+094000210120              PERFORM SQLFailProcess
+094100210120           END-IF.
+094200210120
+094300210120      * ---------------------------------
+094400210120       DetailProcess.
+094500210120      * ---------------------------------
+094600210120
+094700210120      * Process historical redemption transactions.
+094800210120           IF lncc_HSTCursorIsOpen
+094900210120              PERFORM ProcessCursorHistory
+095000210120                UNTIL lb_EndOfCursorTrue
+095100210120              IF li_SavePlacementDate NOT = 0 AND
+095200210120                 li_SaveTransNo       NOT = 0
+095300210120      *RFS129787 - Start
+095400210120      *            IF lc_SaveCalculationRule NOT = '2'
+095500210120                   IF (lc_SaveCalculationRule NOT = '2'
+095600210120180293             AND lc_SaveCalculationRule NOT = lnc_4
+095700210120                   AND lc_SaveCalculationRule NOT = lnc_3)
+095800210120                     PERFORM CalculateCommissionBonus
+095900210120                   END-IF
+096000210120      *RFS129787- End
+096100210120      * RFS103858 Defect 32406 - Begin: write if any data to write
+096200210120      *RFS129787- Start
+096300210120      *            IF lc_SaveCalculationRule = '2' AND
+096400210120                   IF (lc_SaveCalculationRule = '2' Or
+096500210120180293                 lc_SaveCalculationRule = lnc_4  Or
+096600210120                       lc_SaveCalculationRule = lnc_3) And
+096700210120      *RFS129787- End
+096800210120                     ln_TotalToRecover NOT = 0.0
+096900210120                       PERFORM WriteOutputFilesRule2
+097000210120                   END-IF
+097100210120      * RFS103858 Defect 32406 - End
+097200210120              END-IF
+097300210120           END-IF.
+097400210120
+097500210120      * Process reversed redemption transactions.
+097600210120
+097700210120           PERFORM OpenCursorReversal.
+097800210120           INITIALIZE lc_PrevTransBuffer.
+097900210120           SET lb_EndOfCursorFalse TO TRUE.
+098000210120           PERFORM ProcessCursorReversal
+098100210120             UNTIL lb_EndOfCursorTrue.
+098200210120
+098300210120      * ---------------------------------
+098400210120       ProcessCursorHistory.
+098500210120      * ---------------------------------
+098600210120
+098700210120           INITIALIZE ltb_FetchCurTransHstTable.
+098800210120
+098900210120           EXEC SQL
+099000210120             FETCH NEXT FROM C_History
+099100210120               FOR :lnci_MaxFetchRec ROWS
+099200210120              INTO :ltb_FetchCurTransHistory
+099300210120           END-EXEC.
+099400210120
+099500210120           MOVE SQLSTATE TO lc_sqlStates.
+099600210120           EVALUATE TRUE
+099700210120               WHEN lncc_sqlSuccessful
+099800210120                    CONTINUE
+099900210120               WHEN lncc_sqlEnd
+100000210120                    SET lb_EndOfCursorTrue TO TRUE
+100100210120               WHEN OTHER
+100200210120                    SET lncc_Err-14 TO TRUE
+100300210120                    STRING lncc_FetchErrorHistory  DELIMITED BY "  "
+100400210120                           " "                     DELIMITED BY SIZE
+100500210120                           SQLSTATE                DELIMITED BY SIZE
+100600210120                      INTO Ws-Sql-Err-Short-Descr
+100700210120                    PERFORM SQLFailProcess
+100800210120           END-EVALUATE.
+100900210120
+101000210120           IF SQLERRD(3) > 0
+101100210120               COMPUTE li_NumRows = SQLERRD(3)
+101200210120
+101300210120               PERFORM VARYING li_FetchIdx FROM 1 BY 1
+101400210120               UNTIL li_FetchIdx > li_NumRows
+101500210120      *RFS129787 - Start
+101600210120                   PERFORM get-waive-commission-flag
+101700210120                IF ltbc_HstCalculationRule(li_FetchIdx) = lnc_3
+101800210120                   PERFORM get-Std-commission-flag
+101900210120                ELSE
+102000210120                   SET lb_ProceedChargeBackYes TO TRUE
+102100210120                END-IF
+102101210413      * RFS 187293 - Start
+102200210413      *            IF lc_WaiveCommFlag NOT= lncc_Yes
+102300210413      *            AND lb_ProceedChargeBackYes
+102302210413                   IF ((lc_WaiveCommFlag NOT= lncc_Yes
+102303210419                        AND lb_ProceedChargeBackYes AND
+102304210419                      ltbc_HstTransTypeCode(li_FetchIdx) NOT = lncc_Fee)
+102305210419                      OR
+102306210419                      (ltbc_HstTransTypeCode(li_FetchIdx) = lncc_Fee
+102307210420                       AND lc_WaiveCommFlag = lncc_Yes
+102308210420                       AND lb_ProceedChargeBackYes))
+102309210413      * RFS187293 - End
+102310210413
+102400210120      *RFS129787 - End
+102500210120
+102600210120                   PERFORM ProcessCommRecoveryHST
+102700210120129787             END-IF
+102800210120               END-PERFORM
+102900210120            END-IF.
+103000210120
+103100210120      * ---------------------------------
+103200210120       ProcessCursorReversal.
+103300210120      * ---------------------------------
+103400210120
+103500210120           INITIALIZE ltb_FetchCurTransRvsTable.
+103600210120           INITIALIZE lc_ReversalCursorProcess.
+103700210120
+103800210120           EXEC SQL
+103900210120             FETCH NEXT FROM C_Reversal
+104000210120               FOR :lnci_MaxFetchRec ROWS
+104100210120              INTO :ltb_FetchCurTransReversal
+104200210120           END-EXEC.
+104300210120
+104400210120           MOVE SQLSTATE TO lc_sqlStates.
+104500210120           EVALUATE TRUE
+104600210120               WHEN lncc_sqlSuccessful
+104700210120                    MOVE lncc_Yes TO lc_ReversalCursorProcess
+104800210120               WHEN lncc_sqlEnd
+104900210120                    SET lb_EndOfCursorTrue TO TRUE
+105000210120               WHEN OTHER
+105100210120                    SET lncc_Err-15 TO TRUE
+105200210120                    STRING lncc_FetchErrorReversal DELIMITED BY "  "
+105300210120                           " "                     DELIMITED BY SIZE
+105400210120                           SQLSTATE                DELIMITED BY SIZE
+105500210120                      INTO Ws-Sql-Err-Short-Descr
+105600210120                    PERFORM SQLFailProcess
+105700210120           END-EVALUATE.
+105800210120
+105900210120           IF SQLERRD(3) > 0
+106000210120               COMPUTE li_NumRows = SQLERRD(3)
+106100210120
+106200210120               PERFORM VARYING li_FetchIdx FROM 1 BY 1
+106300210120               UNTIL li_FetchIdx > li_NumRows
+106400210120                   PERFORM WriteOutputFiles
+106500210120               END-PERFORM
+106600210120            END-IF.
+106700210120
+106800210120      * ---------------------------------
+106900210120       ProcessCommRecoveryHST.
+107000210120      * ---------------------------------
+107100210120
+107200210120           IF li_SavePlacementDate = 0 AND
+107300210120              ltbi_HstPlacementDate(1) NOT= 0
+107400210120              PERFORM SaveCursorHistory
+107500210120           END-IF.
+107600210120
+107700210120           IF li_SavePlacementDate NOT=
+107800210120              ltbi_HstPlacementDate(li_FetchIdx) OR
+107900210120              li_SaveTransNo NOT= ltbi_HstTransNo(li_FetchIdx)
+108000210120103858       IF ltbc_HstCalculationRule(li_FetchIdx) = lnc_1
+108100210120              PERFORM CalculateCommissionBonus
+108200210120103858       END-IF
+108300210120
+108400210120      * RFS103858 Defect 32406 - Begin
+108500210120             IF ltbc_HstCalculationRule(li_FetchIdx) = lnc_2
+108600210120               PERFORM WriteOutputFilesRule2
+108700210120             END-IF
+108800210120      * RFS103858 Defect 32406 - End
+108900210120
+109000210120      * RFS129787 - Start
+109100210120             IF ltbc_HstCalculationRule(li_FetchIdx) = lnc_3
+109200210120               PERFORM WriteOutputFilesRule2
+109300210120             END-IF
+109400210120      * RFS129787 - End
+109500210120
+109600210120      * RFS180293 - Starts
+109700210120             IF ltbc_HstCalculationRule(li_FetchIdx) = lnc_4
+109800210120               PERFORM WriteOutputFilesRule2
+109900210120             END-IF
+110000210120      * RFS180293 - Ends
+110100210120              PERFORM SaveCursorHistory
+110200210120           END-IF.
+110300210120
+110400210120      * RFS103858 - Start
+110500210120      *    PERFORM CalculateTheoreticalDSC.
+110600210120
+110700210120           EVALUATE TRUE
+110800210120             WHEN ltbc_HstCalculationRule(li_FetchIdx) = lnc_1
+110900210120               PERFORM CalculateTheoreticalDSC
+111000210120             WHEN ltbc_HstCalculationRule(li_FetchIdx) = lnc_2
+111100210120                  AND ltbc_extLoadType (li_FetchIdx) =  'NL'
+111200210120      * RFS103858 Defect 32406 - Begin
+111300210120      *           AND ltbi_HstTransNo(li_FetchIdx) NOT =
+111400210120      *               li_SaveTransNo1
+111500210120      * RFS103858 Defect 32406 - End
+111600210120               PERFORM CalculateCommissionChargeback
+111700210120129787       WHEN ltbc_HstCalculationRule(li_FetchIdx) = lnc_3
+111800210120129787         PERFORM CalculateCommissionChargeback
+111900210120180293       WHEN ltbc_HstCalculationRule(li_FetchIdx) = lnc_4
+112000210120180293        AND ltbc_extLoadType (li_FetchIdx) =  'NL'
+112100210120180293         PERFORM CalculateCommissionChargeback
+112200210120             WHEN OTHER
+112300210120               CONTINUE
+112400210120           END-EVALUATE.
+112500210120      * RFS103858 - End
+112600210120
+112700210120      * ---------------------------------
+112800210120       SaveCursorHistory.
+112900210120      * ---------------------------------
+113000210120
+113100210120           MOVE ltbi_HstPlacementDate(li_FetchIdx)
+113200210120             TO li_SavePlacementDate.
+113300210120           MOVE ltbi_HstTransNo(li_FetchIdx)    TO li_SaveTransNo.
+113400210120           MOVE ltbi_HstAccountNo(li_FetchIdx)  TO li_CommentAccountNo,
+113500210120                                                  li_SaveAccountNo.
+113600210120           MOVE ltbc_HstDealerCode(li_FetchIdx) TO lc_SaveDealerCode.
+113700210120           MOVE ltbc_HstDealerRepCode(li_FetchIdx)
+113800210120             TO lc_CommentDealerRepCode.
+113900210120           MOVE ltbc_HstCurrency(li_FetchIdx)   TO lc_SaveCurrency.
+114000210120           MOVE ltbc_HstCommBonusSource(li_FetchIdx)
+114100210120             TO lc_SaveBonusSource.
+114200210120           MOVE ltbn_HstCommBonusRate(li_FetchIdx)
+114300210120             TO ln_SaveBonusRate.
+114400210120           MOVE ltbc_HstDealerSettlement(li_FetchIdx)
+114500210120             TO lc_SaveDealerSettlement.
+114600210120           MOVE ltbc_HstTrustAccountCode(li_FetchIdx)
+114700210120             TO lc_SaveTrustAccountCode.
+114800210120           MOVE ltbc_HstProductTypeRule(li_FetchIdx)
+114900210120             TO lc_SaveProductTypeRule.
+115000210120           MOVE ltbn_HstPercentAmt(li_FetchIdx)
+115100210120             TO ln_SaveRecoveryPercentage.
+115200210120
+115300210120      * RFS103858 - Start
+115400210120           MOVE ltbc_HstTransOriginCode(li_FetchIdx)
+115500210120             TO lc_SaveTransOriginCode.
+115600210120           MOVE ltbc_HstTransTypeCode(li_FetchIdx)
+115700210120             TO lc_SaveTransTypeCode.
+115800210120           MOVE ltbc_HstInvestmentCode(li_FetchIdx)
+115900210120             TO lc_SaveInvestmentCode.
+116000210120           MOVE ltbn_HstGrossAmt(li_FetchIdx)
+116100210120             TO ln_SaveGrossAmt.
+116200210120           MOVE ltbn_HstOriginalCommAmt(li_FetchIdx)
+116300210120             TO ln_SaveOriginalCommAmt.
+116400210120           MOVE ltbn_HstOriginalCommRate(li_FetchIdx)
+116500210120             TO ln_SaveOriginalCommRate.
+116600210120           MOVE ltbn_HstDepositTakenDown(li_FetchIdx)
+116700210120             TO ln_SaveDepositTakenDown.
+116800210120           MOVE ltbc_HstInvestmentCodePUP(li_FetchIdx)
+116900210120             TO lc_SaveInvestmentCodePUP.
+117000210120           MOVE ltbc_HstCalculationRule(li_FetchIdx)
+117100210120             TO lc_SaveCalculationRule.
+117200210120           MOVE ltbc_HstCommRecovSchedCode(li_FetchIdx)
+117300210120             TO lc_SaveCommRecovSchedCode.
+117400210120           MOVE ltbi_HstTradeDate(li_FetchIdx)
+117500210120             TO li_SaveTradeDate.
+117600210120           MOVE ltbn_origPurchUnitAmt(li_FetchIdx)
+117700210120             TO ln_SaveUnitAmt.
+117800210120      * RFS103858 - End
+117900210120
+118000210120      * ---------------------------------
+118100210120       CalculateCommissionBonus.
+118200210120      * ---------------------------------
+118300210120
+118400210120           COMPUTE ln_CommissionRecovery ROUNDED =
+118500210120           (ln_TheoreticalDSC * ln_SaveRecoveryPercentage) / 100       .
+118600210120
+118700210120           COMPUTE ln_TotalToRecover ROUNDED =
+118800210120                   ln_CommissionRecovery +
+118900210120                  (ln_CommissionRecovery * ln_SaveBonusRate / 100).
+119000210120
+119100210120           COMPUTE ln_SaveBonusAmt ROUNDED =
+119200210120                   ln_CommissionRecovery - ln_TotalToRecover.
+119300210120
+119400210120           PERFORM WriteOutputFiles.
+119500210120
+119600210120           INITIALIZE ln_TheoreticalDSC.
+119700210120
+119800210120      * ---------------------------------
+119900210120       CalculateTheoreticalDSC.
+120000210120      * ---------------------------------
+120100210120
+120200210120           MOVE ZEROES TO ln_UnitPrice,
+120300210120                          li_JulianAgeDate,
+120400210120                          li_JulianTradeDate,
+120500210120                          li_JulianDifference.
+120600210120
+120700210120      * Calculate Julian days for Age Date.
+120800210120           MOVE ltbi_HstAgeDate(li_FetchIdx) TO Dgp-Gregorian.
+120900210120           CALL "DRG2J" USING Dr-G2J-Parms.
+121000210120           MOVE DGP-Julian TO li_JulianAgeDate.
+121100210120
+121200210120      * Calculate Julian days for Trade Date.
+121300210120           MOVE ltbi_HstTradeDate(li_FetchIdx) TO Dgp-Gregorian.
+121400210120           CALL "DRG2J" USING Dr-G2J-Parms.
+121500210120           MOVE DGP-Julian TO li_JulianTradeDate.
+121600210120
+121700210120      * Calculate difference between Trade Date and Age Date.
+121800210120           COMPUTE li_JulianDifference =
+121900210120                   li_JulianTradeDate - li_JulianAgeDate.
+122000210120
+122100210120      * Get Applicable Rate from CDSC-REDEM-RATE-SCHEDULE.
+122200210120           PERFORM GetApplicableRate.
+122300210120
+122400210120           COMPUTE ln_ApplicableRate = ln_ApplicableRate / 100.
+122500210120
+122600210120           IF ltbc_HstChargeCDSCOrigMkt(li_FetchIdx) = lncc_Original
+122700210120R36325     OR (ltbc_HstChargeCDSCOrigMkt(li_FetchIdx) = lncc_Lesser
+122800210120  ¦            AND ltbn_HstUnitPriceCpp(li_FetchIdx) <
+122900210120R36325             ltbn_HstUnitPriceOrig(li_FetchIdx))
+123000210120              MOVE ltbn_HstUnitPriceCpp(li_FetchIdx)  TO ln_UnitPrice
+123100210120           ELSE
+123200210120              MOVE ltbn_HstUnitPriceOrig(li_FetchIdx) TO ln_UnitPrice
+123300210120           END-IF.
+123400210120
+123500210120           COMPUTE ln_TheoreticalDSC ROUNDED =
+123600210120                   ln_TheoreticalDSC +
+123700210120                  (ln_UnitPrice * ln_ApplicableRate *
+123800210120                  (ltbn_HstFreeUnitsTakenDown(li_FetchIdx) +
+123900210120                   ltbn_HstChrgUnitsTakenDown(li_FetchIdx))).
+124000210120
+124100210120      * ---------------------------------
+124200210120       GetApplicableRate.
+124300210120      * ---------------------------------
+124400210120
+124500210120           INITIALIZE  lc_CDSCSchedule.
+124600210120           MOVE ZEROES TO ln_ApplicableRate.
+124700210120           MOVE ltbc_HstCDSCSchedule(li_FetchIdx) TO lc_CDSCSchedule.
+124800210120
+124900210120           EXEC SQL
+125000210120             SELECT Applicable_Rate
+125100210120               INTO :ln_ApplicableRate
+125200210120               FROM Mfacdsrdp
+125300210120              WHERE CDSC_Schedule     = :lc_CDSCSchedule AND
+125400210120                    Lower_Limit_Days >= :li_JulianDifference
+125500210120              FETCH FIRST ROW ONLY
+125600210120           END-EXEC.
+125700210120
+125800210120           MOVE SQLSTATE TO lc_sqlStates.
+125900210120           IF NOT lncc_sqlSuccessful
+126000210120              CONTINUE
+126100210120           END-IF.
+126200210120
+126300210120      * ---------------------------------
+126400210120       WriteOutputFiles.
+126500210120      * ---------------------------------
+126600210120
+126700210120           IF lncc_ReversalCursorProcess
+126800210120              PERFORM SaveCursorReversal
+126900210120           END-IF.
+127000210120
+127100210120           COMPUTE ln_SaveBonusAmt   = ln_SaveBonusAmt   * -1.
+127200210120           COMPUTE ln_TotalToRecover = ln_TotalToRecover * -1.
+127300210120
+127400210120      * RFS172224 - Start add new field
+127500210120           INITIALIZE li_ControlNumber
+127600210120      * RFS172224 - End
+127700210120           PERFORM InsertTransCommRecover.
+127800210120
+127900210120           IF lncc_MfatrncmrpInserted
+128000210120              IF ln_TotalToRecover  NOT = 0  AND
+128100210120                 lc_SaveBonusSource NOT = lncc_External
+128200210120                 PERFORM GetNextControlNumber
+128300210120                 PERFORM DeterminSegOrNonSeg
+128400210120                 PERFORM InsertDealerPayAdjItems2
+128500210120      * RFS163133 - Update Adjustment Item Number
+128600210120                 PERFORM updTransCommRecAdjItemNo
+128700210120      * RFS163133 - End
+128800210120              END-IF
+128900210120           END-IF.
+129000210120      * RFS103858 Defect 32406 - Begin
+129100210120           INITIALIZE ln_TotalToRecover
+129200210120                      ln_TheoreticalDSC.
+129300210120      * RFS163133 - Update Adjustment Item Number
+129400210120      * ---------------------------------
+129500210120       updTransCommRecAdjItemNo.
+129600210120      * ---------------------------------
+129700210120           EXEC SQL
+129800210120             UPDATE mfatrncmrp
+129900210120               SET DEALER_PAY_ADJ_ITEM_NO = :li_ControlNumber
+130000210120             WHERE placement_date = :li_SavePlacementDate AND
+130100210120                   trans_no       = :li_SaveTransNo
+130200210120           END-EXEC.
+130300210120      * RFS163133 - End
+130400210120      * ---------------------------------
+130500210120       WriteOutputFilesRule2.
+130600210120      * ---------------------------------
+130700210120           INITIALIZE
+130800210120                      ln_SaveBonusAmt.
+130900210120           PERFORM WriteOutputFiles.
+131000210120
+131100210120      * RFS103858 Defect 32406 - End
+131200210120      * ---------------------------------
+131300210120       SaveCursorReversal.
+131400210120      * ---------------------------------
+131500210120           MOVE ltbi_RvsPlacementDate(li_FetchIdx)
+131600210120             TO li_SavePlacementDate.
+131700210120           MOVE ltbi_RvsTransNo(li_FetchIdx)
+131800210120             TO li_SaveTransNo.
+131900210120           MOVE ltbi_RvsAccountNo(li_FetchIdx) TO li_CommentAccountNo,
+132000210120                                                  li_SaveAccountNo.
+132100210120           MOVE ltbc_RvsDealerCode(li_FetchIdx) TO lc_SaveDealerCode.
+132200210120           MOVE ltbc_RvsDealerRepCode(li_FetchIdx)
+132300210120             TO lc_CommentDealerRepCode.
+132400210120           MOVE ltbc_RvsCurrency(li_FetchIdx)  TO lc_SaveCurrency.
+132500210120           MOVE ltbc_RvsProductTypeRule(li_FetchIdx)
+132600210120             TO lc_SaveProductTypeRule.
+132700210120           MOVE ltbc_RvsTrustAccountCode(li_FetchIdx)
+132800210120             TO lc_SaveTrustAccountCode.
+132900210120           MOVE ltbc_RvsDealerSettlement(li_FetchIdx)
+133000210120             TO lc_SaveDealerSettlement.
+133100210120           MOVE ltbn_RvsTheoreticalDSCAmt(li_FetchIdx)
+133200210120             TO ln_TheoreticalDSC.
+133300210120           MOVE ltbn_RvsRecoveryPercentage(li_FetchIdx)
+133400210120             TO ln_SaveRecoveryPercentage.
+133500210120           MOVE ltbn_RvsBonusAmt(li_FetchIdx)
+133600210120             TO ln_SaveBonusAmt.
+133700210120           MOVE ltbn_RvsCommRecoveryAmt(li_FetchIdx)
+133800210120             TO ln_TotalToRecover.
+133900210120           MOVE ltbc_RvsCommBonusSource(li_FetchIdx)
+134000210120             TO lc_SaveBonusSource.
+134100210120
+134200210120      * ---------------------------------
+134300210120       GetNextControlNumber.
+134400210120      * ---------------------------------
+134500210120
+134600210120           INITIALIZE li_ControlNumber.
+134700210120           MOVE "00" TO lc_ReturnCodeGETCTLNUM.
+134800210120           CALL "GETCTLNUM" USING lc_ControlCode,
+134900210120                                  li_ControlNumber,
+135000210120                                  lc_ReturnCodeGETCTLNUM.
+135100210120
+135200210120           IF lc_ReturnCodeGETCTLNUM NOT= lncc_SuccessfulCall
+135300210120              SET lncc_Err-19 TO TRUE
+135400210120              STRING lncc_NextControlNumber DELIMITED BY "  "
+135500210120                     " "                    DELIMITED BY SIZE
+135600210120                     SQLSTATE               DELIMITED BY SIZE
+135700210120                INTO Ws-Sql-Err-Short-Descr
+135800210120              PERFORM SQLFailProcess
+135900210120           END-IF.
+136000210120
+136100210120      * ---------------------------------
+136200210120       DeterminSegOrNonSeg.
+136300210120      * ---------------------------------
+136400210120
+136500210120           MOVE SPACE TO lc_SaveSegOrNonSeg.
+136600210120124451*    IF lc_SaveDealerSettlement   = lncc_SettlementC
+136700210120              IF lc_SaveProductTypeRule = lncc_RuleSeg
+136800210120                 MOVE lncc_Seg    TO lc_SaveSegOrNonSeg
+136900210120              ELSE
+137000210120                 MOVE lncc_NonSeg TO lc_SaveSegOrNonSeg
+137100210120              END-IF.
+137200210120124451*    END-IF.
+137300210120
+137400210120      * ---------------------------------
+137500210120       InsertTransCommRecover.
+137600210120      * ---------------------------------
+137700210120           INITIALIZE lc_MfatrncmrpInserted.
+137800210120           EXEC SQL
+137900210120             INSERT INTO Mfatrncmrp
+138000210120             VALUES (:li_SavePlacementDate,
+138100210120                     :li_SaveTransNo,
+138200210120                     :ln_TheoreticalDSC,
+138300210120                     :ln_SaveRecoveryPercentage,
+138400210120                     :ln_SaveBonusAmt,
+138500210120      * RFS172224 - Start: added 1 new field
+138600210120      *              :ln_TotalToRecover)
+138700210120                     :ln_TotalToRecover,
+138800210120                     :li_ControlNumber )
+138900210120      * RFS172224 - End
+139000210120           END-EXEC.
+139100210120
+139200210120           MOVE SQLSTATE TO lc_sqlStates.
+139300210120           IF lncc_sqlSuccessful
+139400210120              MOVE lncc_Yes TO lc_MfatrncmrpInserted
+139500210120      * RFS103858 Defect 32406 - Begin
+139600210120103858*    MOVE  li_SaveTransNo to li_SaveTransNo1
+139700210120      * RFS103858 Defect 32406 - End
+139800210120           ELSE
+139900210120              DISPLAY "PL-DT: " li_SavePlacementDate
+140000210120              DISPLAY "TRANS-NO: " li_SaveTransNo
+140100210120              SET lncc_Err-17 TO TRUE
+140200210120              STRING lncc_InsertMFATRNCMRP  DELIMITED BY "  "
+140300210120                     " "                    DELIMITED BY SIZE
+140400210120                     SQLSTATE               DELIMITED BY SIZE
+140500210120                INTO Ws-Sql-Err-Short-Descr
+140600210120              PERFORM Dsp-Error
+140700210120           END-IF.
+140800210120
+140900210120      * ---------------------------------
+141000210120       InsertDealerPayAdjItems2.
+141100210120      * ---------------------------------
+141200210120
+141300210120           MOVE lc_Comment TO lc_SaveComment.
+141400210120
+141500210120           EXEC SQL
+141600210120             INSERT INTO Mfadepi2p
+141700210120             VALUES (:lc_SaveDealerCode,
+141800210120                     :lc_CommentDealerRepCode,
+141900210120                     :li_ControlNumber,
+142000210120                     0,
+142100210120                     :ln_TotalToRecover,
+142200210120                     :lc_SaveComment,
+142300210120                     :lncc_DCOMM,
+142400210120                     :lncc_No,
+142500210120                     :ln_ProcessDate,
+142600210120                     :lc_SaveCurrency,
+142700210120                     :lc_SaveTrustAccountCode,
+142800210120                     :lncc_COMRECOVER,
+142900210120                     :lc_SaveSegOrNonSeg,
+143000210120161093*              :li_SaveAccountNo)
+143100210120161093               :li_SaveAccountNo,
+143200210120161093               :lc_SaveInvestmentCode,
+143300210120170408               0," ",
+143400210120171974               0)
+143500210120           END-EXEC.
+143600210120
+143700210120           MOVE SQLSTATE TO lc_sqlStates.
+143800210120           IF NOT lncc_sqlSuccessful
+143900210120              DISPLAY "ACCNT: " li_SaveAccountNo
+144000210120              SET lncc_Err-18 TO TRUE
+144100210120              STRING lncc_InsertMFADEPI2P   DELIMITED BY "  "
+144200210120                     " "                    DELIMITED BY SIZE
+144300210120                     SQLSTATE               DELIMITED BY SIZE
+144400210120                INTO Ws-Sql-Err-Short-Descr
+144500210120              PERFORM Dsp-Error
+144600210120           END-IF.
+144700210120
+144800210120      * RFS103858 - Start
+144900210120       CalculateCommissionChargeback.
+145000210120
+145100210120           MOVE ZEROES TO li_JulAgeDate,
+145200210120                          li_JulTradeDate.
+145300210120
+145400210120      * Calculate Julian days for Age Date.
+145500210120           MOVE ltbi_HstAgeDate(li_FetchIdx) TO li_JulAgeDate.
+145600210120
+145700210120      * Calculate Julian days for Trade Date.
+145800210120           MOVE ltbi_HstTradeDate(li_FetchIdx) TO li_JulTradeDate.
+145900210120
+146000210120175992     SET lb_CalculationRuleFoundNo TO TRUE.
+146100210120           PERFORM Determine-Calculation-Rule.
+146200210120
+146300210120      * RFS103858 Defect 32406 - Begin
+146400210120      * -------------------------------------------------------------
+146500210120      *    INITIALIZE ln_CommUnitAmt.
+146600210120      *    IF ln_SaveUnitAmt > 0
+146700210120      *      IF ln_SaveUnitAmt >=
+146800210120      *                      ltbn_HstPurchOrigUnitBal(li_FetchIdx)
+146900210120      *      COMPUTE ln_CommUnitAmt =
+147000210120      *                     ltbn_HstPurchOrigUnitBal(li_FetchIdx)
+147100210120      *      COMPUTE ln_SaveUnitAmt ROUNDED =
+147200210120      *                     ln_SaveUnitAmt - ln_CommUnitAmt
+147300210120      *      ELSE
+147400210120      *           COMPUTE ln_CommUnitAmt = ln_SaveUnitAmt
+147500210120      *      END-IF
+147600210120      *    ELSE
+147700210120      *      SET lb_CalculationRuleFoundNo TO TRUE
+147800210120      *    END-IF.
+147900210120      * -------------------------------------------------------------
+148000210120      * RFS103858 Defect 32406 - End
+148100210120
+148200210120           IF ltbn_HstDepositTakenDown(li_FetchIdx) <= 0.00 OR
+148300210120               ltbn_origPurchUnitAmt(li_FetchIdx) <= 0.00   OR
+148400210120      * RFS103858 Defect 32406 - Begin
+148500210120               ltbn_HstOriginalCommAmt  (li_FetchIdx) <= 0.00
+148600210120      * RFS103858 Defect 32406 - End
+148700210120             SET lb_CalculationRuleFoundNo TO TRUE
+148800210120           END-IF.
+148900210120
+149000210120      *RFS129787 - Start
+149100210120           IF lc_ComCalculationRule  = lnc_3
+149200210120           AND  li_AgePeriod <= ln_UpperLimitPeriod
+149300210120                 SET lb_CalculationRuleFoundYes   TO TRUE
+149400210120           END-IF.
+149500210120      *RFS129787 - End
+149600210120
+149700210120      *RFS175845 - Starts
+149800210120      * Get the Switch-In fund information of the Switch transaction being
+149900210120      * Processed for Commission Clawback. If SWI is also Chargeback fund,
+150000210120      * Set Calculation Found flag to 0 so that it will not be considered for
+150100210120      * Clawback Calculation
+150200210120           INITIALIZE lc_CalRuleFound.
+150300210120           IF  lc_ComCalculationRule  = lnc_2
+150400210120           AND lb_CalculationRuleFoundYes
+150500210120           AND ltbc_HstTransTypeCode (li_FetchIdx) = lncc_SwitchOut
+150600210120               EXEC SQL
+150700210120                 SELECT "0"
+150800210120                   INTO :lc_CalRuleFound
+150900210120                 FROM MFATRNTGP TRNTGP
+151000210120                 INNER JOIN MFATRNP TRNP ON
+151100210120                     TRNP.PLACEMENT_DATE = TRNTGP.PLACEMENT_DATE_2
+151200210120                 AND TRNP.TRANS_NO       = TRNTGP.TRANS_NO_2
+151300210120                 INNER JOIN MFAIMSCHP IMSCHP ON
+151400210120                     TRNP.INVESTMENT_CODE = IMSCHP.INVESTMENT_CODE
+151500210120                 INNER JOIN MFACOMRPP COMRPP ON
+151600210120                    COMRPP.COMM_RECOV_SCHED_CODE
+151700210120                            = IMSCHP.COMM_RECOV_SCHED_CODE
+151800210120                 WHERE TRNTGP.PLACEMENT_DATE = :li_NewPlacementDate
+151900210120                   AND TRNTGP.TRANS_NO       = :li_NewTransNo
+152000210120                   AND CALCULATION_RULE      = :lnc_2
+152100210120                 FETCH FIRST ROW ONLY
+152200210120               END-EXEC
+152300210120           END-IF.
+152400210120           IF lc_CalRuleFound = "0"
+152500210120              SET lb_CalculationRuleFoundNo  TO TRUE
+152600210120           END-IF.
+152700210120      *RFS175845 - Ends
+152800210120      *RFS180293 - Start
+152900210120           IF  lc_ComCalculationRule  = lnc_4
+153000210120           AND lb_CalculationRuleFoundYes
+153100210120           AND ltbc_HstTransTypeCode (li_FetchIdx) = lncc_SwitchOut OR
+153200210120                                                     lncc_TransferOut
+153300210120               INITIALIZE lc_CalRuleFound
+153400210120               EXEC SQL
+153500210120                 SELECT "0"
+153600210120                   INTO :lc_CalRuleFound
+153700210120                 FROM MFATRNTGP TRNTGP
+153800210120                 INNER JOIN MFATRNP TRNP ON
+153900210120                     TRNP.PLACEMENT_DATE = TRNTGP.PLACEMENT_DATE_2
+154000210120                 AND TRNP.TRANS_NO       = TRNTGP.TRANS_NO_2
+154100210120                 INNER JOIN MFAIMSCHP IMSCHP ON
+154200210120                     TRNP.INVESTMENT_CODE = IMSCHP.INVESTMENT_CODE
+154300210120                 INNER JOIN MFACOMRPP COMRPP ON
+154400210120                    COMRPP.COMM_RECOV_SCHED_CODE
+154500210120                            = IMSCHP.COMM_RECOV_SCHED_CODE
+154600210120                 WHERE TRNTGP.PLACEMENT_DATE = :li_NewPlacementDate
+154700210120                   AND TRNTGP.TRANS_NO       = :li_NewTransNo
+154800210120                   AND CALCULATION_RULE      = :lnc_4
+154900210120                 FETCH FIRST ROW ONLY
+155000210120               END-EXEC
+155100210120               IF lc_CalRuleFound = "0"
+155200210120                  SET lb_CalculationRuleFoundNo  TO TRUE
+155300210120               END-IF
+155400210120           END-IF.
+155500210120      *RFS180293 - Ends
+155600210120           IF lb_CalculationRuleFoundYes
+155700210120           MOVE lc_ComCalculationRule TO lc_CalculationRule
+155800210120
+155900210120             EVALUATE TRUE
+156000210120               WHEN lb_CalculationRule2
+156100210120                 PERFORM CalculationRule2
+156200210120      *RFS129787 - Start
+156300210120               WHEN lb_CalculationRule3
+156400210120                 PERFORM CalculationRule3
+156500210120      *RFS129787 - End
+156600210120      *RFS180293 - Starts
+156700210120               WHEN lb_CalculationRule4
+156800210120                 PERFORM CalculationRule4
+156900210120      *RFS180293 - Ends
+157000210120             END-EVALUATE
+157100210120
+157200210120           END-IF.
+157300210120
+157400210120      * Reduce the redemption Unit amount by PUP original units
+157500210120      * until no more redemption units remain for commission chargeback
+157600210120      * If PUP units are more than remaining redemption units then
+157700210120      * use the remaining redemption units in the calculations.
+157800210120
+157900210120       DETERMINE-CALCULATION-RULE.
+158000210120
+158001210405      *RFS185897 - Starts
+158002210405           INITIALIZE lc_PeriodIndicator.
+158003210405      *RFS185897 - Ends
+158400210120           EXEC SQL
+158500210120             SELECT COALESCE(Percent_Amt, 0),
+158600210120                    COALESCE(Calculation_Rule, " "),
+158700210120                    COALESCE(Upper_Limit_Period, 0)
+158701210405      *RFS185897 - Starts
+158702210405                   ,COALESCE(Period_Indicator, " ")
+158703210405      *RFS185897 - Ends
+159100210120                INTO :ln_RecoveryPercentage,
+159200210120                     :lc_ComCalculationRule,
+159300210120                     :ln_UpperLimitPeriod
+159301210405      *RFS185897 - Starts
+159302210405                    ,:lc_PeriodIndicator
+159303210405      *RFS185897 - Ends
+159700210120               FROM Mfacomrpp   Comrpp
+159800210120              WHERE COMM_RECOV_SCHED_CODE = :lc_SaveCommRecovSchedCode
+159900210120                    AND Comrpp.Start_Date <= :li_JulTradeDate AND
+160000210120                    Comrpp.End_Date >= :li_JulTradeDate
+160100210120           END-EXEC.
+160200210120
+160300210120           MOVE SQLSTATE TO lc_sqlStates.
+160400210120           IF NOT lncc_sqlSuccessful
+160500210120              CONTINUE
+160600210120           END-IF.
+160700210120
+160800210120           INITIALIZE CALCDUR-PARMS-BUFFER.
+160900210120           IF  li_JulAgeDate    NOT = 0   AND
+161000210120               li_JulTradeDate  NOT = 0
+161100210120              MOVE li_JulAgeDate   TO CALCDUR-START-DATE
+161200210120              MOVE li_JulTradeDate TO CALCDUR-END-DATE
+161300210120              CALL "CALCDUR"    USING CALCDUR-PARMS
+161301210405      *RFS185897 - Starts
+161302210405              IF lc_PeriodIndicator = "D"
+161303210405                 MOVE CALCDUR-DAYS   TO li_AgePeriod
+161304210405              ELSE
+161305210405      *RFS185897 - Ends
+161900210120              MOVE CALCDUR-MONTHS TO li_AgePeriod
+161901210405      *RFS185897 - Starts
+161902210405              END-IF
+161903210405      *RFS185897 - Ends
+162300210120           ELSE
+162400210120              INITIALIZE lnc_CalculationRule
+162500210120           END-IF.
+162600210120
+162700210120           IF lnc_CalculationRule  = lnc_2  AND
+162800210120              li_AgePeriod <= ln_UpperLimitPeriod
+162900210120                 SET lb_CalculationRuleFoundYes   TO TRUE
+163000210120           END-IF.
+163100210120      *RFS180293 - Starts
+163200210120           IF lc_ComCalculationRule = "4"
+163300210120
+163400210120              INITIALIZE ln_RecoveryPercentage
+163500210120              EXEC SQL
+163600210120               SELECT COALESCE(Recovery_Percent_Amt, 0)
+163700210120                 INTO :ln_RecoveryPercentage
+163800210120                 FROM Mfacomrsp Comrsp
+163900210120                WHERE Comm_Recov_Sched_Code = :lc_SaveCommRecovSchedCode
+164000210120                  AND Monthly_Period       >= :li_AgePeriod
+164100210120               ORDER BY Monthly_Period
+164200210120               FETCH FIRST ROW ONLY
+164300210120              END-EXEC
+164400210120
+164500210120              MOVE SQLSTATE TO lc_sqlStates
+164600210120              IF lncc_sqlSuccessful OR lncc_sqlEnd
+164700210120                 IF ln_RecoveryPercentage = 0
+164800210120                    SET lb_CalculationRuleFoundNo  TO TRUE
+164900210120                  ELSE
+165000210120                    SET lb_CalculationRuleFoundYes TO TRUE
+165100210120                 END-IF
+165200210120              END-IF
+165300210120           END-IF.
+165400210120      *RFS180293 - Ends
+165500210120
+165600210120       CalculationRule2.
+165700210120
+165800210120             MOVE ln_UpperLimitPeriod       TO ln_tmpUpperLimit
+165900210120             MOVE li_AgePeriod              TO ln_tmpAgePeriod
+166000210120
+166100210120             COMPUTE ln_CommToRecover ROUNDED =
+166200210120               ((ln_tmpUpperLimit - ln_tmpAgePeriod )
+166300210120               / ln_tmpUpperLimit   ) *
+166400210120               ( ltbn_HstDepositTakenDown(li_FetchIdx)
+166500210120175134*        / ltbn_origPurchUnitAmt(li_FetchIdx) )
+166600210120175134         / ltbn_HstPurchOrigUnitBal(li_FetchIdx) )
+166700210120               * ltbn_HstOriginalCommAmt  (li_FetchIdx)
+166800210120             COMPUTE ln_TotalToRecover = ln_TotalToRecover
+166900210120                                     + ln_CommToRecover.
+167000210120
+167100210120      * RFS103858 Defect 32406 - Begin
+167200210120      *      PERFORM WriteOutputFiles.
+167300210120      * RFS103858 Defect 32406 - End
+167400210120
+167500210120      * RFS103858 - End
+167600210120      * RFS129787 - Start
+167700210120      * ---------------------------------
+167800210120       CalculationRule3.
+167900210120      * ---------------------------------
+168000210120
+168100210120           MOVE ln_UpperLimitPeriod       TO ln_tmpUpperLimit3
+168200210120           MOVE li_AgePeriod              TO ln_tmpAgePeriod3
+168300210120
+168400210120           MOVE ltbn_HstChrgUnitsTakenDown(li_FetchIdx)
+168500210120             TO li_SaveChrgUnitsTakenDown
+168600210120           MOVE ltbn_HstPurchOrigUnitBal(li_FetchIdx)
+168700210120             TO li_SaveOrigPurUnitAmt
+168800210120           MOVE ltbn_HstOriginalCommAmt(li_FetchIdx)
+168900210120             TO li_SaveOrigCommAmt
+169000210120
+169100210120           COMPUTE ln_CommToRecover ROUNDED =
+169200210120              ((li_SaveChrgUnitsTakenDown / li_SaveOrigPurUnitAmt)
+169300210120                    * li_SaveOrigCommAmt) *
+169400210120                ((ln_tmpUpperLimit3 - ln_tmpAgePeriod3 )
+169500210120                / ln_tmpUpperLimit3)
+169600210120
+169700210120           COMPUTE ln_TotalToRecover = ln_TotalToRecover
+169800210120                                   + ln_CommToRecover.
+169900210120      * RFS129787 - End
+170000210120      * RFS180293 - Starts
+170100210120      * ---------------------------------
+170200210120       CalculationRule4.
+170300210120      * ---------------------------------
+170400210120
+170500210120           COMPUTE ln_CommToRecover ROUNDED =
+170600210120                   ltbn_HstOriginalCommAmt(li_FetchIdx)
+170700210120              *  ( ln_RecoveryPercentage / 100)
+170800210120              * (( ltbn_HstDepositTakenDown(li_FetchIdx)
+170900210120                 - ltbn_FreeUnitsTaken(li_FetchIdx))
+171000210120                 / ltbn_HstPurchOrigUnitBal(li_FetchIdx))
+171100210120
+171200210120           COMPUTE ln_TotalToRecover = ln_TotalToRecover
+171300210120                                   + ln_CommToRecover.
+171400210120
+171500210120      * RFS180293 - Ends
+171600210120      * ---------------------------------
+171700210120       CloseCursor.
+171800210120      * ---------------------------------
+171900210120
+172000210120           IF lncc_HSTCursorIsOpen
+172100210120              EXEC SQL
+172200210120                CLOSE C_History
+172300210120              END-EXEC
+172400210120           END-IF.
+172500210120
+172600210120           IF lncc_RVSCursorIsOpen
+172700210120               EXEC SQL
+172800210120                 CLOSE C_Reversal
+172900210120               END-EXEC
+173000210120           END-IF.
+173100210120
+173200210120      *RFS129787 - Start
+173300210120      * ---------------------------------
+173400210120       Get-Waive-Commission-Flag.
+173500210120      * ---------------------------------
+173600210120
+173700210120           MOVE ltbi_HstPlacementDate(li_FetchIdx)
+173800210120             TO li_NewPlacementDate.
+173900210120           MOVE ltbi_HstTransNo(li_FetchIdx) TO li_NewTransNo.
+174000210120
+174100210120           EXEC SQL
+174200210120             SELECT COALESCE(REP.WAIVE_COMM_CHARGEBACK, " " )
+174300210120             INTO   :lc_waivecommflag
+174400210120             FROM MFATRNREP REP
+174500210120             WHERE REP.PLACEMENT_DATE = :li_NewPlacementDate AND
+174600210120                   REP.TRANS_NO       = :li_NewTransNo
+174700210120           END-EXEC.
+174800210120
+174900210120           MOVE SQLSTATE TO lc_sqlStates.
+175000210120           IF NOT lncc_sqlSuccessful
+175100210120              SET lncc_Err-25 TO TRUE
+175200210120              STRING lncc_SelectWaiveFlag   DELIMITED BY "  "
+175300210120                     " "                    DELIMITED BY SIZE
+175400210120                     SQLSTATE               DELIMITED BY SIZE
+175500210120                INTO Ws-Sql-Err-Short-Descr
+175600210120
+175700210120               PERFORM Dsp-Error
+175800210120           END-IF.
+175900210120      * ---------------------------------
+176000210120       Get-Std-Commission-Flag.
+176100210120      * ---------------------------------
+176200210120           INITIALIZE lc_StdFlag,
+176300210120                      lc_TransTypeCode.
+176400210120           SET lb_ProceedChargeBackNo TO TRUE.
+176500210120
+176600210120           EXEC SQL
+176700210120             SELECT  COALESCE(D.STANDARD_COMMISSION ," ") ,
+176800210120                     COALESCE(A.TRANS_TYPE_CODE," ")
+176900210120             INTO :lc_StdFlag,
+177000210120                  :lc_TransTypeCode
+177100210120
+177200210120             FROM MFATRNP A
+177300210120             LEFT OUTER JOIN MFATRNTGP B ON
+177400210120             A.PLACEMENT_DATE =B.PLACEMENT_DATE AND
+177500210120             A.TRANS_NO = B.TRANS_NO
+177600210120             LEFT OUTER JOIN MFATRNP C ON
+177700210120             C.PLACEMENT_DATE =B.PLACEMENT_DATE_2 AND
+177800210120             C.TRANS_NO = B.TRANS_NO_2
+177900210120             LEFT OUTER JOIN MFAINVSCP D ON
+178000210120             D.FROM_INVESTMENT = A.INVESTMENT_CODE AND
+178100210120             D.TO_INVESTMENT   = C.INVESTMENT_CODE
+178200210120             WHERE
+178300210120             A.PLACEMENT_DATE =:li_NewPlacementDate AND
+178400210120             A.TRANS_NO = :li_NewTransNo
+178500210120           END-EXEC.
+178600210120
+178700210120           EVALUATE  lc_TransTypeCode
+178800210429           WHEN "SEL"
+178900210120              SET lb_ProceedChargeBackYes TO TRUE
+178901210429187293     WHEN "FEE"
+178902210429187293        SET lb_ProceedChargeBackYes TO TRUE
+179000210120           WHEN "SWO"
+179100210120              IF lc_StdFlag  = lncc_X
+179200210120              SET lb_ProceedChargeBackYes TO TRUE
+179300210120              ELSE
+179400210120              SET lb_ProceedChargeBackNo  TO TRUE
+179500210120              END-IF
+179600210120           WHEN "TRO"
+179700210120              IF lc_StdFlag  = lncc_X
+179800210120              SET lb_ProceedChargeBackYes TO TRUE
+179900210120              ELSE
+180000210120              SET lb_ProceedChargeBackNo  TO TRUE
+180100210120              END-IF
+180200210120           WHEN OTHER
+180300210120              PERFORM get-Cash-Distribution
+180400210120              IF lb_CashDistYes
+180500210120              SET lb_ProceedChargeBackYes TO TRUE
+180600210120              ELSE
+180700210120              SET lb_ProceedChargeBackNo  TO TRUE
+180800210120              END-IF
+180900210120           END-EVALUATE
+181000210120
+181100210120           MOVE SQLSTATE TO lc_sqlStates.
+181200210120           IF NOT lncc_sqlSuccessful
+181300210120              SET lncc_Err-26 TO TRUE
+181400210120              STRING lncc_SelectStdFlag     DELIMITED BY "  "
+181500210120                     " "                    DELIMITED BY SIZE
+181600210120                     SQLSTATE               DELIMITED BY SIZE
+181700210120                INTO Ws-Sql-Err-Short-Descr
+181800210120
+181900210120               PERFORM Dsp-Error
+182000210120           END-IF.
+182100210120      * ---------------------------------
+182200210120       get-Cash-Distribution.
+182300210120      * ---------------------------------
+182400210120           INITIALIZE lc_OptionCode.
+182500210120           SET lb_CashDistNo TO TRUE.
+182600210120
+182700210120           EXEC SQL
+182800210120             SELECT  COALESCE(B.DISTR_OPTION_CODE ," ")
+182900210120             INTO :lc_OptionCode
+183000210120             FROM MFATRNP A
+183100210120             INNER JOIN MFATRNDDP B ON
+183200210120             A.PLACEMENT_DATE =B.PLACEMENT_DATE AND
+183300210120             A.TRANS_NO = B.TRANS_NO
+183400210120             WHERE A.PLACEMENT_DATE = :li_NewPlacementDate
+183500210120             AND A.TRANS_NO = :li_NewTransNo
+183600210120           END-EXEC.
+183700210120
+183800210120           IF lc_OptionCode = lncc_C
+183900210120              SET lb_CashDistYes TO TRUE
+184000210120           ELSE
+184100210120              SET lb_CashDistNo TO TRUE
+184200210120           END-IF.
+184300210120      *RFS129787 - End
+184400210120      * ---------------------------------
+184500210120       SQLFailProcess.
+184600210120      * ---------------------------------
+184700210120
+184800210120           PERFORM CloseCursor.
+184900210120           PERFORM Dsp-Error.
+185000210120           GOBACK.
+185100210120
+185200210120      * ---------------------------------
+185300210120       Termination.
+185400210120      * ---------------------------------
+185500210120
+185600210120           PERFORM CloseCursor.
+185700210120           GOBACK.
+185800210120
+185900210120      * ---------------------------------
+186000210120      * DSP-ERROR and FORCE-MSGW Routines
+186100210120      * ---------------------------------
+186200210120          COPY CPYSQLRTN.

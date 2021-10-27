@@ -1,0 +1,541 @@
+000100101220       IDENTIFICATION DIVISION.
+000200101220       PROGRAM-ID.    PRGSTATS2.
+000300101220       AUTHOR.        CITI.
+000400101220       INSTALLATION.  CITI.
+000500101220       DATE-WRITTEN.  Nov 2010.
+000600101220       DATE-COMPILED.
+000700101220      *****************************************************************
+000800101220      * Purpose: This program executes initial update of Statistic    *
+000900101220      * Table SFPURSTSP.                                              *
+001000101220      *****************************************************************
+001100101220      *****************************************************************
+001200101220      * PROGRAMMER *  CHANGE DATE * DESCRIPTION OF CHANGE             *
+001300101220      *****************************************************************
+001400101220      * Richard G. *  2010/12/20  * RFS84468 - New program to update  *
+001500101220      *            *              * Statistic Table SFPURSTSP.        *
+001600170516      *Janapriya J * 2017/05/16  * RFS169351 - Recompile for MFAINTARP*
+001700101220      *****************************************************************
+001800101220       ENVIRONMENT DIVISION.
+001900101220       CONFIGURATION SECTION.
+002000101220       SOURCE-COMPUTER. IBM-AS400.
+002100101220       OBJECT-COMPUTER. IBM-AS400.
+002200101220       SPECIAL-NAMES. LOCAL-DATA IS WS-LOCAL
+002300101220                      DATA-AREA  IS WS-DATA-AREA-1.
+002400101220      /
+002500101220       INPUT-OUTPUT SECTION.
+002600101220       FILE-CONTROL.
+002700101229
+002800101229           SELECT PRINT-FILE
+002900101229                  ASSIGN TO PRINTER-QPRINT.
+003000101220
+003100101220       DATA DIVISION.
+003200101220       FILE SECTION.
+003300101229
+003400101229       FD  PRINT-FILE
+003500101229           LABEL RECORDS ARE OMITTED.
+003600101229       01  PRINT-REC                 PIC X(150).
+003700101220
+003800101220       WORKING-STORAGE SECTION.
+003900101220
+004000101220      *-------------------------------------------------------------*
+004100101220      *    Heading for print file.
+004200101220      *-------------------------------------------------------------*
+004300101220
+004400101220       01  lc_Heading-Line1.
+004500101220           03  FILLER            PIC X(11)  VALUE "DATE     : ".
+004600101220           03  Hl1_Date          PIC X(8).
+004700101220           03  FILLER            PIC X(17)  VALUE SPACES               .
+004800101220           03  Hl1_Client-Code   PIC X(3).
+004900101220           03  FILLER            PIC X(3)   VALUE " - ".
+005000101220           03  Hl1_Client-Name   PIC X(40).
+005100101220           03  FILLER            PIC X(32)  VALUE SPACES               .
+005200101220           03  FILLER            PIC X(6)   VALUE "TIME: ".
+005300101220           03  Hl1_Time          PIC 99B99B99B99.
+005400101220           03  Hl1_Time-R           REDEFINES Hl1_Time.
+005500101220               05  FILLER        PIC X(8).
+005600101220               05  Hl1_Time-Dot  PIC X(1).
+005700101220               05  FILLER        PIC X(2).
+005800101220           03  FILLER            PIC X(19)       VALUE SPACES          .
+005900101220
+006000101220       01  lc_Heading-Line2.
+006100101220           03  FILLER             PIC X(11) VALUE "REPORT NO: ".
+006200101220           03  FILLER             PIC X(10) VALUE "PRGSTATS2 ".
+006300101220           03  FILLER             PIC X(15) VALUE SPACES               .
+006400101220           03  FILLER             PIC X(40) VALUE
+006500101220               "Statistic File Initial Update ".
+006600101220           03  FILLER             PIC X(38)       VALUE SPACES         .
+006700101220           03  FILLER             PIC X(8)  VALUE  "PAGE:   ".
+006800101220           03  Hdg2_Page          PIC Z,ZZZ,ZZZ9.
+006900101220           03  FILLER             PIC X(18)       VALUE SPACES         .
+007000101220
+007100101220       01  lc_Heading-Line3.
+007200101220           03  FILLER             PIC X(132) VALUE ALL "-".
+007300101220
+007400101220       01  lc_Heading-Line4.
+007500101220           03  FILLER             PIC X(132) VALUE SPACES.
+007600101220
+007700101229      *-------------------------------------------------------------*
+007800101229      *   Constants.
+007900101229      *-------------------------------------------------------------*
+008000101222
+008100101220       01 Ws-Err-Code                 PIC X(02) VALUE SPACES.
+008200101220            88  lncc_Err-Ok                     VALUE SPACES.
+008300101220            88  lncc_Err-10                     VALUE "10".
+008400101220
+008500101220       01 LT-X-LITERALS.
+008600101223          05 LT-X-010                 PIC X(03) VALUE "010".
+008700101223          05 LT-X-020                 PIC X(03) VALUE "020".
+008800101220          05 LT-X-030                 PIC X(03) VALUE "030".
+008900101220          05 LT-X-040                 PIC X(03) VALUE "040".
+009000101220          05 LT-X-050                 PIC X(03) VALUE "050".
+009100101223          05 LT-X-060                 PIC X(03) VALUE "060".
+009200101220          05 LT-X-070                 PIC X(03) VALUE "070".
+009300110126          05 LT-X-99                  PIC X(02) VALUE "99".
+009400101220
+009500101220       01 LT-VARS.
+009600101220          05 LT-NOT-EXIST             PIC X(32) VALUE
+009700101220             "*** Not exists in Dictionary".
+009800101220          05 LT-SPACE                 PIC X(01) VALUE SPACE.
+009900101220          05 LT-SLASH                 PIC X(01) VALUE "/".
+010000110131          05 LT-SFPURSTSP             PIC X(10) VALUE "SFPURSTSP".
+010100110126          05 LT-CURR-PROGRAM          PIC X(10) VALUE "PRGSTATS2".
+010200101220
+010300101220       01 WS-IDX-MAX                  PIC S9(07) VALUE 512.
+010400101220
+010500101220       01 lc_Fetch-Area.
+010600101221          04 Ct-FetchArray OCCURS 5000 INDEXED BY WS-FET-IDX.
+010700101220          COPY DDR-ALL-FORMATS OF MFAPRGDRVP.
+010800101220
+010900101221       01 lc_Fetch-Record.
+011000101221          05 fc_FL_FIL_NAME               PIC X(10) VALUE SPACES.
+011100101221          05 fc_FL_FROM_LIB               PIC X(10) VALUE SPACES.
+011200101221          05 fn_FL_REC_CREATION_DATE      PIC S9(8) VALUE ZEROES.
+011300101221          05 fn_FL_REC_LAST_MODIFIED_DATE PIC S9(8) VALUE ZEROES.
+011400110210          05 fc_FL_PURGE_LEVEL            PIC X(2)  VALUE SPACES.
+011500101221          05 fc_FL_RET_CODE               PIC X(2)  VALUE SPACES.
+011600110210          05 fc_FL_SEL_CRITERIA           PIC X(500) VALUE SPACES.
+011700110210          05 fc_FL_DEL_CRITERIA           PIC X(500) VALUE SPACES.
+011800101221
+011900101221       01 lc_Sfpurstsp-Record.
+012000101221          05 ic_FL_FIL_NAME               PIC X(10)   VALUE SPACES.
+012100101221          05 ic_FL_FIL-DESC               PIC X(32)   VALUE SPACES.
+012200101221          05 ic_FL_FROM_LIB               PIC X(10)   VALUE SPACES.
+012300101221          05 ic_FL_SEL_METHOD             PIC X(2)    VALUE SPACES.
+012400101221          05 in_FL_BEFORE_ROWS            PIC S9(10)  VALUE ZEROES.
+012500101221          05 in_FL_AFTER_ROWS             PIC S9(10)  VALUE ZEROES.
+012600101221          05 in_FL_DIF_BEF_AFTER          PIC S9(10)  VALUE ZEROES.
+012700101221          05 in_FL_SEL_ROWS               PIC S9(10)  VALUE ZEROES.
+012800101221          05 in_FL_DEL_ROWS               PIC S9(10)  VALUE ZEROES.
+012900101221          05 in_FL_SYS_DATE_SEL_START     PIC S9(8)   VALUE ZEROES.
+013000101221          05 in_FL_SYS_TIME_SEL_START     PIC S9(8)   VALUE ZEROES.
+013100101221          05 in_FL_SYS_DATE_SEL_END       PIC S9(8)   VALUE ZEROES.
+013200101221          05 in_FL_SYS_TIME_SEL_END       PIC S9(8)   VALUE ZEROES.
+013300101221          05 in_FL_SYS_DATE_DEL_START     PIC S9(8)   VALUE ZEROES.
+013400101221          05 in_FL_SYS_TIME_DEL_START     PIC S9(8)   VALUE ZEROES.
+013500101221          05 in_FL_SYS_DATE_DEL_END       PIC S9(8)   VALUE ZEROES.
+013600101221          05 in_FL_SYS_TIME_DEL_END       PIC S9(8)   VALUE ZEROES.
+013700110210          05 ic_FL_MODE                   PIC X(2)    VALUE SPACES.
+013800101221          05 in_FL_PROCESS_DATE           PIC S9(8)   VALUE ZEROES.
+013900101221          05 in_FL_PURGE_MONTH            PIC S9(2)   VALUE ZEROES.
+014000101221          05 ic_FL_RET_CODE               PIC X(2)    VALUE SPACES.
+014100110210          05 ic_FL_SEL_CRITERIA           PIC X(500) VALUE SPACES.
+014200110210          05 ic_FL_DEL_CRITERIA           PIC X(500) VALUE SPACES.
+014300101221
+014400101220       01 WS-LDA-REC                  PIC X(1024).
+014500101220       01 WS-LDA-REC-RED REDEFINES WS-LDA-REC.
+014600101220          05 WS-LDA-MODE              PIC X(01).
+014700101220             88 WS-LDA-PURGE          VALUE "Y".
+014800101220             88 WS-LDA-REPORT         VALUE "N".
+014900101220
+015000101220       01 WS-MFAPURPARM.
+015100101220          05 WS-PURGE-YEAR            PIC 9(4).
+015200101220          05 WS-PURGE-MONTH-N         PIC 9(2).
+015300101220          05 FILLER                   PIC X(8).
+015400101220
+015500101220       01 WS-INDEXES.
+015600101220          05 WS-CURR-IDX              PIC S9(07) VALUE 0.
+015700101220          05 WS-J                     PIC S9(07).
+015800101220
+015900101220       01 WS-TEMP-VARS.
+016000101220          05 WS-TEMP-CCYYMMDD            PIC S9(08) COMP-3.
+016100101220          05 WS-TEMP-HHMISSMS            PIC S9(08) COMP-3.
+016200101220          05 WS-TEMP-SQLCODE             PIC S9(09).
+016300101220          05 WS-TEMP-SQLCODE-X           PIC -Z9(08)9.
+016400101220
+016500101220       01 WS-VARS.
+016600101220          05 WS-ERR-NUM               PIC X(03)  VALUE SPACES.
+016700101220          05 WS-PROCESS-DATE          PIC S9(08) COMP-3.
+016800101220          05 WS-PURGE-MONTH           PIC S9(02) COMP-3.
+016900101220
+017000101220       01  lc_flags.
+017100101220           05  lncc_Eof-Flag             PIC X(01) VALUE "N".
+017200101220               88  lncc_Eof-Mfaprgdrvp             VALUE "Y".
+017300101220
+017400101220       01  li_Counters.
+017500101221           05 li_CurMfaprgdrvp-Read-Cnt    PIC S9(09) VALUE ZEROES.
+017600101220           05 li_CurMfaprgdrvp-InvRead-Cnt PIC S9(09) VALUE ZEROES.
+017700101221           05 li_Sfpurstsp-Insert-Cnt      PIC S9(09) VALUE ZEROES.
+017800101220
+017900101220       01  lc_Detail-Line1.
+018000101220           03  FILLER                    PIC X(45)  VALUE
+018100101220               "Total successfully fetched records         = ".
+018200101220           03  ln_CurMfaprgdrvp-Read-Cnt    PIC ZZZ,ZZZ,ZZ9.
+018300101220
+018400101220       01  lc_Detail-Line2.
+018500101220           03  FILLER                    PIC X(45)  VALUE
+018600101220               "Total unsuccessfully fetched records       = ".
+018700101220           03  ln_CurMfaprgdrvp-InvRead-Cnt PIC ZZZ,ZZZ,ZZ9.
+018800101220
+018900101220       01  lc_Detail-Line3.
+019000101220           03  FILLER                    PIC X(45)  VALUE
+019100101221               "Total records inserted into SFPURSTSP      = ".
+019200101221           03  ln_Sfpurstsp-Insert-Cnt           PIC ZZZ,ZZZ,ZZ9.
+019300101220
+019400101220       01 WS99-SQL-VARS.
+019500101220          05 WS99-SQL-STMT            PIC X(2048) VALUE SPACES.
+019600110126
+019700110126       01 WS-CALLING-PROGRAM           PIC X(10)     VALUE "PRGSTATS2".
+019800110126       01 WS-SQLERR-STATEMENT          PIC X(25)     VALUE " ".
+019900110126       01 WS-SQLERR-DATA               PIC X(1780)   VALUE " ".
+020000110126       01 WS-SQL-STATS                 PIC X(1966)   VALUE " ".
+020100110126       01 WS-SQLERR-REPLY              PIC X(1)      VALUE " ".
+020200101220
+020300101220      *COPY Cpwcmpcdp.
+020400101220       01  Cpwcmpcdp-LINKAGE.
+020500101220           03  Cpwcmpcdp-Client-Code   PICTURE X(3).
+020600101220           03  Cpwcmpcdp-Client-Name   PICTURE X(40).
+020700101220
+020800101220       COPY Cpysqlfld
+020900101220            REPLACING == "CURRENT_PROGRAM" == BY == "PRGSTATS2 " ==.
+021000101220
+021100101220           EXEC SQL
+021200101220             INCLUDE SQLDA
+021300101220           END-EXEC.
+021400101220
+021500101220           EXEC SQL
+021600101220             INCLUDE SQLCA
+021700101220           END-EXEC.
+021800101220
+021900101220       LINKAGE SECTION.
+022000101220      *-----------------------------------------
+022100101220       01 LNK-PROCESS-DATE            PIC 9(08).
+022200101220       01 LNK-RET-CODE                PIC X(02).
+022300110131       01 LNK-DEL-IVR                 PIC X(01).
+022400101220      *-----------------------------------------
+022500101220       PROCEDURE DIVISION USING LNK-PROCESS-DATE
+022600110131                                    LNK-RET-CODE
+022700110131                                    LNK-DEL-IVR.
+022800101220       MAIN-00.
+022900101220
+023000101220           PERFORM InitialLogic.
+023100101220           PERFORM FetchCurMfaprgdrvp.
+023200101220           PERFORM DetailProcess
+023300101220                   UNTIL lncc_Eof-Mfaprgdrvp
+023400101223           PERFORM EndJob.
+023500101220           GOBACK.
+023600101220
+023700101220       InitialLogic.
+023800101220      *-----------------*
+023900101220      *  Initial Logic  *
+024000101220      *-----------------*
+024100101221
+024200101220           ACCEPT WS-LDA-REC FROM WS-LOCAL
+024300101220           ACCEPT WS-MFAPURPARM FROM WS-DATA-AREA-1 FOR "MFAPURPARM".
+024400101220           MOVE LNK-PROCESS-DATE           TO WS-PROCESS-DATE.
+024500101220           MOVE WS-PURGE-MONTH-N           TO WS-PURGE-MONTH.
+024600101220           INITIALIZE  lc_sqlErrShortDESCR
+024700101220                       li_CurMfaprgdrvp-Read-Cnt
+024800101220                       li_CurMfaprgdrvp-InvRead-Cnt
+024900101221                       li_Sfpurstsp-Insert-Cnt
+025000101221                       lc_Fetch-Record
+025100101221                       lc_Sfpurstsp-Record.
+025200101220           PERFORM DeclareMfaprgdrvp.
+025300101221           PERFORM ClearSfpurstsp.
+025400101220
+025500101220       DeclareMfaprgdrvp.
+025600101220      *----------------------------------------*
+025700101220      *  Declaration of Cursor Cur_Mfaprgdrvp  *
+025800101220      *----------------------------------------*
+025900101220
+026000110126           MOVE SPACES      TO WS-SQLERR-STATEMENT.
+026100110126           MOVE "Declare Cursor for MFAPRGDRVP" TO WS-SQLERR-STATEMENT.
+026200110126
+026300101220           EXEC SQL
+026400101220                DECLARE Cur_Mfaprgdrvp CURSOR FOR
+026500101220                 SELECT A.*
+026600101220                 FROM
+026700101220                    Mfaprgdrvp A
+026800101220           END-EXEC.
+026900101220
+027000101220           IF SQLSTATE NOT = SPACES
+027100101220              MOVE SQLSTATE TO lc_sqlStates
+027200101220              IF NOT lncc_sqlSuccessful
+027300101223                  MOVE LT-X-010 TO WS-ERR-NUM
+027400101223                  PERFORM VZ-CHECK-RESULT
+027500101220              END-IF
+027600101220           END-IF.
+027700101220
+027800101220           EXEC SQL
+027900101220                OPEN Cur_Mfaprgdrvp
+028000101220           END-EXEC.
+028100101220
+028200101220       FetchCurMfaprgdrvp.
+028300101220      *-------------------------------------*
+028400101220      *   Fetch the Cursor Cur_Mfaprgdrvp   *
+028500101220      *-------------------------------------*
+028600101220
+028700110126           MOVE SPACES      TO WS-SQLERR-STATEMENT.
+028800110126           MOVE "Fetch Record from Cursor" TO WS-SQLERR-STATEMENT.
+028900110126
+029000101229           INITIALIZE   lc_Fetch-Record.
+029100101220
+029200101220           EXEC SQL
+029300101220                FETCH NEXT FROM  Cur_Mfaprgdrvp
+029400101221                           INTO  :lc_Fetch-Record
+029500101220           END-EXEC.
+029600101220
+029700101223           MOVE SQLSTATE TO lc_sqlStates
+029800101220           EVALUATE TRUE
+029900101220               WHEN SQLCODE                = 100
+030000101220                    SET lncc_Eof-Mfaprgdrvp  TO TRUE
+030100101223               WHEN SQLSTATE           NOT = SPACES
+030200101223                    COMPUTE li_CurMfaprgdrvp-Read-Cnt =
+030300101223                            li_CurMfaprgdrvp-Read-Cnt + 1
+030400101220               WHEN OTHER
+030500101220                    MOVE SQLSTATE         TO lc_sqlStates
+030600101223                    if  NOT lncc_sqlSuccessful
+030700101223                         COMPUTE li_CurMfaprgdrvp-InvRead-Cnt =
+030800101223                               li_CurMfaprgdrvp-InvRead-Cnt + 1
+030900101223                         MOVE LT-X-030 TO WS-ERR-NUM
+031000101223                         PERFORM VZ-CHECK-RESULT
+031100101220                    END-IF
+031200101220           END-EVALUATE.
+031300101220
+031400101220       DetailProcess.
+031500101220      *----------------------
+031600101220
+031700101221           PERFORM InsertSfpurstsp.
+031800101220           PERFORM FetchCurMfaprgdrvp.
+031900101220
+032000101221       InsertSfpurstsp.
+032100101220      *---------------------
+032200101220
+032300110126           MOVE SPACES      TO WS-SQLERR-STATEMENT.
+032400110126           MOVE "Insert Record to SFPURSTSP" TO WS-SQLERR-STATEMENT.
+032500110126
+032600101221           INITIALIZE lc_Sfpurstsp-Record.
+032700101221
+032800101221           MOVE fc_FL_FIL_NAME     TO ic_FL_FIL_NAME.
+032900101221           MOVE fc_FL_FROM_LIB     TO ic_FL_FROM_LIB.
+033000110208           MOVE fc_FL_PURGE_LEVEL  TO ic_FL_SEL_method
+033100101221           MOVE fc_FL_RET_CODE     TO ic_FL_RET_CODE.
+033200110210           MOVE fc_FL_SEL_CRITERIA TO ic_FL_SEL_CRITERIA.
+033300110210           MOVE fc_FL_DEL_CRITERIA TO ic_FL_DEL_CRITERIA.
+033400101221
+033500101221           EXEC SQL
+033600101221             INSERT INTO SFPURSTSP
+033700101221             VALUES( :ic_FL_FIL_NAME,
+033800101221                     :ic_FL_FIL-DESC,
+033900101221                     :ic_FL_FROM_LIB,
+034000101221                     :ic_FL_SEL_METHOD,
+034100101221                     :in_FL_BEFORE_ROWS,
+034200101221                     :in_FL_AFTER_ROWS,
+034300101221                     :in_FL_DIF_BEF_AFTER,
+034400101221                     :in_FL_SEL_ROWS,
+034500101221                     :in_FL_DEL_ROWS,
+034600101221                     :in_FL_SYS_DATE_SEL_START,
+034700101221                     :in_FL_SYS_TIME_SEL_START,
+034800101221                     :in_FL_SYS_DATE_SEL_END,
+034900101221                     :in_FL_SYS_TIME_SEL_END,
+035000101221                     :in_FL_SYS_DATE_DEL_START,
+035100101221                     :in_FL_SYS_TIME_DEL_START,
+035200101221                     :in_FL_SYS_DATE_DEL_END,
+035300101221                     :in_FL_SYS_TIME_DEL_END,
+035400101221                     :ic_FL_MODE,
+035500101221                     :in_FL_PROCESS_DATE,
+035600101221                     :in_FL_PURGE_MONTH,
+035700101221                     :ic_FL_RET_CODE,
+035800110210                     :ic_FL_SEL_CRITERIA,
+035900110210                     :ic_FL_DEL_CRITERIA)
+036000101220           END-EXEC.
+036100101220
+036200101220           MOVE SQLSTATE TO lc_sqlStates
+036300101220           EVALUATE TRUE
+036400101220               WHEN lncc_sqlSuccessful
+036500101221                    COMPUTE li_Sfpurstsp-Insert-Cnt =
+036600101221                            li_Sfpurstsp-Insert-Cnt + 1
+036700101220               WHEN OTHER
+036800101223                    MOVE LT-X-040 TO WS-ERR-NUM
+036900101223                    PERFORM VZ-CHECK-RESULT
+037000101220           END-EVALUATE .
+037100101220
+037200101221       ClearSfpurstsp.
+037300101220      * ---------------------------------
+037400101222
+037500101220           EXEC SQL
+037600101221              DELETE FROM SFPURSTSP
+037700101220           END-EXEC
+037800101220
+037900101220           EXEC SQL
+038000101222             CREATE INDEX QTEMP/PURSTSPIDX1 ON SFPURSTSP
+038100101220               (FL_SEL_METHOD, FL_FIL_NAME)
+038200101220           END-EXEC.
+038300101220
+038400101223           MOVE LT-X-020  TO WS-ERR-NUM
+038500101221           PERFORM VZ-CHECK-RESULT.
+038600101220
+038700101223       EndJob.
+038800101222      * ---------------------------------
+038900101222           Perform UpdateSfpurstspCase1.
+039000101222           Perform UpdateSfpurstspCase2.
+039100101229           OPEN  OUTPUT  PRINT-FILE.
+039200101222           Perform 3100-Write-Spool-File.
+039300101229           CLOSE PRINT-FILE.
+039400101229
+039500101222      * ---------------------------------
+039600101222       UpdateSfpurstspCase1.
+039700101222      * ---------------------------------
+039800110126
+039900110126           MOVE SPACES      TO WS-SQLERR-STATEMENT.
+040000110126           MOVE "Update Record in SFPURSTSP#1" TO WS-SQLERR-STATEMENT.
+040100101222
+040200101222           EXEC SQL
+040300101222           UPDATE SFPURSTSP
+040400101222           SET FL_MODE         = :WS-LDA-MODE,
+040500101222               FL_PURGE_MONTH  = :WS-PURGE-MONTH,
+040600101222               FL_PROCESS_DATE = :WS-PROCESS-DATE
+040700101222           END-EXEC.
+040800101222
+040900101222           MOVE SQLSTATE TO lc_sqlStates.
+041000101222           IF lncc_sqlSuccessful
+041100101222               CONTINUE
+041200101222           ELSE
+041300101223               MOVE LT-X-050 TO WS-ERR-NUM
+041400101223               PERFORM VZ-CHECK-RESULT
+041500101222           END-IF.
+041600101222
+041700101222      * ---------------------------------
+041800101222       UpdateSfpurstspCase2.
+041900101222      * ---------------------------------
+042000101222
+042100110126           MOVE SPACES      TO WS-SQLERR-STATEMENT.
+042200110126           MOVE "Update Record in SFPURSTSP#2" TO WS-SQLERR-STATEMENT.
+042300110126
+042400101222           EXEC SQL
+042500101222           UPDATE SFPURSTSP A
+042600101222           SET FL_FIL_DESC     =
+042700101222             (SELECT MAX (IFNULL(SUBSTR(B.SFPURDC,1,32), :LT-NOT-EXIST))
+042800101222                FROM SFPURDC B
+042900101222                WHERE A.FL_FIL_NAME = SUBSTR(B.SFPURDC, 53, 10) OR
+043000101222                      A.FL_FIL_NAME = SUBSTR(B.SFPURDC, 59, 10) )
+043100101222           WHERE EXISTS                                                 RFS13323
+043200101222               (SELECT *                                                RFS13323
+043300101222                FROM SFPURDC C                                          RFS13323
+043400101222                WHERE A.FL_FIL_NAME = SUBSTR(C.SFPURDC, 53, 10) OR      RFS13323
+043500101222                      A.FL_FIL_NAME = SUBSTR(C.SFPURDC, 59, 10) )       RFS13323
+043600101222           END-EXEC.
+043700101222                                                                        RFS13323
+043800101222           MOVE SQLSTATE TO lc_sqlStates.
+043900101222           IF lncc_sqlSuccessful
+044000101222               CONTINUE
+044100101222           ELSE
+044200101223               MOVE LT-X-060 TO WS-ERR-NUM
+044300101223               PERFORM VZ-CHECK-RESULT
+044400101222           END-IF.
+044500101222                                                                        RFS13323
+044600101222           EXEC SQL                                                     RFS13323
+044700101222           UPDATE SFPURSTS A                                            RFS13323
+044800101222           SET FL_FIL_DESC     = :LT-NOT-EXIST                          RFS13323
+044900101222           WHERE NOT EXISTS                                             RFS13323
+045000101222               (SELECT *                                                RFS13323
+045100101222                FROM SFPURDC C                                          RFS13323
+045200101222                WHERE A.FL_FIL_NAME = SUBSTR(C.SFPURDC, 53, 10) OR      RFS13323
+045300101222                      A.FL_FIL_NAME = SUBSTR(C.SFPURDC, 59, 10) )       RFS13323
+045400101222           END-EXEC.                                                    RFS13323
+045500101222                                                                        RFS13323
+045600101222           MOVE SQLSTATE TO lc_sqlStates.
+045700101222           IF lncc_sqlSuccessful
+045800101222               CONTINUE
+045900101222           ELSE
+046000101223               MOVE LT-X-070 TO WS-ERR-NUM
+046100101223               PERFORM VZ-CHECK-RESULT
+046200101222           END-IF.
+046300101220
+046400101220       3100-Write-Spool-File.
+046500101220      *-------------------------------------------------------------*
+046600101220      *    Format and print the control report record counts.
+046700101220      *-------------------------------------------------------------*
+046800101229
+046900101220           MOVE 1                           TO Hdg2_Page
+047000101220
+047100101220           WRITE Print-Rec FROM lc_Heading-Line1 AFTER ADVANCING PAGE
+047200101220           WRITE Print-Rec FROM lc_Heading-Line2 AFTER ADVANCING 1
+047300101220           WRITE Print-Rec FROM lc_Heading-Line3 AFTER ADVANCING 2
+047400101220           WRITE Print-Rec FROM lc_Heading-Line4 AFTER ADVANCING 2
+047500101220
+047600101220           MOVE li_CurMfaprgdrvp-Read-Cnt  TO ln_CurMfaprgdrvp-Read-Cnt.
+047700101220           MOVE li_CurMfaprgdrvp-InvRead-Cnt
+047800101220             TO ln_CurMfaprgdrvp-InvRead-Cnt.
+047900101221           MOVE li_Sfpurstsp-Insert-Cnt    TO ln_Sfpurstsp-Insert-Cnt
+048000101220
+048100101220           WRITE Print-Rec FROM lc_Detail-Line1 AFTER ADVANCING 1
+048200101220           WRITE Print-Rec FROM lc_Detail-Line2 AFTER ADVANCING 1
+048300101220           WRITE Print-Rec FROM lc_Detail-Line3 AFTER ADVANCING 1.
+048400101222
+048500101222      * ---------------------------------
+048600101222       VZ-CHECK-RESULT.
+048700101222      * ---------------------------------
+048800101222           MOVE SQLSTATE          TO WS-SQL-STATES
+048900101222           EVALUATE TRUE
+049000110126             WHEN SW-SQL-SUCCESSFUL
+049100101222               CONTINUE
+049200110126             WHEN SW-SQL-END
+049300101222               CONTINUE
+049400110126             WHEN SW-SQL-WARNING
+049500101222               CONTINUE
+049600110126             WHEN SW-SQL-DUPLICATE
+049700101222               CONTINUE
+049800101222             WHEN OTHER
+049900101222               PERFORM VZC-FATAL-ERROR
+050000101222           END-EVALUATE.
+050100101222
+050200101222       VZC-FATAL-ERROR.
+050300101222      * ---------------------------------
+050400101222           MOVE LT-X-99              TO LNK-RET-CODE
+050500101222           MOVE SQLCODE              TO WS-TEMP-SQLCODE-X
+050600101222           DISPLAY
+050700101222           " *** Fatal Error in " LT-CURR-PROGRAM " N " WS-ERR-NUM
+050800101222           DISPLAY " *** SQLSTATE = " SQLSTATE
+050900101222                   " *** SQLCODE  = " WS-TEMP-SQLCODE
+051000101223           PERFORM EndJob.
+051100101222
+051200110126       SQLLOG.
+051300101220      ************************************
+051400101220      *   S Q L L O G    R O U T I N E   *
+051500101220      ************************************
+051600110126
+051700110126            CALL "SQLLOG"     USING WS-CALLING-PROGRAM
+051800110126                                    WS-SQLERR-STATEMENT
+051900110126                                    SQLCODE
+052000110126                                    SQLERRD(1)
+052100110126                                    SQLERRD(2)
+052200110126                                    SQLERRD(3)
+052300110126                                    SQLERRD(4)
+052400110126                                    SQLERRD(5)
+052500110126                                    SQLERRD(6)
+052600110126                                    SQLSTATE
+052700110126                                    WS-SQLERR-DATA
+052800110126                                    WS-SQL-STATS
+052900110126                                    WS-SQLERR-REPLY.
+053000110126            CANCEL "SQLLOG".
+053100101220      *-------------------------------------------------------------*
+053200101220       SQLFailProcess.
+053300101220      *-------------------------------------------------------------*
+053400101220
+053500101220           PERFORM Dsp-Error.
+053600101220           GOBACK.
+053700101220      *-------------------------------------------------------------*
+053800101220      * DSP-ERROR and FORCE-MSGW Routines
+053900101220      *-------------------------------------------------------------*
+054000101220
+054100101220          COPY CPYSQLRTN.
