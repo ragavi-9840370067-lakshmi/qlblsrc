@@ -1,0 +1,76 @@
+000100181031/* %ATTR DBGVIEW(*LIST) */
+000101181031/********************************************************************/
+000102181031/* TITLE        : Work with selected job                            */
+000103181031/*                                                                  */
+000104190117/* DESCRIPTION  :                                                   */
+000105181031/* This program is to work wiht selected job                        */
+000106181031/*                                                                  */
+000107181031/********************************************************************/
+000108181031/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION                          */
+000109181031/*            *  yyyy/mm/dd  *                                      */
+000110181031/* Lev O      *  2018/10/31  * RFS181002 - Initial version to       */
+000111181031/*            *              *   work with selected job             */
+000112181031/********************************************************************/
+000113181107             PGM        PARM(&Usrname &Jobname)
+000114181107             DCL        VAR(&Usrname) TYPE(*CHAR) LEN(10)
+000115181107             DCL        VAR(&Jobname) TYPE(*CHAR) LEN(10)
+000116181107
+000117181107             DCL        VAR(&USRID) TYPE(*CHAR) LEN(10)  VALUE(' ')
+000118181107             DCL        VAR(&UsrtoUse) TYPE(*CHAR) LEN(10) VALUE(' ')
+000119181126             DCL        VAR(&tmpUsr) TYPE(*CHAR) LEN(10) VALUE(' ')
+000120181031             DCL        VAR(&errmsgd) TYPE(*CHAR) LEN(78) VALUE(' ')
+000121181128
+000122181128             DCL        VAR(&USFMNU) TYPE(*CHAR) LEN(10) VALUE(' ')
+000123181128             DCL        VAR(&SBSNAME) TYPE(*CHAR) LEN(10) VALUE(' ')
+000124181128/* Constants                                                        */
+000125181107             DCL        VAR(&lc_current) TYPE(*CHAR) LEN(10) +
+000126181107                          VALUE('*CURRENT')
+000127181128             DCL        VAR(&USF002) TYPE(*CHAR) LEN(10) VALUE('USF002')
+000128181128             DCL        VAR(&USF005) TYPE(*CHAR) LEN(10) VALUE('USF005')
+000129181128             DCL        VAR(&USF006) TYPE(*CHAR) LEN(10) VALUE('USF006')
+000130181128
+000131181128             DCL        VAR(&JOB) TYPE(*CHAR) LEN(3) VALUE('JOB')
+000132181128             DCL        VAR(&spaces10) TYPE(*CHAR) LEN(10) VALUE(' ')
+000133181128
+000134181031             MONMSG     MSGID(CPF0000)
+000135181031             RTVJOBA    USER(&USRID)
+000136181128             RTVDTAARA  DTAARA(MFACLIMNU (21 10)) RTNVAR(&USFMNU)
+000137181107
+000138181128/* ----------------------------------------------------------------- */
+000139181128/* Work with jobs by calling program                                 */
+000140181128/* ----------------------------------------------------------------- */
+000141181128             IF         (&USFMNU *NE &USF002 *AND &USFMNU *NE &USF005 *AND +
+000142181128                          &USFMNU *NE &USF006 *AND &Usrname *NE +
+000143181128                          &lc_current) THEN(DO)
+000144181128                CHGVAR     VAR(&SBSNAME) VALUE('XXXXX')
+000145181128                CALL       PGM(WRKSBSJSL) PARM(&JOB &SBSNAME &Usrname +
+000146181128                             &JOBNAME &USFMNU)
+000147181128                GOTO       end_pgm
+000148181128             ENDDO
+000149181128/* ----------------------------------------------------------------- */
+000150181107             CHGVAR     VAR(&usrToUse) VALUE(&USRID)
+000151181107             IF         COND(&USRNAME *NE &LC_CURRENT) THEN(CHGVAR +
+000152181107                          VAR(&UsrToUse)  VALUE(&USRNAME))
+000153181031/* Set up lda for error check                                      */
+000154181031             CHGDTAARA  DTAARA(*LDA (1 78)) VALUE(' ')
+000155181031             CHGVAR     VAR(&errmsgd) VALUE('Job' *BCAT &USRID *TCAT '/' +
+000156181031                          *TCAT &JOBNAME *BCAT  'was not found.')
+000157181031
+000158181126             IF         (&Jobname *NE ' ') THEN(DO)
+000159181126                WRKJOB     JOB(&UsrToUse/&Jobname)
+000160181126                MONMSG     MSGID(CPF1070) EXEC(CHGDTAARA DTAARA(*LDA (1 +
+000161181126                             78)) VALUE(&errmsgd) )
+000162181126             ENDDO
+000163181126             ELSE       (DO)
+000164181126                CHGVAR     VAR(&tmpUsr) VALUE(&UsrToUse)
+000165181126                IF         (&UsrToUse *EQ &lc_current) THEN(DO)
+000166181126                   CHGVAR     VAR(&tmpUsr) VALUE('*')
+000167181126                ENDDO
+000168181126
+000169181126                WRKUSRJOB  USER(&tmpUsr)
+000170181126             ENDDO
+000171181128/* ----------------------------------------------------------------- */
+000172181128/* End of program                                                    */
+000173181128/* ----------------------------------------------------------------- */
+000174181128 end_pgm:
+000175181031             ENDPGM

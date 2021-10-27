@@ -1,0 +1,140 @@
+000100181112/* %ATTR DBGVIEW(*LIST) */
+000101181112/********************************************************************/
+000102190117/* TITLE        : Work with selected jobq choice pgm                */
+000103181112/*                                                                  */
+000104181112/* DESCRIPTION  :                                                   */
+000105181112/* This program is to work with selected jobq choice pgm            */
+000106181112/*                                                                  */
+000107181112/********************************************************************/
+000108181112/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION                          */
+000109181112/*            *  yyyy/mm/dd  *                                      */
+000110181112/* Lev O      *  2018/11/12  * RFS181002 - Initial version to       */
+000111181112/*            *              *   work with selected jobq choice pgm */
+000112181112/********************************************************************/
+000113181112             PGM        PARM(&inputparm &outputparm)
+000114181112             DCL        VAR(&BINWORK) TYPE(*CHAR)  LEN(2)
+000115181112             DCL        VAR(&CHOICETXT) TYPE(*CHAR) LEN(30) VALUE('Enter +
+000116181112                          valid job queue name')
+000117181112             DCL        VAR(&ELEMENTLEN) TYPE(*DEC) LEN(2 0)
+000118181112             DCL        VAR(&ELEMENTS) TYPE(*DEC) LEN(2 0) VALUE(0)
+000119181112             DCL        VAR(&FLDLENGTH) TYPE(*DEC) LEN(2 0) VALUE(10)
+000120181112             DCL        VAR(&INPUTPARM) TYPE(*CHAR) LEN(21)
+000121181112             /* Output Parms */
+000122181112             DCL        VAR(&OFFSET) TYPE(*DEC) LEN(4 0) VALUE(3)
+000123181112             DCL        VAR(&OUTPARMLEN) TYPE(*DEC) LEN(4 0) VALUE(2)
+000124181112             DCL        VAR(&OUTPUTPARM) TYPE(*CHAR) LEN(2000)
+000125181112             DCL        VAR(&PGMOPTION) TYPE(*CHAR) LEN(1)
+000126181112/* Variables                                                        */
+000127181112             DCL        VAR(&lb_Eof)     TYPE(*LGL)  VALUE('0')
+000128181112             DCL        VAR(&strPos)     TYPE(*INT)
+000129181112             DCL        VAR(&maxPos)     TYPE(*INT)  VALUE(27)
+000130181113             DCL        VAR(&length)     TYPE(*DEC)  LEN(3 0)
+000131181112/* Constants                                                        */
+000132181112             DCL        VAR(&wrkjobqsl1) TYPE(*CHAR) VALUE('WRKJOBQSL1')
+000133181112             DCL        VAR(&lc_3dots) TYPE(*CHAR) VALUE('...')
+000134181112
+000135181112             DCLF       FILE(QADSPOBJ)
+000136181112/* Ignore Messages                                                  */
+000137181112             MONMSG     MSGID(CPF0000)
+000138181112/* Declare output file                                              */
+000139181112
+000140181112/* Set up input option                                              */
+000141181112             CHGVAR     VAR(&PGMOPTION) VALUE(%SST(&INPUTPARM 21 1))
+000142181112/* ---------------------------------------------------------------- */
+000143181112/* Produce output                                                   */
+000144181112/* ---------------------------------------------------------------- */
+000145181112             DSPOBJD    OBJ(*CURLIB/*ALL) OBJTYPE(*JOBQ) OUTPUT(*OUTFILE) +
+000146181112                          OUTFILE(QTEMP/&wrkjobqsl1)
+000147181112             OVRDBF     FILE(QADSPOBJ) TOFILE(QTEMP/&wrkjobqsl1)
+000148181112/* Check input option and action on it                              */
+000149181112             IF         COND(&PGMOPTION *EQ 'C') THEN(DO)
+000150181112                CHGVAR     VAR(&OUTPUTPARM) VALUE(' ')
+000151181112                CHGVAR     VAR(&strPos) VALUE(1)
+000152181113                CHGVAR     VAR(&lb_Eof) VALUE('0')
+000153181112                DOUNTIL    COND(&lb_Eof)
+000154181112                   CALLSUBR   SUBR(bldChoice)
+000155181112                ENDDO
+000156181112                GOTO       CMDLBL(PGMEND1)
+000157181112             ENDDO
+000158181112
+000159181112             IF         COND(&PGMOPTION *NE 'P') THEN(DO)
+000160181112                GOTO       CMDLBL(PGMEND1)
+000161181112             ENDDO
+000162181112
+000163181112             CHGVAR     VAR(&ELEMENTLEN) VALUE(&FLDLENGTH + 2)
+000164181112/* ---------------------------------------------------------------- */
+000165181113/* Build Select List                                                */
+000166181112/* ---------------------------------------------------------------- */
+000168181113             CHGVAR     VAR(&lb_Eof) VALUE('0')
+000169181113             DOUNTIL    COND(&lb_Eof)
+000170181113                CALLSUBR   SUBR(bldSelLst)
+000171181113             ENDDO
+000198181112             CHGVAR     VAR(%BIN(&OUTPUTPARM 1 2)) VALUE(&ELEMENTS)
+000199181112 pgmEnd1:
+000200181112             DLTOVR     FILE(&wrkjobqsl1)
+000201181112             GOTO       (PGMEND)
+000202181112/* ---------------------------------------------------------------- */
+000203181112/* Subroutines                                                      */
+000204181112/* ---------------------------------------------------------------- */
+000205181112/* Set Choice                                                       */
+000206181112/* ---------------------------------------------------------------- */
+000207181112             SUBR       SUBR(bldChoice)
+000208181112                RCVF
+000209181112                MONMSG     MSGID(CPF0864) EXEC(DO)
+000210181112                   CHGVAR     VAR(&lb_Eof) VALUE('1')
+000211181112                   CALLSUBR   SUBR(setDots)
+000212181112                ENDDO
+000213181112
+000214181112                IF         COND(&strPos *GE &MAXPOS) THEN(DO)
+000215181112                   CHGVAR     VAR(&lb_Eof) VALUE('1')
+000216181112                   CALLSUBR   SUBR(setDots)
+000217181112                ENDDO
+000218181112
+000219181112                IF         (*NOT &lb_Eof) THEN(DO)
+000220181112                   IF         (&strPos *GT 1) THEN(DO)
+000221181112                      CHGVAR     VAR(%SST(&OUTPUTPARM &strPos 1)) +
+000222181112                                   VALUE(',')
+000223181112                   ENDDO
+000224181112                   CHGVAR     (&strPos) VALUE(&strPos + 1)
+000225181113                   RTVVALA    VALUE(&ODOBNM) LENGTH(&length)
+000226181113                   CHGVAR     VAR(%SST(&OUTPUTPARM &strPos &length)) +
+000227181113                                VALUE(&ODOBNM)
+000228181113                   CHGVAR     (&strPos) VALUE(&strPos + &length)
+000229181112                ENDDO
+000230181112             ENDSUBR
+000231181113/* ---------------------------------------------------------------- */
+000232181113/* Set up Select List                                               */
+000233181113/* ---------------------------------------------------------------- */
+000234181113             SUBR       SUBR(bldSelLst)
+000235181113                RCVF
+000236181113                MONMSG     MSGID(CPF0864) EXEC(DO)
+000237181113                   CHGVAR     VAR(&lb_Eof) VALUE('1')
+000238181113                ENDDO
+000239181113
+000240181113                IF         (*NOT &lb_eof) THEN(DO)
+000241181113                   CHGVAR     VAR(&ELEMENTS) VALUE(&ELEMENTS + 1)
+000242181113                   CHGVAR     VAR(%BIN(&BINWORK)) VALUE(&FLDLENGTH)
+000243181113                   CHGVAR     VAR(%SST(&OUTPUTPARM &OFFSET &ELEMENTLEN)) +
+000244181113                                VALUE(&BINWORK *CAT &ODOBNM )
+000245181113                   CHGVAR     VAR(&OFFSET) VALUE(&OFFSET + &ELEMENTLEN)
+000246181113                   CHGVAR     VAR(&OUTPARMLEN) VALUE(&OUTPARMLEN + +
+000247181113                                &ELEMENTLEN)
+000248181113/* Check if maximum reached                                          */
+000249181113                   IF         COND(&OUTPARMLEN *GT 2000) THEN(CHGVAR +
+000250181113                                VAR(&lb_Eof) VALUE('1'))
+000251181113                ENDDO
+000252181113             ENDSUBR
+000253181112/* ---------------------------------------------------------------- */
+000254181112/* Set Dots                                                         */
+000255181112/* ---------------------------------------------------------------- */
+000256181112             SUBR       SUBR(setDots)
+000257181112                IF         COND(&strPos *GE &MAXPOS) THEN(DO)
+000258181112                   CHGVAR     VAR(&strPos) VALUE(&MAXPOS + 1)
+000259181112                ENDDO
+000260181112
+000261181112                CHGVAR     VAR(%SST(&OUTPUTPARM &strPos 3)) +
+000262181112                             VALUE(&lc_3dots)
+000263181112             ENDSUBR
+000264181112/* ---------------------------------------------------------------- */
+000265181112 PGMEND:
+000266181112             ENDPGM
