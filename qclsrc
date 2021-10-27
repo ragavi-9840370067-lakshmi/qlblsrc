@@ -1,0 +1,51 @@
+000100090901   /*****************************************************************/
+000200090901   /* TITLE        : Asset Allocation - Buy/Sell Multi-Thread       */
+000300090901   /*                                   Calling                     */
+000400190930   /* PROGRAMMER   : UNITRAX                                        */
+000500190926   /*                                                               */
+000600090901   /* PROGRAM      : AAMLTBYSL  - Submitted by JOBAABYSL            */
+000700090901   /*                                                               */
+000800090901   /* DESCRIPTION  : This program is used to call AABSLTXN for      */
+000900090901   /*                the incoming account range and send signal     */
+001000090901   /*                back to JOBAABYSL to indicate Fail or Success  */
+001100090901   /*****************************************************************/
+001200090901   /*    C H A N G E   H I S T O R Y                                */
+001300090901   /*****************************************************************/
+001400090901   /* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE             */
+001500090901   /*****************************************************************/
+001600191101   /* Andy Cgan 20090901 RFS62817 Initial Coding                    */
+001601190919   /*Lavanya V   * 2019/09/03 * RFS184524 - AOT for Phantom Funds   */
+001700090901   /*****************************************************************/
+001800090901
+001900090901             PGM        PARM(&PRODATE &INSTANCEI &FRMACCT &TOACCT +
+002000090901                          &OJLIB &DQNAME)
+002100090901
+002200090901             DCL        VAR(&PRODATE)    TYPE(*CHAR) LEN(8)
+002300090901             DCL        VAR(&FRMACCT)    TYPE(*CHAR) LEN(9)
+002400090901             DCL        VAR(&TOACCT)     TYPE(*CHAR) LEN(9)
+002500090901             DCL        VAR(&OJLIB)      TYPE(*CHAR) LEN(10)
+002600090901             DCL        VAR(&JOBNAME)    TYPE(*CHAR) LEN(10)
+002700090901             DCL        VAR(&DQNAME)     TYPE(*CHAR) LEN(10)
+002800090901             DCL        VAR(&FIELDLEN)   TYPE(*DEC) LEN(5) VALUE(2)
+002900090901             DCL        VAR(&INSTANCEI)  TYPE(*CHAR) LEN(02)
+003000090901             DCL        VAR(&INSTANCEX)  TYPE(*CHAR) LEN(02)
+003100190919             /*RFS184524*/
+003101190919             DCL        VAR(&LT_SPACE)   TYPE(*CHAR) LEN(1) VALUE(' ') +
+003102190919                          /*RFS184524*/
+003200190919             CHGVAR     VAR(&INSTANCEX) VALUE('F')
+003300090901
+003400190919/*RFS184524  CALL       PGM(AABSLTXN) PARM(&PRODATE &FRMACCT &TOACCT) */
+003401190919             /*RFS184524*/
+003402190919             CALL       PGM(AABSLTXN) PARM(&PRODATE &FRMACCT &TOACCT +
+003403190919                          &LT_SPACE)
+003404190919                          /*RFS184524*/
+003500090901
+003600090901             CHGVAR     VAR(&INSTANCEX) VALUE(&INSTANCEI)
+003700090901SNDDTAQ:
+003800090901             IF         COND(&DQNAME *EQ ' ') THEN(GOTO CMDLBL(EXIT))
+003900090901
+004000090901             CALL       PGM(QSNDDTAQ) PARM(&DQNAME &OJLIB &FIELDLEN +
+004100090901                          &INSTANCEX)
+004200090901EXIT:
+004300090901             RETURN
+004400090901             ENDPGM
