@@ -1,0 +1,270 @@
+000100080609       IDENTIFICATION DIVISION.
+000200080609       PROGRAM-ID.     AXYTRNEXT.
+000300080609       INSTALLATION.   CITIGROUP.
+000400080609       AUTHOR.         A. Chan.
+000500080609       DATE-WRITTEN.   Jun 9, 2008.
+000600080609       DATE-COMPILED.
+000700080609      ******************************************************************
+000800080609      *                                                                *
+000900080609      *    RFS-NUMBER : RFS-45389                                      *
+001000080609      *                                                                *
+001100080609      *    DESCRIPTION: This module is used extract daily transaction  *
+001200080609      *       into Qtemp file MFAAXYTRN for Saxon`s AXY System.        *
+001300080609      *                                                                *
+001400080609      *     PARAMETERS: Process Date                                   *
+001500080609      *                                                                *
+001600080609      * LINKED MODULES: *NONE                                          *
+001700080609      *                                                                *
+001800080609      ******************************************************************
+001900080609      *                                                                *
+002000080609      *    C H A N G E   H I S T O R Y                                 *
+002100080609      *                                                                *
+002200080609      ******************************************************************
+002300080609      * PROGRAMMER | YYYY/MM/DD   | DESCRIPTION                        *
+002400080609      ******************************************************************
+002500080609      * A. Chan    | 2008/06/09   | RFS45389 - Initial Coding          *
+002600080609      ******************************************************************
+002700080609
+002800080609       ENVIRONMENT DIVISION.
+002900080609       CONFIGURATION SECTION.
+003000080609       SOURCE-COMPUTER. IBM-AS400.
+003100080609       OBJECT-COMPUTER. IBM-AS400.
+003200080609       SPECIAL-NAMES.
+003300080609      /
+003400080609       INPUT-OUTPUT SECTION.
+003500080609       FILE-CONTROL.
+003600080609      **
+003700080609      /
+003800080609      ******************************************************************
+003900080609      *    D A T A   D I V I S I O N                                   *
+004000080609      ******************************************************************
+004100080609      *                                                                *
+004200080609       DATA DIVISION.
+004300080609      ******************************************************************
+004400080609      *    F I L E   S E C T I O N                                     *
+004500080609      ******************************************************************
+004600080609      *                                                                *
+004700080609       FILE SECTION.
+004800080609      **
+004900080609      /
+005000080609      ******************************************************************
+005100080609      *     W O R K I N G  S T O R A G E  S E C T I O N                *
+005200080609      ******************************************************************
+005300080609       WORKING-STORAGE SECTION.
+005400080609
+005500080609      * SQL usage Variables
+005600080609
+005700080609       01  lt-SQL-Variables.
+005800080609           05 ld-Date                      PIC S9(9) COMP-3.
+005900080611           05 li-Count                     PIC S9(9) COMP-3.
+006000080609
+006100080609      * Cobol standard copybook
+006200080609
+006300080609          COPY CPYSQLFLD
+006400080609               REPLACING    "CURRENT_PROGRAM"  BY "AXYTRNEXT ".
+006500080609
+006600080609           EXEC SQL
+006700080609             INCLUDE SQLCA
+006800080609           END-EXEC.
+006900080609
+007000080609           EXEC SQL
+007100080609             INCLUDE SQLDA
+007200080609           END-EXEC.
+007300080609
+007400080609       01  WS-ERR-CODE                PIC X(02) VALUE "  ".
+007500080609           88 lb-ErrorOK                        VALUE "00".
+007600080609           88 lb-Error10-Drop                   VALUE "10".
+007700080609           88 lb-Error20-Create                 VALUE "20".
+007800080609           88 lb-Error30-Insert                 VALUE "30".
+007900080609           88 lb-Error40-Declare                VALUE "40".
+008000080609           88 lb-Error50-Fetch                  VALUE "50".
+008100080609           88 lb-Error60-Insert                 VALUE "60".
+008200080609           88 lb-Error70-Insert                 VALUE "70".
+008300080609
+008400080609      /
+008500080609      ******************************************************************
+008600080609      *         L I N K A G E    S E C T I O N                         *
+008700080609      ******************************************************************
+008800080609       LINKAGE SECTION.
+008900080609
+009000080609       01  pc-ProcessDate                          Pic X(08).
+009100080609
+009200080609       01  pd-ProcessDate redefines pc-ProcessDate Pic 9(8).
+009300080609
+009400080609      ******************************************************************
+009500080609      *                                                                *
+009600080609      *               M A I N L I N E                                  *
+009700080609      *                                                                *
+009800080609      ******************************************************************
+009900080609       PROCEDURE DIVISION USING pc-ProcessDate.
+010000080609
+010100080609       MAINLINE.
+010200080609
+010300080609           PERFORM CREATE-QTEMP-TABLES
+010400080609
+010500080609           PERFORM SUMMARIZE-WITHHOLDING-TAX
+010600080609
+010700080609           PERFORM EXTRACT-TRANSACTIONS
+010800080609
+010900080609           PERFORM END-JOB
+011000080609           .
+011100080609      /
+011200080609       EXTRACT-TRANSACTIONS.
+011300080609
+011400080609           EXEC SQL
+011500080609
+011600080609              INSERT INTO QTEMP/MFAAXYTRN
+011700080609                SELECT
+011800080610
+011900080611test  *           trim(char(trn.placement_date)) || ","
+012000080611test  *           || trim(char(trn.trans_no)) || ":" ||
+012100080611test  *           trn.trans_type_code || "-" || trn.trans_status_code
+012200080611test  *           || "-" || trn.trans_origin_code
+012300080611test  *           || "-" || trn.investment_code || "|" ||
+012400080610
+012500080610                  TRIM(ACXR.ACCOUNT_NO_XREF2) || "," ||
+012600080612                  TRIM(COALESCE(EXTRN.EXT_MAPPING_CODE1, " "))
+012700080609                  || ", ,"  ||
+012800080612                  TRIM(COALESCE(EXSEC.EXT_MAPPING_CODE1, " "))
+012900080609                  || ","  ||
+013000080624                  TRIM(COALESCE(EXSEC.EXT_MAPPING_CODE3, " "))
+013100080609                  || ","  ||
+013200080609                  SUBSTR(CHAR(TRADE_DATE),5,2) ||
+013300080609                  SUBSTR(CHAR(TRADE_DATE),7,2) ||
+013400080610                  SUBSTR(CHAR(TRADE_DATE),1,4) || "," || TRIM(
+013500080610                  SUBSTR(CHAR(SETTLEMENT_DATE),5,2)  ||
+013600080610                  SUBSTR(CHAR(SETTLEMENT_DATE),7,2)  ||
+013700080612                  SUBSTR(CHAR(SETTLEMENT_DATE),1,4)) || ",," || TRIM(
+013800080612                  CHAR(UNIT_AMT)) || ",,,caca,c,,,,,"   ||
+013900080612                  TRIM(CHAR(GROSS_AMT)) || ",,,"  || TRIM(
+014000080612                  CHAR(COALESCE(CHG.TOTCHG, 0))) || ",,,,,n,,,n,"
+014100080609                  || Case When Trn.Trans_Type_Code = "BUY"
+014200080612                  then "253" else " " end || ",,,"  ||
+014300080623                  ",,,,,,,,,1,,,n,y,,,,,,,,,,,,,"
+014400080609                FROM MFATRNP TRN
+014500080609
+014600080609                JOIN MFAACXR2P ACXR ON
+014700080609                TRN.ACCOUNT_NO   = ACXR.ACCOUNT_NO AND
+014800080609                ACXR.ACCOUNT_NO_XREF2 <> " "
+014900080609
+015000080609                LEFT OUTER JOIN QTEMP/AXYTOTCHG CHG ON
+015100080609                TRN.PLACEMENT_DATE   = CHG.PLACEMENT_DATE    AND
+015200080609                TRN.TRANS_NO         = CHG.TRANS_NO
+015300080609
+015400080609                LEFT OUTER JOIN MFAEXTCDP EXTRN ON
+015500080609                EXTRN.EXTERNAL_ID    = "AXYTRNCDE"           AND
+015600080609                TRN.TRANS_TYPE_CODE   = EXTRN.TRANS_TYPE_CODE  AND
+015700080609                TRN.TRANS_STATUS_CODE = EXTRN.TRANS_STATUS_CODE
+015800080609
+015900080609                LEFT OUTER JOIN MFAEXTCDP EXSEC ON
+016000080609                EXSEC.EXTERNAL_ID      = "AXYSECCDE"         AND
+016100080623                TRN.INDUSTRY_FUND_CODE = EXSEC.INDUSTRY_FUND_CODE
+016200080609
+016300080610                WHERE TRN.PROCESS_DATE = :ld-Date      AND
+016400080610                  (  (TRN.TRANS_STATUS_CODE = "HST"    AND
+016500080611                      TRN.REVERSE          in(" ","N") AND
+016600080612                      TRN.TRANS_ORIGIN_CODE <> "WOR")
+016700080610                  OR (TRN.TRANS_STATUS_CODE = "HST"    AND
+016800080610                      TRN.TRANS_ORIGIN_CODE = "WOR"    AND
+016900080611                      TRN.REVERSE          in(" ","N") AND
+017000080610                      NOT TRN.TRANS_TYPE_CODE IN("BUY","SEL"))
+017100080612                  OR (TRN.TRANS_STATUS_CODE in("RVS","CAN"))
+017200080610                  OR (TRN.TRANS_STATUS_CODE = "CON"    AND
+017300080610                      TRN.TRANS_ORIGIN_CODE = "WOR"    AND
+017400080611                      TRN.REVERSE          in(" ","N") AND
+017500080610                      TRN.TRANS_TYPE_CODE IN("BUY","SEL"))   )
+017600080620             ORDER BY ACXR.ACCOUNT_NO_XREF2
+017700080609           END-EXEC
+017800080609
+017900080609           IF SQLSTATE NOT = WS-SQL-SUCCESSFUL AND
+018000080609              SQLSTATE NOT = WS-SQL-END
+018100080609             SET lb-Error30-Insert  TO TRUE
+018200080609             MOVE SQLSTATE          TO WS-SQLSTATE
+018300080609             PERFORM DSP-ERROR
+018400080609             PERFORM END-JOB
+018500080609           END-IF
+018600080609
+018700080611           EXEC SQL
+018800080611             Select count(1) into :li-Count
+018900080611               from qtemp/mfaaxytrn
+019000080611           END-EXEC
+019100080611
+019200080611           if li-Count = 0
+019300080611              EXEC SQL
+019400080611                Insert into QTEMP/MFAAXYTRN
+019500080611                  Values("0 record were found.")
+019600080611              END-EXEC
+019700080611           End-If
+019800080609           .
+019900080609
+020000080609       CREATE-QTEMP-TABLES.
+020100080609
+020200080609           Move pd-ProcessDate to ld-Date
+020300080610
+020400080610           EXEC SQL
+020500080610             Drop table QTEMP/AXYTRNCHG
+020600080610           END-EXEC
+020700080609
+020800080610           EXEC SQL
+020900080610             Drop table QTEMP/AXYTOTCHG
+021000080610           END-EXEC
+021100080610
+021200080610           EXEC SQL
+021300080610             Delete from QTEMP/MFAAXYTRN
+021400080610           END-EXEC
+021500080610
+021600080609           EXEC SQL
+021700080609            CREATE TABLE QTEMP/AXYTRNCHG  AS
+021800080609              (SELECT PLACEMENT_DATE, TRANS_NO, DEDUCTION_CODE,
+021900080609                      CHARGE FROM MFATRNCHP) WITH NO DATA
+022000080609           END-EXEC
+022100080609
+022200080609           EXEC SQL
+022300080609            CREATE TABLE QTEMP/AXYTOTCHG  AS
+022400080609              (SELECT PLACEMENT_DATE, TRANS_NO,
+022500080609                      SUM(CHARGE) AS TOTCHG FROM MFATRNCHP
+022600080609               GROUP BY PLACEMENT_DATE, TRANS_NO) WITH NO DATA
+022700080609           END-EXEC
+022800080609
+022900080609           .
+023000080609
+023100080609       SUMMARIZE-WITHHOLDING-TAX.
+023200080609
+023300080609           EXEC SQL
+023400080609            INSERT INTO QTEMP/AXYTRNCHG
+023500080609              (SELECT TRN.PLACEMENT_DATE, TRN.TRANS_NO,
+023600080609                      CH.DEDUCTION_CODE, CH.CHARGE
+023700080609                 FROM MFATRNP TRN, MFATRNCHP CH
+023800080609                WHERE TRN.PROCESS_DATE   =  :ld-Date
+023900080609                  AND TRN.PLACEMENT_DATE =  CH.PLACEMENT_DATE
+024000080609                  AND TRN.TRANS_NO       =  CH.TRANS_NO
+024100080609                  AND CH.DEDUCTION_CODE IN("NONT","PRVT","FEDT","USWT",
+024200080609                                           "GST ","PST ")
+024300080609              )
+024400080609           END-EXEC
+024500080609
+024600080609           EXEC SQL
+024700080609            INSERT INTO QTEMP/AXYTOTCHG
+024800080609              (SELECT PLACEMENT_DATE, TRANS_NO,
+024900080609                      SUM(CHARGE)
+025000080609                 FROM QTEMP/AXYTRNCHG
+025100080609               GROUP BY PLACEMENT_DATE, TRANS_NO
+025200080609              )
+025300080609           END-EXEC
+025400080609
+025500080609           .
+025600080609
+025700080609      ******************************************************************
+025800080609      *  END OF JOB                                                    *
+025900080609      ******************************************************************
+026000080609       END-JOB.
+026100080609
+026200080609           GOBACK.
+026300080609
+026400080609      /
+026500080609      ******************************************************************
+026600080609      * DSP-ERROR AND FORCE-MSGW ROUTINES                              *
+026700080609      ******************************************************************
+026800080609          COPY CPYSQLRTN.
+026900080609      *
+027000080609      /
