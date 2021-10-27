@@ -1,0 +1,434 @@
+000001181010/* %ATTR DBGVIEW(*LIST) */
+000101181010/********************************************************************/
+000103181010/* TITLE        : Client Service Menu                               */
+000109190117/*                                                                  */
+000110181010/* DESCRIPTION  :                                                   */
+000111181010/* This program is to replace CLI001 TUI Menu                       */
+000112181010/*                                                                  */
+000121181010/********************************************************************/
+000122181010/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION                          */
+000123181010/*            *  yyyy/mm/dd  *                                      */
+000124181010/* Lev O      *  2018/10/10  * RFS181002 - Initial version to       */
+000127181010/*            *              *   replace TUI CLI001                 */
+000128190122/* Lev O      *  2019/01/21  * Check mem user.                      */
+000129190122/*            *  2019/01/22  * Added errcode set up                 */
+000130181010/********************************************************************/
+000131181010             PGM
+000132181010             DCLF       FILE(CLI001)
+000133181011             DCL        VAR(&OPTXX) TYPE(*CHAR) LEN(2) VALUE(' ')
+000134181011             DCL        VAR(&OPTSTR) TYPE(*CHAR) LEN(120) VALUE(' ')
+000135181012             DCL        VAR(&POS) TYPE(*INT) LEN(4) VALUE(0)
+000136181011             DCL        VAR(&errCode) TYPE(*CHAR) LEN(01) VALUE(' ')
+000137181012/* Error descriptions                                               */
+000138181012             DCL        VAR(&ERR001) TYPE(*CHAR) LEN(78) VALUE('Specified +
+000139181012                          menu selection is not correct.')
+000140181012             DCL        VAR(&ERR002) TYPE(*CHAR) LEN(78) VALUE('You are +
+000141181012                          not authorized to use this system.')
+000142181012             DCL        VAR(&ERR003) TYPE(*CHAR) LEN(78) VALUE('You are +
+000143181012                          not authorized to use this screen.')
+000144181012             DCL        VAR(&ERR004) TYPE(*CHAR) LEN(78) VALUE('This menu +
+000145181012                          option has not been enabled for your firm.')
+000146181012
+000147181029             DCL        VAR(&authorized) TYPE(*LGL) VALUE('0') /* Screen +
+000148181029                          authorization */
+000149181029             DCL        VAR(&enabled) TYPE(*LGL) VALUE('0') /* Option +
+000150181029                          Enabled */
+000151181029             DCL        VAR(&moduleId) TYPE(*CHAR) LEN(10) VALUE(' ') /* +
+000152181029                          Option Enabled */
+000153181029             DCL        VAR(&authFlag) TYPE(*CHAR) LEN(1) VALUE(' ') /* +
+000154181029                          Special Authority */
+000155181029             DCL        VAR(&moveAuth) TYPE(*CHAR) LEN(1) VALUE(' ') /* +
+000156181029                          Move authority set up */
+000157181029             DCL        VAR(&qryLib) TYPE(*CHAR) LEN(10) VALUE(' ') /* +
+000158181029                          Query Library */
+000159181029             DCL        VAR(&edtFlag) TYPE(*CHAR) LEN(1) VALUE(' ') /* +
+000160181029                          Edit Flag */
+000161181029             DCL        VAR(&memEnv) TYPE(*CHAR) LEN(1) VALUE(' ') /* Edit +
+000162181029                          MEM Environment Flag */
+000163190121/* RFS181002.1 - Start: Added user validation                       */
+000164190121             DCL        VAR(&memUsrRtn) TYPE(*CHAR) LEN(10) VALUE(' ')
+000165190121             DCL        VAR(&memRtnCode) TYPE(*CHAR) LEN(1) VALUE(' ')
+000166190121             DCL        VAR(&memGrp) TYPE(*CHAR) LEN(10) VALUE(' ')
+000169190121/* RFS181002.1 - End                                                */
+000170181029
+000171181029
+000172181011             DCL        VAR(&DSCR2) TYPE(*CHAR) LEN(10) VALUE(' ')
+000173181011             DCL        VAR(&DSCR3) TYPE(*CHAR) LEN(10) VALUE(' ')
+000174181011             DCL        VAR(&DSCR4) TYPE(*CHAR) LEN(10) VALUE(' ')
+000175181011             DCL        VAR(&DSCR5) TYPE(*CHAR) LEN(10) VALUE(' ')
+000176181011             DCL        VAR(&DSCR6) TYPE(*CHAR) LEN(10) VALUE(' ')
+000177181012/*                                                                  */
+000178181012             DCL        VAR(&USRID) TYPE(*CHAR) LEN(10) VALUE(' ')
+000179181012             DCL        VAR(&USRCLS) TYPE(*CHAR) LEN(06) VALUE(' ')
+000180181012             DCL        VAR(&SCRCODE) TYPE(*CHAR) LEN(08) VALUE('CLI001')
+000181181029             DCL        VAR(&USRACC) TYPE(*DEC) LEN(01) VALUE(0)
+000182181030             DCL        VAR(&TMPSCRCODE) TYPE(*CHAR) LEN(08) VALUE(' ')
+000183181010
+000184181029             DCL        VAR(&CMPCODE)    TYPE(*CHAR) LEN(03) VALUE(' ')
+000185181029             DCL        VAR(&MFADBASE) TYPE(*CHAR) LEN(10) VALUE(' ')
+000186181126             DCL        VAR(&CRSLIB) TYPE(*CHAR) LEN(10) VALUE(' ')
+000187181029             DCL        VAR(&ENV)      TYPE(*CHAR) LEN(3) VALUE(' ')
+000188181029/* Some Constants                                                   */
+000189181029             DCL        VAR(&lc_T) TYPE(*CHAR) LEN(1) VALUE('T')
+000190181029             DCL        VAR(&lc_Y) TYPE(*CHAR) LEN(1) VALUE('Y')
+000191181029             DCL        VAR(&lc_N) TYPE(*CHAR) LEN(1) VALUE('N')
+000192190122             DCL        VAR(&lc_err99) TYPE(*CHAR) LEN(2) VALUE('99')
+000193181010/* Initialize variables                                             */
+000194181011             MONMSG     MSGID(CPF0000)
+000195181011
+000196181025             RTVDTAARA  DTAARA(MFACMPCDP (4 40))    RTNVAR(&CONAME)
+000197181029             CALL       PGM(FXCENTER) PARM(&CONAME '40' '00')
+000198181029             RTVDTAARA  DTAARA(MFACMPCDP (1 3))     RTNVAR(&CMPCODE)
+000199181029             RTVDTAARA  DTAARA(MFADBASE) RTNVAR(&MFADBASE)
+000200181029             CHGVAR     VAR(&qryLib) VALUE(&CMPCODE *TCAT 'QRY' *TCAT &ENV)
+000201181031             CHGVAR     VAR(&ENV) VALUE(%SST(&MFADBASE 4 3))
+000202181029
+000203181031/* Set Up Windows Message                                           */
+000204181031             CHGVAR     VAR(&WLINE01) VALUE('  Please note that all +
+000205181031                          queries should be')
+000206181031             CHGVAR     VAR(&WLINE02) VALUE('saved in' *BCAT &qryLib *BCAT +
+000207181031                          'Library.')
+000208181031             CHGVAR     VAR(&WLINE03) VALUE('  All existing queries in +
+000209181031                          your DB, TB,OJ')
+000210181031             CHGVAR     VAR(&WLINE04) VALUE('and AD libraries will be +
+000211181031                          moved to the')
+000212181031             CHGVAR     VAR(&WLINE05) VALUE(&qryLib *BCAT 'Library. Please +
+000213181031                          ensure the query')
+000214181031             CHGVAR     VAR(&WLINE06) VALUE('name is unique. Otherwise, if +
+000215181031                          existing')
+000216181031             CHGVAR     VAR(&WLINE07) VALUE('query with the same name, it +
+000217181031                          will be')
+000218181031             CHGVAR     VAR(&WLINE08) VALUE('overrriten.')
+000219181029
+000220181031/* ---------------------------------------------------------------- */
+000221181204             RTVJOBA    USER(&USRID)
+000222181029/* Get MEM Env                                                      */
+000223181128             ADDLIBLE   LIB(MEMCOMMON)  POSITION(*LAST)
+000225190121
+000226181029             CALL       PGM(CHKMEMENV) PARM(&memEnv)
+000227190121             IF         (&memEnv *NE &lc_N) THEN(DO)
+000228190121                CALL       PGM(CHKMEMUSR) PARM(&USRID &memUsrRtn +
+000229190121                             &memRtnCode &memGrp)
+000230190121             ENDDO
+000231181029/* Set up qry Options, edit code                                    */
+000232181029             CALL       PGM(FXSCEDTAL1) PARM(&SCRCODE 'AUTQRY' 'N' +
+000233181029                          &edtflag)
+000234181029             IF         (&edtFlag *EQ &lc_Y) THEN(DO)
+000235181029                CHGVAR     VAR(&moveAuth) VALUE(&lc_T)
+000236181029             ENDDO
+000237181029             ELSE       CMD(CHGVAR VAR(&moveAuth) VALUE(' '))
+000238181029/*                                                                  */
+000239181010             CALLSUBR   SUBR(SETOPT)
+000240181010             CALLSUBR   SUBR(INIT)
+000241181010
+000242181012             CALLSUBR   SUBR(chkusr)
+000243181010/* Refresh screen                                                   */
+000244181010 Refresh:
+000245181011             SNDRCVF    RCDFMT(CLI001)
+000246181010             CALLSUBR   SUBR(INIT)
+000247181011             CALLSUBR   SUBR(SETOPTXX)
+000248181010/* Check end of program                                             */
+000249181010             IF         COND((&IN12 *EQ '1') *OR (&IN03 *EQ '1')) THEN(DO)
+000250181010                GOTO       CMDLBL(ExitPgm)
+000251181010             ENDDO
+000252181012
+000253181012/* Check user                                                       */
+000254181012             CALLSUBR   SUBR(chkusr)
+000255181012             IF         COND(&errCode *NE ' ') THEN(GOTO CMDLBL(REFRESH))
+000256181011/* Validate Input                                                   */
+000257181012             IF         COND(&OPTXX *EQ '  ') THEN(GOTO CMDLBL(REFRESH))
+000258181012
+000259181012             CALLSUBR   SUBR(validOpt)
+000260181011             IF         (&errCode *NE ' ') THEN(DO)
+000261181012                CHGVAR     VAR(&FLDERR) VALUE(&err001)
+000262181012                CHGVAR     VAR(&IN50) VALUE('1') /* Error Indicator */
+000263181011                GOTO       CMDLBL(REFRESH)
+000264181011             ENDDO
+000265181012/* ---------------------------------------------------------------- */
+000266181012/* Validation passed =>                                             */
+000267181012/* Process selected option                                          */
+000268181012/* ---------------------------------------------------------------- */
+000269181012             SELECT
+000270181012                WHEN       (&OPTXX *EQ '01') THEN(DO)
+000271181012                   IF         (&DSCR2 *NE 'DSS001') THEN(DO)
+000272181012                      CALLSUBR   SUBR(setNotEnab)
+000273181012                   ENDDO
+000274181012                   ELSE       (DO)
+000275181012                      CALL       PGM(DSS001)
+000276181012                   ENDDO
+000277181012                ENDDO
+000278181012
+000279181012                WHEN       (&OPTXX *EQ '02') THEN(DO)
+000280181012                   IF         (%SST(&DSCR3 1 3) *NE 'USF') THEN(DO)
+000281181012                      CALLSUBR   SUBR(setNotEnab)
+000282181012                   ENDDO
+000283181012                   ELSE       (DO)
+000284181029                      CALL       PGM(USF006) /* USF006 not &DSCR3 */
+000285181012                   ENDDO
+000286181012                ENDDO
+000287181012
+000288181012                WHEN       (&OPTXX *EQ '03') THEN(DO)
+000289181012                   IF         (&DSCR5 *NE 'CST001' *AND &DSCR5 *NE +
+000290181012                                'CMM001') THEN(DO)
+000291181012                      CALLSUBR   SUBR(setNotEnab)
+000292181012                   ENDDO
+000293181012                   ELSE       (DO)
+000294181116                      IF         COND(&DSCR5 *EQ 'CMM001') THEN(DO)
+000295181116                         CHKOBJ     OBJ(DYNMENU) OBJTYPE(*PGM)
+000296181116                         MONMSG     MSGID(CPF9801 CPF9810) EXEC(DO)
+000297181116                            CHGVAR     VAR(&FLDERR) VALUE(&err004)
+000298181116                            CHGVAR     VAR(&IN50) VALUE('1') /* Error +
+000299181116                                         Indicator */
+000300181116                            GOTO       CMDLBL(REFRESH)
+000301181116                         ENDDO
+000302181116                         CALL       PGM(DYNMENU)
+000303181116                      ENDDO
+000304181116                      IF         COND(&DSCR5 *EQ 'CST001') THEN(DO)
+000305181116                         CHKOBJ     OBJ(PHNMENU) OBJTYPE(*PGM)
+000306181116                         MONMSG     MSGID(CPF9801 CPF9810) EXEC(DO)
+000307181116                            CHGVAR     VAR(&FLDERR) VALUE(&err004)
+000308181116                            CHGVAR     VAR(&IN50) VALUE('1') /* Error +
+000309181116                                         Indicator */
+000310181116                            GOTO       CMDLBL(REFRESH)
+000311181116                         ENDDO
+000312181116                         CALL       PGM(PHNMENU)
+000313181116                      ENDDO
+000314181012                   ENDDO
+000315181012                ENDDO
+000316181012
+000317181012                WHEN       (&OPTXX *EQ '04') THEN(DO)
+000318181012                   IF         (&DSCR4 *NE 'CF001') THEN(DO)
+000319181012                      CALLSUBR   SUBR(setNotEnab)
+000320181012                   ENDDO
+000321181030                   ELSE       (DO)
+000322181030/* Validate user access                                                */
+000323181030                      CHGVAR     VAR(&TMPSCRCODE) VALUE('CF001')
+000324181030                      CALLSUBR   SUBR(vldUsrAcc)
+000325181030                      IF         (&errCode *NE '  ' *OR &USRACC *EQ 4) +
+000326181030                                   THEN(CALLSUBR   SUBR(setNotAuth))
+000327181116                      ELSE       CMD(DO)
+000328181116                         CHKOBJ     OBJ(CF001) OBJTYPE(*PGM)
+000329181116                         MONMSG     MSGID(CPF9801 CPF9810) EXEC(DO)
+000330181116                            CHGVAR     VAR(&FLDERR) VALUE(&err004)
+000331181116                            CHGVAR     VAR(&IN50) VALUE('1') /* Error +
+000332181116                                         Indicator */
+000333181116                            GOTO       CMDLBL(REFRESH)
+000334181116                         ENDDO
+000335181116                         CALL       PGM(CF001)
+000336181116                      ENDDO
+000337181012                   ENDDO
+000338181012                ENDDO
+000339181012
+000340181012                WHEN       (&OPTXX *EQ '05') THEN(DO)
+000341181012                   IF         (&DSCR6 *NE 'OPR001') THEN(DO)
+000342181012                      CALLSUBR   SUBR(setNotEnab)
+000343181012                   ENDDO
+000344181012                   ELSE       (DO)
+000345181012                      CALL       PGM(OPR001)
+000346181012                   ENDDO
+000347181012                ENDDO
+000348181012
+000349181029                WHEN       (&OPTXX *EQ '21') THEN(DO)
+000350190121                   IF         (&memEnv *EQ &lc_N *OR &memRtnCode *NE +
+000351190121                                &lc_Y) THEN(CALLSUBR SUBR(setNotAuth))
+000352181126                   ELSE       (DO)
+000353181126                      CALL       PGM(FXSRCHRLIB) PARM(&CMPCODE &MFADBASE +
+000354181126                                   &CRSLIB)
+000355181126                      IF         COND(&CRSLIB *NE ' ') THEN(DO)
+000356181126                         ADDLIBLE   LIB(&CRSLIB) POSITION(*BEFORE +
+000357181126                                      &MFADBASE)
+000358181126                         MONMSG     MSGID(CPF2103)
+000359181126                      ENDDO
+000360181126                      CALL       PGM(CMDRIVER) PARM(&USRID)
+000361181126                   ENDDO
+000362181029                ENDDO
+000363181029
+000364181012                WHEN       (&OPTXX *EQ '22') THEN(DO)
+000365181029                   CHGVAR     VAR(&TMPSCRCODE) VALUE('SYWRKQRY')
+000366181029                   CALLSUBR   SUBR(chkAuth)
+000367181029                   IF         (&authorized) THEN(DO)
+000368181029                      CALLSUBR   SUBR(chkEnabled)
+000369181029                      IF         (&enabled) THEN(DO)
+000370181030                         IF         (&moveAuth *EQ &lc_T) THEN(DO)
+000371181030                            CHGVAR     VAR(&RESPONSE) VALUE(' ')
+000372181030                            SNDRCVF    RCDFMT(CONFIRM)
+000373181030                            IF         COND(&IN12 *NE '1' *AND &IN03 *NE +
+000374181030                                         '1' *AND &RESPONSE *EQ &LC_Y) +
+000375181030                                         THEN(DO)
+000376181030                               WRKQRY
+000377181030                               CALL       PGM(JOBQRYSRCH)
+000378181030                            ENDDO
+000379181030                         ENDDO
+000380181030                         ELSE       CMD(WRKQRY)
+000381181030                      ENDDO      /* Enabled    */
+000382181030                   ENDDO      /* Authorized */
+000383181029                ENDDO
+000384181012             ENDSELECT
+000385181012
+000386181012             GOTO       CMDLBL(REFRESH)
+000387181012
+000388181010/* End of program                                                   */
+000389181010 ExitPgm:
+000390181010             GOTO       CMDLBL(EndClPgm)
+000391181010/* ---------------------------------------------------------------- */
+000392181010/* Subroutines                                                      */
+000393181010/* ---------------------------------------------------------------- */
+000394181011/* Set Option code                                                  */
+000395181011             SUBR       SUBR(SETOPTXX)
+000396181011                CHGVAR     VAR(&OPTXX) VALUE(&SELOPT)
+000397181011
+000398181011                IF         (&OPTXX *NE '  ') THEN(DO)
+000399181011                   IF         (%SST(&OPTXX 1 1) *EQ ' ') THEN(DO)
+000400181011                      CHGVAR     %SST(&OPTXX 1 1) VALUE('0')
+000401181011                   ENDDO
+000402181011
+000403181011                   IF         (%SST(&OPTXX 2 1) *EQ ' ') THEN(DO)
+000404181011                      CHGVAR     %SST(&OPTXX 2 1) VALUE(%SST(&OPTXX 1 1))
+000405181011                      CHGVAR     %SST(&OPTXX 1 1) VALUE('0')
+000406181011                   ENDDO
+000407181011                ENDDO
+000408181011             ENDSUBR
+000409181010
+000410181010/* Set Options based on availability                                */
+000411181010             SUBR       SUBR(SETOPT)
+000412181011/* Set up screen names                                              */
+000413181011                RTVDTAARA  DTAARA(MFACLIMNU (11 10)) RTNVAR(&DSCR2)
+000414181011                RTVDTAARA  DTAARA(MFACLIMNU (21 10)) RTNVAR(&DSCR3)
+000415181011                RTVDTAARA  DTAARA(MFACLIMNU (51 10)) RTNVAR(&DSCR4)
+000416181011                RTVDTAARA  DTAARA(MFACLIMNU (41 10)) RTNVAR(&DSCR5)
+000417181011                RTVDTAARA  DTAARA(MFACLIMNU (61 10)) RTNVAR(&DSCR6)
+000418181012
+000419181012                CHGVAR     VAR(&POS) VALUE(1) /* Set up start position */
+000420181011
+000421181010                CHGVAR     VAR(&OPT01) VALUE('01 Dealer Service Menu')
+000422181012                CHGVAR     VAR(%SST(&OPTSTR &POS 2)) VALUE('01')
+000423181011                CALLSUBR   SUBR(nextPos) RTNVAL(&POS)
+000424181011
+000425181011                IF         (%SST(&DSCR3 1 3) *EQ "USF") THEN(DO)
+000426181011                   CHGVAR     VAR(&OPT02) VALUE('02 User System Functions')
+000427181012                   CHGVAR     VAR(%SST(&OPTSTR &POS 2)) VALUE('02')
+000428181011                   CALLSUBR   SUBR(nextPos) RTNVAL(&POS)
+000429181011                ENDDO
+000430181011                IF         (%SST(&DSCR5 1 3) *EQ "CMM" *OR %SST(&DSCR5 1 +
+000431181011                             3) *EQ "CST") THEN(DO)
+000432181011                   CHGVAR     VAR(&OPT03) VALUE('03 Custom Menu Functions')
+000433181012                   CHGVAR     VAR(%SST(&OPTSTR &POS 2)) VALUE('03')
+000434181011                   CALLSUBR   SUBR(nextPos) RTNVAL(&POS)
+000435181011                ENDDO
+000436181211/* ---------------------------------------------------------------------- */
+000437181211/* Disable Option 04                                                      */
+000438181211/*              IF         (%SST(&DSCR4 1 3) *EQ "CF0" *OR %SST(&DSCR4 1 +*/
+000439181211/*                           3) *EQ "CS0") THEN(DO)                       */
+000440181211/*                 CHGVAR     VAR(&OPT04) VALUE('04 Custom Menu Tables')  */
+000441181211/*                 CHGVAR     VAR(%SST(&OPTSTR &POS 2)) VALUE('04')       */
+000442181211/*                 CALLSUBR   SUBR(nextPos) RTNVAL(&POS)                  */
+000443181211/*              ENDDO                                                     */
+000444181211/* ---------------------------------------------------------------------- */
+000445181011
+000446181011                IF         (%SST(&DSCR6 1 3) *EQ "OPR") THEN(DO)
+000447181011                   CHGVAR     VAR(&OPT05) VALUE('05 Operator Functions')
+000448181012                   CHGVAR     VAR(%SST(&OPTSTR &POS 2)) VALUE('05')
+000449181011                   CALLSUBR   SUBR(nextPos) RTNVAL(&POS)
+000450181011                ENDDO
+000451181011
+000452181029                CHGVAR     VAR(&OPT21) VALUE('21 iSeries Commands  ')
+000453181029                CHGVAR     VAR(%SST(&OPTSTR &POS 2)) VALUE('21')
+000454181029                CALLSUBR   SUBR(nextPos) RTNVAL(&POS)
+000455181029
+000456181011                CHGVAR     VAR(&OPT22) VALUE('22 Work with Queries')
+000457181012                CHGVAR     VAR(%SST(&OPTSTR &POS 2)) VALUE('22')
+000458181011                CALLSUBR   SUBR(nextPos) RTNVAL(&POS)
+000459181010             ENDSUBR
+000460181010
+000461181011/* Next Position                                                    */
+000462181011             SUBR       SUBR(nextPos)
+000463181011                CHGVAR     VAR(&POS) VALUE(&POS + 2)
+000464181011                RTNSUBR    RTNVAL(&POS)
+000465181011             ENDSUBR
+000466181011/* Initialize variables                                             */
+000467181010             SUBR       SUBR(INIT)
+000468181010                CHGVAR     VAR(&IN50) VALUE('0') /* Error Indicator */
+000469181010                CHGVAR     VAR(&FLDERR) VALUE(' ') /* Error Line */
+000470181031                CHGDTAARA  DTAARA(*LDA (1 78)) VALUE(' ') /* Clear error +
+000471181031                             in *LDA */
+000472181010
+000473181010             ENDSUBR
+000474181010
+000475181011/* Validate inptut and set up error message                         */
+000476181011             SUBR       SUBR(validOpt)
+000477181012                CHGVAR     VAR(&errCode) VALUE('01')
+000478181012                CHGVAR     VAR(&POS)     VALUE(1)
+000479181012                DOWHILE    (%SST(&OPTSTR &POS 2) *NE '  ')
+000480181012                   IF         (%SST(&OPTSTR &POS 2) *EQ &OPTXX) THEN(DO)
+000481181012                      CHGVAR     VAR(&errCode) VALUE('  ') /* Clear the +
+000482181012                                   error */
+000483181012                      LEAVE
+000484181012                   ENDDO
+000485181012                   /* Increase counter                              */
+000486181012                   CHGVAR     VAR(&POS) VALUE(&POS + 2)
+000487181012                ENDDO
+000488181012
+000489181011             ENDSUBR
+000490181012/* Validate user                                                   */
+000491181012             SUBR       SUBR(chkUsr)
+000492181012                CHGVAR     VAR(&errCode) VALUE('  ')
+000493181012                CALL       PGM(FXGETUSR) PARM(&USRID &USRCLS  &errCode)
+000494181012                IF         (&errCode *NE '  ') THEN(DO)
+000495181012                   CHGVAR     VAR(&FLDERR) VALUE(&err002)
+000496181012                   CHGVAR     VAR(&IN50) VALUE('1') /* Error Indicator */
+000497181012                   RTNSUBR
+000498181012                ENDDO
+000499181012
+000500181012/* Validate user access                                                */
+000501181030                CHGVAR     VAR(&TMPSCRCODE) VALUE(&SCRCODE)
+000502181030                CALLSUBR   SUBR(vldUsrAcc)
+000503181012
+000504181012                IF         (&errCode *NE '  ' *OR &USRACC *EQ 4) THEN(DO)
+000505181030                   CALLSUBR   SUBR(setNotAuth)
+000506190122                   CHGVAR     VAR(&errCode) VALUE(&lc_err99) /* error */
+000507181012                   RTNSUBR
+000508181012                ENDDO
+000509181012             ENDSUBR
+000510181030/* Call program to get User Access                                     */
+000511181030             SUBR       SUBR(vldUsrAcc)
+000512181030                CALL       PGM(FXGETUSRA) PARM(&USRCLS &TMPSCRCODE &USRACC +
+000513181030                             &errCode)
+000514181030             ENDSUBR
+000515181029/* Check Screen authorization                                          */
+000516181029             SUBR       SUBR(chkAuth)
+000517181029                CALL       PGM(FXGETUSRA) PARM(&USRCLS &TMPSCRCODE &USRACC +
+000518181029                             &errCode)
+000519181029                IF         COND(&ERRCODE *NE '  ' *OR &USRACC *NE 1) +
+000520181029                             THEN(DO)
+000521181029                   CALLSUBR   SUBR(SETNOTAUTH)
+000522181029                   CHGVAR     VAR(&authorized) VALUE('0')
+000523181029                ENDDO
+000524181029                ELSE       CMD(CHGVAR     VAR(&authorized) VALUE('1'))
+000525181029             ENDSUBR
+000526181029
+000527181029/* Check if Option Enabled                                            */
+000528181029             SUBR       SUBR(chkEnabled)
+000529181029                CHGVAR     VAR(&moduleId) VALUE('WRKQRY')
+000530181029
+000531181029                CALL       PGM(RTVSPECMOD) PARM(&moduleId &authFlag)
+000532181029                IF         (&authFlag *NE &lc_Y) THEN(DO)
+000533181029                   CHGVAR     VAR(&enabled) VALUE('0')
+000534181029                   CALLSUBR   SUBR(setNotEnab)
+000535181029                ENDDO
+000536181029                ELSE       CMD(CHGVAR     VAR(&enabled) VALUE('1'))
+000537181029             ENDSUBR
+000538181029
+000539181029/* Set Option not Authorized                                        */
+000540181029             SUBR       SUBR(setNotAuth)
+000541181029                CHGVAR     VAR(&FLDERR) VALUE(&err003)
+000542181029                CHGVAR     VAR(&IN50) VALUE('1') /* Error Indicator */
+000543181029             ENDSUBR
+000544181012/* Set Option not enabled for your firm                                */
+000545181012             SUBR       SUBR(setNotEnab)
+000546181012                CHGVAR     VAR(&FLDERR) VALUE(&err004)
+000547181012                   CHGVAR     VAR(&IN50) VALUE('1') /* Error Indicator */
+000548181012             ENDSUBR
+000549181012/* End of program                                                      */
+000550181010 EndClPgm:
+000551181010             ENDPGM
+000552181010/********************************************************************/

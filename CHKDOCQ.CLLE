@@ -1,0 +1,111 @@
+000001170313     /* %ATTR DBGVIEW(*SOURCE) */
+000101100219/* ******************************************************************/
+000201100219/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000301100219/* ******************************************************************/
+000401100219/* ******************************************************************/
+000501100219/* Andy Chan  * 2010/02/16   * RFS 72144                            */
+000601100219/*            *              * IWA CM enhancement - use cmpcde/env  */
+000701100219/*            *              * to replace user id for getting oj lib*/
+000801100512/* M. Anwar   * 2010/05/12   * RFS 82761 - Recompile                */
+000901100219/* ******************************************************************/
+001001100219             PGM        PARM(&Userid &Curlib &Cmpcde &Env &Rtnval)
+001101100219
+001201100219             DCL        VAR(&Userid)     TYPE(*CHAR) LEN(10)
+001301100219             DCL        VAR(&Curlib)     TYPE(*CHAR) LEN(10)
+001401100219             DCL        VAR(&Rtnval)     TYPE(*CHAR) LEN(1)
+001501100219             DCL        VAR(&CmpCde)     TYPE(*CHAR) LEN(3)  /* 72144 */
+001601100219             DCL        VAR(&Env)        TYPE(*CHAR) LEN(3)  /* 72144 */
+001701100219             DCL        VAR(&InstallFlg) TYPE(*CHAR) LEN(1)  /* 72144 */
+001801100219             DCL        VAR(&EnvCount)   TYPE(*DEC)  LEN(10) /* 72144 */
+001901100219             DCLF       FILE(JSUTIL/VCSENVP)                 /* 72144 */
+002001100219
+002101100219             CHGVAR     VAR(&RTNVAL) VALUE('Y')
+002201100219
+002301100219/* only acceptance & production & development are allow */
+002401100219
+002501100223             IF         COND(&ENV *NE 'UAT' *AND &ENV *NE 'PRD' *AND +
+002601100223                          &ENV *NE 'DVP' *AND &ENV *NE 'TST' *AND +
+002701100223                          &ENV *NE 'CNV') THEN(DO)
+002801100222             CHGVAR     VAR(&RTNVAL) VALUE('E')
+002901100219             GOTO       CMDLBL(PGM_EXIT)
+003001100219             ENDDO
+003101100219
+003201100219             IF         COND(&ENV *EQ 'UAT') THEN(CHGVAR +
+003301100219                          VAR(&INSTALLFLG) VALUE('A'))
+003401100219
+003501100219             IF         COND(&ENV *EQ 'PRD') THEN(CHGVAR +
+003601100219                          VAR(&INSTALLFLG) VALUE('P'))
+003701100219
+003801100219             IF         COND(&ENV *EQ 'DVP') THEN(CHGVAR +
+003901100219                          VAR(&INSTALLFLG) VALUE('Y'))
+004001100219
+004101100223             IF         COND(&ENV *EQ 'TST') THEN(CHGVAR +
+004201100223                          VAR(&INSTALLFLG) VALUE('T'))
+004301100223
+004401100223             IF         COND(&ENV *EQ 'CNV') THEN(CHGVAR +
+004501100223                          VAR(&INSTALLFLG) VALUE('C'))
+004601100223
+004701100225/* should found only 1 env, reject if no Env found or more than 1 */
+004801100219
+004901100219             DLTF       FILE(QTEMP/VCSENVP)
+005001100219             MONMSG     MSGID(CPF0000)
+005101100219
+005201100219             DLTOVR     FILE(VCSENVP)
+005301100219             MONMSG     MSGID(CPF0000)
+005401100219
+005501100219             CPYF       FROMFILE(JSUTIL/VCSENVP) +
+005601100219                          TOFILE(QTEMP/VCSENVP) MBROPT(*REPLACE) +
+005701100219                          CRTFILE(*YES) INCREL((*IF F0000 *EQ +
+005801100219                          &CMPCDE) (*AND F0005 *EQ &INSTALLFLG))
+005901100219
+006001100219             RTVMBRD    FILE(QTEMP/VCSENVP) NBRCURRCD(&ENVCOUNT)
+006101100219
+006201100219             IF         COND(&ENVCOUNT *NE 1) THEN(DO)
+006301100222             CHGVAR     VAR(&RTNVAL) VALUE('E')
+006401100219             GOTO       CMDLBL(PGM_EXIT)
+006501100219             ENDDO
+006601100219
+006701100225/* If user id not exists, return with error */
+006801100225
+006901100222             CHKOBJ     OBJ(&USERID) OBJTYPE(*USRPRF)
+007001100219             MONMSG     MSGID(CPF0000) EXEC(DO)
+007101100219             CHGVAR     VAR(&RTNVAL) VALUE('N')
+007201100219             GOTO       CMDLBL(PGM_EXIT)
+007301100219             ENDDO
+007401100219
+007501100225/* Get the env library info */
+007601100219
+007701100219             OVRDBF     FILE(VCSENVP) TOFILE(QTEMP/VCSENVP)
+007801100219
+007901100219             RCVF
+008001100219
+008101100225/* If no library found, return with error */
+008201100225
+008301100219             MONMSG     MSGID(CPF0000) EXEC(DO)
+008401100222             CHGVAR     VAR(&RTNVAL) VALUE('E')
+008501100219             GOTO       CMDLBL(PGM_EXIT)
+008601100219             ENDDO
+008701100219
+008801100225             CHGVAR     VAR(&CURLIB) VALUE(&F0002)
+008901100219
+009001100225/* If library not exists, return with error */
+009101100225
+009201100219             CHKOBJ     OBJ(&CURLIB) OBJTYPE(*LIB)
+009301100219             MONMSG     MSGID(CPF0000) EXEC(DO)
+009401100222             CHGVAR     VAR(&RTNVAL) VALUE('D')
+009501100219             GOTO       CMDLBL(PGM_EXIT)
+009601100219             ENDDO
+009701100219
+009801100225/* If document queue not exists in that library, return with error */
+009901100225
+010001100219             CHKOBJ     OBJ(&CURLIB/MFADOCID) OBJTYPE(*DTAQ)
+010101100219             MONMSG     MSGID(CPF0000) EXEC(DO)
+010201100222             CHGVAR     VAR(&RTNVAL) VALUE('D')
+010301100219             GOTO       CMDLBL(PGM_EXIT)
+010401100219             ENDDO
+010501100219
+010601100219PGM_EXIT:
+010701100219             DLTOVR     FILE(VCSENVP)
+010801100219             MONMSG     MSGID(CPF0000)
+010901100219
+011001100219             ENDPGM

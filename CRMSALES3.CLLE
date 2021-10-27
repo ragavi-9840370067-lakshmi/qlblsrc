@@ -1,0 +1,83 @@
+000100080501/* ******************************************************************/
+000200080501/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000300080501/* ******************************************************************/
+000400080501/* RFS 44275 - The purpose of this program is to extract the sales  */
+000500080501/*             by Advisor and Investment Code                       */
+000600080501/* ******************************************************************/
+000700080501/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000800080501/* ******************************************************************/
+000900080501/* Andy Lo    * 2008/05/01   * RFS 44275 - Created program.         */
+001000080709/* Andy Lo    * 2008/07/08   * RFS54437  - Change CRTPF to *NOMAX.  */
+001100080501/* ******************************************************************/
+001200080501PGM
+001300080501             DCL        VAR(&MFAEFTLIB) TYPE(*CHAR) LEN(10)
+001400080501
+001500080512             DCL        VAR(&JOBNAME) TYPE(*CHAR) LEN(15) +
+001600080512                          VALUE('JBCRMSALES001')
+001700080512             DCL        VAR(&INFILE) TYPE(*CHAR) LEN(100) +
+001800080512                          VALUE('ADVSALES')
+001900080512             DCL        VAR(&EXTENSION) TYPE(*CHAR) LEN(4) VALUE('TXT')
+002000080512
+002100080501 /* Retrieve data area values                                     */
+002200080501             RTVDTAARA  DTAARA(MFAEFTLIB (1 10)) RTNVAR(&MFAEFTLIB)
+002300080501
+002400080501             DLTF       FILE(&MFAEFTLIB/ADVSALES)
+002500080501             MONMSG     MSGID(CPF2105)
+002600080501
+002700080709 /* RFS54437 Begin */
+002800080501             CRTPF      FILE(&MFAEFTLIB/ADVSALES) RCDLEN(1024) +
+002900080709                          TEXT('Advisor CRM Sales file') SIZE(*NOMAX)
+003000080709 /* RFS54437 End   */
+003100080501
+003200080501             DLTF       FILE(QTEMP/WRKSYNCHP)
+003300080501             MONMSG     MSGID(CPF2105)
+003400080501             CRTDUPOBJ  OBJ(WRKSYNCHP) FROMLIB(*LIBL) OBJTYPE(*FILE) +
+003500080501                          TOLIB(QTEMP)
+003600080501             OVRDBF     FILE(WRKSYNCHP) TOFILE(QTEMP/WRKSYNCHP)
+003700080501
+003800080501             DLTF       FILE(QTEMP/WRKSAL3DP)
+003900080501             MONMSG     MSGID(CPF2105)
+004000080501             CRTDUPOBJ  OBJ(WRKSAL3DP) FROMLIB(*LIBL) OBJTYPE(*FILE) +
+004100080501                          TOLIB(QTEMP)
+004200080501             OVRDBF     FILE(WRKSAL3DP) TOFILE(QTEMP/WRKSAL3DP)
+004300080501
+004400080501             DLTF       FILE(QTEMP/WRKSALETP)
+004500080501             MONMSG     MSGID(CPF2105)
+004600080501             CRTDUPOBJ  OBJ(WRKSALETP) FROMLIB(*LIBL) OBJTYPE(*FILE) +
+004700080501                          TOLIB(QTEMP)
+004800080501             OVRDBF     FILE(WRKSALETP) TOFILE(QTEMP/WRKSALETP)
+004900080501
+005000080501             DLTF       FILE(QTEMP/WRKINVDTP)
+005100080501             MONMSG     MSGID(CPF2105)
+005200080501
+005300080501             DLTF       FILE(QTEMP/WRKSAL3)
+005400080501             MONMSG     MSGID(CPF2105)
+005500080501
+005600080501             CALL       PGM(SALEADV)
+005700080501
+005800080501 /* ************************************************************* */
+005900080501 /* Create extract file by executing below views.               * */
+006000080501 /* Copy the extract file to the EFT library.                   * */
+006100080501 /* ************************************************************* */
+006200080501 /*                                                               */
+006300080501             OVRDBF     FILE(ADVSALES) TOFILE(&MFAEFTLIB/ADVSALES) +
+006400080501                          LVLCHK(*NO)
+006500080501
+006600080501             EXECUTE    VIEW(CRMSYNCHV) OUTFILE(&MFAEFTLIB/ADVSALES) +
+006700080501                          MBROPT(*ADD)
+006800080501
+006900080501             EXECUTE    VIEW(CRMSALE3DV) +
+007000080501                          OUTFILE(&MFAEFTLIB/ADVSALES) MBROPT(*ADD)
+007100080501
+007200080501             EXECUTE    VIEW(CRMSALETV) OUTFILE(&MFAEFTLIB/ADVSALES) +
+007300080501                          MBROPT(*ADD)
+007400080501
+007500080501             DLTOVR     FILE(ADVSALES)
+007600080501             DLTOVR     FILE(WRKSYNCHP)
+007700080501             DLTOVR     FILE(WRKSAL3DP)
+007800080501             DLTOVR     FILE(WRKSALETP)
+007900080512
+008000080512             CALL       PGM(CRTDOCFH) PARM(&JOBNAME +
+008100080512                          &INFILE  &EXTENSION)
+008200080512
+008300080501PGM_EXIT:    ENDPGM

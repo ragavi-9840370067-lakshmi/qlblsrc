@@ -1,0 +1,76 @@
+000100080725/* ******************************************************************/
+000200080725/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000300080725/* ******************************************************************/
+000400080725/* RFS 52662 - The purpose of this program is to create the daily   */
+000500080725/*             Branch exception extract file                        */
+000600080725/* ******************************************************************/
+000700080725/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000800080725/* ******************************************************************/
+000900080725/* Andy Lo      2008/07/25   * RFS 52662 - Created program.         */
+001000080805/* Andy Lo      2008/08/05   * RFS 55449 - Fix file name            */
+001100080725/* ******************************************************************/
+001200080725PGM
+001300080725             DCL        VAR(&MFAEFTLIB) TYPE(*CHAR) LEN(10)
+001400080725
+001500080725             DCL        VAR(&JOBNAME) TYPE(*CHAR) LEN(15) +
+001600080725                          VALUE('JBSYNCFILE001')
+001700080725             DCL        VAR(&INFILE) TYPE(*CHAR) LEN(100) +
+001800080805                          VALUE('BRANCHEX')
+001900080725             DCL        VAR(&EXTENSION) TYPE(*CHAR) LEN(4) VALUE('TXT')
+002000080725
+002100080725 /* Retrieve data area values                                     */
+002200080725             RTVDTAARA  DTAARA(MFAEFTLIB (1 10)) RTNVAR(&MFAEFTLIB)
+002300080725
+002400080805             DLTF       FILE(&MFAEFTLIB/BRANCHEX)
+002500080725             MONMSG     MSGID(CPF2105)
+002600080725
+002700080805             CRTPF      FILE(&MFAEFTLIB/BRANCHEX) RCDLEN(1024) +
+002800080725                          TEXT('Institution Branch Daily Exception ') +
+002900080725                          SIZE(*NOMAX)
+003000080725
+003100080725             DLTF       FILE(QTEMP/WRKSYNCHP)
+003200080725             MONMSG     MSGID(CPF2105)
+003300080725             CRTDUPOBJ  OBJ(WRKSYNCHP) FROMLIB(*LIBL) OBJTYPE(*FILE) +
+003400080725                          TOLIB(QTEMP)
+003500080725             OVRDBF     FILE(WRKSYNCHP) TOFILE(QTEMP/WRKSYNCHP)
+003600080725
+003700080725             DLTF       FILE(QTEMP/WRKSYNEDP)
+003800080725             MONMSG     MSGID(CPF2105)
+003900080725             CRTDUPOBJ  OBJ(WRKSYNEDP) FROMLIB(*LIBL) OBJTYPE(*FILE) +
+004000080725                          TOLIB(QTEMP)
+004100080725             OVRDBF     FILE(WRKSYNEDP) TOFILE(QTEMP/WRKSYNEDP)
+004200080725
+004300080725             DLTF       FILE(QTEMP/WRKSYNCTP)
+004400080725             MONMSG     MSGID(CPF2105)
+004500080725             CRTDUPOBJ  OBJ(WRKSYNCTP) FROMLIB(*LIBL) OBJTYPE(*FILE) +
+004600080725                          TOLIB(QTEMP)
+004700080725             OVRDBF     FILE(WRKSYNCTP) TOFILE(QTEMP/WRKSYNCTP)
+004800080725
+004900080725             CALL       PGM(BRNCHEXD)
+005000080725
+005100080725 /* ************************************************************* */
+005200080725 /* Create extract file by executing below views.               * */
+005300080725 /* Copy the extract file to the EFT library.                   * */
+005400080725 /* ************************************************************* */
+005500080725 /*                                                               */
+005600080805             OVRDBF     FILE(BRANCHEX) TOFILE(&MFAEFTLIB/BRANCHEX) +
+005700080725                          LVLCHK(*NO)
+005800080725
+005900080805             EXECUTE    VIEW(CRMSYNCHV) OUTFILE(&MFAEFTLIB/BRANCHEX) +
+006000080725                          MBROPT(*ADD)
+006100080725
+006200080725             EXECUTE    VIEW(CRMSYNCEDV) +
+006300080805                          OUTFILE(&MFAEFTLIB/BRANCHEX) MBROPT(*ADD)
+006400080725
+006500080805             EXECUTE    VIEW(CRMSYNCETV) OUTFILE(&MFAEFTLIB/BRANCHEX) +
+006600080725                          MBROPT(*ADD)
+006700080725
+006800080805             DLTOVR     FILE(BRANCHEX)
+006900080725             DLTOVR     FILE(WRKSYNCHP)
+007000080725             DLTOVR     FILE(WRKSYNEDP)
+007100080725             DLTOVR     FILE(WRKSYNCTP)
+007200080725
+007300080725             CALL       PGM(CRTDOCFH) PARM(&JOBNAME +
+007400080725                          &INFILE  &EXTENSION)
+007500080725
+007600080725PGM_EXIT:    ENDPGM

@@ -1,0 +1,84 @@
+000100090901   /*****************************************************************/
+000200120615   /* TITLE        : Account Contract Detail File Creation using    */
+000300120615   /*                        Multi-Thread functionality             */
+000400090901   /* PROGRAMMER   : UNITRAX                                        */
+000500090901   /*                                                               */
+000600120615   /* PROGRAM      : CLEUACNMLT - Submitted by JOBCLUEACN           */
+000700090901   /*                                                               */
+000800120615   /* DESCRIPTION  : This program is used to call CLUEACCNDT with   */
+000900120625   /*                the incoming record range.                     */
+001000120625   /*                                                               */
+001100090901   /*****************************************************************/
+001200090901   /*    C H A N G E   H I S T O R Y                                */
+001300090901   /*****************************************************************/
+001400090901   /* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE             */
+001500090901   /*****************************************************************/
+001600120615   /*Alan Andrade* 2012/06/15 * RFS106625 - Creation                */
+001700120615   /*            *            *                                     */
+001800120615   /*            *            *                                     */
+001900090901   /*****************************************************************/
+002000090901
+002100120615             PGM        PARM(&MGRCDE &INSTANCEI &FRMRCD &TORCD +
+002200090901                          &OJLIB &DQNAME)
+002300090901
+002400120618             DCL        VAR(&FRMRCD)     TYPE(*CHAR) LEN(10)
+002500120618             DCL        VAR(&TORCD)      TYPE(*CHAR) LEN(10)
+002600090901             DCL        VAR(&OJLIB)      TYPE(*CHAR) LEN(10)
+002700120615             DCL        VAR(&MGRCDE)     TYPE(*CHAR) LEN(3)
+002800090901             DCL        VAR(&DQNAME)     TYPE(*CHAR) LEN(10)
+002900090901             DCL        VAR(&FIELDLEN)   TYPE(*DEC) LEN(5) VALUE(2)
+003000090901             DCL        VAR(&INSTANCEI)  TYPE(*CHAR) LEN(02)
+003100120619             DCL        VAR(&TMPFILE)    TYPE(*CHAR) LEN(10)
+003200090901
+003300120615/* Create files in QTEMP for thread                                  */
+003400120615
+003500120615             DLTF       FILE(QTEMP/DELTACON)
+003600120615             MONMSG     MSGID(CPF0000)
+003700120615
+003800120618             CPYF       FROMFILE(&OJLIB/TMPTACON) +
+003900120618                          TOFILE(QTEMP/DELTACON) MBROPT(*REPLACE) +
+004000120618                          CRTFILE(*YES) FROMRCD(&FRMRCD) TORCD(&TORCD)
+004100120615             MONMSG     MSGID(CPF0000)
+004200120615
+004300120615             DLTF       FILE(QTEMP/MFACLUEFD)
+004400120615             MONMSG     MSGID(CPF0000)
+004500120615
+004600120615             CRTPF      FILE(QTEMP/MFACLUEFD) RCDLEN(1500) +
+004700120615                          TEXT('CLUE Feed file for Standard Life') +
+004800120615                          MAXMBRS(*NOMAX) SIZE(*NOMAX)
+004900120619
+005000120619/* Create temporary file in OJ to contain output of thread           */
+005100120619             CHGVAR     VAR(&TMPFILE) VALUE('TMPCLUAC' *TCAT +
+005200120619                          &INSTANCEI)
+005300120619
+005400120619             DLTF       FILE(&OJLIB/&TMPFILE)
+005500120619             MONMSG     MSGID(CPF2105)
+005600120619
+005700120619             CRTPF      FILE(&OJLIB/&TMPFILE) RCDLEN(1500) +
+005800120619                          TEXT('CLUE Feed file for Standard Life') +
+005900120619                          MAXMBRS(*NOMAX) SIZE(*NOMAX)
+006000120615
+006100120618             OVRDBF     FILE(DELTACON) TOFILE(QTEMP/DELTACON)
+006200120615             OVRDBF     FILE(MFACLUEFD) TOFILE(QTEMP/MFACLUEFD)
+006300090901
+006400120615             CALL       PGM(CLUEACCNDT) PARM(&MGRCDE)
+006500090901
+006600120615             DLTOVR     FILE(DELTACON)
+006700120615             MONMSG     MSGID(CPF0000)
+006800120615             DLTOVR     FILE(MFACLUEFD)
+006900120615             MONMSG     MSGID(CPF0000)
+007000120615
+007100120619/* Copy to Clue Extract file to temp file in OJ                      */
+007200120615
+007300120615             CPYF       FROMFILE(QTEMP/MFACLUEFD) +
+007400120619                          TOFILE(&OJLIB/&TMPFILE) MBROPT(*ADD) +
+007500120615                          FMTOPT(*NOCHK)
+007600120615
+007700090901SNDDTAQ:
+007800090901             IF         COND(&DQNAME *EQ ' ') THEN(GOTO CMDLBL(EXIT))
+007900090901
+008000090901             CALL       PGM(QSNDDTAQ) PARM(&DQNAME &OJLIB &FIELDLEN +
+008100120619                          &INSTANCEI)
+008200090901EXIT:
+008300090901             RETURN
+008400090901             ENDPGM

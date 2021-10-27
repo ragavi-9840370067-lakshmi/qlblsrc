@@ -1,0 +1,161 @@
+000200200310/* ******************************************************************/
+000300121204/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000400200413/* ******************************************************************/
+000500130429/* This job will select transactions for GIC certificate based on   */
+000600130429/* entiries from new gui screen GICPIT                              */
+000700121204/* ******************************************************************/
+000800130429/* Tony V.    * 2013/04/29   * RFS 121117 - New Program.            */
+000900131015/* Bhanu D    * 2013/10/15   * RFS 128735 - Change the data area    */
+001000131015/*            *              * and retreived the data area from     */
+001100131015/*            *              * 400 position to 425                  */
+001200200413/* Michael Fan* 2014/12/31   * RFS 140269 - Do not advance process  */
+001300150102/*            *              * date when it is calling within       */
+001400200309/*            *              * JOBDAILY                             */
+001500150508/* Michael Fan* 2015/05/07   * RFS 147432 - Move the delete         */
+001600150507/*            *              * of MFATRNP from the end of program   */
+001700200413/*            *              * to after GICRTSEL since the override */
+001800150507/*            *              * is affecting promotional rate        */
+001900150507/*            *              * calculation under PRMCLC on CRTGEN.  */
+002000121204/*            *              *                                      */
+002100190819/* Jebastin K * 2019/08/19   * RFS 1015067 - GIC ISSUE Fix          */
+002200200218/* Chaya SP   * 2020/02/18   * RFS185066 - Recompile for MFAGICDP   */
+002300121204/* ******************************************************************/
+002400130429PGM  PARM(&placedte &transno &certno &errmsg)
+002500130617             DCL        VAR(&placedte) TYPE(*CHAR)  LEN(9)
+002600130617             DCL        VAR(&transno)  TYPE(*CHAR)  LEN(9)
+002700130429             DCL        VAR(&certno)   TYPE(*CHAR) LEN(11)
+002800130429             DCL        VAR(&errmsg)   TYPE(*CHAR) LEN(27)
+002900130429             DCL        VAR(&errmsg1)  TYPE(*CHAR) LEN(25)
+003000130429             DCL        VAR(&AsAtDate) TYPE(*CHAR) LEN(8)
+003100130102             DCL        VAR(&RecordCnt) TYPE(*DEC) LEN(10 0)
+003200130429             DCL        VAR(&RecordCnt1) TYPE(*DEC) LEN(10 0)
+003300130722             DCL        VAR(&NxtBusDat) TYPE(*CHAR) LEN(46)
+003400130722             DCL        VAR(&NxtDat) TYPE(*CHAR) LEN(8)
+003500130722             DCL        VAR(&CertID) TYPE(*CHAR) LEN(10)
+003600130722             DCL        VAR(&CertNew) TYPE(*DEC) LEN(10 0)
+003700121204/* -----------------------------------------------------------------*/
+003800121204/* Begin Processing                                                 */
+003900121204/* -----------------------------------------------------------------*/
+004000121205             RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&AsAtDate)
+004100150102/* RFS140269 - Begin (Do not advance process date if from JOBDAILY  */
+004200150102             IF         COND(&ERRMSG *EQ 'JOBDAILY') THEN(DO)
+004300150102             CHGVAR     VAR(&NxtDat) VALUE(&AsAtDate)
+004400150102             CHGVAR     VAR(&ERRMSG) VALUE(' ')
+004500150102             GOTO       CMDLBL(STEP1)
+004600150102             ENDDO
+004700150102/* RFS140269 - End                                                  */
+004800130722             CHGVAR     VAR(&NXTBUSDAT) VALUE('00000000' || &AsAtDate)
+004900130722             CALL       PGM(GETBUSDAY) PARM(&NxtBusDat)
+005000130722             CHGVAR     VAR(&NxtDat) VALUE(%SST(&NxtBusDat 9 8))
+005100130614
+005200150102 STEP1:   /* RFS140269 */
+005300130614             DLTF       FILE(QTEMP/SQGICDP)
+005400130614             MONMSG     MSGID(CPF2105)
+005500130614
+005600130614             DLTF       FILE(QTEMP/WKTRNP)
+005700130614             MONMSG     MSGID(CPF2105)
+005800130614
+005900130614             CRTDUPOBJ  OBJ(MFAGICDP) FROMLIB(*LIBL) OBJTYPE(*FILE) +
+006000130614                          TOLIB(QTEMP) NEWOBJ(SQGICDP)
+006100121204
+006200130429             CRTDUPOBJ  OBJ(MFATRNP) FROMLIB(*LIBL) OBJTYPE(*FILE) +
+006300130429                          TOLIB(QTEMP) NEWOBJ(WKTRNP)
+006400130430
+006500130614             INSERT     INTO(QTEMP/WKTRNP) SQL('SELECT * FROM +
+006600130614                          MFATRNP WHERE PLACEMENT_DATE  = ' *CAT +
+006700130614                          &PLACEDTE *CAT 'AND TRANS_NO = ' *CAT +
+006800130614                          &TRANSNO)
+006900130429             OVRDBF     FILE(MFATRNP) TOFILE(QTEMP/WKTRNP)
+007000121204
+007100130722             CALL       PGM(GICRTSEL) PARM(&NxtDat)
+007200150507/*147432*/   DLTOVR     FILE(MFATRNP)
+007300130102             RTVMBRD    FILE(SQGCRTINT) NBRCURRCD(&RecordCnt)
+007400130102
+007500190819/*1015067    IF         COND(&RECORDCNT = 0) THEN(GOTO + */
+007600190819/*1015067                 CMDLBL(PGM_EXIT))              */
+007700190819/* RFS 1015067  - starts  */
+007800190819             IF         COND(&RECORDCNT = 0) THEN(DO)
+007900190819                CHGVAR     VAR(&CERTNO) VALUE(' ')
+008000190819                CHGVAR     VAR(&ERRMSG) VALUE('99Certificate Not +
+008100190819                created')
+008200190819                GOTO CMDLBL(PGM_EXIT)
+008300190819             ENDDO
+008400190821/* RFS 1015067  - End     */
+008500121204
+008600121204             DLTF       FILE(QTEMP/MFACRTREJ)
+008700121204             MONMSG     MSGID(CPF2105)
+008800130102
+008900130102             DLTF       FILE(QTEMP/MFAGIPRDP)
+009000130102             MONMSG     MSGID(CPF2105)
+009100121204
+009200130102             CRTPF      FILE(QTEMP/MFACRTREJ) OPTION(*NOSOURCE +
+009300130102                          *NOLIST) SIZE(*NOMAX)
+009400121204             CRTDUPOBJ  OBJ(MFAGIPRDP) FROMLIB(*LIBL) OBJTYPE(*FILE) +
+009500121204                          TOLIB(QTEMP) NEWOBJ(MFAGIPRDP)
+009600121204
+009700121204             CALL       PGM(GICINTENV)
+009800121204
+009900130102             CPYF       FROMFILE(QTEMP/SQGCRTINT) +
+010000130102                          TOFILE(QTEMP/MFAGIWRP) MBROPT(*REPLACE) +
+010100130102                          CRTFILE(*YES) FMTOPT(*NOCHK)
+010200121204
+010300121204             OVRDBF     FILE(MFAGICDP) TOFILE(QTEMP/SQGICDP)
+010400130617             OVRDBF     FILE(MFACRTREJ) TOFILE(QTEMP/MFACRTREJ)
+010500130624             OVRDBF     FILE(MFAGIWRP)  TOFILE(QTEMP/MFAGIWRP)
+010600121204             OVRDBF     FILE(MFAGIPRDP) TOFILE(QTEMP/MFAGIPRDP)
+010700121204
+010800130722             CALL       PGM(CRTGEN) PARM(&NxtDat)
+010900130102
+011000130624             DLTOVR     FILE(MFAGICDP MFAGIPRDP MFAGIWRP)
+011100130102
+011200130102             CPYF       FROMFILE(QTEMP/MFAGIWRP) +
+011300130102                          TOFILE(QTEMP/SQGCRTINT) MBROPT(*REPLACE) +
+011400130102                          CRTFILE(*YES) FMTOPT(*NOCHK)
+011500130102
+011600130722             CALL       PGM(CRTCERT) PARM(&NxtDat)
+011700130624
+011800130624             DLTOVR     FILE(MFACRTREJ)
+011900130614
+012000130617             RTVMBRD    FILE(QTEMP/MFACRTREJ) NBRCURRCD(&RECORDCNT1)
+012100130429             IF         COND(&RECORDCNT1 = 0) THEN(DO)
+012200130429                        CHGVAR VAR(&errmsg) VALUE('00' +
+012300130429                        *CAT (&errmsg1))
+012400130722             DLTDTAARA  DTAARA(QTEMP/NEWCERT)
+012500130722             MONMSG     MSGID(CPF2105)
+012600130722             DLTDTAARA  DTAARA(QTEMP/NEWCERTNO)
+012700130722             MONMSG     MSGID(CPF2105)
+012800130722             CRTDTAARA  DTAARA(QTEMP/NEWCERT) TYPE(*DEC) LEN(10 0) +
+012900130722                          VALUE(0)
+013000130722             CRTDTAARA  DTAARA(QTEMP/NEWCERTNO) TYPE(*CHAR) LEN(11)
+013100130722             RUNCMD     CMD('CHGDTAARA DTAARA(QTEMP/NEWCERT) +
+013200130722                          VALUE(&CERT)') SQL('SELECT +
+013300130722                          CERTIFICATE_ID_NO NAME(CERT) LEN(10,0) +
+013400130722                          FROM MFAGITRP WHERE PLACEMENT_DATE = ' || +
+013500130722                          &PLACEDTE || ' AND TRANS_NO = ' || &TRANSNO)
+013600130722             RTVDTAARA  DTAARA(QTEMP/NEWCERT) RTNVAR(&CertNew)
+013700130722             CHGVAR     VAR(&CERTID) VALUE(&CERTNEW)
+013800130722             RUNCMD     CMD('CHGDTAARA DTAARA(QTEMP/NEWCERTNO) +
+013900130722                          VALUE(&CERTNO)') SQL('SELECT +
+014000130722                          CERTIFICATE_NO NAME(CERTNO) LEN(11) +
+014100130722                          FROM MFAGICDP WHERE CERTIFICATE_ID_NO = ' +
+014200130722                           || &CertID)
+014300130722             RTVDTAARA  DTAARA(QTEMP/NEWCERTNO) RTNVAR(&CertNo)
+014400130429             ENDDO
+014500130429             ELSE (DO)
+014600131015 /*128735    RUNCMD     CMD('CHGDTAARA(*LDA 400 25)) +     */
+014700131015 /*128735*/  RUNCMD     CMD('CHGDTAARA DTAARA(*LDA (400 25)) +
+014800131015                          VALUE(''&&ERRMSG1'')') SQL('select distinct +
+014900131015 /*128735*/               a.rejection_descr  NAME(ERRMSG1) LEN(25) +
+015000131015 /*128735*/               from mfarejcdp a   where +
+015100131015 /*128735*/               exists (select * from mfacrtrej b where +
+015200131015                          a.rejection_code = b.rejection_code)')
+015300131015 /*128735                 rejection_descr from mfarejcdp a where +  */
+015400131015
+015500131015 /*128735*/  RTVDTAARA  DTAARA(*LDA (400 25)) RTNVAR(&ERRMSG1)
+015600130429                          CHGVAR VAR(&errmsg) VALUE('99' *CAT +
+015700131015                                     (&ERRMSG1))
+015800130429             ENDDO
+015900130614
+016000130614PGM_EXIT:
+016100150507/* 147432    DLTOVR     FILE(MFATRNP)                  */
+016200130614             ENDPGM

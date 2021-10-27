@@ -1,0 +1,878 @@
+000100210510     /* %ATTR OPTION(*XREF) DBGVIEW(*SOURCE) */
+000200210510/********************************************************************/
+000300210510/* TITLE         : CDIC HOLDS AND EXTRACTS                          */
+000400210510/* SYSTEM        : L & T FINANCIAL SERVICES TECHNOLOGY INSTITUTION  */
+000500210510/* PROGRAM TYPE  : CLLE/BND                                         */
+000600210510/* PROGRAMMER    : DEEPIKA                                          */
+000700210510/* PROGRAM       : CDICHLDEX                                        */
+000800210510/* DESCRIPTION   : PROGRAM TO CRAETE EXTRACTS FROM EITHER HOLD FILE */
+000900210510/*                 OR HOLD INSTRUCTION FILE DEPENDING ON THE JOB    */
+001000210510/*                 THAT CALLS IT                                    */
+001100210510/* DATE CREATED  : 2012/02/23                                       */
+001200210510/* RFS NUMBER    : 105984                                           */
+001300210510/* CALLED BY     : JBGENACHLD                                       */
+001400210510/*                 JOBGENHDIN                                       */
+001500210510/* PARAMETERS    : &ExtType                                         */
+001600210512/* CALLS PROGRAM : NONE                                             */
+001700210510/********************************************************************/
+001800210510/*    C H A N G E   H I S T O R Y                                   */
+001900210510/********************************************************************/
+002000210510/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+002100210510/* ******************************************************************/
+002200210510/* ******************************************************************/
+002300210510/* Deepika    * 2012/02/23   * RFS102778                            */
+002400210510/*            *              * create extracts from either Hold file*/
+002500210510/*            *              * or Hold Instruction file depending on*/
+002600210510/*            *              * the job that calls it.JBGENACHLD     */
+002700210510/*            *              * processes Hold file and JOBGENHDIN   */
+002800210510/*            *              * will process Hold Instruction file.  */
+002900210510/* R Miguel   * 2012/05/01   * RFS 108987 - File length issues on   */
+003000210510/*            *              * the extract creation.                */
+003100210510/* Geeta S.   * 2012/06/04   * RFS 110423 - Comment out missing     */
+003200210510/*            *              * changes from 108987.                 */
+003300210510/* Geeta S.   * 2012/06/18   * RFS 111018 - Correct Hold File logic */
+003400210510/* Raja N     * 2021/01/18   * RFS186130 - CDIC Fast Insurance      */
+003500210510/*            *              *             Determination            */
+003600210510/* Raja N     * 2021/04/30   * RFS1114630 - Pipe line added for     */
+003700210510/*            *              * extract 140 & 153 trailer records    */
+003800210510/* Raja N     * 2021/04/30   * RFS1114491 - GENHDIN Adhoc MSGW fix  */
+003801210513/* Raja N     * 2021/05/11   * RFS1114901 - Extract 153 selection   */
+003802210512/*           *               * criteria has been modified           */
+003900210510/* ******************************************************************/
+004000210510PGM          PARM(&ExtType)
+004100210510
+004200210510             DCL       VAR(&ExtType)   TYPE(*CHAR) LEN(01)
+004300210510             DCL       VAR(&MFAEFTLIB) TYPE(*CHAR) LEN(10)
+004400210510             DCL       VAR(&CMPCODE)   TYPE(*CHAR) LEN(3)
+004500210510             DCL       VAR(&ASATDTE)   TYPE(*CHAR) LEN(08)
+004600210510             DCL       VAR(&Hdr)       TYPE(*CHAR) LEN(20)
+004700210510             DCL       VAR(&Trl)       TYPE(*CHAR) LEN(30)
+004800210510             DCL       VAR(&FileLst)   TYPE(*CHAR) LEN(03)
+004900210510             DCL       VAR(&FileLst1)  TYPE(*CHAR) LEN(03) VALUE('100')
+005000210510             DCL       VAR(&FileLst2)  TYPE(*CHAR) LEN(03) VALUE('110')
+005100210510             DCL       VAR(&FileLst3)  TYPE(*CHAR) LEN(03) VALUE('120')
+005200210510             DCL       VAR(&FileLst4)  TYPE(*CHAR) LEN(03) VALUE('130')
+005300210510             DCL       VAR(&FileLst5)  TYPE(*CHAR) LEN(03) VALUE('500')
+005400210510             DCL       VAR(&FileLst6)  TYPE(*CHAR) LEN(03) VALUE('800')
+005500210510             DCL       VAR(&FileLst7)  TYPE(*CHAR) LEN(03) VALUE('900')
+005600210510             DCL       VAR(&EftFile1)  TYPE(*CHAR) LEN(10)
+005700210510             DCL       VAR(&EftFile2)  TYPE(*CHAR) LEN(10)
+005800210510             DCL       VAR(&EftFile3)  TYPE(*CHAR) LEN(10)
+005900210510             DCL       VAR(&EftFile4)  TYPE(*CHAR) LEN(10)
+006000210510             DCL       VAR(&EftFile5)  TYPE(*CHAR) LEN(10)
+006100210510             DCL       VAR(&EftFile6)  TYPE(*CHAR) LEN(10)
+006200210510             DCL       VAR(&EftFile7)  TYPE(*CHAR) LEN(10)
+006300210510             DCL       VAR(&RecLen)    TYPE(*DEC)  LEN(10) VALUE(300)
+006400210510             DCL       VAR(&DtlCnt)    TYPE(*DEC)  LEN(10) VALUE(0)
+006500210510             DCL       VAR(&DtlCnt1)   TYPE(*CHAR) LEN(10)
+006600210510             DCL       VAR(&Sdate)     TYPE(*CHAR) LEN(08)
+006700210510             DCL       VAR(&Qte)       TYPE(*CHAR) LEN(01) VALUE('"')
+006800210510             DCL       VAR(&Hdrv)      TYPE(*CHAR) LEN(80) VALUE(' ')
+006900210510             DCL       VAR(&Trlv)      TYPE(*CHAR) LEN(80) VALUE(' ')
+007000210510             DCL       VAR(&OBJLIB)    TYPE(*CHAR) LEN(10)
+007100210510
+007200210510/*RFS186130 BEGINS */
+007300210510             DCL        VAR(&EFTFILE8)   TYPE(*CHAR) LEN(10)
+007400210510             DCL        VAR(&EFTFILE9)   TYPE(*CHAR) LEN(10)
+007500210510             DCL        VAR(&FILELST8)   TYPE(*CHAR) LEN(10) VALUE('140')
+007600210510             DCL        VAR(&FILELST9)   TYPE(*CHAR) LEN(10) VALUE('153')
+007700210510             DCL        VAR(&DTLCNT2)    TYPE(*CHAR) LEN(12)
+007800210510             DCL        VAR(&IFSTYPE)    TYPE(*CHAR) LEN(02) VALUE('UX')
+007900210510             DCL        VAR(&IFSOWNER)   TYPE(*CHAR) LEN(04) VALUE('OUT')
+008000210510             DCL        VAR(&IFSMETHOD)  TYPE(*CHAR) LEN(03)
+008100210510             DCL        VAR(&IFSDIRS)    TYPE(*CHAR) LEN(300)
+008200210510             DCL        VAR(&IFSDIRARCS) TYPE(*CHAR) LEN(300)
+008300210510             DCL        VAR(&IFSDIR)     TYPE(*CHAR) LEN(100)
+008400210510             DCL        VAR(&IFSDIRARC)  TYPE(*CHAR) LEN(100)
+008500210510             DCL        VAR(&eftfle)     TYPE(*CHAR) LEN(10) VALUE(' ')
+008600210510/*RFS186130 ENDS   */
+008700210510
+008800210510             RTVDTAARA DTAARA(MFAEFTLIB (1 10))    RTNVAR(&MFAEFTLIB)
+008900210510             RTVDTAARA DTAARA(MFACMPCDP (1 3))     RTNVAR(&CMPCODE)
+009000210510             RTVDTAARA DTAARA(MFAPRCDTP (1 8))     RTNVAR(&ASATDTE)
+009100210510
+009200210510/* GET THE CLIENT'S OJ LIBRARY. */
+009300210510             RTVDTAARA  DTAARA(MFAOBJECTS (1 10)) RTNVAR(&OBJLIB)
+009400210510
+009500210510/* Begin Processing */
+009600210510
+009700210510/*RFS186130 BEGINS*/
+009800210510             CHGVAR     VAR(&IfsMethod) VALUE('EXT')
+009900210510             CALL       PGM(FxGetIfsD) PARM(&IfsType &IfsOwner &IfsMethod +
+010000210510                          &IFSDIRS)
+010100210510             IF         (&IFSDIRS *EQ ' ') THEN(DO)
+010200210510                SNDPGMMSG  MSG('CDIC Extracts not created because IFS +
+010300210510                             folder not setup correctly') TOMSGQ(QSYSOPR)
+010400210510                GOTO       EXITPGM
+010500210510             ENDDO
+010600210510
+010700210510             CHGVAR     VAR(&IfsMethod) VALUE('ARC')
+010800210510             CALL       PGM(FxGetIfsD) PARM(&IfsType &IfsOwner &IfsMethod +
+010900210510                          &IFSDIRARCS)
+011000210510             IF         (&IFSDIRARCS *EQ ' ') THEN(DO)
+011100210510                SNDPGMMSG  MSG('CDIC Extracts not created because IFS +
+011200210510                             folder not setup correctly') TOMSGQ(QSYSOPR)
+011300210510
+011400210510                GOTO       EXITPGM
+011500210510             ENDDO
+011600210510/*RFS186130 ENDS*/
+011700210510
+011800210510/*RFS186130 BEGINS*/
+011900210510/*           CALL      PGM(GETSYSDATE) PARM(&Sdate) */
+012000210510             CHGVAR     VAR(&Sdate) VALUE(&ASATDTE)
+012100210510/*RFS186130 ENDS*/
+012200210510
+012300210510
+012400210510             IF        COND(&ExtType *EQ 'H')                        +
+012500210510                                       THEN(GOTO CMDLBL(HOLDF))
+012600210510/*RFS186130 BEGINS */
+012700210512/*           CALLSUBR   SUBR(NewExt) RFS1114901 */
+012800210510/*RFS186130 ENDS */
+012900210510
+013000210510/* Creating MIEXTPRE file                                           */
+013100210510
+013200210510             DLTF      QTEMP/MIEXTPRE
+013300210510             MONMSG    MSGID(CPF2105)
+013400210510             IF        COND(&ExtType *EQ 'I')       THEN(DO)
+013500210510             EXECUTE   VIEW(MIEXTPRE1) OUTFILE(QTEMP/MIEXTPRE)       +
+013600210510                                       MBROPT(*REPLACE)
+013700210510             ENDDO
+013800210510             ELSE      DO
+013900210510             EXECUTE   VIEW(MIEXTPRE2) OUTFILE(QTEMP/MIEXTPRE)       +
+014000210510                                       MBROPT(*REPLACE)
+014100210510             ENDDO
+014200210510
+014300210510             RTVMBRD   FILE(QTEMP/MIEXTPRE)       NBRCURRCD(&DtlCnt)
+014400210510             IF        COND(&DtlCnt  *EQ  0)                         +
+014500210510                                       THEN(GOTO CMDLBL(EXITPGM))
+014600210510
+014601210512/*Extracts 140 & 153*/
+014602210512             CALLSUBR   SUBR(NewExt) /*RFS1114901*/
+014603210512
+014700210510/* Creating extract file for CDICEX100V                             */
+014800210510
+014900210510             CHGVAR    VAR(&FileLst)   VALUE(&FileLst1)
+015000210510             CHGVAR    VAR(&EftFile1)  VALUE(&CMPCODE *CAT 'FID'     +
+015100210510                                            *CAT &FileLst)
+015200210510             DLTF      &MFAEFTLIB/&EftFile1
+015300210510             MONMSG    MSGID(CPF2105)
+015400210510/* RFS 108987 - begin   */
+015500210510/*           CRTPF     FILE(&MFAEFTLIB/&EftFile1) RCDLEN(&RecLen)    +
+015600210510                       SIZE(*NOMAX)     */
+015700210510             CHGVAR    VAR(&Hdr)       VALUE('"' *CAT &EftFile1      +
+015800210510                                              *CAT &Sdate *CAT '"')
+015900210510             CHGVAR    VAR(&Hdrv)      VALUE('SELECT' *CAT &Hdr      +
+016000210510                                              *CAT 'FROM SQLEXEC')
+016100210510 /*          INSERT    INTO(&MFAEFTLIB/&EftFile1) SQL(&Hdrv)         */
+016200210510             DLTF      QTEMP/&EftFile1
+016300210510             MONMSG    MSGID(CPF2105)
+016400210510             EXECUTE   VIEW(CDICEX100V) OUTFILE(QTEMP/&EftFile1)     +
+016500210510                                        MBROPT(*REPLACE)
+016600210510
+016700210510             CALL       PGM(CHECKRCLEN) PARM(&EFTFILE1 QTEMP &RECLEN)
+016800210510
+016900210510             CRTPF     FILE(&MFAEFTLIB/&EftFile1) RCDLEN(&RecLen)    +
+017000210510                       SIZE(*NOMAX)
+017100210510
+017200210510             INSERT    INTO(&MFAEFTLIB/&EftFile1) SQL(&Hdrv)
+017300210510
+017400210510             CPYF       FROMFILE(QTEMP/&EFTFILE1) +
+017500210510                          TOFILE(&MFAEFTLIB/&EFTFILE1) MBROPT(*ADD) +
+017600210510                          FMTOPT(*NOCHK)
+017700210510/*           CPYTOIMPF  FROMFILE(QTEMP/&EftFile1)                    +
+017800210510                        TOFILE(&MFAEFTLIB/&EftFile1) DTAFMT(*FIXED)  */
+017900210510/* RFS 108987 - end     */
+018000210510             RTVMBRD   FILE(&MFAEFTLIB/&EftFile1) NBRCURRCD(&DtlCnt)
+018100210510             CHGVAR    VAR(&DtlCnt)    VALUE(&DtlCnt+1)
+018200210510             CHGVAR    VAR(&DtlCnt1)   VALUE(&DtlCnt)
+018300210510             CHGVAR    VAR(&Trl)       VALUE(&Qte *CAT &EftFile1     +
+018400210510                                              *CAT &Sdate *CAT       +
+018500210510                                              &DtlCnt1 *CAT &Qte)
+018600210510             CHGVAR    VAR(&Trlv)      VALUE('SELECT' *CAT &Trl      +
+018700210510                                              *CAT 'FROM SQLEXEC')
+018800210510             INSERT    INTO(&MFAEFTLIB/&EftFile1) SQL(&Trlv)
+018900210510             DLTF      QTEMP/&EftFile1
+019000210510             MONMSG    MSGID(CPF2105)
+019100210510
+019200210510/*RFS186130 BEGINS*/
+019300210510/*----------Table 100 extract copy---------------------------------*/
+019400210510             CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIRS)
+019500210510             CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIR *TCAT &EFTFILE1 *TCAT +
+019600210510                          '.TXT')
+019700210510             CPYTOIMPF  FROMFILE(&MFAEFTLIB/&EFTFILE1) TOSTMF(&IFSDIR) +
+019800210510                          MBROPT(*REPLACE) STMFCODPAG(*PCASCII) +
+019900210510                          RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE) +
+020000210510                          FLDDLM(*TAB)
+020100210510             CHGAUT     OBJ(&IFSDIR) USER(*PUBLIC) DTAAUT(*RWX) +
+020200210510                          OBJAUT(*ALL)
+020300210510             MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+020400210510
+020500210510             CHGVAR     VAR(&IFSDIRARC)  VALUE(&IFSDIRARCS)
+020600210510             CHGVAR     VAR(&IFSDIRARC)  VALUE(&IFSDIRARC *TCAT &EFTFILE1 +
+020700210510                          *TCAT '_' *TCAT &SDATE *TCAT '.TXT')
+020800210510             CPYTOIMPF  FROMFILE(&MFAEFTLIB/&EFTFILE1) TOSTMF(&IFSDIRARC) +
+020900210510                          MBROPT(*REPLACE) STMFCODPAG(*PCASCII) +
+021000210510                          RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE) +
+021100210510                          FLDDLM(*TAB)
+021200210510             CHGAUT     OBJ(&IFSDIRARC) USER(*PUBLIC) DTAAUT(*RWX) +
+021300210510                          OBJAUT(*ALL)
+021400210510             MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+021500210510/*RFS186130 ENDS*/
+021600210510
+021700210510/* Creating extract file for CDICEX110V                             */
+021800210510
+021900210510             CHGVAR    VAR(&FileLst)   VALUE(&FileLst2)
+022000210510             CHGVAR    VAR(&EftFile2)  VALUE(&CMPCODE *CAT 'FID'     +
+022100210510                                            *CAT &FileLst)
+022200210510             DLTF      &MFAEFTLIB/&EftFile2
+022300210510             MONMSG    MSGID(CPF2105)
+022400210510/* RFS 108987 - begin   */
+022500210510/*           CRTPF     FILE(&MFAEFTLIB/&EftFile2) RCDLEN(&RecLen) */
+022600210510             CHGVAR    VAR(&Hdr)       VALUE(&Qte *CAT &EftFile2     +
+022700210510                                              *CAT &Sdate *CAT &Qte)
+022800210510             CHGVAR    VAR(&Hdrv)      VALUE('SELECT' *CAT &Hdr      +
+022900210510                                              *CAT 'FROM SQLEXEC')
+023000210510             DLTF      QTEMP/&EftFile2
+023100210510             MONMSG    MSGID(CPF2105)
+023200210510             EXECUTE   VIEW(CDICEX110V) OUTFILE(QTEMP/&EftFile2)     +
+023300210510                                        MBROPT(*REPLACE)
+023400210510
+023500210510             CALL       PGM(CHECKRCLEN) PARM(&EFTFILE2 QTEMP &RECLEN)
+023600210510
+023700210510             CRTPF     FILE(&MFAEFTLIB/&EftFile2) RCDLEN(&RecLen)    +
+023800210510                       SIZE(*NOMAX)
+023900210510
+024000210510             INSERT    INTO(&MFAEFTLIB/&EftFile2) SQL(&Hdrv)
+024100210510             CPYF       FROMFILE(QTEMP/&EFTFILE2) +
+024200210510                          TOFILE(&MFAEFTLIB/&EFTFILE2) MBROPT(*ADD) +
+024300210510                          FMTOPT(*NOCHK)
+024400210510/*           CPYTOIMPF  FROMFILE(QTEMP/&EftFile2)                    +
+024500210510                        TOFILE(&MFAEFTLIB/&EftFile2) DTAFMT(*FIXED)  */
+024600210510/* RFS 108987 - end     */
+024700210510             RTVMBRD   FILE(&MFAEFTLIB/&EftFile2) NBRCURRCD(&DtlCnt)
+024800210510             CHGVAR    VAR(&DtlCnt)    VALUE(&DtlCnt+1)
+024900210510             CHGVAR    VAR(&DtlCnt1)   VALUE(&DtlCnt)
+025000210510             CHGVAR    VAR(&Trl)       VALUE(&Qte *CAT &EftFile2     +
+025100210510                                              *CAT &Sdate *CAT       +
+025200210510                                              &DtlCnt1 *CAT &Qte)
+025300210510             CHGVAR    VAR(&Trlv)      VALUE('SELECT' *CAT &Trl      +
+025400210510                                              *CAT 'FROM SQLEXEC')
+025500210510             INSERT    INTO(&MFAEFTLIB/&EftFile2) SQL(&Trlv)
+025600210510             DLTF      QTEMP/&EftFile2
+025700210510             MONMSG    MSGID(CPF2105)
+025800210510
+025900210510/*RFS186130 BEGINS*/
+026000210510/*----------Table 110 extract copy ---------------------------------*/
+026100210510             CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIRS)
+026200210510             CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIR *TCAT &EFTFILE2 *TCAT +
+026300210510                          '.TXT')
+026400210510             CPYTOIMPF  FROMFILE(&MFAEFTLIB/&EFTFILE2) TOSTMF(&IFSDIR) +
+026500210510                          MBROPT(*REPLACE) STMFCODPAG(*PCASCII) +
+026600210510                          RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE)  +
+026700210510                          FLDDLM(*TAB)
+026800210510             CHGAUT     OBJ(&IFSDIR) USER(*PUBLIC) DTAAUT(*RWX) +
+026900210510                          OBJAUT(*ALL)
+027000210510             MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+027100210510
+027200210510             CHGVAR     VAR(&IFSDIRARC)  VALUE(&IFSDIRARCS)
+027300210510             CHGVAR     VAR(&IFSDIRARC)  VALUE(&IFSDIRARC *TCAT &EFTFILE2 +
+027400210510                          *TCAT '_' *TCAT &SDATE *TCAT '.TXT')
+027500210510             CPYTOIMPF  FROMFILE(&MFAEFTLIB/&EFTFILE2) TOSTMF(&IFSDIRARC) +
+027600210510                          MBROPT(*REPLACE) STMFCODPAG(*PCASCII) +
+027700210510                          RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE) +
+027800210510                          FLDDLM(*TAB)
+027900210510             CHGAUT     OBJ(&IFSDIRARC) USER(*PUBLIC) DTAAUT(*RWX) +
+028000210510                          OBJAUT(*ALL)
+028100210510             MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+028200210510/*RFS186130 ENDS*/
+028300210510
+028400210510/* Creating extract file for CDICEX120V                             */
+028500210510
+028600210510             CHGVAR    VAR(&FileLst)   VALUE(&FileLst3)
+028700210510             CHGVAR    VAR(&EftFile3)  VALUE(&CMPCODE *CAT 'FID'     +
+028800210510                                            *CAT &FileLst)
+028900210510             DLTF      &MFAEFTLIB/&EftFile3
+029000210510             MONMSG    MSGID(CPF2105)
+029100210510/* RFS 108987 - begin   */
+029200210510/*           CRTPF     FILE(&MFAEFTLIB/&EftFile3) RCDLEN(&RecLen)   */
+029300210510             CHGVAR    VAR(&Hdr)       VALUE(&Qte *CAT &EftFile3     +
+029400210510                                              *CAT &Sdate *CAT &Qte)
+029500210510             CHGVAR    VAR(&Hdrv)      VALUE('SELECT' *CAT &Hdr      +
+029600210510                                              *CAT 'FROM SQLEXEC')
+029700210510/*           INSERT    INTO(&MFAEFTLIB/&EftFile3) SQL(&Hdrv)         */
+029800210510             DLTF      QTEMP/&EftFile3
+029900210510             MONMSG    MSGID(CPF2105)
+030000210510             DLTF      QTEMP/TMPDLRCLP
+030100210510             MONMSG    MSGID(CPF2105)
+030200210510             DLTF      QTEMP/TMPIVRCLP
+030300210510             MONMSG    MSGID(CPF2105)
+030400210510             EXECUTE   VIEW(DLRNONV)   OUTFILE(QTEMP/TMPDLRCLP)      +
+030500210510                                       MBROPT(*REPLACE)
+030600210510             EXECUTE   VIEW(IVRNONV)   OUTFILE(QTEMP/TMPIVRCLP)      +
+030700210510                                       MBROPT(*REPLACE)
+030800210510             EXECUTE   VIEW(CDICEX120V) OUTFILE(QTEMP/&EftFile3)     +
+030900210510                                        MBROPT(*REPLACE)
+031000210510
+031100210510             CALL       PGM(CHECKRCLEN) PARM(&EFTFILE3 QTEMP &RECLEN)
+031200210510
+031300210510             CRTPF     FILE(&MFAEFTLIB/&EftFile3) RCDLEN(&RecLen)    +
+031400210510                       SIZE(*NOMAX)
+031500210510
+031600210510             INSERT    INTO(&MFAEFTLIB/&EftFile3) SQL(&Hdrv)
+031700210510             CPYF       FROMFILE(QTEMP/&EFTFILE3) +
+031800210510                          TOFILE(&MFAEFTLIB/&EFTFILE3) MBROPT(*ADD) +
+031900210510                          FMTOPT(*NOCHK)
+032000210510
+032100210510/*           CPYTOIMPF  FROMFILE(QTEMP/&EftFile3)                    +
+032200210510                        TOFILE(&MFAEFTLIB/&EftFile3) DTAFMT(*FIXED)  */
+032300210510/* RFS 108987 - end     */
+032400210510             RTVMBRD   FILE(&MFAEFTLIB/&EftFile3) NBRCURRCD(&DtlCnt)
+032500210510             CHGVAR    VAR(&DtlCnt)    VALUE(&DtlCnt+1)
+032600210510             CHGVAR    VAR(&DtlCnt1)   VALUE(&DtlCnt)
+032700210510             CHGVAR    VAR(&Trl)       VALUE(&Qte *CAT &EftFile3     +
+032800210510                                              *CAT &Sdate *CAT       +
+032900210510                                              &DtlCnt1 *CAT &Qte)
+033000210510             CHGVAR    VAR(&Trlv)      VALUE('SELECT' *CAT &Trl      +
+033100210510                                              *CAT 'FROM SQLEXEC')
+033200210510             INSERT    INTO(&MFAEFTLIB/&EftFile3) SQL(&Trlv)
+033300210510             DLTF      QTEMP/&EftFile3
+033400210510             MONMSG    MSGID(CPF2105)
+033500210510             DLTF      QTEMP/TMPDLRCLP
+033600210510             MONMSG    MSGID(CPF2105)
+033700210510             DLTF      QTEMP/TMPIVRCLP
+033800210510             MONMSG    MSGID(CPF2105)
+033900210510
+034000210510/*RFS186130 BEGINS*/
+034100210510/*----------Table 120 extract copy----------------------------------*/
+034200210510             CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIRS)
+034300210510             CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIR *TCAT &EFTFILE3 *TCAT +
+034400210510                          '.TXT')
+034500210510             CPYTOIMPF  FROMFILE(&MFAEFTLIB/&EFTFILE3) TOSTMF(&IFSDIR) +
+034600210510                          MBROPT(*REPLACE) STMFCODPAG(*PCASCII) +
+034700210510                          RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE)  +
+034800210510                          FLDDLM(*TAB)
+034900210510             CHGAUT     OBJ(&IFSDIR) USER(*PUBLIC) DTAAUT(*RWX) +
+035000210510                          OBJAUT(*ALL)
+035100210510             MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+035200210510
+035300210510             CHGVAR     VAR(&IFSDIRARC)  VALUE(&IFSDIRARCS)
+035400210510             CHGVAR     VAR(&IFSDIRARC)  VALUE(&IFSDIRARC *TCAT &EFTFILE3 +
+035500210510                          *TCAT '_' *TCAT &SDATE *TCAT '.TXT')
+035600210510             CPYTOIMPF  FROMFILE(&MFAEFTLIB/&EFTFILE3) TOSTMF(&IFSDIRARC) +
+035700210510                          MBROPT(*REPLACE) STMFCODPAG(*PCASCII) +
+035800210510                          RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE) +
+035900210510                          FLDDLM(*TAB)
+036000210510             CHGAUT     OBJ(&IFSDIRARC) USER(*PUBLIC) DTAAUT(*RWX) +
+036100210510                          OBJAUT(*ALL)
+036200210510             MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+036300210510/*RFS186130 ENDS*/
+036400210510
+036500210510/* Creating extract file for CDICEX130V                             */
+036600210510
+036700210510             CHGVAR    VAR(&FileLst)   VALUE(&FileLst4)
+036800210510             CHGVAR    VAR(&EftFile4)  VALUE(&CMPCODE *CAT 'FID'     +
+036900210510                                            *CAT &FileLst)
+037000210510             DLTF      &MFAEFTLIB/&EftFile4
+037100210510             MONMSG    MSGID(CPF2105)
+037200210510/* RFS 108987 - begin   */
+037300210510/*           CRTPF     FILE(&MFAEFTLIB/&EftFile4) RCDLEN(&RecLen)   */
+037400210510/* RFS 108987 - end     */
+037500210510             CHGVAR    VAR(&Hdr)       VALUE(&Qte *CAT &EftFile4     +
+037600210510                                              *CAT &Sdate *CAT &Qte)
+037700210510             CHGVAR    VAR(&Hdrv)      VALUE('SELECT' *CAT &Hdr      +
+037800210510                                              *CAT 'FROM SQLEXEC')
+037900210510/*           INSERT    INTO(&MFAEFTLIB/&EftFile4) SQL(&Hdrv)         */
+038000210510             DLTF      QTEMP/&EftFile4
+038100210510             MONMSG    MSGID(CPF2105)
+038200210510             EXECUTE   VIEW(CDICEX130V) OUTFILE(QTEMP/&EftFile4)     +
+038300210510                                        MBROPT(*REPLACE)
+038400210510
+038500210510             CALL       PGM(CHECKRCLEN) PARM(&EFTFILE4 QTEMP &RECLEN)
+038600210510
+038700210510             CRTPF     FILE(&MFAEFTLIB/&EftFile4) RCDLEN(&RecLen)    +
+038800210510                       SIZE(*NOMAX)
+038900210510
+039000210510             INSERT    INTO(&MFAEFTLIB/&EftFile4) SQL(&Hdrv)
+039100210510
+039200210510             CPYF       FROMFILE(QTEMP/&EFTFILE4) +
+039300210510                          TOFILE(&MFAEFTLIB/&EFTFILE4) MBROPT(*ADD) +
+039400210510                          FMTOPT(*NOCHK)
+039500210510
+039600210510/*           CPYTOIMPF  FROMFILE(QTEMP/&EftFile4)                    +
+039700210510                        TOFILE(&MFAEFTLIB/&EftFile4) DTAFMT(*FIXED)  */
+039800210510/* RFS 108987 - end     */
+039900210510             RTVMBRD   FILE(&MFAEFTLIB/&EftFile4) NBRCURRCD(&DtlCnt)
+040000210510             CHGVAR    VAR(&DtlCnt)    VALUE(&DtlCnt+1)
+040100210510             CHGVAR    VAR(&DtlCnt1)   VALUE(&DtlCnt)
+040200210510             CHGVAR    VAR(&Trl)       VALUE(&Qte *CAT &EftFile4     +
+040300210510                                              *CAT &Sdate *CAT       +
+040400210510                                              &DtlCnt1 *CAT &Qte)
+040500210510             CHGVAR    VAR(&Trlv)      VALUE('SELECT' *CAT &Trl      +
+040600210510                                              *CAT 'FROM SQLEXEC')
+040700210510             INSERT    INTO(&MFAEFTLIB/&EftFile4) SQL(&Trlv)
+040800210510             DLTF      QTEMP/&EftFile4
+040900210510             MONMSG    MSGID(CPF2105)
+041000210510
+041100210510/*RFS186130 BEGINS*/
+041200210510/*----------Table 130 extract copy----------------------------------*/
+041300210510             CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIRS)
+041400210510             CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIR *TCAT &EFTFILE4 *TCAT +
+041500210510                          '.TXT')
+041600210510             CPYTOIMPF  FROMFILE(&MFAEFTLIB/&EFTFILE4) TOSTMF(&IFSDIR) +
+041700210510                          MBROPT(*REPLACE) STMFCODPAG(*PCASCII) +
+041800210510                          RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE)  +
+041900210510                          FLDDLM(*TAB)
+042000210510             CHGAUT     OBJ(&IFSDIR) USER(*PUBLIC) DTAAUT(*RWX) +
+042100210510                          OBJAUT(*ALL)
+042200210510             MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+042300210510
+042400210510             CHGVAR     VAR(&IFSDIRARC)  VALUE(&IFSDIRARCS)
+042500210510             CHGVAR     VAR(&IFSDIRARC)  VALUE(&IFSDIRARC *TCAT &EFTFILE4 +
+042600210510                          *TCAT '_' *TCAT &SDATE *TCAT '.TXT')
+042700210510             CPYTOIMPF  FROMFILE(&MFAEFTLIB/&EFTFILE4) TOSTMF(&IFSDIRARC) +
+042800210510                          MBROPT(*REPLACE) STMFCODPAG(*PCASCII) +
+042900210510                          RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE) +
+043000210510                          FLDDLM(*TAB)
+043100210510             CHGAUT     OBJ(&IFSDIRARC) USER(*PUBLIC) DTAAUT(*RWX) +
+043200210510                          OBJAUT(*ALL)
+043300210510             MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+043400210510/*RFS186130 ENDS*/
+043500210510
+043600210510/* Creating extract file for CDICEX500V                             */
+043700210510
+043800210510             CHGVAR    VAR(&FileLst)   VALUE(&FileLst5)
+043900210510             CHGVAR    VAR(&EftFile5)  VALUE(&CMPCODE *CAT 'FID'     +
+044000210510                                            *CAT &FileLst)
+044100210510             DLTF      &MFAEFTLIB/&EftFile5
+044200210510             MONMSG    MSGID(CPF2105)
+044300210510/* RFS 108987 - begin   */
+044400210510/*           CRTPF     FILE(&MFAEFTLIB/&EftFile5)  RCDLEN(&RecLen)  */
+044500210510             CHGVAR    VAR(&Hdr)       VALUE(&Qte *CAT &EftFile5     +
+044600210510                                              *CAT &Sdate *CAT &Qte)
+044700210510             CHGVAR    VAR(&Hdrv)      VALUE('SELECT' *CAT &Hdr      +
+044800210510                                              *CAT 'FROM SQLEXEC')
+044900210510/*           INSERT    INTO(&MFAEFTLIB/&EftFile5) SQL(&Hdrv)         */
+045000210510             DLTF      QTEMP/&EftFile5
+045100210510             MONMSG    MSGID(CPF2105)
+045200210510             EXECUTE   VIEW(CDICEX500V) OUTFILE(QTEMP/&EftFile5)     +
+045300210510                                        MBROPT(*REPLACE)
+045400210510
+045500210510             CALL       PGM(CHECKRCLEN) PARM(&EFTFILE5 QTEMP &RECLEN)
+045600210510
+045700210510             CRTPF     FILE(&MFAEFTLIB/&EftFile5) RCDLEN(&RecLen)    +
+045800210510                       SIZE(*NOMAX)
+045900210510
+046000210510             INSERT    INTO(&MFAEFTLIB/&EftFile5) SQL(&Hdrv)
+046100210510
+046200210510             CPYF       FROMFILE(QTEMP/&EFTFILE5) +
+046300210510                          TOFILE(&MFAEFTLIB/&EFTFILE5) MBROPT(*ADD) +
+046400210510                          FMTOPT(*NOCHK)
+046500210510/*           CPYTOIMPF  FROMFILE(QTEMP/&EftFile5)                    +
+046600210510                        TOFILE(&MFAEFTLIB/&EftFile5) DTAFMT(*FIXED)  */
+046700210510/* RFS 108987 - end     */
+046800210510             RTVMBRD   FILE(&MFAEFTLIB/&EftFile5) NBRCURRCD(&DtlCnt)
+046900210510             CHGVAR    VAR(&DtlCnt)    VALUE(&DtlCnt+1)
+047000210510             CHGVAR    VAR(&DtlCnt1)   VALUE(&DtlCnt)
+047100210510             CHGVAR    VAR(&Trl)       VALUE(&Qte *CAT &EftFile5     +
+047200210510                                              *CAT &Sdate *CAT       +
+047300210510                                              &DtlCnt1 *CAT &Qte)
+047400210510             CHGVAR    VAR(&Trlv)      VALUE('SELECT' *CAT &Trl      +
+047500210510                                              *CAT 'FROM SQLEXEC')
+047600210510             INSERT    INTO(&MFAEFTLIB/&EftFile5) SQL(&Trlv)
+047700210510             DLTF      QTEMP/&EftFile5
+047800210510             MONMSG    MSGID(CPF2105)
+047900210510
+048000210510/*RFS186130 BEGINS*/
+048100210510/*----------Table 500 extract copy----------------------------------*/
+048200210510             CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIRS)
+048300210510             CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIR *TCAT &EFTFILE5 *TCAT +
+048400210510                          '.TXT')
+048500210510             CPYTOIMPF  FROMFILE(&MFAEFTLIB/&EFTFILE5) TOSTMF(&IFSDIR) +
+048600210510                          MBROPT(*REPLACE) STMFCODPAG(*PCASCII) +
+048700210510                          RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE)  +
+048800210510                          FLDDLM(*TAB)
+048900210510             CHGAUT     OBJ(&IFSDIR) USER(*PUBLIC) DTAAUT(*RWX) +
+049000210510                          OBJAUT(*ALL)
+049100210510             MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+049200210510
+049300210510             CHGVAR     VAR(&IFSDIRARC)  VALUE(&IFSDIRARCS)
+049400210510             CHGVAR     VAR(&IFSDIRARC)  VALUE(&IFSDIRARC *TCAT &EFTFILE5 +
+049500210510                          *TCAT '_' *TCAT &SDATE *TCAT '.TXT')
+049600210510             CPYTOIMPF  FROMFILE(&MFAEFTLIB/&EFTFILE5) TOSTMF(&IFSDIRARC) +
+049700210510                          MBROPT(*REPLACE) STMFCODPAG(*PCASCII) +
+049800210510                          RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE) +
+049900210510                          FLDDLM(*TAB)
+050000210510             CHGAUT     OBJ(&IFSDIRARC) USER(*PUBLIC) DTAAUT(*RWX) +
+050100210510                          OBJAUT(*ALL)
+050200210510             MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+050300210510/*RFS186130 ENDS*/
+050400210510
+050500210510/* Creating extract file for CDICEX800V                             */
+050600210510
+050700210510             CHGVAR    VAR(&FileLst)   VALUE(&FileLst6)
+050800210510             CHGVAR    VAR(&EftFile6)  VALUE(&CMPCODE *CAT 'FID'     +
+050900210510                                            *CAT &FileLst)
+051000210510             DLTF      &MFAEFTLIB/&EftFile6
+051100210510             MONMSG    MSGID(CPF2105)
+051200210510/* RFS 108987 - begin   */
+051300210510/*           CRTPF     FILE(&MFAEFTLIB/&EftFile6)  RCDLEN(&RecLen)   +
+051400210510                                                   SIZE(*NOMAX)     */
+051500210510             CHGVAR    VAR(&Hdr)       VALUE(&Qte *CAT &EftFile6     +
+051600210510                                              *CAT &Sdate *CAT &Qte)
+051700210510             CHGVAR    VAR(&Hdrv)      VALUE('SELECT' *CAT &Hdr      +
+051800210510                                              *CAT 'FROM SQLEXEC')
+051900210510/*           INSERT    INTO(&MFAEFTLIB/&EftFile6) SQL(&Hdrv)         */
+052000210510             DLTF      QTEMP/&EftFile6
+052100210510             MONMSG    MSGID(CPF2105)
+052200210510             DLTF      QTEMP/&EftFile6
+052300210510             MONMSG    MSGID(CPF2105)
+052400210510             EXECUTE   VIEW(CDICEX800V) OUTFILE(QTEMP/&EftFile6)     +
+052500210510                                        MBROPT(*REPLACE)
+052600210510
+052700210510             CALL       PGM(CHECKRCLEN) PARM(&EFTFILE6 QTEMP &RECLEN)
+052800210510
+052900210510             CRTPF     FILE(&MFAEFTLIB/&EftFile6) RCDLEN(&RecLen)    +
+053000210510                       SIZE(*NOMAX)
+053100210510
+053200210510             INSERT    INTO(&MFAEFTLIB/&EftFile6) SQL(&Hdrv)
+053300210510
+053400210510             CPYF       FROMFILE(QTEMP/&EFTFILE6) +
+053500210510                          TOFILE(&MFAEFTLIB/&EFTFILE6) MBROPT(*ADD) +
+053600210510                          FMTOPT(*NOCHK)
+053700210510/*           CPYTOIMPF  FROMFILE(QTEMP/&EftFile6)                    +
+053800210510                        TOFILE(&MFAEFTLIB/&EftFile6) DTAFMT(*FIXED)  */
+053900210510/* RFS 108987 - end     */
+054000210510             RTVMBRD   FILE(&MFAEFTLIB/&EftFile6)  NBRCURRCD(&DtlCnt)
+054100210510             CHGVAR    VAR(&DtlCnt)    VALUE(&DtlCnt+1)
+054200210510             CHGVAR    VAR(&DtlCnt1)   VALUE(&DtlCnt)
+054300210510             CHGVAR    VAR(&Trl)       VALUE(&Qte *CAT &EftFile6     +
+054400210510                                              *CAT &Sdate *CAT       +
+054500210510                                              &DtlCnt1 *CAT &Qte)
+054600210510             CHGVAR    VAR(&Trlv)      VALUE('SELECT' *CAT &Trl      +
+054700210510                                              *CAT 'FROM SQLEXEC')
+054800210510             INSERT    INTO(&MFAEFTLIB/&EftFile6) SQL(&Trlv)
+054900210510             DLTF      QTEMP/&EftFile6
+055000210510             MONMSG    MSGID(CPF2105)
+055100210510
+055200210510/*RFS186130 BEGINS*/
+055300210510/*----------Table 800 extract copy----------------------------------*/
+055400210510             CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIRS)
+055500210510             CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIR *TCAT &EFTFILE6 *TCAT +
+055600210510                          '.TXT')
+055700210510             CPYTOIMPF  FROMFILE(&MFAEFTLIB/&EFTFILE6) TOSTMF(&IFSDIR) +
+055800210510                          MBROPT(*REPLACE) STMFCODPAG(*PCASCII) +
+055900210510                          RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE)  +
+056000210510                          FLDDLM(*TAB)
+056100210510             CHGAUT     OBJ(&IFSDIR) USER(*PUBLIC) DTAAUT(*RWX) +
+056200210510                          OBJAUT(*ALL)
+056300210510             MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+056400210510
+056500210510             CHGVAR     VAR(&IFSDIRARC)  VALUE(&IFSDIRARCS)
+056600210510             CHGVAR     VAR(&IFSDIRARC)  VALUE(&IFSDIRARC *TCAT &EFTFILE6 +
+056700210510                          *TCAT '_' *TCAT &SDATE *TCAT '.TXT')
+056800210510             CPYTOIMPF  FROMFILE(&MFAEFTLIB/&EFTFILE6) TOSTMF(&IFSDIRARC) +
+056900210510                          MBROPT(*REPLACE) STMFCODPAG(*PCASCII) +
+057000210510                          RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE) +
+057100210510                          FLDDLM(*TAB)
+057200210510             CHGAUT     OBJ(&IFSDIRARC) USER(*PUBLIC) DTAAUT(*RWX) +
+057300210510                          OBJAUT(*ALL)
+057400210510             MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+057500210510/*RFS186130 ENDS*/
+057600210510
+057700210510/* Creating extract file for CDICEX900V                             */
+057800210510
+057900210510             CHGVAR    VAR(&FileLst)   VALUE(&FileLst7)
+058000210510             CHGVAR    VAR(&EftFile7)  VALUE(&CMPCODE *CAT 'FID'     +
+058100210510                                            *CAT &FileLst)
+058200210510             DLTF      &MFAEFTLIB/&EftFile7
+058300210510             MONMSG    MSGID(CPF2105)
+058400210510/* RFS 108987 - begin   */
+058500210510/*           CRTPF     FILE(&MFAEFTLIB/&EftFile7)  RCDLEN(&RecLen)  */
+058600210510             CHGVAR    VAR(&Hdr)       VALUE(&Qte *CAT &EftFile7     +
+058700210510                                              *CAT &Sdate *CAT &Qte)
+058800210510             CHGVAR    VAR(&Hdrv)      VALUE('SELECT' *CAT &Hdr      +
+058900210510                                              *CAT 'FROM SQLEXEC')
+059000210510/*           INSERT    INTO(&MFAEFTLIB/&EftFile7) SQL(&Hdrv)         */
+059100210510             DLTF      QTEMP/&EftFile7
+059200210510             MONMSG    MSGID(CPF2105)
+059300210510             /* RFS 111018 start */
+059400210510             EXECUTE   VIEW(TMPACRINT) OUTFILE(QTEMP/TMPACRINT)     +
+059500210510                                        MBROPT(*REPLACE)
+059600210510             /* RFS 111018 end   */
+059700210510             EXECUTE   VIEW(CDICEX900V) OUTFILE(QTEMP/&EftFile7)     +
+059800210510                                        MBROPT(*REPLACE)
+059900210510
+060000210510             CALL       PGM(CHECKRCLEN) PARM(&EFTFILE7 QTEMP &RECLEN)
+060100210510
+060200210510             CRTPF     FILE(&MFAEFTLIB/&EftFile7) RCDLEN(&RecLen)    +
+060300210510                       SIZE(*NOMAX)
+060400210510
+060500210510             INSERT    INTO(&MFAEFTLIB/&EftFile7) SQL(&Hdrv)
+060600210510             CPYF       FROMFILE(QTEMP/&EFTFILE7) +
+060700210510                          TOFILE(&MFAEFTLIB/&EFTFILE7) MBROPT(*ADD) +
+060800210510                          FMTOPT(*NOCHK)
+060900210510/*           CPYTOIMPF  FROMFILE(QTEMP/&EftFile7)                    +
+061000210510                        TOFILE(&MFAEFTLIB/&EftFile7) DTAFMT(*FIXED)  */
+061100210510/* RFS 108987 - end     */
+061200210510             RTVMBRD   FILE(&MFAEFTLIB/&EftFile7) NBRCURRCD(&DTLCNT)
+061300210510             CHGVAR    VAR(&DtlCnt)    VALUE(&DtlCnt+1)
+061400210510             CHGVAR    VAR(&DtlCnt1)   VALUE(&DtlCnt)
+061500210510             CHGVAR    VAR(&Trl)       VALUE(&Qte *CAT &EftFile7     +
+061600210510                                              *CAT &Sdate *CAT       +
+061700210510                                              &DtlCnt1 *CAT &Qte)
+061800210510             CHGVAR    VAR(&Trlv)      VALUE('SELECT' *CAT &Trl      +
+061900210510                                              *CAT 'FROM SQLEXEC')
+062000210510             INSERT    INTO(&MFAEFTLIB/&EftFile7) SQL(&Trlv)
+062100210510             DLTF      QTEMP/&EftFile7
+062200210510             MONMSG    MSGID(CPF2105)
+062300210510/*RFS186130 BEGINS*/
+062400210510/*----------Table 900 extract copy----------------------------------*/
+062500210510             CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIRS)
+062600210510             CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIR *TCAT &EFTFILE7 *TCAT +
+062700210510                          '.TXT')
+062800210510             CPYTOIMPF  FROMFILE(&MFAEFTLIB/&EFTFILE7) TOSTMF(&IFSDIR) +
+062900210510                          MBROPT(*REPLACE) STMFCODPAG(*PCASCII) +
+063000210510                          RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE)  +
+063100210510                          FLDDLM(*TAB)
+063200210510             CHGAUT     OBJ(&IFSDIR) USER(*PUBLIC) DTAAUT(*RWX) +
+063300210510                          OBJAUT(*ALL)
+063400210510             MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+063500210510
+063600210510             CHGVAR     VAR(&IFSDIRARC)  VALUE(&IFSDIRARCS)
+063700210510             CHGVAR     VAR(&IFSDIRARC)  VALUE(&IFSDIRARC *TCAT &EFTFILE7 +
+063800210510                          *TCAT '_' *TCAT &SDATE *TCAT '.TXT')
+063900210510             CPYTOIMPF  FROMFILE(&MFAEFTLIB/&EFTFILE7) TOSTMF(&IFSDIRARC) +
+064000210510                          MBROPT(*REPLACE) STMFCODPAG(*PCASCII) +
+064100210510                          RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE) +
+064200210510                          FLDDLM(*TAB)
+064300210510             CHGAUT     OBJ(&IFSDIRARC) USER(*PUBLIC) DTAAUT(*RWX) +
+064400210510                          OBJAUT(*ALL)
+064500210510             MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+064600210510/*RFS186130 ENDS */
+064700210510
+064800210510             DLTF      QTEMP/MIEXTPRE
+064900210510             MONMSG    MSGID(CPF2105)
+065000210510             GOTO      CMDLBL(EXITPGM)
+065100210510
+065200210510/* Creating extract file for CDICEX801V                             */
+065300210510
+065400210510 HOLDF:
+065500210510             CPYF      FROMFILE(&OBJLIB/WRKACCHLD)                 +
+065600210510                       TOFILE(QTEMP/WRKACCHLD) MBROPT(*REPLACE)    +
+065700210510                       CRTFILE(*YES)
+065800210510             CHGVAR    VAR(&FileLst)   VALUE(&FileLst6)
+065900210510             CHGVAR    VAR(&EftFile1)  VALUE(&CMPCODE *CAT 'CGID'    +
+066000210510                                            *CAT &FileLst)
+066100210510             DLTF      &MFAEFTLIB/&EftFile1
+066200210510             MONMSG    MSGID(CPF2105)
+066300210510/* RFS 108987 - begin   */
+066400210510/*           CRTPF     FILE(&MFAEFTLIB/&EftFile1)  RCDLEN(&RecLen)   */
+066500210510             CHGVAR    VAR(&Hdr)       VALUE(&Qte *CAT &EftFile1     +
+066600210510                                              *CAT &Sdate *CAT &Qte)
+066700210510             CHGVAR    VAR(&Hdrv)      VALUE('SELECT' *CAT &Hdr      +
+066800210510                                              *CAT 'FROM SQLEXEC')
+066900210510/* RFS 110423 - begin   */
+067000210510 /*          INSERT    INTO(&MFAEFTLIB/&EftFile1) SQL(&Hdrv)        */
+067100210510/* RFS 110423 - end     */
+067200210510             DLTF      QTEMP/&EftFile1
+067300210510             MONMSG    MSGID(CPF2105)
+067400210510 /* RFS 111018 START   */
+067500210510
+067600210510             EXECUTE   VIEW(TMPHFDTA) OUTFILE(QTEMP/TMPHFDTA)     +
+067700210510                                        MBROPT(*REPLACE)
+067800210510             EXECUTE   VIEW(TMPINVPTP) OUTFILE(QTEMP/TMPINVPTP)     +
+067900210510                                        MBROPT(*REPLACE)
+068000210510             EXECUTE   VIEW(TMPACCASN) OUTFILE(QTEMP/TMPACCASP)     +
+068100210510                                        MBROPT(*REPLACE)
+068200210510 /* RFS 111018 END     */
+068300210510             EXECUTE   VIEW(CDICEX801V) OUTFILE(QTEMP/&EftFile1)     +
+068400210510                                        MBROPT(*REPLACE)
+068500210510
+068600210510             CALL       PGM(CHECKRCLEN) PARM(&EFTFILE1 QTEMP &RECLEN)
+068700210510
+068800210510             CRTPF     FILE(&MFAEFTLIB/&EftFile1) RCDLEN(&RecLen)    +
+068900210510                       SIZE(*NOMAX)
+069000210510
+069100210510             INSERT    INTO(&MFAEFTLIB/&EftFile1) SQL(&Hdrv)
+069200210510
+069300210510             CPYF       FROMFILE(QTEMP/&EFTFILE1) +
+069400210510                          TOFILE(&MFAEFTLIB/&EFTFILE1) MBROPT(*ADD) +
+069500210510                          FMTOPT(*NOCHK)
+069600210510/*           CPYTOIMPF  FROMFILE(QTEMP/&EftFile1)                    +
+069700210510                        TOFILE(&MFAEFTLIB/&EftFile1) DTAFMT(*FIXED)  */
+069800210510/* RFS 108987 - end     */
+069900210510             RTVMBRD   FILE(&MFAEFTLIB/&EftFile1) NBRCURRCD(&DtlCnt)
+070000210510             CHGVAR    VAR(&DtlCnt)    VALUE(&DtlCnt+1)
+070100210510             CHGVAR    VAR(&DtlCnt1)   VALUE(&DtlCnt)
+070200210510             CHGVAR    VAR(&Trl)       VALUE(&Qte *CAT &EftFile1     +
+070300210510                                              *CAT &Sdate *CAT       +
+070400210510                                              &DtlCnt1 *CAT &Qte)
+070500210510             CHGVAR    VAR(&Trlv)      VALUE('SELECT' *CAT &Trl      +
+070600210510                                              *CAT 'FROM SQLEXEC')
+070700210510             INSERT    INTO(&MFAEFTLIB/&EftFile1) SQL(&Trlv)
+070800210510             DLTF      QTEMP/&EftFile1
+070900210510             MONMSG    MSGID(CPF2105)
+071000210510
+071100210510/*RFS186130 BEGINS */
+071200210510/*----------CGID extract copy --------------------------------------*/
+071300210510             CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIRS)
+071400210510             CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIR *TCAT &EFTFILE1 *TCAT +
+071500210510                          '.TXT')
+071600210510             CPYTOIMPF  FROMFILE(&MFAEFTLIB/&EFTFILE1) TOSTMF(&IFSDIR) +
+071700210510                          MBROPT(*REPLACE) STMFCODPAG(*PCASCII) +
+071800210510                          RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE)  +
+071900210510                          FLDDLM(*TAB)
+072000210510             CHGAUT     OBJ(&IFSDIR) USER(*PUBLIC) DTAAUT(*RWX) +
+072100210510                          OBJAUT(*ALL)
+072200210510             MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+072300210510
+072400210510             CHGVAR     VAR(&IFSDIRARC)  VALUE(&IFSDIRARCS)
+072500210510             CHGVAR     VAR(&IFSDIRARC)  VALUE(&IFSDIRARC *TCAT &EFTFILE1 +
+072600210510                          *TCAT '_' *TCAT &SDATE *TCAT '.TXT')
+072700210510             CPYTOIMPF  FROMFILE(&MFAEFTLIB/&EFTFILE1) TOSTMF(&IFSDIRARC) +
+072800210510                          MBROPT(*REPLACE) STMFCODPAG(*PCASCII) +
+072900210510                          RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE) +
+073000210510                          FLDDLM(*TAB)
+073100210510             CHGAUT     OBJ(&IFSDIRARC) USER(*PUBLIC) DTAAUT(*RWX) +
+073200210510                          OBJAUT(*ALL)
+073300210510             MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+073400210510/*RFS186130 ENDS */
+073500210510
+073600210510
+073700210510/*RFS186130 BEGINS */
+073800210510             SUBR       SUBR(NewEXT)
+073900210510
+074000210510/*----------TABLE 140 extract MI Deposit Hold Data-----------------*/
+074100210510                CHGVAR     VAR(&FileLst)   VALUE(&FileLst8)
+074200210510                CHGVAR     VAR(&EftFile8)  VALUE(&CMPCODE *CAT 'FID' *CAT +
+074300210510                             &FileLst)
+074400210510                CHGVAR     VAR(&eftfle)    VALUE(&EftFile8)
+074500210510                DLTF       &MFAEFTLIB/&EftFile8
+074600210510                MONMSG     MSGID(CPF2105)
+074700210510
+074800210510                EXECUTE    VIEW(CDICEXHV) OUTFILE(QTEMP/TBL140H) +
+074900210510                             MBROPT(*REPLACE) SETVAR(&eftfle)
+075000210510                EXECUTE    VIEW(CDICEX140V) OUTFILE(QTEMP/TBL140D) +
+075100210510                             MBROPT(*REPLACE)
+075200210510
+075300210510                RTVMBRD    FILE(QTEMP/TBL140D) NBRCURRCD(&DTLCNT)
+075400210510                CHGVAR     (&DTLCNT)  VALUE(&DTLCNT+2)
+075500210510                CHGVAR     (&DTLCNT2) VALUE(&DTLCNT)
+075600210510
+075700210510/*RFS1114630 STARTS */
+075800210510/*              CHGVAR     (&TRL) VALUE(&QTE *CAT '999' *CAT &DTLCNT2 *CAT +
+075900210510                             &QTE)  */
+076000210510                CHGVAR     (&TRL) VALUE(&QTE *CAT '999' *CAT '|' *CAT +
+076100210510                             &DTLCNT2 *CAT &QTE)
+076200210510/*RFS1114630 ENDS   */
+076300210510
+076400210510                CHGVAR     (&TRLV) VALUE('SELECT' *CAT &TRL *CAT 'FROM +
+076500210510                             SQLEXEC')
+076600210510                EXECUTE    SQL(&TRLV)  OUTFILE(QTEMP/TBL140T) +
+076700210510                             MBROPT(*REPLACE)
+076800210510
+076900210510                CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIRS)
+077000210510                CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIR *TCAT &EFTFILE8 +
+077100210510                             *TCAT '.TXT')
+077200210510                CPYTOIMPF  FROMFILE(QTEMP/TBL140H) TOSTMF(&IFSDIR) +
+077300210510                             MBROPT(*REPLACE) STMFCODPAG(*PCASCII) +
+077400210510                             RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE) +
+077500210510                             FLDDLM('|')
+077600210510                CPYTOIMPF  FROMFILE(QTEMP/TBL140D) TOSTMF(&IFSDIR) +
+077700210510                             MBROPT(*ADD) STMFCODPAG(*PCASCII) +
+077800210510                             RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE) +
+077900210510                             FLDDLM('|')
+078000210510                CPYTOIMPF  FROMFILE(QTEMP/TBL140T) TOSTMF(&IFSDIR) +
+078100210510                             MBROPT(*ADD) STMFCODPAG(*PCASCII) +
+078200210510                             RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE) +
+078300210510                             FLDDLM('|')
+078400210510                CHGAUT     OBJ(&IFSDIR) USER(*PUBLIC) DTAAUT(*RWX) +
+078500210510                             OBJAUT(*ALL)
+078600210510                MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+078700210510
+078800210510                CRTPF      FILE(&MFAEFTLIB/&EFTFILE8) RCDLEN(1000) +
+078900210510                             MAXMBRS(*NOMAX)
+079000210510                CPYFRMIMPF FROMSTMF(&IFSDIR) TOFILE(&MFAEFTLIB/&EFTFILE8) +
+079100210510                             MBROPT(*REPLACE) RCDDLM(*CRLF) STRDLM(*NONE) +
+079200210510                             RMVBLANK(*NONE) FLDDLM(*TAB)
+079300210510
+079400210510                CHGVAR     VAR(&IFSDIRARC) VALUE(&IFSDIRARCS)
+079500210510                CHGVAR     VAR(&IFSDIRARC) VALUE(&IFSDIRARC *TCAT +
+079600210510                             &EFTFILE8 *TCAT '_' *TCAT &SDATE *TCAT '.TXT')
+079700210510                CPYTOIMPF  FROMFILE(&MFAEFTLIB/&EFTFILE8) +
+079800210510                             TOSTMF(&IFSDIRARC) MBROPT(*REPLACE) +
+079900210510                             STMFCODPAG(*PCASCII) RCDDLM(*CRLF) +
+080000210510                             DTAFMT(*DLM) STRDLM(*NONE) FLDDLM('|')
+080100210510                CHGAUT     OBJ(&IFSDIRARC) USER(*PUBLIC) DTAAUT(*RWX) +
+080200210510                             OBJAUT(*ALL)
+080300210510                MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+080400210510
+080500210510/*------ TABLE 153 extract MI Beneficiary Data - Nominee Broker ---------*/
+080600210510                CHGVAR     VAR(&FileLst)   VALUE(&FileLst9)
+080700210510                CHGVAR     VAR(&EftFile9)  VALUE(&CMPCODE *CAT 'FID' *CAT +
+080800210510                             &FileLst)
+080900210510                CHGVAR     VAR(&eftfle)    VALUE(&EftFile9)
+081000210510                DLTF       &MFAEFTLIB/&EftFile9
+081100210510                MONMSG     MSGID(CPF2105)
+081200210510
+081300210510                EXECUTE    VIEW(CDICEXHV)   OUTFILE(QTEMP/TBL153H) +
+081400210510                             MBROPT(*REPLACE) SETVAR(&eftfle)
+081500210510                EXECUTE    VIEW(CDICEX153V) OUTFILE(QTEMP/TBL153D) +
+081600210510                             MBROPT(*REPLACE)
+081700210510
+081800210510                RTVMBRD    FILE(QTEMP/TBL153D) NBRCURRCD(&DTLCNT)
+081900210510                CHGVAR     (&DTLCNT)  VALUE(&DTLCNT+2)
+082000210510                CHGVAR     (&DTLCNT2) VALUE(&DTLCNT)
+082100210510
+082200210510/*RFS1114630 STARTS */
+082300210510/*              CHGVAR     (&TRL)     VALUE(&QTE *CAT '999' *CAT &DTLCNT2 +
+082400210510                             *CAT &QTE)  */
+082500210510                CHGVAR     (&TRL)     VALUE(&QTE *CAT '999' *CAT '|' *CAT +
+082600210510                             &DTLCNT2 *CAT &QTE)
+082700210510/*RFS1114630 ENDS   */
+082800210510                CHGVAR     (&TRLV) VALUE('SELECT' *CAT &TRL *CAT 'FROM +
+082900210510                             SQLEXEC')
+083000210510
+083100210510                EXECUTE    SQL(&TRLV)  OUTFILE(QTEMP/TBL153T) +
+083200210510                             MBROPT(*REPLACE)
+083300210510
+083400210510                CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIRS)
+083500210510                CHGVAR     VAR(&IFSDIR) VALUE(&IFSDIR *TCAT &EFTFILE9 +
+083600210510                             *TCAT '.TXT')
+083700210510                CPYTOIMPF  FROMFILE(QTEMP/TBL153H) TOSTMF(&IFSDIR) +
+083800210510                             MBROPT(*REPLACE) STMFCODPAG(*PCASCII) +
+083900210510                             RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE) +
+084000210510                             FLDDLM('|')
+084100210510                CPYTOIMPF  FROMFILE(QTEMP/TBL153D) TOSTMF(&IFSDIR) +
+084200210510                             MBROPT(*ADD) STMFCODPAG(*PCASCII) +
+084300210510                             RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE) +
+084400210510                             FLDDLM('|')
+084500210510                CPYTOIMPF  FROMFILE(QTEMP/TBL153T) TOSTMF(&IFSDIR) +
+084600210510                             MBROPT(*ADD) STMFCODPAG(*PCASCII) +
+084700210510                             RCDDLM(*CRLF) DTAFMT(*DLM) STRDLM(*NONE) +
+084800210510                             FLDDLM('|')
+084900210510                CHGAUT     OBJ(&IFSDIR) USER(*PUBLIC) DTAAUT(*RWX) +
+085000210510                             OBJAUT(*ALL)
+085100210510                MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+085200210510
+085300210510                CRTPF      FILE(&MFAEFTLIB/&EFTFILE9) RCDLEN(1000) +
+085400210510                             MAXMBRS(*NOMAX)
+085500210510                CPYFRMIMPF FROMSTMF(&IFSDIR) TOFILE(&MFAEFTLIB/&EFTFILE9) +
+085600210510                             MBROPT(*REPLACE) RCDDLM(*CRLF) STRDLM(*NONE) +
+085700210510                             RMVBLANK(*NONE) FLDDLM(*TAB)
+085800210510
+085900210510                CHGVAR     VAR(&IFSDIRARC) VALUE(&IFSDIRARCS)
+086000210510                CHGVAR     VAR(&IFSDIRARC) VALUE(&IFSDIRARC *TCAT +
+086100210510                             &EFTFILE9 *TCAT '_' *TCAT &SDATE *TCAT '.TXT')
+086200210510                CPYTOIMPF  FROMFILE(&MFAEFTLIB/&EFTFILE9) +
+086300210510                             TOSTMF(&IFSDIRARC) MBROPT(*REPLACE) +
+086400210510                             STMFCODPAG(*PCASCII) RCDDLM(*CRLF) +
+086500210510                             DTAFMT(*DLM) STRDLM(*NONE) FLDDLM('|')
+086600210510                CHGAUT     OBJ(&IFSDIRARC) USER(*PUBLIC) DTAAUT(*RWX) +
+086700210510                             OBJAUT(*ALL)
+086800210510                MONMSG     MSGID(CPFA0B1) /*RFS1114491*/
+086900210510
+087000210510             ENDSUBR
+087100210510/*RFS186130 ENDS */
+087200210510
+087300210510 EXITPGM:    ENDPGM

@@ -1,0 +1,82 @@
+000001170313     /* %ATTR OPTION(*XREF) DBGVIEW(*SOURCE) */
+000101080714/* ******************************************************************/
+000201080714/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000301080714/* ******************************************************************/
+000401080714/* RFS 52662 - The purpose of this program is to create the bulk    */
+000501080714/*             Branch synchronization extract file                  */
+000601080714/* ******************************************************************/
+000701080714/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000801080714/* ******************************************************************/
+000901080714/* Fatema Haji* 2008/07/14   * RFS 52662 - Created program.         */
+001001080725/* Andy Lo    * 2008/07/25   * RFS 52662 - Add program BRNCHEXBC    */
+001101080725/*            *              *             for exception  extract   */
+001201081125/* Alan A.    * 2008/11/20   * RFS 57353 - Suppress call to program */
+001301081125/*            *              *             BRNCHEXBC                */
+001401080714/* ******************************************************************/
+001501080714PGM
+001601080714             DCL        VAR(&MFAEFTLIB) TYPE(*CHAR) LEN(10)
+001701080714
+001801080714             DCL        VAR(&JOBNAME) TYPE(*CHAR) LEN(15) +
+001901080714                          VALUE('JBSYNCFILE001')
+002001080714             DCL        VAR(&INFILE) TYPE(*CHAR) LEN(100) +
+002101080714                          VALUE('BRNSYNC2')
+002201080714             DCL        VAR(&EXTENSION) TYPE(*CHAR) LEN(4) VALUE('TXT')
+002301080714
+002401080714 /* Retrieve data area values                                     */
+002501080714             RTVDTAARA  DTAARA(MFAEFTLIB (1 10)) RTNVAR(&MFAEFTLIB)
+002601080714
+002701080714             DLTF       FILE(&MFAEFTLIB/BRNSYNC2)
+002801080714             MONMSG     MSGID(CPF2105)
+002901080714
+003001080714             CRTPF      FILE(&MFAEFTLIB/BRNSYNC2) RCDLEN(1024) +
+003101080714                          TEXT('Institution Branch Schronization') +
+003201080714                          SIZE(*NOMAX)
+003301080714
+003401080714             DLTF       FILE(QTEMP/WRKSYNCHP)
+003501080714             MONMSG     MSGID(CPF2105)
+003601080714             CRTDUPOBJ  OBJ(WRKSYNCHP) FROMLIB(*LIBL) OBJTYPE(*FILE) +
+003701080714                          TOLIB(QTEMP)
+003801080714             OVRDBF     FILE(WRKSYNCHP) TOFILE(QTEMP/WRKSYNCHP)
+003901080714
+004001080714             DLTF       FILE(QTEMP/WRKSYN2DP)
+004101080714             MONMSG     MSGID(CPF2105)
+004201080714             CRTDUPOBJ  OBJ(WRKSYN2DP) FROMLIB(*LIBL) OBJTYPE(*FILE) +
+004301080714                          TOLIB(QTEMP)
+004401080714             OVRDBF     FILE(WRKSYN2DP) TOFILE(QTEMP/WRKSYN2DP)
+004501080714
+004601080714             DLTF       FILE(QTEMP/WRKSYNCTP)
+004701080714             MONMSG     MSGID(CPF2105)
+004801080714             CRTDUPOBJ  OBJ(WRKSYNCTP) FROMLIB(*LIBL) OBJTYPE(*FILE) +
+004901080714                          TOLIB(QTEMP)
+005001080714             OVRDBF     FILE(WRKSYNCTP) TOFILE(QTEMP/WRKSYNCTP)
+005101080714
+005201080714             CALL       PGM(SYNCBRNBK)
+005301080714
+005401080714 /* ************************************************************* */
+005501080714 /* Create extract file by executing below views.               * */
+005601080714 /* Copy the extract file to the EFT library.                   * */
+005701080714 /* ************************************************************* */
+005801080714 /*                                                               */
+005901080714             OVRDBF     FILE(BRNSYNC2) TOFILE(&MFAEFTLIB/BRNSYNC2) +
+006001080714                          LVLCHK(*NO)
+006101080714
+006201080714             EXECUTE    VIEW(CRMSYNCHV) OUTFILE(&MFAEFTLIB/BRNSYNC2) +
+006301080714                          MBROPT(*ADD)
+006401080714
+006501080714             EXECUTE    VIEW(CRMSYNC2DV) +
+006601080714                          OUTFILE(&MFAEFTLIB/BRNSYNC2) MBROPT(*ADD)
+006701080714
+006801080714             EXECUTE    VIEW(CRMSYNCTV) OUTFILE(&MFAEFTLIB/BRNSYNC2) +
+006901080714                          MBROPT(*ADD)
+007001080714
+007101080714             DLTOVR     FILE(BRNSYNC2)
+007201080714             DLTOVR     FILE(WRKSYNCHP)
+007301080714             DLTOVR     FILE(WRKSYN2DP)
+007401080714             DLTOVR     FILE(WRKSYNCTP)
+007501080714
+007601080714             CALL       PGM(CRTDOCFH) PARM(&JOBNAME +
+007701080714                          &INFILE  &EXTENSION)
+007801080714
+007901081120/* 57353     CALL       PGM(BRNCHEXBC)                  */
+008001080725
+008101080714PGM_EXIT:    ENDPGM

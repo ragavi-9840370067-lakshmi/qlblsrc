@@ -1,0 +1,57 @@
+000101180830/* %ATTR DBGVIEW(*SOURCE) */
+000102180830/*********************************************************************/
+000200180824/* TITLE        : CALCDAYS                                           */
+000300180824/* PROGRAM TYPE : CLLE                                               */
+000400180824/* PROGRAM      : CALCDAYS                                           */
+000500180824/* CREATED BY   : Ewa Kolsinska-Roj                                  */
+000600180824/* DESCRIPTION  : This program subtruct/add given number of days from*/
+000700180824/*                the provided date (YYYYMMDD) and returns date in   */
+000800180824/*                YYYYMMDD format                                    */
+000900180824/*                                                                   */
+001000180824/* Input parameters: MODE (A - add, S - subtract)                    */
+001100180824/*                   Date in YYYYMMDD format                         */
+001200180824/*                   Number of days to be subtructed/added (DEC)     */
+001300180824/* Ouput parameters: Calculated date in YYYYMMDD format              */
+001400180824/*                                                                   */
+001500180824/*********************************************************************/
+001600180824/*PROGRAMMER  *DATE OF CHANGE* DESCRIPTION OF CHANGE                 */
+001700180824/*********************************************************************/
+001800180830/* Ewa K.     * 2018/08/28   * RFS179666 WI36423 Create program.     */
+001900180824/*********************************************************************/
+002000180824             PGM (&MODE &USAINPUT &SUBDAYSDEC &YMDOUTPUT)
+002100180824
+002200180824             DCL        VAR(&MODE) TYPE(*CHAR) LEN(1)
+002300180824             DCL        VAR(&USAINPUT) TYPE(*CHAR) LEN(8)
+002400180824             DCL        VAR(&SUBDAYSDEC) TYPE(*DEC) LEN(15 5)
+002500180824             DCL        VAR(&YMDOUTPUT)  TYPE(*CHAR) LEN(8)
+002600180824             DCL        VAR(&PICTURE)   TYPE(*CHAR) LEN(8)
+002700180824             DCL        VAR(&LILIANBIN) TYPE(*CHAR) LEN(4)
+002800180824             DCL        VAR(&LILIANDEC) TYPE(*DEC) LEN(10 0)
+002900180824             DCL        VAR(&FC) TYPE(*CHAR) LEN(12)
+003000180824
+003100180828             CHGVAR     VAR(&PICTURE)   VALUE('YYYYMMDD')
+003101180828             CHGVAR     VAR(&YMDOUTPUT) VALUE(' ')
+003200180824
+003300180824  /* Convert to Lilian date (returned as a 32-bit binary integer) */
+003400180824             CALLPRC    PRC(CEEDAYS) PARM((&USAINPUT) (&PICTURE) +
+003500180824                          (&LILIANBIN) (&FC))
+003600180824
+003700180824  /* Convert binary Lilian to decimal Lilian */
+003800180824             CHGVAR     VAR(&LILIANDEC) VALUE(%BINARY(&LILIANBIN))
+003900180824
+004000180827  /* Subtract or add a number of days from decimal Lilian */
+004100180824             IF  COND(&MODE *EQ 'S') THEN(DO)
+004200180824             CHGVAR     VAR(&LILIANDEC) VALUE(&LILIANDEC - &SUBDAYSDEC)
+004300180824             ENDDO
+004400180824             ELSE       CMD(DO)
+004500180824             CHGVAR     VAR(&LILIANDEC) VALUE(&LILIANDEC + &SUBDAYSDEC)
+004600180824             ENDDO
+004700180824
+004800180824             CHGVAR     VAR(%BINARY(&LILIANBIN)) VALUE(&LILIANDEC)
+004900180824
+005000180827  /* Convert the calculated date back to Gregorian date */
+005100180824             CALLPRC    PRC(CEEDATE) PARM((&LILIANBIN) (&PICTURE) +
+005200180824                          (&YMDOUTPUT) (&FC))
+005300180824
+005400180824  ENDPGM:    ENDPGM
+005401180919

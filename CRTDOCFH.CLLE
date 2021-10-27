@@ -1,0 +1,106 @@
+000100000000/* ******************************************************************/
+000200000000/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000300000000/* ******************************************************************/
+000400080509/* RFS 44275 - The purpose of this program is to create document    */
+000500080509/*             in the folder for Feedhub process.                   */
+000600000000/* ******************************************************************/
+000700000000/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000800000000/* ******************************************************************/
+000900000000/* Andy Lo    * 2008/04/11   * RFS 44275 - Created program.         */
+001000080623/*                           * Use STMFCODPAG(*PCASCII).            */
+001100080722/* ******************************************************************/
+001200080722/* Andy Chan  * 2008/07/22   * RFS 55040 - Make sure Feebhub env.   */
+001300080820/* M. Anwar   * 2008/08/20   * RFS 56044 - Delete the object.       */
+001301210203/* Niranjan   * 2021/02/03   * RFS1110664 - MSGW caused by incorrect*/
+001302210203/*            *              * path due to missing '/'              */
+001400000000/* ******************************************************************/
+001500080509             PGM        PARM(&JOBNAME &INFILE &EXTENSION)
+001600080509
+001700080509             DCL        VAR(&JOBNAME) TYPE(*CHAR) LEN(15)
+001800080509             DCL        VAR(&INFILE)  TYPE(*CHAR) LEN(100)
+001900080509             DCL        VAR(&EXTENSION) TYPE(*CHAR) LEN(4)
+002000080509
+002100080509             DCL        VAR(&MFAEFTLIB) TYPE(*CHAR) LEN(10)
+002200080509             DCL        VAR(&FILE)  TYPE(*CHAR) LEN(100)
+002300080509             DCL        VAR(&FMSTMF)  TYPE(*CHAR) LEN(100)
+002400080509             DCL        VAR(&TOSTMF)  TYPE(*CHAR) LEN(100)
+002500000000
+002600080509             DCL        VAR(&ROOTFLR1) TYPE(*CHAR) LEN(30)
+002700080509             DCL        VAR(&ROOTFLR2) TYPE(*CHAR) LEN(30)
+002800080509             DCL        VAR(&ROOTDIR ) TYPE(*CHAR) LEN(25)
+002900080509             DCL        VAR(&QTE)        TYPE(*CHAR) LEN(1) VALUE('"')
+003000080523             DCL        VAR(&FLRFILE) TYPE(*CHAR) LEN(100)
+003100080509
+003200080722/*55040 begin - make sure CIBC Feedhub envirnoment exists */
+003300080722
+003400080722             CHKOBJ     OBJ(FDFILEATTR) OBJTYPE(*FILE)
+003500080722             MONMSG     MSGID(CPF0000) EXEC(GOTO CMDLBL(PGM_EXIT))
+003600080722
+003700080722/*55040 End   */
+003800080722
+003900000000 /* Retrieve data area values                                     */
+004000080509
+004100000000             RTVDTAARA  DTAARA(MFAEFTLIB (1 10)) RTNVAR(&MFAEFTLIB)
+004200000000
+004300080509             CALL       PGM(GETATLROOT) PARM(&ROOTFLR1 &ROOTFLR2 +
+004400080509                          &ROOTDIR)
+004500080509
+004600080526/* add extension if any */
+004700080526
+004800080526             IF         COND(&EXTENSION *NE ' ') THEN(CHGVAR +
+004900080526                          VAR(&FILE) VALUE(&INFILE *TCAT '.' || +
+005000080526                          &EXTENSION))
+005100080526             ELSE       CMD(CHGVAR VAR(&FILE) VALUE(&INFILE))
+005200080509
+005300080526/* Format Folder Name */
+005400080526
+005500080523             CHGVAR     VAR(&FLRFILE) VALUE(&ROOTDIR  *TCAT +
+005600080523                                     '/'  *TCAT &FILE)
+005700080526
+005800080526/* Remove old link, if any */
+005900080526
+006000080523             RMVLNK     OBJLNK(&FLRFILE)
+006100080509             MONMSG     MSGID(CPF0000)
+006200080509
+006300080526/* Format Copying path */
+006400080526
+006401210203/* RFS1110664 Starts */
+006500210203/*           CHGVAR     VAR(&FMSTMF) VALUE('QSYS.LIB/' *CAT +
+006600080509                          &MFAEFTLIB *TCAT '.LIB/' *TCAT &INFILE +
+006700210203                          *TCAT '.FILE/' *CAT &INFILE *TCAT '.MBR') */
+006701210203
+006702210203             CHGVAR     VAR(&FMSTMF) VALUE('/QSYS.LIB/' *CAT &MFAEFTLIB +
+006703210203                          *TCAT '.LIB/' *TCAT &INFILE *TCAT '.FILE/' *CAT +
+006704210203                          &INFILE *TCAT '.MBR')
+006705210203/* RFS1110664 Ends */
+006800080509
+006900080509             CHGVAR     VAR(&TOSTMF) VALUE(&ROOTFLR2 *TCAT +
+007000080509                          '/' *CAT &FILE)
+007100080526
+007200080820/* RFS56044 Start */
+007300080820/* Remove the TOSSTMF file before copy command */
+007400080820
+007500080820             RMVLNK     OBJLNK(&TOSTMF)
+007600080820             MONMSG     MSGID(CPF0000)
+007700080820
+007800080820/* RFS56044 End   */
+007900080526/* Copy files to FeedHub folder */
+008000080509
+008100080623             CPYTOSTMF  FROMMBR(&FMSTMF) TOSTMF(&TOSTMF) +
+008200080623                          STMFOPT(*REPLACE) STMFCODPAG(*PCASCII)
+008300080420
+008400080526/* Grant authority and update Feedhub log */
+008500080526
+008600080523             CHGAUT     OBJ(&TOSTMF) USER(*PUBLIC) DTAAUT(*RWX) +
+008700080523                          OBJAUT(*ALL)
+008800080523
+008900080509             CHGVAR     VAR(&JOBNAME) VALUE(&QTE *TCAT &JOBNAME   +
+009000080509                          *TCAT &QTE)
+009100080509
+009200080509             CHGVAR     VAR(&FILE) VALUE(&QTE *TCAT &FILE   +
+009300080509                          *TCAT &QTE)
+009400080509
+009500080509             INSERT     INTO(MFAFEEDHUP) FIELDS(F0000 F0001) +
+009600080509                          VALUES(&JOBNAME &FILE)
+009700080509
+009800000000PGM_EXIT:    ENDPGM

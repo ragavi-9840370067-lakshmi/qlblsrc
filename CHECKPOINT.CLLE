@@ -1,0 +1,53 @@
+000100030417/* ******************************************************************/
+000200030417/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000300030417/* ******************************************************************/
+000400030417/* ******************************************************************/
+000500070808/* Esin A.    * 2007/08/08   * Monitors for the checkpoint messages */
+000600070808/*            *              * created by SAVLIB command in HABACKUP*/
+000700070808/*            *              * (called by HAMONITOR)                */
+000800071127/* Ade Adeyemi* 2007/11/27   * Performance Improvement on HA        */
+000900071127/*            *              * RFS 46039. Check for only 1 chk point*/
+000901160223/* Michael Fan* 2016/02/23   * RFS151969                            */
+000902160223/*            *              * Mon Msg CPI3710 instead of CPI3712   */
+001000030417/* ******************************************************************/
+001100070814             PGM        PARM(&POJLIB &MSGID &RETCD)
+001200070807
+001300070814             DCL        VAR(&POJLIB) TYPE(*CHAR) LEN(10)
+001400070808             DCL        VAR(&MSGID)  TYPE(*CHAR) LEN(7)
+001500070808             DCL        VAR(&RETCD)  TYPE(*CHAR) LEN(1)
+001600070808
+001700070814             DCL        VAR(&OJLIB)  TYPE(*CHAR) LEN(10) VALUE(' ')
+001800070807
+001900070808             DCL        VAR(&MSGQ)    TYPE(*CHAR) LEN(10) +
+002000070808                          VALUE('MFAHAMSGQ')
+002100070808             DCL        VAR(&NREC  )  TYPE(*DEC) LEN(10)
+002200070807/* -----------------------------------------------------------------*/
+002300070807/* Environment values                                               */
+002400070807/* -----------------------------------------------------------------*/
+002500070814             RTVDTAARA  DTAARA(&POJLIB/MFAOBJECTS) RTNVAR(&OJLIB)
+002600070808             CHGVAR     VAR(&RETCD) VALUE('N')
+002700030417/* -----------------------------------------------------------------*/
+002800070808/* Convert message queue into the file MSGLSTP in QTEMP             */
+002900030417/* -----------------------------------------------------------------*/
+003000070808CVTMSG:
+003100070808             CVTMSGQ    MSGQ(&OJLIB/&MSGQ) MSGID(&MSGID) +
+003200070808                          OUTLIB(QTEMP) OUTMBR(MSGLSTP)
+003300070808             MONMSG     MSGID(TAA9801) EXEC(RETURN)
+003400070807/* -----------------------------------------------------------------*/
+003500070808/* Check no of records when MSGID = CPI3712                         */
+003600070807/* -----------------------------------------------------------------*/
+003700070808CHKMSG:
+003800160223/* 151969    IF         COND(&MSGID *EQ 'CPI3712') THEN(DO)         */
+003801160223/* 151969 */ IF         COND(&MSGID *EQ 'CPI3710') THEN(DO)
+003900070814                RTVMBRD    FILE(QTEMP/MSGLSTP) NBRCURRCD(&NREC)
+004000071127
+004100071127 /*Rfs 46039 begins */
+004200071127 /*             IF      COND(&NREC  *EQ 3) THEN(DO)      */
+004300071127                IF      COND(&NREC  *EQ 1) THEN(DO)
+004400071127 /*Rfs 46039 ends   */
+004500071127
+004600070808                   CHGVAR     VAR(&RETCD) VALUE('Y')
+004700070808                ENDDO
+004800070814             ENDDO
+004900070808
+005000020103PGM_EXIT:    ENDPGM

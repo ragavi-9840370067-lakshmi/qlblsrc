@@ -1,0 +1,99 @@
+000100030417/* ******************************************************************/
+000200030417/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000300030417/* ******************************************************************/
+000400030417/* ******************************************************************/
+000500090401/* Richie M   * 2009/04/01   * Inst Branch associated with Dealer   */
+000600090401/*            *              * Reps synchronization bulke extract   */
+000700140528/* Kamal T    * 2014/05/27   * RFS 137052 - Adding SIZE parameter   */
+000800140528/*            *              * as *NOMAX in CRTPF COMMAND           */
+000900030417/* ******************************************************************/
+001000090401PGM
+001100090401             DCL        VAR(&MFAEFTLIB) TYPE(*CHAR) LEN(10)
+001200090401
+001300090401             DCL        VAR(&JOBNAME) TYPE(*CHAR) LEN(15) +
+001400090401                          VALUE('JBSYNCFILE001')
+001500090401             DCL        VAR(&INFILE) TYPE(*CHAR) LEN(100) +
+001600090401                          VALUE('BRNSYNC2')
+001700090401             DCL        VAR(&EXTENSION) TYPE(*CHAR) LEN(4) VALUE('TXT')
+001800090401
+001900090401             DCL        VAR(&MEMBRNM) TYPE(*CHAR) LEN(10)
+002000090401             DCL        VAR(&ASATDTE) TYPE(*CHAR) LEN(8)
+002100090401
+002200090401 /* Retrieve data area values                                     */
+002300090401             RTVDTAARA  DTAARA(MFAEFTLIB (1 10)) RTNVAR(&MFAEFTLIB)
+002400090401             RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&ASATDTE)
+002500090401
+002600090401             CHGVAR     VAR(&MEMBRNM) VALUE('BRN' *CAT +
+002700090401                        (%SST(&ASATDTE 3 6)))
+002800090401
+002900090401/* Check the existence of the object in the EFT library */
+003000090401/* If it does not exist, create the file and set the max members to *NOMAX */
+003100090401             CHKOBJ     OBJ(&MFAEFTLIB/BRNSYNEXT) OBJTYPE(*FILE)
+003200090401             MONMSG     MSGID(CPF9801) EXEC(CRTPF +
+003300090401                          FILE(&MFAEFTLIB/BRNSYNEXT) RCDLEN(1024) +
+003400140528 /*RFS137052*/            SIZE(*NOMAX) +
+003500090401                          TEXT('Institution Branch Pivotal +
+003600090401                          extract') MAXMBRS(*NOMAX))
+003700090401
+003800090401             DLTF       FILE(&MFAEFTLIB/BRNSYNC2)
+003900090401             MONMSG     MSGID(CPF2105)
+004000090401
+004100090401 /* RFS54437 Begin */
+004200090401             CRTPF      FILE(&MFAEFTLIB/BRNSYNC2) RCDLEN(1024) +
+004300090401                          TEXT('Institution Branch Schronization') +
+004400090401                          SIZE(*NOMAX)
+004500090401 /* RFS54437 End   */
+004600090401
+004700090401             DLTF       FILE(QTEMP/WRKSYNCHP)
+004800090401             MONMSG     MSGID(CPF2105)
+004900090401             CRTDUPOBJ  OBJ(WRKSYNCHP) FROMLIB(*LIBL) OBJTYPE(*FILE) +
+005000090401                          TOLIB(QTEMP)
+005100090401             OVRDBF     FILE(WRKSYNCHP) TOFILE(QTEMP/WRKSYNCHP)
+005200090401
+005300090401             DLTF       FILE(QTEMP/WRKSYN2DP)
+005400090401             MONMSG     MSGID(CPF2105)
+005500090401             CRTDUPOBJ  OBJ(WRKSYN2DP) FROMLIB(*LIBL) OBJTYPE(*FILE) +
+005600090401                          TOLIB(QTEMP)
+005700090401             OVRDBF     FILE(WRKSYN2DP) TOFILE(QTEMP/WRKSYN2DP)
+005800090401
+005900090401             DLTF       FILE(QTEMP/WRKSYNCTP)
+006000090401             MONMSG     MSGID(CPF2105)
+006100090401             CRTDUPOBJ  OBJ(WRKSYNCTP) FROMLIB(*LIBL) OBJTYPE(*FILE) +
+006200090401                          TOLIB(QTEMP)
+006300090401             OVRDBF     FILE(WRKSYNCTP) TOFILE(QTEMP/WRKSYNCTP)
+006400090401
+006500090401             CALL       PGM(SYNCBRNBK)
+006600090401
+006700090401 /* ************************************************************* */
+006800090401 /* Create extract file by executing below views.               * */
+006900090401 /* Copy the extract file to the EFT library.                   * */
+007000090401 /* ************************************************************* */
+007100090401 /*                                                               */
+007200090401             OVRDBF     FILE(BRNSYNC2) TOFILE(&MFAEFTLIB/BRNSYNC2) +
+007300090401                          LVLCHK(*NO)
+007400090401
+007500090401             EXECUTE    VIEW(CRMSYNCHV) OUTFILE(&MFAEFTLIB/BRNSYNC2) +
+007600090401                          MBROPT(*ADD)
+007700090401
+007800090401             EXECUTE    VIEW(CRMSYNC2DV) +
+007900090401                          OUTFILE(&MFAEFTLIB/BRNSYNC2) MBROPT(*ADD)
+008000090401
+008100090401             EXECUTE    VIEW(CRMSYNCTV) OUTFILE(&MFAEFTLIB/BRNSYNC2) +
+008200090401                          MBROPT(*ADD)
+008300090401
+008400090401/* Allow to save multiple members of the Inst Branch synchronization */
+008500090402             CPYF       FROMFILE(&MFAEFTLIB/BRNSYNC2) +
+008600090402                          TOFILE(&MFAEFTLIB/BRNSYNEXT) +
+008700090402                          TOMBR(&MEMBRNM) MBROPT(*REPLACE) +
+008800090402                          CRTFILE(*YES) FMTOPT(*NOCHK)
+008900090401             MONMSG     MSGID(CPF2817)
+009000090401
+009100090401             DLTOVR     FILE(BRNSYNC2)
+009200090401             DLTOVR     FILE(WRKSYNCHP)
+009300090401             DLTOVR     FILE(WRKSYN2DP)
+009400090401             DLTOVR     FILE(WRKSYNCTP)
+009500090401
+009600090401             CALL       PGM(CRTDOCFH) PARM(&JOBNAME +
+009700090401                          &INFILE  &EXTENSION)
+009800090401
+009900090401PGM_EXIT:    ENDPGM

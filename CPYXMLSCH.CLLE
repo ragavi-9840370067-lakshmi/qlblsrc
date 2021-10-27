@@ -1,0 +1,156 @@
+000001170313     /* %ATTR DBGVIEW(*ALL) */
+000101141022/* ----------------------------------------------------------------- */
+000201141022/* Program     : CPYXMLSCH                                           */
+000301141022/* Purpose     : Copy XML schemas from Unisenapps to IFS folder      */
+000401141022/*             :                                                     */
+000501141022/* ----------------------------------------------------------------- */
+000601141022/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                 */
+000701141022/* ----------------------------------------------------------------- */
+000801141022/* Emmanuel Y  * 2014/10/22 * RFS141574 - Created Program            */
+000901151104/* K Naveen.   * 2015/08/05 * RFS 145909 - Added BS file schema.     */
+000902160422/* Abdi Yare   * 2016-04-12 * RFS158366 - Performance enhancement    */
+001001141022/*             *            *                                        */
+001101141022/*             *            *                                        */
+001201141022/* ----------------------------------------------------------------- */
+001301141022 PGM PARM(&FilTyp)
+001401141022
+001501141022/* Parms Variables */
+001601141022        DCL VAR(&FilTyp) TYPE(*CHAR) LEN(02)
+001701141022        DCL VAR(&FilDir) TYPE(*CHAR) LEN(100)
+001801141022
+001901141022/* Schema Names */
+002001141022        DCL VAR(&FsType) TYPE(*CHAR) LEN(11) VALUE('FStypes.xsd')
+002101141022        DCL VAR(&PosRec) TYPE(*CHAR) LEN(15) VALUE('PositionRec.xsd')
+002201141022        DCL VAR(&PrcRec) TYPE(*CHAR) LEN(09) VALUE('Price.xsd')
+002301141022        DCL VAR(&AccRec) TYPE(*CHAR) LEN(15) VALUE('AcctDemoRec.xsd')
+002401141022
+002501141022/* MISC Variables */
+002601141022        DCL VAR(&ErrCde) TYPE(*CHAR) LEN(2)
+002701141022        DCL VAR(&SchTyp) TYPE(*CHAR) LEN(2) VALUE('SC')
+002801141022        DCL VAR(&SchOwn) TYPE(*CHAR) LEN(4) VALUE('SCHM')
+002901141022        DCL VAR(&SchDel) TYPE(*CHAR) LEN(3) VALUE('REC')
+003001141022        DCL VAR(&SchLoc) TYPE(*CHAR) LEN(100)
+003101141022        DCL VAR(&SchFil) TYPE(*CHAR) LEN(150)
+003201141022        DCL VAR(&ScoRec) TYPE(*CHAR) LEN(14) VALUE('Commission.xsd')
+003301141022        DCL VAR(&SrfRec) TYPE(*CHAR) LEN(15) VALUE('ServiceFees.xsd')
+003401141022        DCL VAR(&SetRec) TYPE(*CHAR) LEN(14) VALUE('Settlement.xsd')
+003501141022        DCL VAR(&TrnRec) TYPE(*CHAR) LEN(18)  +
+003601141022                                          VALUE('Reconciliation.xsd')
+003701141022        DCL VAR(&HstRec) TYPE(*CHAR) LEN(11) VALUE('History.xsd')
+003801141219        DCL VAR(&LsRec) TYPE(*CHAR) LEN(16) +
+003901141219                                          VALUE('AcctServFees.xsd')
+004001151104  /* RFS 145909 - Start */
+004101151104        DCL VAR(&BsRec) TYPE(*CHAR) LEN(16) +
+004201151104                                          VALUE('IncomeReport.xsd')
+004301151104  /* RFS 145909 - End */
+004401141022        DCL VAR(&IFSFile) TYPE(*CHAR) LEN(100)
+004501141022
+004601141022        RTVDTAARA DTAARA(*LDA (720 100)) RTNVAR(&FilDir)
+004701141022
+004801141022        RUNCMD CMD('CHGDTAARA  DTAARA(*LDA (900 100)) +
+004901141022                  VALUE(''&&LOC'')') SQL('SELECT +
+005001141022                  File_Location len(100) name(loc) +
+005101141022               FROM Mfaifsdirp +
+005201141022               WHERE File_Type  = "' || &SchTyp || '"  +
+005301141022                 AND File_Owner = "' || &SchOwn || '"  +
+005401141022                 AND Method_Of_Delivery = "' || &SchDel || '"')
+005501141022
+005601141022        RTVDTAARA  DTAARA(*LDA (900 100)) RTNVAR(&SchLoc)
+005701141022
+005801141022        CHGCURDIR DIR(&FilDir)
+005901141022
+006001141022
+006101141022        CHGVAR VAR(&IFSFile) VALUE(&FilDir *TCAT &FsType)
+006201141022        CHGVAR VAR(&SchFil) VALUE(&SchLoc *TCAT &FsType)
+006301141022             CPY OBJ(&SchFil) REPLACE(*YES) OWNER(*NEW) AUT(*INDIR)
+006401141022        MONMSG     MSGID(CPFA083 CPFA0A0)
+006501141022
+006601141022        SELECT
+006701141022          WHEN COND(&FilTyp *EQ 'RS') THEN(DO)
+006801141022             CHGVAR VAR(&IFSFile) VALUE(&FilDir *TCAT &PrcRec)
+006901141022             CHGVAR VAR(&SchFil) VALUE(&SchLoc *TCAT &PrcRec)
+007001141022             CPY OBJ(&SchFil) REPLACE(*YES) OWNER(*NEW) AUT(*INDIR)
+007101141022             MONMSG     MSGID(CPFA083 CPFA0A0)
+007201141022          ENDDO
+007301141022          WHEN COND(&FilTyp *EQ 'PS') THEN(DO)
+007401141022             CHGVAR VAR(&IFSFile) VALUE(&FilDir *TCAT &PosRec)
+007501141022             CHGVAR VAR(&SchFil) VALUE(&SchLoc *TCAT &PosRec)
+007601141022             CPY OBJ(&SchFil) REPLACE(*YES) OWNER(*NEW) AUT(*INDIR)
+007701141022             MONMSG     MSGID(CPFA083 CPFA0A0)
+007801141022          ENDDO
+007901141022          WHEN COND(&FilTyp *EQ 'NS') THEN(DO)
+008001141022             CHGVAR VAR(&IFSFile) VALUE(&FilDir *TCAT &AccRec)
+008101141022             CHGVAR VAR(&SchFil) VALUE(&SchLoc *TCAT &AccRec)
+008201141022             CPY OBJ(&SchFil) REPLACE(*YES) OWNER(*NEW) AUT(*INDIR)
+008301141022             MONMSG     MSGID(CPFA083 CPFA0A0)
+008401141022          ENDDO
+008501141022          WHEN COND(&FilTyp *EQ 'WS') THEN(DO)
+008601141022             CHGVAR VAR(&IFSFile) VALUE(&FilDir *TCAT &ScoRec)
+008701141022             CHGVAR VAR(&SchFil) VALUE(&SchLoc *TCAT &ScoRec)
+008801141022             CPY OBJ(&SchFil) REPLACE(*YES) OWNER(*NEW) AUT(*INDIR)
+008901141022             MONMSG     MSGID(CPFA083 CPFA0A0)
+009001141022          ENDDO
+009101141022          WHEN COND(&FilTyp *EQ 'SS') THEN(DO)
+009201141022             CHGVAR VAR(&IFSFile) VALUE(&FilDir *TCAT &SrfRec)
+009301141022             CHGVAR VAR(&SchFil) VALUE(&SchLoc *TCAT &SrfRec)
+009401141022             CPY OBJ(&SchFil) REPLACE(*YES) OWNER(*NEW) AUT(*INDIR)
+009501141022             MONMSG     MSGID(CPFA083 CPFA0A0)
+009601141022          ENDDO
+009701141022          WHEN COND(&FilTyp *EQ 'FS') THEN(DO)
+009801141022             CHGVAR VAR(&IFSFile) VALUE(&FilDir *TCAT &SetRec)
+009901141022             CHGVAR VAR(&SchFil) VALUE(&SchLoc *TCAT &SetRec)
+010001141022             CPY OBJ(&SchFil) REPLACE(*YES) OWNER(*NEW) AUT(*INDIR)
+010101141022             MONMSG     MSGID(CPFA083 CPFA0A0)
+010201141022          ENDDO
+010301141022          WHEN COND(&FilTyp *EQ 'TS') THEN(DO)
+010401141022             CHGVAR VAR(&IFSFile) VALUE(&FilDir *TCAT &TrnRec)
+010501141022             CHGVAR VAR(&SchFil) VALUE(&SchLoc *TCAT &TrnRec)
+010601141022             CPY OBJ(&SchFil) REPLACE(*YES) OWNER(*NEW) AUT(*INDIR)
+010701141022             MONMSG     MSGID(CPFA083 CPFA0A0)
+010801141022
+010901141022             CHGVAR VAR(&IFSFile) VALUE(&FilDir *TCAT &AccRec)
+011001141022             CHGVAR VAR(&SchFil) VALUE(&SchLoc *TCAT &AccRec)
+011101141022             CPY OBJ(&SchFil) REPLACE(*YES) OWNER(*NEW) AUT(*INDIR)
+011201141022             MONMSG     MSGID(CPFA083 CPFA0A0)
+011202160422/*Rfs158366 - Start */
+011203160422             CHGVAR VAR(&IFSFile) VALUE(&FilDir *TCAT &HstRec)
+011204160422             CHGVAR VAR(&SchFil) VALUE(&SchLoc *TCAT &HstRec)
+011205160422             CPY OBJ(&SchFil) REPLACE(*YES) OWNER(*NEW) AUT(*INDIR)
+011206160422             MONMSG     MSGID(CPFA083 CPFA0A0)
+011207160422/*Rfs158366 - End   */
+011301141022          ENDDO
+011401141022          WHEN COND(&FilTyp *EQ 'HS') THEN(DO)
+011501141022             CHGVAR VAR(&IFSFile) VALUE(&FilDir *TCAT &HstRec)
+011601141022             CHGVAR VAR(&SchFil) VALUE(&SchLoc *TCAT &HstRec)
+011701141022             CPY OBJ(&SchFil) REPLACE(*YES) OWNER(*NEW) AUT(*INDIR)
+011801141022             MONMSG     MSGID(CPFA083 CPFA0A0)
+011901141022
+012001141022             CHGVAR VAR(&IFSFile) VALUE(&FilDir *TCAT &AccRec)
+012101141022             CHGVAR VAR(&SchFil) VALUE(&SchLoc *TCAT &AccRec)
+012201141022             CPY OBJ(&SchFil) REPLACE(*YES) OWNER(*NEW) AUT(*INDIR)
+012301141022             MONMSG     MSGID(CPFA083 CPFA0A0)
+012401141022
+012501141022             CHGVAR VAR(&IFSFile) VALUE(&FilDir *TCAT &TrnRec)
+012601141022             CHGVAR VAR(&SchFil) VALUE(&SchLoc *TCAT &TrnRec)
+012701141022             CPY OBJ(&SchFil) REPLACE(*YES) OWNER(*NEW) AUT(*INDIR)
+012801141022             MONMSG     MSGID(CPFA083 CPFA0A0)
+012901141022
+013001141022          ENDDO
+013101141219          WHEN COND(&FilTyp *EQ 'LS') THEN(DO)
+013201141219             CHGVAR VAR(&IFSFile) VALUE(&FilDir *TCAT &LsRec)
+013301141219             CHGVAR VAR(&SchFil) VALUE(&SchLoc *TCAT &LsRec)
+013401141219             CPY OBJ(&SchFil) REPLACE(*YES) OWNER(*NEW) AUT(*INDIR)
+013501141219             MONMSG     MSGID(CPFA083 CPFA0A0)
+013601141219          ENDDO
+013701151104  /* RFS 145909 - Start */
+013801151104          WHEN COND(&FilTyp *EQ 'BS') THEN(DO)
+013901151104             CHGVAR VAR(&IFSFile) VALUE(&FilDir *TCAT &BsRec)
+014001151104             CHGVAR VAR(&SchFil) VALUE(&SchLoc *TCAT &BsRec)
+014101151104             CPY OBJ(&SchFil) REPLACE(*YES) OWNER(*NEW) AUT(*INDIR)
+014201151104             MONMSG     MSGID(CPFA083 CPFA0A0)
+014301151104          ENDDO
+014401151104  /* RFS 145909 - End */
+014501141022        ENDSELECT
+014601141022
+014701141022EndClPgm:
+014801141022            ENDPGM

@@ -1,0 +1,448 @@
+000100080314 COPYCLTPST:  PGM
+000200080314
+000300080314     /*---------------------------------------------------------------*/
+000400080314     /*                                                               */
+000500080314     /*    COPYCLTPST: Canada Post Load for Individual Clients        */
+000600080314     /*                                                               */
+000700080314     /*    PURPOSE:    Copy new Canada post file and create a new     */
+000800080314     /*                updated version of file MFAADDSAP in the       */
+000900080314     /*                client's DB Library.                           */
+001000080314     /*                                                               */
+001100080314     /*    CREATED:    20071206 Richard Gill                          */
+001200080314     /*                                                               */
+001300080314     /*---------------------------------------------------------------*/
+001400080314
+001500080314     /*---------------------------------------------------------------*/
+001600080314     /*                                                               */
+001700080314     /*               C H A N G E   H I S T O R Y                     */
+001800080314     /*                                                               */
+001900080314     /*---------------------------------------------------------------*/
+002000080314     /* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE             */
+002100080314     /*---------------------------------------------------------------*/
+002200080314     /* Richard G  * 20071210     * New Process                       */
+002300080314     /*---------------------------------------------------------------*/
+002400080314
+002500080314 /*------------------------------------------------------------------*/
+002600080314 /*          Declaration                                             */
+002700080314 /*------------------------------------------------------------------*/
+002800080314
+002900080314             DCL        VAR(&COUNTER)   TYPE(*DEC)  LEN(2 0) VALUE(0)
+003000080314             DCL        VAR(&DBASE)     TYPE(*CHAR) LEN(10)
+003100080314             DCL        VAR(&PSTCD)     TYPE(*CHAR) LEN(8)
+003200080314             DCL        VAR(&LAST_PDATE) TYPE(*CHAR) LEN(8)
+003300080314             DCL        VAR(&KEY)       TYPE(*CHAR) LEN(4)
+003400080314             DCL        VAR(&REPLY)     TYPE(*CHAR) LEN(1)
+003500080314             DCL        VAR(&MSG)       TYPE(*CHAR) LEN(200)
+003600080314
+003700080314 /*------------------------------------------------------------------*/
+003800080314 /*          Retrieve Data Area                                      */
+003900080314 /*------------------------------------------------------------------*/
+004000080314
+004100080314             RTVDTAARA  DTAARA(*LIBL/MFADBASE)      RTNVAR(&DBASE)
+004200080314             RTVDTAARA  DTAARA(MFAPRCDTP (54 8)) RTNVAR(&LAST_PDATE)
+004300080314             RTVDTAARA  DTAARA(MFASYSWIDE/MFAPSTCD) RTNVAR(&PSTCD)
+004400080314
+004500080314 /*------------------------------------------------------------------*/
+004600080314 /*          Change Variables                                        */
+004700080314 /*------------------------------------------------------------------*/
+004800080314
+004900080314             CHGVAR     VAR(&COUNTER) VALUE(0)
+005000080314
+005100080314 /*------------------------------------------------------------------*/
+005200080314 /*          Check if new Canada Post file exists                    */
+005300080314 /*------------------------------------------------------------------*/
+005400080314
+005500080314              IF COND(&LAST_PDATE *GT &PSTCD)  +
+005600080314                 THEN(DO)
+005700080314                    GOTO       CMDLBL( ENDCLPGM)
+005800080314                 ENDDO
+005900080314
+006000080314 /*------------------------------------------------------------------*/
+006100080314 /*        Copying the new Canada Post file from library MFASYSWIDE   */
+006200080314 /*        to library &DBASE replacing old records.                   */
+006300080314 /*------------------------------------------------------------------*/
+006400080314
+006500080314 LBL_0020:   CPYF       FROMFILE(MFASYSWIDE/MFAADDSAP) +
+006600080314                          TOFILE(&DBASE/MFAADDSAP) MBROPT(*REPLACE) +
+006700080314                          CRTFILE(*YES) INCCHAR(*RCD 180 *NE 'D')
+006800080314
+006900080314              MONMSG     MSGID(CPF2817 CPF2869) +
+007000080314                         EXEC(GOTO CMDLBL(LBL_0030))
+007100080314
+007200080314 /*------------------------------------------------------------------*/
+007300080314 /*        Check if file is locked. Delay process and retry           */
+007400080314 /*------------------------------------------------------------------*/
+007500080314
+007600080314              MONMSG     MSGID(CPC1231 CPF2909) EXEC(DO)
+007700080314              IF COND(&COUNTER     < 10)    THEN(DO)
+007800080314                 DLYJOB     DLY(5)
+007900080314                 CHGVAR VAR(&COUNTER) VALUE(&COUNTER + 1)
+008000080314                 GOTO       CMDLBL(LBL_0020)
+008100080314                 ENDDO
+008200080314              ELSE
+008300080314                 GOTO       CMDLBL(LBL_0060)
+008400080314              ENDDO
+008500080314
+008600080314 /*------------------------------------------------------------------*/
+008700080314 /*        Delete TEMPFILE. TEMPFILE was created by previous run.     */
+008800080314 /*        By deleting TEMPFILE program can create duplicate object.  */
+008900080314 /*        TEMPFILE is a temp file created to be used by CBL program  */
+009000080314 /*        CALL later in this program.                                */
+009100080314 /*------------------------------------------------------------------*/
+009200080314
+009300080314              DLTF       FILE(QTEMP/TEMPFILE)
+009400080314              MONMSG     (CPF2105)
+009500080314              CRTDUPOBJ  OBJ(MFAADDSAP) FROMLIB(&DBASE) +
+009600080314                            OBJTYPE(*FILE) TOLIB(QTEMP) +
+009700080314                            NEWOBJ(TEMPFILE) DATA(*NO)
+009800080314
+009900080314 /*------------------------------------------------------------------*/
+010000080314 /*        Reset counter for delay process                            */
+010100080314 /*------------------------------------------------------------------*/
+010200080314
+010300080314             CHGVAR     VAR(&COUNTER) VALUE(0)
+010400080314
+010500080314 /*------------------------------------------------------------------*/
+010600080314 /*        EXECUTE CBL program to copy previously entered            */
+010700080314 /*        manual address.                                           */
+010800080314 /*------------------------------------------------------------------*/
+010900080314
+011000080314             CHKOBJ     OBJ(&DBASE/MFAADDSDP) +
+011100080314                        OBJTYPE(*FILE)            +
+011200080314                        MBR(*FIRST)
+011300080314
+011400080314             MONMSG     MSGID(CPF9801)            +
+011500080314                            EXEC(DO)
+011600080314             CPYF       FROMFILE(MFASYSWIDE/MFAADDSDP) +
+011700080314                          TOFILE(&DBASE/MFAADDSDP) MBROPT(*REPLACE) +
+011800080314                          CRTFILE(*YES)
+011900080314              ENDDO
+012000080314
+012100080314             CHKOBJ     OBJ(&DBASE/MFAADDSDP1) +
+012200080314                        OBJTYPE(*FILE)            +
+012300080314                        MBR(*FIRST)
+012400080314
+012500080314             MONMSG     MSGID(CPF9801)            +
+012600080314                            EXEC(DO)
+012700080314             CRTDUPOBJ  OBJ(MFAADDSDP1) FROMLIB(MFASYSWIDE) +
+012800080314                          OBJTYPE(*FILE) TOLIB(&DBASE) +
+012900080314                          NEWOBJ(MFAADDSDP1) DATA(*YES)
+013000080314             ENDDO
+013100080314
+013200080314             CHKOBJ     OBJ(&DBASE/MFAADDSMP) +
+013300080314                        OBJTYPE(*FILE)            +
+013400080314                        MBR(*FIRST)
+013500080314
+013600080314             MONMSG     MSGID(CPF9801)            +
+013700080314                            EXEC(DO)
+013800080314             CPYF       FROMFILE(MFASYSWIDE/MFAADDSMP) +
+013900080314                          TOFILE(&DBASE/MFAADDSMP) MBROPT(*REPLACE) +
+014000080314                          CRTFILE(*YES)
+014100080314             ENDDO
+014200080314
+014300080314             CHKOBJ     OBJ(&DBASE/MFAADDSML) +
+014400080314                        OBJTYPE(*FILE)            +
+014500080314                        MBR(*FIRST)
+014600080314
+014700080314             MONMSG     MSGID(CPF9801)            +
+014800080314                            EXEC(DO)
+014900080314             CRTDUPOBJ  OBJ(MFAADDSML) FROMLIB(MFASYSWIDE) +
+015000080314                          OBJTYPE(*FILE) TOLIB(&DBASE) +
+015100080314                          NEWOBJ(MFAADDSML) DATA(*NO)
+015200080314              ENDDO
+015300080314
+015400080314             CHKOBJ     OBJ(&DBASE/MFAADDSMLA) +
+015500080314                        OBJTYPE(*FILE)            +
+015600080314                        MBR(*FIRST)
+015700080314
+015800080314             MONMSG     MSGID(CPF9801)            +
+015900080314                            EXEC(DO)
+016000080314             CRTDUPOBJ  OBJ(MFAADDSMLA) FROMLIB(MFASYSWIDE) +
+016100080314                          OBJTYPE(*FILE) TOLIB(&DBASE) +
+016200080314                          NEWOBJ(MFAADDSMLA) DATA(*NO)
+016300080314              ENDDO
+016400080314
+016500080314             CHKOBJ     OBJ(&DBASE/MFAADDSMLB) +
+016600080314                        OBJTYPE(*FILE)            +
+016700080314                        MBR(*FIRST)
+016800080314
+016900080314             MONMSG     MSGID(CPF9801)            +
+017000080314                            EXEC(DO)
+017100080314             CRTDUPOBJ  OBJ(MFAADDSMLB) FROMLIB(MFASYSWIDE) +
+017200080314                          OBJTYPE(*FILE) TOLIB(&DBASE) +
+017300080314                          NEWOBJ(MFAADDSMLB) DATA(*NO)
+017400080314              ENDDO
+017500080314
+017600080314             CHKOBJ     OBJ(&DBASE/MFAADDSMLC) +
+017700080314                        OBJTYPE(*FILE)            +
+017800080314                        MBR(*FIRST)
+017900080314
+018000080314             MONMSG     MSGID(CPF9801)            +
+018100080314                            EXEC(DO)
+018200080314             CRTDUPOBJ  OBJ(MFAADDSMLC) FROMLIB(MFASYSWIDE) +
+018300080314                          OBJTYPE(*FILE) TOLIB(&DBASE) +
+018400080314                          NEWOBJ(MFAADDSMLC) DATA(*NO)
+018500080314              ENDDO
+018600080314
+018700080314             CHKOBJ     OBJ(&DBASE/MFAADDSMLD) +
+018800080314                        OBJTYPE(*FILE)            +
+018900080314                        MBR(*FIRST)
+019000080314
+019100080314             MONMSG     MSGID(CPF9801)            +
+019200080314                            EXEC(DO)
+019300080314             CRTDUPOBJ  OBJ(MFAADDSMLD) FROMLIB(MFASYSWIDE) +
+019400080314                          OBJTYPE(*FILE) TOLIB(&DBASE) +
+019500080314                          NEWOBJ(MFAADDSMLD) DATA(*NO)
+019600080314              ENDDO
+019700080314
+019800080314             CHKOBJ     OBJ(&DBASE/MFAADDSALA) +
+019900080314                        OBJTYPE(*FILE)            +
+020000080314                        MBR(*FIRST)
+020100080314
+020200080314             MONMSG     MSGID(CPF9801)            +
+020300080314                            EXEC(DO)
+020400080314             CRTDUPOBJ  OBJ(MFAADDSALA) FROMLIB(MFASYSWIDE) +
+020500080314                          OBJTYPE(*FILE) TOLIB(&DBASE) +
+020600080314                          NEWOBJ(MFAADDSALA) DATA(*NO)
+020700080314              ENDDO
+020800080314
+020900080314             CHKOBJ     OBJ(&DBASE/MFAADDSALB) +
+021000080314                        OBJTYPE(*FILE)            +
+021100080314                        MBR(*FIRST)
+021200080314
+021300080314             MONMSG     MSGID(CPF9801)            +
+021400080314                            EXEC(DO)
+021500080314             CRTDUPOBJ  OBJ(MFAADDSALB) FROMLIB(MFASYSWIDE) +
+021600080314                          OBJTYPE(*FILE) TOLIB(&DBASE) +
+021700080314                          NEWOBJ(MFAADDSALB) DATA(*NO)
+021800080314              ENDDO
+021900080314
+022000080314             CHKOBJ     OBJ(&DBASE/MFAADDSALC) +
+022100080314                        OBJTYPE(*FILE)            +
+022200080314                        MBR(*FIRST)
+022300080314
+022400080314             MONMSG     MSGID(CPF9801)            +
+022500080314                            EXEC(DO)
+022600080314             CRTDUPOBJ  OBJ(MFAADDSALC) FROMLIB(MFASYSWIDE) +
+022700080314                          OBJTYPE(*FILE) TOLIB(&DBASE) +
+022800080314                          NEWOBJ(MFAADDSALC) DATA(*NO)
+022900080314              ENDDO
+023000080314
+023100080314             CHKOBJ     OBJ(&DBASE/MFAADDSALD) +
+023200080314                        OBJTYPE(*FILE)            +
+023300080314                        MBR(*FIRST)
+023400080314
+023500080314             MONMSG     MSGID(CPF9801)            +
+023600080314                            EXEC(DO)
+023700080314             CRTDUPOBJ  OBJ(MFAADDSALD) FROMLIB(MFASYSWIDE) +
+023800080314                          OBJTYPE(*FILE) TOLIB(&DBASE) +
+023900080314                          NEWOBJ(MFAADDSALD) DATA(*NO)
+024000080314              ENDDO
+024100080314
+024200080314             CHKOBJ     OBJ(&DBASE/MFAADDSALF) +
+024300080314                        OBJTYPE(*FILE)            +
+024400080314                        MBR(*FIRST)
+024500080314
+024600080314             MONMSG     MSGID(CPF9801)            +
+024700080314                            EXEC(DO)
+024800080314             CRTDUPOBJ  OBJ(MFAADDSALF) FROMLIB(MFASYSWIDE) +
+024900080314                          OBJTYPE(*FILE) TOLIB(&DBASE) +
+025000080314                          NEWOBJ(MFAADDSALF) DATA(*NO)
+025100080314              ENDDO
+025200080314
+025300080314             CHKOBJ     OBJ(&DBASE/MFAADDSDL) +
+025400080314                        OBJTYPE(*FILE)            +
+025500080314                        MBR(*FIRST)
+025600080314
+025700080314             MONMSG     MSGID(CPF9801)            +
+025800080314                            EXEC(DO)
+025900080314             CRTDUPOBJ  OBJ(MFAADDSDL) FROMLIB(MFASYSWIDE) +
+026000080314                          OBJTYPE(*FILE) TOLIB(&DBASE) +
+026100080314                          NEWOBJ(MFAADDSDL) DATA(*NO)
+026200080314              ENDDO
+026300080314
+026400080314             CHKOBJ     OBJ(&DBASE/MFAADDSDLA) +
+026500080314                        OBJTYPE(*FILE)            +
+026600080314                        MBR(*FIRST)
+026700080314
+026800080314             MONMSG     MSGID(CPF9801)            +
+026900080314                            EXEC(DO)
+027000080314             CRTDUPOBJ  OBJ(MFAADDSDLA) FROMLIB(MFASYSWIDE) +
+027100080314                          OBJTYPE(*FILE) TOLIB(&DBASE) +
+027200080314                          NEWOBJ(MFAADDSDLA) DATA(*NO)
+027300080314              ENDDO
+027400080314
+027500080314             CHKOBJ     OBJ(&DBASE/MFAADDSDLB) +
+027600080314                        OBJTYPE(*FILE)            +
+027700080314                        MBR(*FIRST)
+027800080314
+027900080314             MONMSG     MSGID(CPF9801)            +
+028000080314                            EXEC(DO)
+028100080314             CRTDUPOBJ  OBJ(MFAADDSDLB) FROMLIB(MFASYSWIDE) +
+028200080314                          OBJTYPE(*FILE) TOLIB(&DBASE) +
+028300080314                          NEWOBJ(MFAADDSDLB) DATA(*NO)
+028400080314              ENDDO
+028500080314
+028600080314             CHKOBJ     OBJ(&DBASE/MFAADDSDLC) +
+028700080314                        OBJTYPE(*FILE)            +
+028800080314                        MBR(*FIRST)
+028900080314
+029000080314             MONMSG     MSGID(CPF9801)            +
+029100080314                            EXEC(DO)
+029200080314             CRTDUPOBJ  OBJ(MFAADDSDLC) FROMLIB(MFASYSWIDE) +
+029300080314                          OBJTYPE(*FILE) TOLIB(&DBASE) +
+029400080314                          NEWOBJ(MFAADDSDLC) DATA(*NO)
+029500080314              ENDDO
+029600080314
+029700080314             CHKOBJ     OBJ(&DBASE/MFAADDSDLD) +
+029800080314                        OBJTYPE(*FILE)            +
+029900080314                        MBR(*FIRST)
+030000080314
+030100080314             MONMSG     MSGID(CPF9801)            +
+030200080314                            EXEC(DO)
+030300080314             CRTDUPOBJ  OBJ(MFAADDSDLD) FROMLIB(MFASYSWIDE) +
+030400080314                          OBJTYPE(*FILE) TOLIB(&DBASE) +
+030500080314                          NEWOBJ(MFAADDSDLD) DATA(*NO)
+030600080314              ENDDO
+030700080314
+030800080314 LBL_0025:    CLRPFM     FILE(&DBASE/MFAADDSDP)
+030900080314              CALL       PGM(ADDRUPDATE)
+031000080314
+031100080314 LBL_0027:   CPYF       FROMFILE(QTEMP/TEMPFILE) +
+031200080314                          TOFILE(&DBASE/MFAADDSMP) MBROPT(*REPLACE) +
+031300080314                          CRTFILE(*YES)
+031400080314
+031500080314              MONMSG     MSGID(CPF2817 CPF2869) +
+031600080314                            EXEC(DO)
+031700080314              CLRPFM     FILE(&DBASE/MFAADDSMP)
+031800080314              ENDDO
+031900080314
+032000080314 /*------------------------------------------------------------------*/
+032100080314 /*        Execute Delay process for Manual Address File             */
+032200080314 /*------------------------------------------------------------------*/
+032300080314
+032400080314              MONMSG     MSGID(CPC1231 CPF2909) EXEC(DO)
+032500080314
+032600080314              IF COND(&COUNTER     < 10) THEN(DO)
+032700080314                 DLYJOB     DLY(5)
+032800080314                 CHGVAR VAR(&COUNTER) VALUE(&COUNTER + 1)
+032900080314                 GOTO       CMDLBL(LBL_0027)
+033000080314                 ENDDO
+033100080314              ELSE
+033200080314                 GOTO       CMDLBL(LBL_0070)
+033300080314              ENDDO
+033400080314
+033500080314              GOTO       ENDCLPGM
+033600080314
+033700080314 /*------------------------------------------------------------------*/
+033800080314 /*        If  file MFAADDSAP in library is empty, send message to    */
+033900080314 /*        SYSOPR to CANCEL or RETRY.                                 */
+034000080314 /*------------------------------------------------------------------*/
+034100080314
+034200080314 LBL_0030:    CHGVAR     VAR(&MSG) +
+034300080314                         VALUE('File MFAADDSAP in +
+034400080314                               library MFASYSWIDE is EMPTY +
+034500080314                               Enter "C" to CANCEL')
+034600080314              SNDPGMMSG  MSG(&MSG) +
+034700080314                         TOMSGQ(*SYSOPR) +
+034800080314                         MSGTYPE(*INQ) +
+034900080314                         KEYVAR(&KEY)
+035000080314              RCVMSG     MSGQ(*PGMQ) +
+035100080314                         MSGTYPE(*RPY) +
+035200080314                         MSGKEY(&KEY) +
+035300080314                         WAIT(*MAX) +
+035400080314                         RMV(*NO) +
+035500080314                         MSG(&REPLY)
+035600080314
+035700080314              IF         COND(&REPLY *EQ 'R'  +
+035800080314                         *OR  &REPLY *EQ 'r') +
+035900080314                         THEN(DO)
+036000080314              GOTO       CMDLBL(LBL_0020)
+036100080314              ENDDO
+036200080314
+036300080314              IF         COND(&REPLY *EQ 'C'  +
+036400080314                         *OR  &REPLY *EQ 'c') +
+036500080314                         THEN(DO)
+036600080314              GOTO       CMDLBL(ENDCLPGM)
+036700080314              ENDDO
+036800080314              GOTO       CMDLBL(LBL_0030)
+036900080314
+037000080314 /*------------------------------------------------------------------*/
+037100080314 /*       Send message to SYSOPR if object MFAADDSAP is locked       */
+037200080314 /*              SYSOPR can RETRY or CANCEL job.                     */
+037300080314 /*------------------------------------------------------------------*/
+037400080314
+037500080314 LBL_0060:   CHGVAR     VAR(&MSG) +
+037600080314                        VALUE('Object MFAADDSAP in library &DBASE +
+037700080314                               is locked  +
+037800080314                               Enter "R" to RETRY +
+037900080314                               or "C" to CANCEL.')
+038000080314
+038100080314             SNDPGMMSG  MSG(&MSG) +
+038200080314                        TOMSGQ(*SYSOPR) +
+038300080314                        MSGTYPE(*INQ) +
+038400080314                        KEYVAR(&KEY)
+038500080314             RCVMSG     MSGQ(*PGMQ) +
+038600080314                        MSGTYPE(*RPY) +
+038700080314                        MSGKEY(&KEY) +
+038800080314                        WAIT(*MAX) +
+038900080314                        RMV(*NO) +
+039000080314                        MSG(&REPLY)
+039100080314
+039200080314             IF         COND(&REPLY *EQ 'C'  +
+039300080314                        *OR  &REPLY *EQ 'c') +
+039400080314                        THEN(DO)
+039500080314             GOTO       CMDLBL(ENDCLPGM)
+039600080314             ENDDO
+039700080314
+039800080314
+039900080314             IF         COND(&REPLY *EQ 'R'  +
+040000080314                        *OR  &REPLY *EQ 'r') +
+040100080314                        THEN(DO)
+040200080314             GOTO       CMDLBL(LBL_0020)
+040300080314             ENDDO
+040400080314             GOTO       CMDLBL(LBL_0060)
+040500080314
+040600080314 /*------------------------------------------------------------------*/
+040700080314 /*       Send message to SYSOPR if object MFAADDSMP is locked       */
+040800080314 /*              SYSOPR can RETRY or CANCEL job.                     */
+040900080314 /*------------------------------------------------------------------*/
+041000080314
+041100080314 LBL_0070:   CHGVAR     VAR(&MSG) +
+041200080314                        VALUE('Object MFAADDSMP in library &DBASE +
+041300080314                               is locked  +
+041400080314                               Enter "R" to RETRY +
+041500080314                               or "C" to CANCEL.')
+041600080314
+041700080314             SNDPGMMSG  MSG(&MSG) +
+041800080314                        TOMSGQ(*SYSOPR) +
+041900080314                        MSGTYPE(*INQ) +
+042000080314                        KEYVAR(&KEY)
+042100080314             RCVMSG     MSGQ(*PGMQ) +
+042200080314                        MSGTYPE(*RPY) +
+042300080314                        MSGKEY(&KEY) +
+042400080314                        WAIT(*MAX) +
+042500080314                        RMV(*NO) +
+042600080314                        MSG(&REPLY)
+042700080314
+042800080314             IF         COND(&REPLY *EQ 'C'  +
+042900080314                        *OR  &REPLY *EQ 'c') +
+043000080314                        THEN(DO)
+043100080314             GOTO       CMDLBL(ENDCLPGM)
+043200080314             ENDDO
+043300080314
+043400080314
+043500080314             IF         COND(&REPLY *EQ 'R'  +
+043600080314                        *OR  &REPLY *EQ 'r') +
+043700080314                        THEN(DO)
+043800080314             GOTO       CMDLBL(LBL_0027)
+043900080314             ENDDO
+044000080314             GOTO       CMDLBL(LBL_0070)
+044100080314
+044200080314 /*------------------------------------------------------------------*/
+044300080314 /*          End of Program                                          */
+044400080314 /*------------------------------------------------------------------*/
+044500080314
+044600080314 ENDCLPGM:
+044700080314             RETURN
+044800080314             ENDPGM
