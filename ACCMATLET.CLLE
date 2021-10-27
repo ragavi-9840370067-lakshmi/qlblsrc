@@ -1,0 +1,108 @@
+000001170313     /* %ATTR OPTION(*XREF) DBGVIEW(*LIST) */
+000101130408/*********************************************************************/
+000201130425/* TITLE        : ACCMATLET                                          */
+000301130408/* PROGRAM TYPE : CL                                                 */
+000401130425/* PROGRAM      : ACCMATLET                                          */
+000501130408/* CREATED BY   : Noble Thomas K                                     */
+000601130425/* DESCRIPTION  : ACCMATLET is the driver for producing a new        */
+000701130425/*                Account Maturity Letter Extract.                   */
+000801130425/* Input parameters: &RPTNAME,&STRDTE,&ENDDTE,&FRQ,&ALWDTE,&RANGE    */
+000901130408/* Ouput parameters: NA                                              */
+001001130408/*********************************************************************/
+001101130408/*PROGRAMMER  *DATE OF CHANGE* DESCRIPTION OF CHANGE                 */
+001201130408/*********************************************************************/
+001301130425/* Noble T.   * 2013/04/25   * RFS119772 - Create program.           */
+001401131217/* Uma C      * 2013/12/16   * RFS131146 - Defect fix for RFS119772  */
+001501131217/*            *              * - Seg. Account Maturity Extract file  */
+001601131217/*            *              * Naming convention is not having       */
+001701131217/*            *              * process date.                         */
+001801130408/*********************************************************************/
+001901130425             PGM        PARM(&RPTNAME &STRDTE &ENDDTE &FRQ &ALWDTE +
+002001130425                          &RANGE)
+002101130425
+002201130425             DCL        VAR(&RPTNAME) TYPE(*CHAR) LEN(10)
+002301130425             DCL        VAR(&STRDTE) TYPE(*CHAR) LEN(8)
+002401130425             DCL        VAR(&ENDDTE) TYPE(*CHAR) LEN(8)
+002501130425             DCL        VAR(&FRQ) TYPE(*CHAR) LEN(2)
+002601130425             DCL        VAR(&ALWDTE) TYPE(*CHAR) LEN(4)
+002701130425             DCL        VAR(&RANGE) TYPE(*CHAR) LEN(3)
+002801130425             DCL        VAR(&EFTLIBRARY) TYPE(*CHAR) LEN(10)
+002901130425             DCL        VAR(&ENV) TYPE(*CHAR) LEN(3)
+003001130425             DCL        VAR(&CMPCODE) TYPE(*CHAR) LEN(3)
+003101130425             DCL        VAR(&PROCESSDT) TYPE(*CHAR) LEN(8)
+003201130426             DCL        VAR(&YEAR) TYPE(*CHAR) LEN(2)
+003301130426             DCL        VAR(&MONTH) TYPE(*CHAR) LEN(2)
+003401130425             DCL        VAR(&DAY) TYPE(*CHAR) LEN(2)
+003501130426             DCL        VAR(&MEMBRNM) TYPE(*CHAR) LEN(10)
+003601131216 /*131146    DCL        VAR(&PROCESSDT) TYPE(*CHAR) LEN(8)      */
+003701130426             DCL        VAR(&ENV1) TYPE(*CHAR) LEN(1)
+003801130426             DCL        VAR(&HOSTFILE) TYPE(*CHAR) LEN(23)
+003901130528             DCL        VAR(&JOBNAME) TYPE(*CHAR) LEN(10)
+004001130426             DCL        VAR(&FORMCODE) TYPE(*CHAR) LEN(9)
+004101130426             DCL        VAR(&FILENAME) TYPE(*CHAR) LEN(9)
+004201130426             DCL        VAR(&PROCESS) TYPE(*CHAR) LEN(1)
+004301130408
+004401130408/*Retrieve Data Area */
+004501130425             RTVDTAARA  DTAARA(MFAEFTLIB (1 10)) RTNVAR(&EFTLIBRARY)
+004601130506             RTVDTAARA  DTAARA(MFADBASE (4 3)) RTNVAR(&ENV)
+004701130425             RTVDTAARA  DTAARA(MFACMPCDP (1 3)) RTNVAR(&CMPCODE)
+004801130425             RTVDTAARA  DTAARA(MFAPRCDTP (1 8)) RTNVAR(&PROCESSDT)
+004901130426             RTVDTAARA  DTAARA(MFAPRCDTP (3 2)) RTNVAR(&YEAR)
+005001130426             RTVDTAARA  DTAARA(MFAPRCDTP (5 2)) RTNVAR(&MONTH)
+005101130425             RTVDTAARA  DTAARA(MFAPRCDTP (7 2)) RTNVAR(&DAY)
+005201130408
+005301130528             CHGVAR     VAR(&JOBNAME) VALUE('JOBSEGRPT')
+005401130426             CHGVAR     VAR(&PROCESS) VALUE('N')
+005501130426
+005601130426             CALL       PGM(RPTCHK) PARM(&JOBNAME &RPTNAME &PROCESS)
+005701130426
+005801130426/* Run the Report if Process is Yes from Batch Reports Screen RFBATRPT*/
+005901130426             IF         COND(&PROCESS *EQ 'Y') THEN(DO)
+006001130426
+006101130516             DLTF       FILE(QTEMP/&RPTNAME)
+006201130408             MONMSG     MSGID(CPF0000)
+006301130409
+006401130426             CALL       PGM(ACCMATLETR) PARM(&STRDTE &ENDDTE)
+006501130426
+006601130426             CHGVAR     VAR(&MEMBRNM) VALUE('AMTL' *TCAT &YEAR *TCAT +
+006701130426                          &MONTH *TCAT &DAY)
+006801130426
+006901130426             CHKOBJ     OBJ(&EFTLIBRARY/&RPTNAME) OBJTYPE(*FILE)
+007001130426             MONMSG     MSGID(CPF9801) EXEC(CRTPF +
+007101130426                          FILE(&EFTLIBRARY/&RPTNAME) RCDLEN(1500) +
+007201130426                          TEXT(' SEG Account Maturity Letter +
+007301130426                          Extract') MAXMBRS(*NOMAX) SIZE(*NOMAX))
+007401130426
+007501130516             CPYF       FROMFILE(QTEMP/&RPTNAME) +
+007601130426                          TOFILE(&EFTLIBRARY/&RPTNAME) +
+007701130426                          TOMBR(&MEMBRNM) MBROPT(*REPLACE) +
+007801130426                          CRTFILE(*YES) FMTOPT(*NOCHK)
+007901130426
+008001131216 /*131146    CALL       PGM(GETSYSDATE) PARM(&PROCESSDT)        */
+008101130426
+008201130426             IF         COND(&ENV *EQ 'PRD') THEN(CHGVAR VAR(&ENV1) +
+008301130426                          VALUE('P'))
+008401130426             ELSE       CMD(CHGVAR VAR(&ENV1) VALUE('T'))
+008501130426
+008601130514             CHGVAR     VAR(&HOSTFILE) VALUE(&ENV1 *TCAT '_' *TCAT  +
+008701130514                          &CMPCODE *TCAT 'M60'    *TCAT  'O'  +
+008801130516                          *TCAT  &PROCESSDT *TCAT 'D'  *TCAT 'I' *TCAT +
+008901130426                          '.TXT')
+009001130426             CHGVAR     VAR(&FORMCODE) VALUE('ACCMATLET')
+009101130426             CHGVAR     VAR(&FILENAME) VALUE('ACCMATLET')
+009201130409
+009301130409 /*Update LDA for the parms to pass to JOBGENFTPR*/
+009401130409             CHGDTAARA  DTAARA(*LDA (900 110)) VALUE(' ')
+009501130426 /*JOBNAME*/ CHGDTAARA  DTAARA(*LDA (900 10))  VALUE(&JOBNAME)
+009601130426 /*FORM CD*/ CHGDTAARA  DTAARA(*LDA (910 10))  VALUE(&FORMCODE)
+009701130426 /*LIBRARY*/ CHGDTAARA  DTAARA(*LDA (920 10))  VALUE(&EFTLIBRARY)
+009801130426 /*FILE   */ CHGDTAARA  DTAARA(*LDA (930 10))  VALUE(&FILENAME)
+009901130426 /*MEMBER */ CHGDTAARA  DTAARA(*LDA (940 10))  VALUE(&MEMBRNM)
+010001130426 /*TO FILE*/ CHGDTAARA  DTAARA(*LDA (960 30))  VALUE(&HOSTFILE)
+010101130516 /* DATE  */ CHGDTAARA  DTAARA(*LDA (990 8))   VALUE(&PROCESSDT)
+010201130409             CHGDTAARA  DTAARA(*LDA (998 2))   VALUE('UT')
+010301130409
+010401130409             CALL       PGM(JOBGENFTPR)
+010501130409
+010601130409             ENDDO
+010701130409             ENDPGM

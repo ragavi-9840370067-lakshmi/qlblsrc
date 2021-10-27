@@ -1,0 +1,69 @@
+000100070706/* ******************************************************************/
+000200070706/* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE                */
+000300070706/* ******************************************************************/
+000400070706/* ******************************************************************/
+000500070706/* Dom S.     * 2007/07/05   * RFS 43018 Initial                    */
+000600070706/* ******************************************************************/
+000601121214/* Briun Lu   * 2012/02/13   * RFS 96654 Fix                        */
+000602121214/* ******************************************************************/
+000700070706PGM
+000800070706             DCL        VAR(&STRDTE) TYPE(*CHAR) LEN(6)
+000900070706             DCL        VAR(&ENDDTE) TYPE(*CHAR) LEN(6)
+001000070706             DCL        VAR(&STRTIM) TYPE(*CHAR) LEN(6) VALUE('000001')
+001100070706             DCL        VAR(&STRTIMN) TYPE(*DEC) LEN(6) VALUE(0)
+001101121214
+001102121214/****** Start 96654 ******/
+001103121214             DCL        VAR(&HoMiSeC) TYPE(*CHAR) LEN(6)
+001113121214             DCL        VAR(&HH)      TYPE(*DEC) LEN(2)
+001114121214             DCL        VAR(&MM)      TYPE(*DEC) LEN(2)
+001115121214             DCL        VAR(&SS)      TYPE(*DEC) LEN(2)
+001116121214/****** End   96654 ******/
+001200070706
+001300070706             RTVSYSVAL  SYSVAL(QDATE) RTNVAR(&STRDTE)
+001400070706             RTVSYSVAL  SYSVAL(QTIME) RTNVAR(&STRTIM)
+001500070706
+001600070706 CHKDEREG:   RTVSYSVAL  SYSVAL(QDATE) RTNVAR(&ENDDTE)
+001700070709             CALL       PGM(*LIBL/ADEREGREAD) PARM(&STRDTE &STRTIM +
+001800070709                          &STRTIMN)
+001900070706             IF         COND(&STRDTE *NE &ENDDTE) THEN(GOTO +
+002000070706                          CMDLBL(END))
+002100070706 DELAY5:     DLYJOB     DLY(360)
+002200070706             DLTF       FILE(QTEMP/QSQJRNF)
+002201121214
+002202121214/******R96654 Start ********/
+002203121214             IF         COND(&STRTIMN *NE 0) THEN(DO)
+002204121214
+002205121214             CHGVAR     VAR(&HOMISEC) VALUE(&STRTIMN)
+002206121214             CHGVAR     VAR(&HH) VALUE(%SST(&HOMISEC 1 2))
+002207121214             CHGVAR     VAR(&MM) VALUE(%SST(&HOMISEC 3 2))
+002208121214             CHGVAR     VAR(&SS) VALUE(%SST(&HOMISEC 5 2))
+002209121214
+002210121214/* convert seconds into minutes    */
+002211121214
+002212121214             IF         COND(&SS *GE 60) THEN(DO)
+002213121214             CHGVAR     VAR(&SS) VALUE(&SS - 60)
+002214121214             CHGVAR     VAR(&MM) VALUE(&MM + 1)
+002215121214             ENDDO
+002216121214
+002217121214/* convert minutes into hours      */
+002218121214
+002219121214             IF         COND(&MM *GE 60) THEN(DO)
+002220121214             CHGVAR     VAR(&SS) VALUE(&MM - 60)
+002221121214             CHGVAR     VAR(&MM) VALUE(&HH + 1)
+002222121214             ENDDO
+002223121214
+002224121214/* reset hours for 24:00:00 format */
+002225121214
+002226121214             IF         COND(&HH *GE 24) THEN(DO)
+002227121214             CHGVAR     VAR(&SS) VALUE(&HH - 24)
+002228121214             ENDDO
+002229121214
+002255121214             CHGVAR     VAR(&STRTIMN) VALUE((&HH * 10000) + (&MM * +
+002256121214                          100) + &SS)
+002260121214             ENDDO
+002261121214/******R96654 End   ********/
+002262121214
+002300070706             IF         COND(&STRTIMN *NE 0) THEN(CHGVAR +
+002400070706                          VAR(&STRTIM) VALUE(&STRTIMN))
+002500070706             GOTO       CHKDEREG
+002600070706 END:        ENDPGM

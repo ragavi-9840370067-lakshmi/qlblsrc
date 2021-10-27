@@ -1,0 +1,77 @@
+000100090901   /*****************************************************************/
+000200090917   /* TITLE        : Registered Accounts Redemption Consolidation   */
+000300090917   /*                Multi-thread                                   */
+000400090917   /* PROGRAMMER   : Pawel Anielski                                 */
+000500090901   /*                                                               */
+000600090917   /* PROGRAM      : ACCRCON    - Submitted by JOBACCRCON           */
+000700090901   /*                                                               */
+000800090917   /* DESCRIPTION  : This program is used to call REGACCRCON for    */
+000900090901   /*                the incoming account range and send signal     */
+001000090917   /*                back to JOBACCRCON to indicate Fail or Success */
+001100090901   /*****************************************************************/
+001200090901   /*    C H A N G E   H I S T O R Y                                */
+001300090901   /*****************************************************************/
+001400090901   /* PROGRAMMER *DATE OF CHANGE* DESCRIPTION OF CHANGE             */
+001500090901   /*****************************************************************/
+001600090917   /* Pawel A.  20090917 RFS62817 Created program                   */
+001700150817   /* Michael Fan* 2015/08/17   * RFS146994 - Add new parameter to  */
+001800150817   /*            *              * identify which job call this      */
+001900150817   /*            *              * program                           */
+002000150917   /* Michael Fan* 2015/09/17   * RFS151395 - Back out all changes  */
+002100150917   /*            *              *  from RFS146994 because it is     */
+002200150917   /*            *              *  incorrect to limit the selection */
+002300150917   /*            *              *  of direct trade only of 'MAT'    */
+002400150917   /*            *              *  origin code when JOBACCRCON is   */
+002500150917   /*            *              *  called from JOBSEGBRES.          */
+002600190507   /* Thilaga K  * 2019/05/07   * RFS183564 - Added new parameter   */
+002700190507   /*            *              * Called From job name              */
+002701191218   /* Mayilsamy D* 2019/12/17   * RFS185625-Added new CL program to */
+002702191218   /*            *              * create TMPSUBACON table similar to*/
+002703191217   /*            *              * SUBACON in OJ library             */
+002800090901   /*****************************************************************/
+002900090901
+003000090917             PGM        PARM(&INSTANCEI &FRMACCT &TOACCT &OJLIB +
+003100190507                          &DQNAME  &CALLDFROM)
+003200190507   /*R183564              &DQNAME)     */
+003300090901
+003400090901             DCL        VAR(&FRMACCT)    TYPE(*CHAR) LEN(9)
+003500090901             DCL        VAR(&TOACCT)     TYPE(*CHAR) LEN(9)
+003600090901             DCL        VAR(&OJLIB)      TYPE(*CHAR) LEN(10)
+003700090901             DCL        VAR(&JOBNAME)    TYPE(*CHAR) LEN(10)
+003800090901             DCL        VAR(&DQNAME)     TYPE(*CHAR) LEN(10)
+003900190507             DCL        VAR(&CALLDFROM)  TYPE(*CHAR) LEN(10)
+004000090901             DCL        VAR(&FIELDLEN)   TYPE(*DEC) LEN(5) VALUE(2)
+004100090901             DCL        VAR(&INSTANCEI)  TYPE(*CHAR) LEN(02)
+004200090901             DCL        VAR(&INSTANCEX)  TYPE(*CHAR) LEN(02)
+004300090917             DCL        VAR(&CDSCMODE)   TYPE(*CHAR) LEN(10) VALUE(' ')
+004400090917             DCL        VAR(&ADDREPLACE) TYPE(*CHAR) LEN(01) VALUE(' ')
+004500090917             DCL        VAR(&TAXSPLIT)   TYPE(*CHAR) LEN(01) VALUE(' ')
+004600090917             DCL        VAR(&FEDAMT) TYPE(*CHAR) LEN(13) +
+004700090917                          VALUE('0000000000000')
+004800090917             DCL        VAR(&PROVAMT)    TYPE(*CHAR) LEN(13) +
+004900090917                          VALUE('0000000000000')
+005000090917             DCL        VAR(&WHTXFUN)    TYPE(*CHAR) LEN(01) VALUE(' ')
+005100090917             DCL        VAR(&SBMNBR)     TYPE(*CHAR) LEN(2)
+005200090901
+005300090901             CHGVAR     VAR(&INSTANCEX) VALUE('F')
+005400190507 /*RFS183564 - Start*/
+005500190507             IF       (&CALLDFROM  *EQ 'JOBSEGBRES') THEN(DO)
+005600190507             CHGVAR     VAR(&CDSCMODE) VALUE('SEGBRES')
+005700190507             ENDDO
+005800190507 /*RFS183564 - End*/
+005900191217 /*RFS185625-Starts */
+005901191217             CALL       PGM(WRKSUBACON)
+005902191217 /*RFS185625-Ends   */
+006000190507             CALL       PGM(REGACCRCON) PARM(&CDSCMODE &ADDREPLACE +
+006100090917                          &TAXSPLIT &FEDAMT &PROVAMT &WHTXFUN +
+006200090917                          &FRMACCT &TOACCT)
+006300090901
+006400090901             CHGVAR     VAR(&INSTANCEX) VALUE(&INSTANCEI)
+006500090901SNDDTAQ:
+006600090901             IF         COND(&DQNAME *EQ ' ') THEN(GOTO CMDLBL(EXIT))
+006700090901
+006800090901             CALL       PGM(QSNDDTAQ) PARM(&DQNAME &OJLIB &FIELDLEN +
+006900090901                          &INSTANCEX)
+007000090901EXIT:
+007100090901             RETURN
+007200090901             ENDPGM
