@@ -1,0 +1,169 @@
+000100180203       IDENTIFICATION DIVISION.
+000200180614       PROGRAM-ID.    U17957601.
+000300180203       AUTHOR.        Hari Venkata Naga Naveen K.
+000400180203       INSTALLATION.  L&T Financial Services Technology Inc.
+000500180614       DATE-WRITTEN.  June 14, 2018.
+000600180427       DATE-COMPILED.
+000700180427      *****************************************************************
+000800180203      **   DESCRIPTION: Created New ESG28 utility program             *
+000900180203      **                                                              *
+001000180614      **   RFS Number : RFS179576                                     *
+001100180614      **   CALLED By  : UTD179576  (Utility)                          *
+001200180203      **   PARAMETERS : None                                          *
+001300180203      **   Linked Modules : None                                      *
+001400180203      **   Called Objects : None                                      *
+001500180203      **                                                              *
+001600180203      *---------------------------------------------------------------*
+001700180203      *    SQL Files  : (I) MFAXRTCDP                                 *
+001800180203      *               : (I) MFAREJCDP                                 *
+001900180203      *               : (I) MFACNAECAP                                *
+002000180427      *****************************************************************
+002100180427      *    C H A N G E   H I S T O R Y
+002200180427      *****************************************************************
+002300180427      *****************************************************************
+002400180427      * PROGRAMMER   *DATE OF CHANGE* DESCRIPTION OF CHANGE           *
+002500180427      *****************************************************************
+002600180614      * K Naveen.    * 2018/06/14   * RFS179576- Created the program  *
+002700180203      *****************************************************************
+002800180203
+002900180203       ENVIRONMENT DIVISION.
+003000180203       CONFIGURATION SECTION.
+003100180203       SOURCE-COMPUTER. IBM-AS400.
+003200180203       OBJECT-COMPUTER. IBM-AS400.
+003300180203       SPECIAL-NAMES.
+003400180203      /
+003500180203       INPUT-OUTPUT SECTION.
+003600180203       FILE-CONTROL.
+003700180203      /
+003800180203       DATA DIVISION.
+003900180203       FILE SECTION.
+004000180203      /
+004100180203       WORKING-STORAGE SECTION.
+004200180203
+004300180203           EXEC SQL
+004400180203             INCLUDE SQLCA
+004500180203           END-EXEC.
+004600180203
+004700180203          COPY CPYSQLFLD
+004800180614               REPLACING == "CURRENT_PROGRAM" == BY == "U17957601" ==.
+004900180203      *
+005000180203       01  lnc_Variables.
+005100180203         03  li_Count                    PIC S9(03) VALUE 0.
+005200180203         03  li_Count2                   PIC S9(03) VALUE 0.
+005300180203
+005400180203       01  lc-WorkFields.
+005500180203         03  lc_ExternalCode             PIC X(05).
+005600180203         03  lc_ReturnKey                PIC X(15).
+005700180203         03  lc_RejCode                  PIC X(03).
+005800180203         03  lc_ErrDesc                  PIC X(100).
+005900180203         03  lc_RejDes                   PIC X(25).
+006000180203         03  lc_AcctTyCde                PIC X(05).
+006100180203         03  lc_ActCde                   PIC X(03).
+006200180203         03  lc_TranTypCode              PIC X(03).
+006300180203         03  li_Counter                  PIC S9(03).
+006400180310         03  li_ScheduleId               PIC S9(15).
+006500180309         03  lc_JobName                  PIC X(10).
+006600180309         03  lc_SchTime                  PIC X(06).
+006700180203
+006800180203       01  lnc_Constants.
+006900180309         03  lnc_JobName1                PIC X(10) VALUE
+007000180614                                         "JOBOESCH".
+007100180309         03  lnc_SchTime1                PIC X(06) VALUE
+007200180427                                         "0800".
+007300180309         03  lnc_JobName2                PIC X(10) VALUE
+007400180427                                         "JOBOESCH".
+007500180309         03  lnc_SchTime2                PIC X(06) VALUE
+007600180312                                         "1700".
+007700180427         03  lnc_JobName3                PIC X(10) VALUE
+007800180427                                         "JOBOESBM".
+007900180203       LINKAGE SECTION.
+008000180203
+008100180427      *-------------------
+008200180203       PROCEDURE DIVISION.
+008300180427      *-------------------
+008400180427      *----------
+008500180203       Mainline.
+008600180427      *----------
+008700180203           EXEC SQL
+008800180203             WHENEVER SQLERROR   CONTINUE
+008900180203           END-EXEC.
+009000180203
+009100180309           INITIALIZE  lc-WorkFields
+009200180203                       .
+009300180427      * Add the following to report schedule (MFAJOBSCHP)
+009400180309           PERFORM InsertReportSchedule.
+009500180203           PERFORM EndOfProgram.
+009600180203      /
+009700180427      *---------------------*
+009800180309       InsertReportSchedule.
+009900180427      *---------------------*
+010000180614      * JOBOESCH
+010100180614           MOVE lnc_JobName1  TO lc_JobName.
+010200180427           PERFORM DeleteMfaschlkp.
+010300180427           PERFORM DeleteMfajobschp.
+010400180427
+010500180614      * JOBOESBM
+010600180614           MOVE  lnc_JobName3 TO lc_JobName.
+010700180309           MOVE  lnc_SchTime2 TO lc_SchTime.
+010800180310           PERFORM GetRecMfaschlkp.
+010900180309           PERFORM DeleteMfajobschp.
+011000180309           PERFORM InsertMfajobschp.
+011100180309      /
+011200180427      *-----------------*
+011300180309       DeleteMfajobschp.
+011400180427      *-----------------*
+011500180309           EXEC SQL
+011600180309             DELETE
+011700180309             FROM    MFAJOBSCHP
+011800180427             WHERE   JOB_NAME       = :lc_JobName
+011900180309           END-EXEC
+012000180309           .
+012100180309      /
+012200180427      *----------------*
+012300180427       DeleteMfaschlkp.
+012400180427      *----------------*
+012500180427           EXEC SQL
+012600180427             DELETE
+012700180427             FROM    MFASCHLKP
+012800180427             WHERE   JOB_NAME       = :lc_JobName
+012900180427           END-EXEC
+013000180427           .
+013100180427      /
+013200180427      *-----------------*
+013300180309       InsertMfajobschp.
+013400180427      *-----------------*
+013500180309
+013600180309           EXEC SQL
+013700180309             INSERT
+013800180309             INTO   MFAJOBSCHP
+013900180309                    (
+014000180310                      JOB_NAME
+014100180310                      ,SCHED_TIME
+014200180310                      ,MFASCHLKP_ID
+014300180309                    )
+014400180309             VALUES
+014500180309                    (
+014600180309                      :lc_JobName
+014700180309                     ,:lc_SchTime
+014800180310                     ,:li_ScheduleId
+014900180309                    )
+015000180309           END-EXEC
+015100180309           .
+015200180309      /
+015300180427      *----------------
+015400180309       GetRecMfaschlkp.
+015500180427      *----------------
+015600180310           INITIALIZE li_ScheduleId
+015700180310           EXEC SQL
+015800180310             SELECT  MFASCHLKP_ID
+015900180310             INTO    :li_ScheduleId
+016000180310             FROM    MFASCHLKP
+016100180310             WHERE   JOB_NAME       = :lc_JobName
+016200180310           END-EXEC
+016300180310           .
+016400180310      /
+016500180427      *----------------
+016600180203       EndOfProgram.
+016700180427      *----------------
+016800180203           GOBACK.
+016900180203
